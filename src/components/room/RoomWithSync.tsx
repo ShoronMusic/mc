@@ -173,8 +173,9 @@ export default function RoomWithSync({
   const pendingSongConfirmationTextRef = useRef<string | null>(null);
   const nextPromptShownForVideoIdRef = useRef<string | null>(null);
   const initialGreetingDoneRef = useRef(false);
-  const zeroSongPromptShownRef = useRef(false);
   const zeroSongPromptTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** 定期「どなたでも…」のコールバック内で最新人数を参照する */
+  const participantsCountForPromptRef = useRef(0);
   /** 現在再生中の曲を貼った人の clientId（次の曲促しを誰が出すか） */
   const lastChangeVideoPublisherRef = useRef('');
   const fiveMinLimitTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -314,6 +315,7 @@ export default function RoomWithSync({
     () => participants.filter((p) => p.participatesInSelection),
     [participants]
   );
+  participantsCountForPromptRef.current = participants.length;
   /** 次の選曲者 clientId を取得（参加者リストで次の人、末尾なら先頭に戻る） */
   const getNextTurnClientId = useCallback(
     (afterClientId: string): string => {
@@ -755,9 +757,17 @@ export default function RoomWithSync({
     touchActivity();
   }, [messages.length, effectiveDisplayName, roomId, participatingOrder, addAiMessage, touchActivity]);
 
-  const ZERO_SONG_PROMPT_INTERVAL_MS = 3 * 60 * 1000; // 3分に1回
+  const ZERO_SONG_PROMPT_INTERVAL_MS = 3 * 60 * 1000; // 3分に1回（複数人ルーム向け）
   useEffect(() => {
     if (videoId) {
+      if (zeroSongPromptTimeoutRef.current) {
+        clearTimeout(zeroSongPromptTimeoutRef.current);
+        zeroSongPromptTimeoutRef.current = null;
+      }
+      return;
+    }
+    // 参加者が1人だけのときは入室時の「どなたでも…」のみとし、定期的な催促は出さない
+    if (participants.length <= 1) {
       if (zeroSongPromptTimeoutRef.current) {
         clearTimeout(zeroSongPromptTimeoutRef.current);
         zeroSongPromptTimeoutRef.current = null;
@@ -768,6 +778,7 @@ export default function RoomWithSync({
       zeroSongPromptTimeoutRef.current = setTimeout(() => {
         zeroSongPromptTimeoutRef.current = null;
         if (videoIdRef.current) return;
+        if (participantsCountForPromptRef.current <= 1) return;
         addAiMessage('どなたでもどうぞ貼ってください', { allowWhenAiStopped: true });
         schedule();
       }, ZERO_SONG_PROMPT_INTERVAL_MS);
@@ -778,7 +789,7 @@ export default function RoomWithSync({
         clearTimeout(zeroSongPromptTimeoutRef.current);
       }
     };
-  }, [videoId, addAiMessage]);
+  }, [videoId, addAiMessage, participants.length]);
 
   useEffect(() => {
     const t = setInterval(() => {
