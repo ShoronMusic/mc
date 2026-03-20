@@ -192,6 +192,10 @@ export default function RoomWithSync({
   const tidbitPreferMainArtistLeftRef = useRef(0);
   /** comment-pack を表示した動画ID。次の曲まで同じ曲の豆知識を出さず一般豆知識にする（重複解説を防ぐ） */
   const commentPackVideoIdRef = useRef<string | null>(null);
+  /** comment-pack の自由コメントを遅延表示するタイマー（次の曲案内で必ずクリア） */
+  const freeCommentTimeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  /** 自由コメント待ちの間は一般豆知識を抑止 */
+  const suppressTidbitRef = useRef(false);
   /** 自分が発言したか（ステータスありでも発言あれば在席とみなして豆知識を出す） */
   const hasCurrentUserSentMessageSinceLastTidbitRef = useRef(false);
   const [aiFreeSpeechStopped, setAiFreeSpeechStopped] = useState(false);
@@ -479,6 +483,21 @@ export default function RoomWithSync({
         if (isLeaveOrRomPhrase(data.body)) {
           const senderName = data.displayName?.trim() || 'ゲスト';
           addAiMessage(`${senderName}さん、いってらっしゃいませ`, { allowWhenAiStopped: true });
+        }
+      }
+      // 次の選曲案内が出たら、全クライアントで遅延中の自由コメントを破棄（案内の後に旧曲の解説が続かないように）
+      if (data.messageType === 'ai') {
+        const bodyAi = data.body ?? '';
+        if (
+          /次の曲を貼ってください/.test(bodyAi) ||
+          /次の曲をどうぞ/.test(bodyAi) ||
+          /^5分経過しましたので、/.test(bodyAi.trim())
+        ) {
+          if (freeCommentTimeoutsRef.current.length > 0) {
+            freeCommentTimeoutsRef.current.forEach((t) => clearTimeout(t));
+            freeCommentTimeoutsRef.current = [];
+          }
+          suppressTidbitRef.current = false;
         }
       }
       setMessages((prev) => {
@@ -858,10 +877,14 @@ export default function RoomWithSync({
   const SEC_AFTER_END_BEFORE_PROMPT = 30;
   const DEFAULT_DURATION_WHEN_UNKNOWN_SEC = 240;
   const FIVE_MIN_MS = 5 * 60 * 1000;
-  /** comment-pack で生成した自由コメントを小出しにするためのタイマー群 */
-  const freeCommentTimeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
-  /** comment-pack 由来の自由コメントが残っている間は tidbit（一般豆知識）を停止するフラグ */
-  const suppressTidbitRef = useRef(false);
+
+  const clearPendingFreeCommentTimers = useCallback(() => {
+    if (freeCommentTimeoutsRef.current.length > 0) {
+      freeCommentTimeoutsRef.current.forEach((t) => clearTimeout(t));
+      freeCommentTimeoutsRef.current = [];
+    }
+    suppressTidbitRef.current = false;
+  }, []);
 
   /** 視聴専用をスキップしつつ、次の選曲者に促す。曲終了・5分経過時は投稿者のクライアントのみ実行 */
   const promptNextTurn = useCallback((options?: { fiveMinElapsed?: boolean }) => {
@@ -889,6 +912,8 @@ export default function RoomWithSync({
       return;
     }
 
+    clearPendingFreeCommentTimers();
+
     // 参加者が1人だけのとき（通常の曲終了時）は、シンプルに全員宛てのメッセージにする
     if (orderLength <= 1) {
       addAiMessage('次の曲をどうぞ', { allowWhenAiStopped: true });
@@ -902,7 +927,7 @@ export default function RoomWithSync({
     } else {
       addAiMessage(`${prefix}次の曲を貼ってください`, { allowWhenAiStopped: true });
     }
-  }, [participants, addAiMessage, myClientId]);
+  }, [participants, addAiMessage, myClientId, clearPendingFreeCommentTimers]);
 
   useEffect(() => {
     nextPromptShownForVideoIdRef.current = null;
@@ -1012,8 +1037,9 @@ export default function RoomWithSync({
             comments.forEach((c, index) => {
               const delayMs = (index + 1) * 60 * 1000; // 1分ごと
               const timer = setTimeout(() => {
-                // まだ同じ曲が再生中のときだけ表示
                 if (videoIdRef.current !== vid) return;
+                // 「次の曲」案内済みならこの曲の自由コメントは出さない
+                if (nextPromptShownForVideoIdRef.current === vid) return;
                 addAiMessage(packPrefix + c);
                 touchActivity();
               }, delayMs);
