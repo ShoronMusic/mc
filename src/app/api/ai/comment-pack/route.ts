@@ -37,7 +37,7 @@ function isPublishedWithinLastDays(publishedAtIso: string | undefined, days: num
 
 /**
  * 曲ごとのコメントパック生成API
- * - 基本コメント1本 + 自由コメント最大3本（観点を変えて）をまとめて生成する
+ * - 基本コメント1本 + 自由コメント最大3本（1:栄誉・チャート 2:歌詞 3:サウンド）をまとめて生成する
  * - 動画公開から30日以内は「新曲」とみなし、基本コメントのみ（末尾に注釈）。自由3本は生成しない
  * - 同一動画は song_tidbits から再利用（新曲は注釈付き基本のみキャッシュ、それ以外は4本そろいでキャッシュ）
  * - COMMENT_PACK_SKIP_CACHE=1 で常に新規生成
@@ -137,9 +137,11 @@ export async function POST(request: Request) {
 
     const metaLockBlock = `【メタデータの前提（厳守）】
 ・YouTube 動画タイトル（原文）: ${rawYouTubeTitle}
-・ここで用いるアーティスト名: ${artistLabel}
-・ここで用いる曲名: ${songLabel}
-・アーティスト名と曲名の上下関係を入れ替えたり、「別の架空バンド／別タイトルの曲」として語らないこと。
+・【アーティスト（歌手・バンド）】= 「${artistLabel}」のみ。これは人名またはバンド名です。
+・【曲名】= 「${songLabel}」のみ。これは楽曲のタイトルです。
+・絶対禁止: 「${songLabel}」をアーティスト名のように扱い、「${artistLabel}」を曲名のように扱うこと（例:「${songLabel}の代表曲『${artistLabel}』」は誤り。正しくは「${artistLabel}の『${songLabel}』」）。
+・「〜の代表曲」は必ず アーティスト → 曲 の順で書く（${artistLabel} の代表曲として『${songLabel}』、など）。
+・アーティスト名と曲名を入れ替えたり、別の架空の曲として語らないこと。
 ・タイトル・チャンネル名と矛盾するリリース年・アルバム名・編成・未来の年号は書かない。不明・不確実ならその一句を省くか「〜として知られる」など弱い表現にとどめる。
 ・本APIは Music8 等の外部楽曲DBを参照していません。根拠のない固有名・年号を作らないこと。`;
 
@@ -151,6 +153,10 @@ export async function POST(request: Request) {
 
     const basePrompt = `選曲アナウンスの直後に、最初にだけ表示する「曲の基本情報」を1本だけ書いてください。現在は${currentYear}年です。
 ${metaLockBlock}
+
+【書き出しの型（必須）】
+・本文の最初の文は、必ず「${artistLabel}の『${songLabel}』」で始めてください（全角かぎかっこ『』で曲名を囲む）。別の言い回しで始めないこと。
+・続けてリリース年・アルバム・雰囲気を同じ段落内で述べてください。
 
 【基本情報に含めるもの（この順で簡潔に）】
 ・リリース年（分かる範囲）
@@ -175,11 +181,11 @@ ${basePromptTail}`;
       baseText = (baseText + COMMENT_PACK_NEW_RELEASE_DISCLAIMER).trim();
     }
 
-    // 2. 自由コメント3本（基本情報のあとに出す。新曲モードでは生成しない）
+    // 2. 自由コメント3本（基本情報のあと。1本目＝栄誉・チャート、2＝歌詞、3＝サウンド）
     const topics = [
+      '商業的成功と栄誉（世界的な大ヒットに限り、代表チャート・グラミー等の広く知られた事実を簡潔にたたえる。可能なら冒頭一句で全米シングルチャート（Billboard Hot 100）首位など、定番として知られる記録を触れてよい。マイナー曲や不明なら受賞に触れずライブ扱いや文化的言及にとどめる）',
       '歌詞テーマやメッセージ、よく語られる誤解や解釈のポイント',
       'サウンドの特徴（メロディ/リズム/アレンジ/フックなど）と印象',
-      '商業的成功と栄誉（世界的な大ヒットに限り、代表チャート・グラミー等の広く知られた事実を簡潔にたたえる。マイナー曲や不明なら受賞に触れずライブ扱いや文化的言及にとどめる）',
     ] as const;
     if (topics.length !== COMMENT_PACK_MAX_FREE_COMMENTS) {
       console.warn(
@@ -188,7 +194,7 @@ ${basePromptTail}`;
       );
     }
 
-    /** チャート・グラミー等を意図的に含めてよい自由コメント（3本目）用は allowChartAwards=true */
+    /** チャート・グラミー等を意図的に含めてよい自由コメント（1本目＝栄誉）用は allowChartAwards=true */
     const containsUnreliableClaim = (txt: string, allowChartAwards: boolean): boolean => {
       if (!txt) return false;
       const hasEvidence = /出典|ソース|Wikipedia|公式|根拠/i.test(txt);
@@ -219,11 +225,11 @@ ${basePromptTail}`;
     if (!isNewRelease) {
       for (let i = 0; i < COMMENT_PACK_MAX_FREE_COMMENTS; i++) {
       const topic = topics[i];
-      const isHonorsTopic = i === COMMENT_PACK_MAX_FREE_COMMENTS - 1; // 3本目＝栄誉・チャート
+      const isHonorsTopic = i === 0; // 1本目＝栄誉・チャート
       const used = [baseText, ...freeComments].filter(Boolean).join('\n---\n');
 
       const banBlockStandard = `・禁止事項（断定・根拠薄い内容の回避）:
-  - チャート順位/ビルボード等の順位・スコア、受賞/グラミー等は書かない（3本目の自由コメントで扱います）
+  - チャート順位/ビルボード等の順位・スコア、受賞/グラミー等は書かない（1本目の自由コメントで既に扱います。ここでは触れない）
   - 「数日で」「異例の速さ」など制作期間の断定をしない
   - 「全ての工程を手掛けた」「ミックスまで」など録音工程の断定をしない
   - 「唯一無二」「世界観を築き上げた」など過剰な断定表現をしない
