@@ -261,6 +261,22 @@ export function parsePerformingFromDescription(description: string): { artist: s
 }
 
 /**
+ * 別定型: Official Music Video for 'The Power of Love' performed by Huey Lewis and The News (…
+ * 曲名・アーティストの順が parsePerformingFromDescription と逆。
+ */
+export function parseSongPerformedByFromDescription(description: string): { artist: string; song: string } | null {
+  if (!description?.trim()) return null;
+  const m = description.match(
+    /\b(?:official\s+)?(?:music\s+)?video\s+for\s+(["'`\u2018\u2019\u201c\u201d])([^\r\n]+?)\1\s+performed\s+by\s+(.+?)\s*(?:\(|\.(?:\s|$)|\r?\n|$)/i,
+  );
+  if (!m?.[2] || !m?.[3]) return null;
+  const song = m[2].replace(/\s+/g, ' ').trim();
+  let artist = m[3].replace(/\s+/g, ' ').trim().replace(/\.$/, '');
+  if (!artist || !song || artist.length > 120 || song.length > 120) return null;
+  return { artist, song };
+}
+
+/**
  * 表示・AI用にアーティストと曲名を取得。
  * artist: メインアーティスト（AI・スタイル用）
  * artistDisplay: 表示用（複数はカンマ区切り。「アーティスト - 曲名」の先頭に使う）
@@ -273,9 +289,11 @@ export function getArtistAndSong(
   const desc = options?.videoDescription;
   if (desc?.trim()) {
     const perf = parsePerformingFromDescription(desc);
-    if (perf) {
-      const artistPart = perf.artist;
-      const songPart = cleanTitle(perf.song);
+    const perfInverted = perf ? null : parseSongPerformedByFromDescription(desc);
+    const fromDesc = perf ?? perfInverted;
+    if (fromDesc) {
+      const artistPart = fromDesc.artist;
+      const songPart = cleanTitle(fromDesc.song);
       if (artistPart && songPart) {
         return {
           artist: getMainArtist(artistPart) || artistPart,
@@ -350,14 +368,15 @@ export function getArtistAndSong(
     const multiArtistOnRight = /\s&\s|\sand\s/i.test(right);
     const multiArtistOnLeft = /\s&\s|\sand\s/i.test(left);
 
-    // 3) チャンネル名が取れない oEmbed 等で「曲名 - A & B」（左短・右に複数アーティスト）と誤認されるのを直す
+    // 3) oEmbed が「曲名 - アーティスト」で、右に & / and（バンド名）・左に無いときは入れ替え。
+    //    チャンネルが hueylewisofficial のようにアーティスト文字列と一致しないケースもここで救う。
     const shouldSwapTitleArtistOrder =
-      !chNorm &&
+      !channelLooksLikeRight &&
+      !channelLooksLikeLeft &&
       multiArtistOnRight &&
       !multiArtistOnLeft &&
       looksLikeArtistName(right) &&
-      looksLikeSongTitle(left) &&
-      left.length < right.length;
+      looksLikeSongTitle(left);
 
     // swap条件:
     // 1) チャンネル名が右側に含まれる（強い根拠）
