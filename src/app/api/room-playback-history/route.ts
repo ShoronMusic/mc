@@ -11,6 +11,7 @@ import {
   cleanAuthor,
   songTitleMayNeedDescriptionCrossCheck,
   refineSongTitleWithDescription,
+  formatArtistTitle,
 } from '@/lib/format-song-display';
 import { getVideoSnippet } from '@/lib/youtube-search';
 import { getOrAssignStyle, setStyleInDb } from '@/lib/song-style';
@@ -21,6 +22,18 @@ import type { SongStyle } from '@/lib/gemini';
 export const dynamic = 'force-dynamic';
 
 const TWO_MINUTES_MS = 2 * 60 * 1000;
+
+function friendlySupabaseErrorMessage(raw: string): string {
+  const s = raw.toLowerCase();
+  if (s.includes('invalid api key') || s.includes('invalid_api_key')) {
+    return (
+      'Supabase の API キーが無効です（Invalid API key）。' +
+      'Vercel の環境変数で NEXT_PUBLIC_SUPABASE_URL・NEXT_PUBLIC_SUPABASE_ANON_KEY を確認してください。' +
+      'スタイル変更でサービスロールを使う場合は SUPABASE_SERVICE_ROLE_KEY も正しい値か確認してください。'
+    );
+  }
+  return raw;
+}
 
 export type RoomPlaybackHistoryRow = {
   id: string;
@@ -148,9 +161,11 @@ export async function POST(request: Request) {
   const needSnippet =
     !pre.artist || songTitleMayNeedDescriptionCrossCheck(pre.song);
   const snippet = needSnippet ? await getVideoSnippet(videoId) : null;
+  let snippetDescription =
+    snippet?.description && snippet.description.trim() ? snippet.description : null;
 
   let { artist, song } = getArtistAndSong(title ?? videoId, authorName, {
-    videoDescription: snippet?.description ?? null,
+    videoDescription: snippetDescription,
   });
 
   const effectiveAuthor =
@@ -173,6 +188,7 @@ export async function POST(request: Request) {
   if (!artist) {
     const snippetForArtist = snippet ?? (await getVideoSnippet(videoId));
     if (snippetForArtist?.description) {
+      if (!snippetDescription) snippetDescription = snippetForArtist.description;
       const fromDesc = parseArtistTitleFromDescription(snippetForArtist.description);
       if (fromDesc) {
         artist = getMainArtist(fromDesc.artist);
@@ -186,6 +202,11 @@ export async function POST(request: Request) {
       if (!title && snippetForArtist.title) title = snippetForArtist.title;
     }
   }
+
+  /** 一覧・スタイル変更モーダル用。oEmbed 生タイトルが「曲名 - アーティスト」のまま残らないようにする */
+  const titleForDb =
+    formatArtistTitle(title ?? videoId, authorName ?? undefined, snippetDescription) ||
+    (title ?? videoId);
 
   let style: string | null = null;
   try {
@@ -208,7 +229,7 @@ export async function POST(request: Request) {
     display_name: displayNameToStore,
     is_guest: isGuest,
     user_id: userId,
-    title: title ?? videoId,
+    title: titleForDb,
     artist_name: artist ?? effectiveAuthor ?? null,
     style,
   });
@@ -277,12 +298,28 @@ export async function PATCH(request: Request) {
 
   // サービスロールがあれば RLS をバイパスして更新（ゲスト・他ユーザー貼り曲でもスタイル変更可能）
   const admin = createAdminClient();
-  const updateClient = admin ?? supabase;
-  const { data: updated, error } = await updateClient
+  let updateClient = admin ?? supabase;
+  let { data: updated, error } = await updateClient
     .from('room_playback_history')
     .update({ style })
     .eq('id', id)
     .select('id, style');
+
+  // Vercel 等で SUPABASE_SERVICE_ROLE_KEY が誤っていると Invalid API key になる。セッション用クライアントで再試行。
+  if (
+    error &&
+    admin &&
+    error.message?.toLowerCase().includes('invalid api key')
+  ) {
+    console.warn('[room-playback-history PATCH] service role key rejected; retrying with session client');
+    const second = await supabase
+      .from('room_playback_history')
+      .update({ style })
+      .eq('id', id)
+      .select('id, style');
+    updated = second.data;
+    error = second.error;
+  }
 
   if (error) {
     if (error.code === '42P01') {
@@ -298,7 +335,10 @@ export async function PATCH(request: Request) {
       );
     }
     console.error('[room-playback-history PATCH]', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json(
+      { error: friendlySupabaseErrorMessage(error.message) },
+      { status: 500 }
+    );
   }
 
   if (!updated || updated.length === 0) {
