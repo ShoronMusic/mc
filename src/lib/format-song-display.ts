@@ -246,6 +246,21 @@ export type GetArtistAndSongOptions = {
 };
 
 /**
+ * YouTube 公式MVの説明に多い定型: "Music video by Kendrick Lamar, SZA performing luther."
+ */
+export function parsePerformingFromDescription(description: string): { artist: string; song: string } | null {
+  if (!description?.trim()) return null;
+  const m = description.match(
+    /(?:music\s+)?video\s+by\s+(.+?)\s+performing\s+([^\n.©]+?)(?:\s*[.©]|\s*$)/i,
+  );
+  if (!m?.[1] || !m?.[2]) return null;
+  const artist = m[1].replace(/\s+/g, ' ').trim();
+  const song = m[2].replace(/\s+/g, ' ').trim();
+  if (!artist || !song || artist.length > 120 || song.length > 120) return null;
+  return { artist, song };
+}
+
+/**
  * 表示・AI用にアーティストと曲名を取得。
  * artist: メインアーティスト（AI・スタイル用）
  * artistDisplay: 表示用（複数はカンマ区切り。「アーティスト - 曲名」の先頭に使う）
@@ -255,6 +270,22 @@ export function getArtistAndSong(
   authorName?: string | null,
   options?: GetArtistAndSongOptions
 ): { artist: string | null; artistDisplay: string | null; song: string } {
+  const desc = options?.videoDescription;
+  if (desc?.trim()) {
+    const perf = parsePerformingFromDescription(desc);
+    if (perf) {
+      const artistPart = perf.artist;
+      const songPart = cleanTitle(perf.song);
+      if (artistPart && songPart) {
+        return {
+          artist: getMainArtist(artistPart) || artistPart,
+          artistDisplay: getArtistDisplayString(artistPart) || null,
+          song: refineSongTitleWithDescription(songPart, desc),
+        };
+      }
+    }
+  }
+
   const cleaned = cleanTitle(title);
   const parsed = parseArtistTitle(title);
   if (parsed) {
@@ -308,20 +339,34 @@ export function getArtistAndSong(
       if (x.length <= 2) return false;
       if (x.length > 60) return false;
       // 年や解説の断片は避ける
-      if (/\b(19\\d{2}|20\\d{2})\\b/.test(x)) return false;
+      if (/\b(19\d{2}|20\d{2})\b/.test(x)) return false;
       // MV/歌詞などは曲名側に寄ることが多い
-      if (/(official|music video|lyric|lyrics|hd|4k|remaster|live|cover)\\b/i.test(x)) return false;
+      if (/(official|music video|lyric|lyrics|hd|4k|remaster|live|cover)\b/i.test(x)) return false;
       // 記号はバンド名であり得る範囲だけ許容
-      if (!/^[A-Za-z0-9 '&.\\-]+$/.test(x)) return false;
+      if (!/^[A-Za-z0-9 '&.\-]+$/.test(x)) return false;
       return true;
     };
+
+    const multiArtistOnRight = /\s&\s|\sand\s/i.test(right);
+    const multiArtistOnLeft = /\s&\s|\sand\s/i.test(left);
+
+    // 3) チャンネル名が取れない oEmbed 等で「曲名 - A & B」（左短・右に複数アーティスト）と誤認されるのを直す
+    const shouldSwapTitleArtistOrder =
+      !chNorm &&
+      multiArtistOnRight &&
+      !multiArtistOnLeft &&
+      looksLikeArtistName(right) &&
+      looksLikeSongTitle(left) &&
+      left.length < right.length;
 
     // swap条件:
     // 1) チャンネル名が右側に含まれる（強い根拠）
     // 2) もしくは、右がアーティストっぽく左が曲名っぽい（Linkin Park等の公式MVで多い）
+    // 3) 上記 shouldSwapTitleArtistOrder
     const shouldSwap =
       (channelLooksLikeRight && !channelLooksLikeLeft && looksLikeSongTitle(left)) ||
-      (!channelLooksLikeLeft && looksLikeArtistName(right) && looksLikeSongTitle(left) && left.length >= right.length);
+      (!channelLooksLikeLeft && looksLikeArtistName(right) && looksLikeSongTitle(left) && left.length >= right.length) ||
+      shouldSwapTitleArtistOrder;
 
     const artistPart = shouldSwap ? right : left;
     const songPart = shouldSwap ? left : right;
@@ -347,11 +392,39 @@ export function getArtistAndSong(
   };
 }
 
-export function formatArtistTitle(title: string, authorName?: string): string {
+/**
+ * @param videoDescription YouTube Data API の snippet.description（取れるとき）。
+ *   「Music video by … performing …」を最優先し、oEmbed だけの逆転表示を防ぐ。
+ */
+export function formatArtistTitle(
+  title: string,
+  authorName?: string | null,
+  videoDescription?: string | null,
+): string {
   const cleaned = cleanTitle(title);
-  if (!authorName) return cleaned;
+  const opts = videoDescription?.trim() ? { videoDescription } : undefined;
+
+  if (!authorName) {
+    if (opts) {
+      const { artistDisplay, song } = getArtistAndSong(cleaned, null, opts);
+      if (artistDisplay && song) return `${artistDisplay} - ${song}`;
+    }
+    return cleaned;
+  }
+
   const author = cleanAuthor(authorName);
-  if (!author || isLikelyPersonalChannelName(author)) return cleaned;
+  if (!author || isLikelyPersonalChannelName(author)) {
+    if (opts) {
+      const { artistDisplay, song } = getArtistAndSong(cleaned, null, opts);
+      if (artistDisplay && song) return `${artistDisplay} - ${song}`;
+    }
+    return cleaned;
+  }
+
+  if (opts) {
+    const { artistDisplay, song } = getArtistAndSong(cleaned, author, opts);
+    if (artistDisplay && song) return `${artistDisplay} - ${song}`;
+  }
 
   // 既に区切りがある場合でも、「曲名 - アーティスト」逆パターンを正規化して表示する
   if (ARTIST_TITLE_SEPARATOR.test(cleaned)) {

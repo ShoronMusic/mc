@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { formatArtistTitle } from '@/lib/format-song-display';
 import { fetchOEmbed } from '@/lib/youtube-oembed';
-import { getVideoDurationSeconds } from '@/lib/youtube-search';
+import { getVideoDurationSeconds, getVideoSnippet } from '@/lib/youtube-search';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,9 +14,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'videoId is required' }, { status: 400 });
     }
 
-    const [oembed, durationSeconds] = await Promise.all([
+    const [oembed, durationSeconds, snippet] = await Promise.all([
       fetchOEmbed(videoId),
       getVideoDurationSeconds(videoId),
+      getVideoSnippet(videoId),
     ]);
     const title = oembed?.title ?? videoId;
     const authorName = oembed?.author_name;
@@ -55,7 +56,7 @@ export async function POST(request: Request) {
       });
     }
 
-    const artistTitle = formatArtistTitle(title, authorName);
+    const artistTitle = formatArtistTitle(title, authorName, snippet?.description);
     const text = `${displayName}さんの選曲です！\n${artistTitle}`;
 
     return NextResponse.json({

@@ -1125,7 +1125,15 @@ export default function RoomWithSync({
       const currentVid = videoIdRef.current;
       const turnClientId = currentTurnClientIdRef.current;
       const order = participatingOrderRef.current;
-      const multipleParticipants = order.length > 1;
+      const normalizedNames = order.map(
+        (p) => (p.displayName ?? '').trim() || 'ゲスト',
+      );
+      const uniqueDisplayNameCount = new Set(normalizedNames).size;
+      // 別タブ二重接続など「同じ表示名の clientId が複数」だとターンが自分以外扱いになり
+      // 「今すぐ貼る」が弾かれる。表示名が全員同一なら実質1人とみなし順番制限をかけない。
+      const sameDisplayNameOnly =
+        order.length > 1 && uniqueDisplayNameCount === 1;
+      const multipleParticipants = order.length > 1 && !sameDisplayNameOnly;
       const isMyTurn = turnClientId && turnClientId === myClientId;
 
       if (currentVid && multipleParticipants && !isMyTurn && !isOwner) {
