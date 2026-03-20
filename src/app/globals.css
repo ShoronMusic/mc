@@ -1,0 +1,28 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #0a0a0a;
+  --foreground: #ededed;
+}
+
+body {
+  color: var(--foreground);
+  background: var(--background);
+}
+
+/* 選曲者「再生中」インジケーター：波形 */
+@keyframes now-playing-wave {
+  0%, 100% { transform: scaleY(0.4); }
+  50% { transform: scaleY(1); }
+}
+
+.animate-now-playing-wave span {
+  animation: now-playing-wave 0.6s ease-in-out infinite;
+}
+.animate-now-playing-wave span:nth-child(1) { animation-delay: 0s; }
+.animate-now-playing-wave span:nth-child(2) { animation-delay: 0.1s; }
+.animate-now-playing-wave span:nth-child(3) { animation-delay: 0.2s; }
+.animate-now-playing-wave span:nth-child(4) { animation-delay: 0.3s; }
+.animate-now-playing-wave span:nth-child(5) { animation-delay: 0.4s; }
