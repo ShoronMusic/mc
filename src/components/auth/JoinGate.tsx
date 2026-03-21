@@ -43,7 +43,11 @@ export function JoinGate({ roomId }: JoinGateProps) {
 
   useEffect(() => {
     if (!readTermsAccepted()) {
-      router.replace(`/consent?next=${encodeURIComponent(`/${roomId}`)}`);
+      const nextPath =
+        typeof window !== 'undefined'
+          ? `${window.location.pathname}${window.location.search}`
+          : `/${roomId}`;
+      router.replace(`/consent?next=${encodeURIComponent(nextPath)}`);
       setConsentOk(false);
       return;
     }

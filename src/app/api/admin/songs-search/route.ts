@@ -1,13 +1,12 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { requireStyleAdminApi } from '@/lib/admin-access';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
-  const supabase = await createClient();
-  if (!supabase) {
-    return NextResponse.json({ error: 'DBが利用できません。' }, { status: 503 });
-  }
+  const gate = await requireStyleAdminApi();
+  if (!gate.ok) return gate.response;
+  const { supabase } = gate;
 
   const { searchParams } = new URL(request.url);
   const q = (searchParams.get('q') ?? '').trim();

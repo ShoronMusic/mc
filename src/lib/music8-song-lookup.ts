@@ -4,6 +4,7 @@
  */
 
 import { artistNameToMusic8Slug } from '@/lib/music8-artist-display';
+import { resolveArtistNameForMusic8Lookup } from '@/lib/music8-main-artist-lookup';
 import {
   getArtistDisplayString,
   getMainArtist,
@@ -166,7 +167,10 @@ export async function fetchMusic8SongData(
   artistNameOrSlug: string,
   songTitle: string
 ): Promise<Record<string, unknown> | null> {
-  const artistSlug = artistNameToMusic8Slug(artistNameOrSlug) || (artistNameOrSlug ?? '').trim().toLowerCase().replace(/\s+/g, '-');
+  const nameForMusic8 = resolveArtistNameForMusic8Lookup(artistNameOrSlug ?? '');
+  const artistSlug =
+    artistNameToMusic8Slug(nameForMusic8) ||
+    nameForMusic8.trim().toLowerCase().replace(/\s+/g, '-');
   const normalizedTitle = normalizeSongTitleForLookup(artistNameOrSlug, songTitle ?? '');
   const titleSlug = songTitleToMusic8Slug(normalizedTitle || (songTitle ?? '').trim());
   if (!artistSlug || !titleSlug) return null;

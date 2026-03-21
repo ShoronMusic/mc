@@ -15,6 +15,7 @@ import { upsertSongAndVideo } from '@/lib/song-entities';
 import {
   COMMENT_PACK_MAX_FREE_COMMENTS,
   COMMENT_PACK_NEW_RELEASE_DISCLAIMER,
+  COMMENT_PACK_SOURCES,
   getStoredCommentPackByVideoId,
   getStoredNewReleaseCommentPack,
   insertTidbit,
@@ -106,6 +107,7 @@ export async function POST(request: Request) {
             freeComments: [],
             source: 'library',
             newReleaseOnly: true,
+            ...(nrCached.tidbitIds?.length ? { tidbitIds: nrCached.tidbitIds } : {}),
           });
         }
       } else {
@@ -117,6 +119,7 @@ export async function POST(request: Request) {
             baseComment: cached.baseComment,
             freeComments: [...cached.freeComments],
             source: 'library',
+            ...(cached.tidbitIds?.length ? { tidbitIds: cached.tidbitIds } : {}),
           });
         }
       }
@@ -183,7 +186,7 @@ ${basePromptTail}`;
 
     // 2. 自由コメント3本（基本情報のあと。1本目＝栄誉・チャート、2＝歌詞、3＝サウンド）
     const topics = [
-      '商業的成功と栄誉（世界的な大ヒットに限り、代表チャート・グラミー等の広く知られた事実を簡潔にたたえる。可能なら冒頭一句で全米シングルチャート（Billboard Hot 100）首位など、定番として知られる記録を触れてよい。マイナー曲や不明なら受賞に触れずライブ扱いや文化的言及にとどめる）',
+      '商業的成功と栄誉（世界的な大ヒットに限り、代表チャート・グラミー等の広く知られた事実を簡潔にたたえる。全米シングルチャート（Billboard Hot 100）の1位・首位・上位入りなどを書くときは、必ずその実績が生じた西暦を「1990年」のように明示すること（どの年のチャートか分からない場合は順位の断定を書かない）。可能なら冒頭一句で上記の形で記録に触れてよい。マイナー曲や不明なら受賞に触れずライブ扱いや文化的言及にとどめる）',
       '歌詞テーマやメッセージ、よく語られる誤解や解釈のポイント',
       'サウンドの特徴（メロディ/リズム/アレンジ/フックなど）と印象',
     ] as const;
@@ -236,7 +239,8 @@ ${basePromptTail}`;
   - 特定のボーカル名／メンバー名を「この動画で歌っている」と断定しない（タイトルや説明文に明記がある場合のみ）
   - 亡くなった可能性があるメンバーに触れる場合は、現在の歌唱者と誤解される断定表現を避け、無理に名前を出さない`;
 
-      const banBlockHonors = `・この1本だけの禁止事項:
+      const banBlockHonors = `・この1本だけの必須・禁止:
+  - ビルボードHot 100・全米シングルチャート等の順位（1位・首位・トップ等）を書くときは、必ず西暦の年を添える（例：「1990年の全米シングルチャートで1位」）。年がはっきり分からないときは順位やチャート成績に触れない
   - 数字・順位・受賞名は「広く参照される事実」に限る。不確かな週数や売上、作った受賞歴は書かない
   - マイナー曲・インディーで明確な大ヒットでないと判断したら、チャート/グラミーに触れず「ライブ定番」「カバーが多い」などにとどめる
   - 制作期間の断定（「数日で」等）、録音工程の断定、TikTokバズや若者文化の誇張はしない`;
@@ -279,7 +283,7 @@ ${isHonorsTopic ? banBlockHonors : banBlockStandard}
           if (attempt === 2) break;
           prompt = isHonorsTopic
             ? prompt +
-              '\n（追加指示）事実として確からしい代表チャート・グラミー等だけを短く。曖昧なら受賞に触れずに書き直してください。'
+              '\n（追加指示）事実として確からしい代表チャート・グラミー等だけを短く。チャート順位を書く場合は西暦年（例：1990年）を必ず添える。年が不明なら順位に触れず書き直す。曖昧なら受賞に触れずに書き直してください。'
             : prompt +
               '\n（追加指示）チャート/受賞/制作期間/録音工程に触れず、指定観点だけで短く書き直してください。';
         }
@@ -290,33 +294,62 @@ ${isHonorsTopic ? banBlockHonors : banBlockStandard}
     }
 
     const freeCommentsCapped = freeComments.slice(0, COMMENT_PACK_MAX_FREE_COMMENTS);
+    /** insert・tidbitId 紐づけ・クライアント表示を一致させる（空文字スロットを除外） */
+    const freeBodiesForPack = freeCommentsCapped
+      .map((t) => (typeof t === 'string' ? t.trim() : ''))
+      .filter((t) => t.length > 0);
 
     // song_tidbits に保存（新曲は基本のみ、通常は基本＋自由3本）
+    const tidbitIds: (string | null)[] = [];
     if (supabase && songId) {
+      const dbWrite = createAdminClient() ?? supabase;
       const allBodies = isNewRelease
-        ? [baseText]
-        : [baseText, ...freeCommentsCapped].filter((t) => t.trim());
+        ? [baseText.trim()].filter((t) => t.length > 0)
+        : [baseText.trim(), ...freeBodiesForPack].filter((t) => t.length > 0);
+
+      // 同一動画で再生成（COMMENT_PACK_SKIP_CACHE 等）するとき、古い ai_commentary / ai_chat_* と UNIQUE がぶつかり
+      // ai_chat_1 だけ insert 失敗 → 2本目に tidbitId が付かない、となる。先に該当行を消してから入れ直す。
+      try {
+        const { error: delErr } = await dbWrite
+          .from('song_tidbits')
+          .delete()
+          .eq('video_id', videoId)
+          .in('source', [...COMMENT_PACK_SOURCES]);
+        if (delErr) {
+          console.warn('[api/ai/comment-pack] delete old song_tidbits', delErr.message);
+        }
+      } catch (e) {
+        console.warn('[api/ai/comment-pack] delete old song_tidbits', e);
+      }
+
       const sources = ['ai_commentary', 'ai_chat_1', 'ai_chat_2', 'ai_chat_3'];
       for (let i = 0; i < allBodies.length; i++) {
         try {
-          await insertTidbit(supabase, {
+          const row = await insertTidbit(dbWrite, {
             songId,
             videoId,
             body: allBodies[i],
             source: sources[i] ?? 'ai_chat',
           });
+          tidbitIds.push(row?.id ?? null);
         } catch (e) {
           console.error('[api/ai/comment-pack] insertTidbit', i, e);
+          tidbitIds.push(null);
         }
       }
     }
+
+    const freeCommentTidbitIds =
+      !isNewRelease && tidbitIds.length > 1 ? tidbitIds.slice(1) : [];
 
     return NextResponse.json({
       songId,
       videoId,
       baseComment: baseText,
-      freeComments: freeCommentsCapped,
+      freeComments: freeBodiesForPack,
       ...(isNewRelease ? { newReleaseOnly: true } : {}),
+      ...(tidbitIds.length > 0 ? { tidbitIds } : {}),
+      ...(freeCommentTidbitIds.length > 0 ? { freeCommentTidbitIds } : {}),
     });
   } catch (e) {
     console.error('[api/ai/comment-pack]', e);

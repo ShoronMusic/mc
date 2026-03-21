@@ -3,6 +3,8 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { createClient, isSupabaseConfigured } from '@/lib/supabase/client';
+import { setOAuthReturnPathCookie } from '@/lib/oauth-return-path';
+import { getBrowserAppOrigin } from '@/lib/app-origin';
 import { SimpleAuthForm } from './SimpleAuthForm';
 
 export const GUEST_STORAGE_KEY = 'mc:guest';
@@ -55,9 +57,14 @@ export function JoinChoice({ onJoin, roomId }: JoinChoiceProps) {
       return;
     }
     setError(null);
-    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    const origin = getBrowserAppOrigin() || (typeof window !== 'undefined' ? window.location.origin : '');
     const pathname = typeof window !== 'undefined' ? window.location.pathname : `/${roomId}`;
+    setOAuthReturnPathCookie(pathname);
     const redirectTo = `${origin}/auth/callback?next=${encodeURIComponent(pathname)}`;
+    if (process.env.NODE_ENV === 'development') {
+      // Supabase が redirectTo を拒否すると Site URL（本番）へ ?code= だけ飛ばすことがある。Network タブの authorize URL と照合する。
+      console.info('[OAuth] redirectTo →', redirectTo);
+    }
     const { error: err } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: { redirectTo },

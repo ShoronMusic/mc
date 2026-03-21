@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
+import { AdminMenuBar } from '@/components/admin/AdminMenuBar';
 
 type LogRow = {
   id: string;
@@ -14,6 +15,15 @@ type LogRow = {
   video_id: string | null;
   created_at: string;
 };
+
+/** Gemini Developer API の公式料金（モデル別の入力・出力単価） */
+const GEMINI_PRICING_URL = 'https://ai.google.dev/pricing';
+
+/** Google AI Studio 左メニュー「使用量」に相当（リクエスト・トークン・エラーなど） */
+const GOOGLE_AI_STUDIO_USAGE_URL = 'https://aistudio.google.com/usage?timeRange=last-28-days';
+
+/** Google AI Studio 左メニュー「利用額」に相当（日別の利用額・上限） */
+const GOOGLE_AI_STUDIO_SPEND_URL = 'https://aistudio.google.com/spend';
 
 const CONTEXT_HELP: Record<string, string> = {
   chat_reply: 'チャットへの AI 返答',
@@ -75,6 +85,7 @@ export default function AdminGeminiUsagePage() {
   return (
     <main className="min-h-screen bg-gray-950 p-4 text-gray-100">
       <div className="mx-auto max-w-6xl">
+        <AdminMenuBar />
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
           <h1 className="text-xl font-semibold">Gemini 利用ログ</h1>
           <div className="flex flex-wrap items-center gap-2">
@@ -98,8 +109,35 @@ export default function AdminGeminiUsagePage() {
             >
               再読込
             </button>
-            <Link href="/admin/songs" className="text-sm text-blue-400 hover:underline">
-              曲管理へ
+            <a
+              href={GOOGLE_AI_STUDIO_USAGE_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded border border-sky-800/70 bg-sky-950/50 px-3 py-1 text-sm text-sky-200 hover:border-sky-600 hover:bg-sky-900/40"
+            >
+              AI Studio · 使用量↗
+            </a>
+            <a
+              href={GOOGLE_AI_STUDIO_SPEND_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded border border-violet-800/70 bg-violet-950/50 px-3 py-1 text-sm text-violet-200 hover:border-violet-600 hover:bg-violet-900/40"
+            >
+              AI Studio · 利用額↗
+            </a>
+            <a
+              href={GEMINI_PRICING_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded border border-emerald-800/70 bg-emerald-950/50 px-3 py-1 text-sm text-emerald-200 hover:border-emerald-600 hover:bg-emerald-900/40"
+            >
+              料金表（単価・公式）↗
+            </a>
+            <Link
+              href="/admin/ai-comment-origin"
+              className="rounded border border-gray-600 bg-gray-800/80 px-3 py-1 text-sm text-gray-200 hover:bg-gray-700"
+            >
+              NEW/DB 分析
             </Link>
           </div>
         </div>
@@ -107,6 +145,36 @@ export default function AdminGeminiUsagePage() {
         <section className="mb-6 rounded-lg border border-gray-700 bg-gray-900/50 p-4 text-sm">
           <h2 className="mb-2 font-medium text-gray-200">どんなログか</h2>
           <ul className="list-inside list-disc space-y-1 text-gray-400">
+            <li>
+              この画面のトークン数から概算コストを把握するには、{' '}
+              <a
+                href={GEMINI_PRICING_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-emerald-400 underline decoration-emerald-600/60 underline-offset-2 hover:text-emerald-300"
+              >
+                Gemini API の料金表（公式）
+              </a>
+              で利用中のモデル名の入力・出力単価を確認し、下の集計に掛け算してください。Google 側の公式ダッシュボードは{' '}
+              <a
+                href={GOOGLE_AI_STUDIO_USAGE_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sky-400 underline decoration-sky-600/60 underline-offset-2 hover:text-sky-300"
+              >
+                AI Studio · 使用量
+              </a>
+              {' / '}
+              <a
+                href={GOOGLE_AI_STUDIO_SPEND_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-violet-400 underline decoration-violet-600/60 underline-offset-2 hover:text-violet-300"
+              >
+                AI Studio · 利用額
+              </a>
+              から直接開けます。
+            </li>
             <li>
               <strong className="text-gray-300">入力トークン</strong>（prompt）… プロンプト・会話履歴の量。料金の入力単価に掛け算。
             </li>

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { AdminMenuBar } from '@/components/admin/AdminMenuBar';
 
 type SongRow = {
   id: string;
@@ -52,11 +53,9 @@ export default function AdminSongsPage() {
 
   return (
     <main className="mx-auto flex min-h-screen max-w-4xl flex-col bg-gray-950 p-4 text-gray-100">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+      <AdminMenuBar />
+      <div className="mb-4">
         <h1 className="text-xl font-semibold">管理者: 曲ダッシュボード（検索）</h1>
-        <Link href="/admin/gemini-usage" className="text-sm text-blue-400 hover:underline">
-          Gemini 利用ログ
-        </Link>
       </div>
 
       <form onSubmit={handleSearch} className="mb-4 flex gap-2">

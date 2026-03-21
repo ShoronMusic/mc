@@ -67,6 +67,8 @@ export async function insertTidbit(
 export interface StoredCommentPack {
   baseComment: string;
   freeComments: [string, string, string];
+  /** ai_commentary → ai_chat_1..3 の順の song_tidbits.id（NG削除API用） */
+  tidbitIds?: string[];
 }
 
 /** 新曲モードで基本コメント末尾に付与する注釈（キャッシュ判定にも使う先頭フレーズ） */
@@ -81,13 +83,13 @@ const NEW_RELEASE_CACHE_MARKER = '【注釈】新曲と判断したため';
 export async function getStoredNewReleaseCommentPack(
   supabase: SupabaseClient | null,
   videoId: string
-): Promise<{ baseComment: string; freeComments: [] } | null> {
+): Promise<{ baseComment: string; freeComments: []; tidbitIds?: string[] } | null> {
   if (!supabase || !videoId.trim()) return null;
   const vid = videoId.trim();
 
   const { data, error } = await supabase
     .from('song_tidbits')
-    .select('body')
+    .select('id, body')
     .eq('video_id', vid)
     .eq('source', 'ai_commentary')
     .eq('is_active', true)
@@ -101,8 +103,9 @@ export async function getStoredNewReleaseCommentPack(
   }
   const b = typeof data?.body === 'string' ? data.body.trim() : '';
   if (!b || !b.includes(NEW_RELEASE_CACHE_MARKER)) return null;
+  const tid = typeof (data as { id?: string })?.id === 'string' ? (data as { id: string }).id : '';
 
-  return { baseComment: b, freeComments: [] };
+  return { baseComment: b, freeComments: [], tidbitIds: tid ? [tid] : undefined };
 }
 
 /**
@@ -116,11 +119,12 @@ export async function getStoredCommentPackByVideoId(
   if (!supabase || !videoId.trim()) return null;
   const vid = videoId.trim();
   const base: Partial<Record<(typeof COMMENT_PACK_SOURCES)[number], string>> = {};
+  const tidbitIds: string[] = [];
 
   for (const src of COMMENT_PACK_SOURCES) {
     const { data, error } = await supabase
       .from('song_tidbits')
-      .select('body')
+      .select('id, body')
       .eq('video_id', vid)
       .eq('source', src)
       .eq('is_active', true)
@@ -132,14 +136,18 @@ export async function getStoredCommentPackByVideoId(
       if ((error as { code?: string }).code === '42P01') return null;
       return null;
     }
-    const b = typeof data?.body === 'string' ? data.body.trim() : '';
-    if (!b) return null;
+    const row = data as { id?: string; body?: string } | null;
+    const b = typeof row?.body === 'string' ? row.body.trim() : '';
+    const tid = typeof row?.id === 'string' ? row.id : '';
+    if (!b || !tid) return null;
     base[src] = b;
+    tidbitIds.push(tid);
   }
 
   return {
     baseComment: base.ai_commentary!,
     freeComments: [base.ai_chat_1!, base.ai_chat_2!, base.ai_chat_3!],
+    tidbitIds,
   };
 }
 

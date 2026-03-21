@@ -23,6 +23,10 @@ export interface ChatMessage {
   videoId?: string | null;
   /** AIコメントの種別（曲解説 / 豆知識 / 通常応答など） */
   aiSource?: 'commentary' | 'tidbit' | 'chat_reply' | 'other';
+  /** song_tidbits の行ID（comment-pack 由来のみ。モデレーターNG用） */
+  tidbitId?: string | null;
+  /** モデレーターがNGを押しライブラリから無効化済み（ローカル表示用） */
+  tidbitLibraryRejected?: boolean;
 }
 
 /** Ably で送るチャットイベントのペイロード */
@@ -42,4 +46,6 @@ export interface ChatMessagePayload {
   videoId?: string | null;
   /** AIコメントの種別（曲解説 / 豆知識 / 通常応答など） */
   aiSource?: 'commentary' | 'tidbit' | 'chat_reply' | 'other';
+  /** song_tidbits の行ID（comment-pack 由来） */
+  tidbitId?: string | null;
 }

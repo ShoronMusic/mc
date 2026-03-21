@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import { AdminMenuBar } from '@/components/admin/AdminMenuBar';
 
 interface SongDetailPageProps {
   params: { songId: string };
@@ -207,6 +208,7 @@ export default async function SongDetailPage({ params }: SongDetailPageProps) {
 
   return (
     <main className="mx-auto max-w-4xl bg-gray-950 p-4 text-gray-100">
+      <AdminMenuBar />
       <h1 className="mb-4 text-xl font-semibold">管理者: 曲詳細</h1>
 
       {/* 曲メイン情報 */}

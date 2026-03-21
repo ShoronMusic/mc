@@ -57,3 +57,25 @@ create policy "Anyone can select room chat log"
 | display_name | text | 発言者表示名（AIは「AI」、システムは「システム」） |
 | body | text | 本文（最大500文字想定） |
 | user_id | uuid | ログイン参加者の場合のみ。ゲストは null |
+
+## 1日分をテキストで見る・保存する
+
+アプリの API で、**日本時間（JST）の1日分**をプレーンテキストにまとめて取得できます。
+
+- **ブラウザで表示（コピー用）**  
+  `https://あなたのドメイン/api/room-chat-log?roomId=ルームID`  
+  - `date` を省略すると **今日（JST）**  
+  - 例: `?roomId=my-room&date=2025-03-21`
+
+- **ファイルとしてダウンロード**  
+  上記に `&download=1` を付ける（例: `...&date=2025-03-21&download=1`）
+
+1日あたり最大 **8000 件**まで（超える場合は先頭 8000 件のみでヘッダに注記）。
+
+Supabase の **SQL Editor** で同様の範囲を絞る場合は、`created_at` を UTC で比較するか、上記 API と同じく JST の日付境界を計算してください。
+
+## 管理画面（日付・ルーム別一覧）
+
+**`/admin`** ダッシュボードのメニューから **ルーム会話ログ** を開くか、直接 **`/admin/room-chat-log`** にアクセスします。**直近 N 日**を対象に **JST の日付 × ルームID** ごとの件数と、テキスト表示・ダウンロード・ルームへのリンクが一覧できます。
+
+- 利用条件は **Gemini 利用ログ管理** と同じ（`.env.local` の `STYLE_ADMIN_USER_IDS` と `SUPABASE_SERVICE_ROLE_KEY`、管理者アカウントでログイン）。

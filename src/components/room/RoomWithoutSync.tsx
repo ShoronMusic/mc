@@ -24,6 +24,7 @@ import {
 import { NON_YOUTUBE_URL_SYSTEM_MESSAGE } from '@/lib/chat-non-youtube-url';
 import { extractVideoId, isStandaloneNonYouTubeUrl } from '@/lib/youtube';
 import type { ChatMessage } from '@/types/chat';
+import { useRoomChatLogPersistence } from '@/hooks/useRoomChatLogPersistence';
 
 const AI_DISPLAY_NAME = 'AI';
 const SILENCE_TIDBIT_SEC = 30;
@@ -75,6 +76,7 @@ export default function RoomWithoutSync({ displayName: displayNameProp = 'ゲス
   const [videoId, setVideoId] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  useRoomChatLogPersistence(roomId, messages, { isGuest, myClientId: '' });
   const [myPageOpen, setMyPageOpen] = useState(false);
   const [userTextColor, setUserTextColor] = useState(DEFAULT_CHAT_TEXT_COLOR);
   const lastActivityAtRef = useRef(Date.now());

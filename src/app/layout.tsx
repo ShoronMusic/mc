@@ -1,9 +1,41 @@
 import type { Metadata } from 'next';
 import './globals.css';
 
+/** OAuth 戻りが Site URL 直下に ?code= で付いたとき、React・同意ゲートより先に /auth/callback へ送る */
+const OAUTH_STRAY_CODE_SCRIPT = `
+(function(){
+  try {
+    var path = window.location.pathname || '';
+    if (path.indexOf('/auth/callback') === 0) return;
+    var sp = new URLSearchParams(window.location.search);
+    if (!sp.get('code')) return;
+    var cb = new URL('/auth/callback', window.location.origin);
+    sp.forEach(function(v, k) { cb.searchParams.set(k, v); });
+    var next = cb.searchParams.get('next');
+    if (!next || next.charAt(0) !== '/') {
+      cb.searchParams.set('next', path === '/' ? '/' : path);
+    }
+    next = cb.searchParams.get('next');
+    if (path === '/' && next === '/') {
+      var parts = ('; ' + document.cookie).split('; mc_oauth_next=');
+      if (parts.length === 2) {
+        var c = decodeURIComponent(parts.pop().split(';').shift() || '');
+        if (c && c.charAt(0) === '/' && c.indexOf('//') !== 0 && (c === '/' || /^\\/[a-zA-Z0-9][a-zA-Z0-9-]*$/.test(c))) {
+          cb.searchParams.set('next', c);
+        }
+      }
+    }
+    document.cookie = 'mc_oauth_next=; Path=/; Max-Age=0';
+    window.location.replace(cb.pathname + cb.search);
+  } catch (e) {}
+})();
+`.trim();
+
 export const metadata: Metadata = {
   title: '洋楽AIチャット',
   description: 'AIと語る、YouTube同時視聴型・洋楽サロン',
+  /** public/favicon.ico を明示。無いと /favicon.ico が App Router 経由になり RSC で 500 になることがある */
+  icons: { icon: '/favicon.ico' },
 };
 
 export default function RootLayout({
@@ -14,6 +46,11 @@ export default function RootLayout({
   return (
     <html lang="ja">
       <body className="antialiased min-h-screen bg-[var(--background)] text-[var(--foreground)]">
+        {/* next/script の beforeInteractive はルート layout ＋ dev で RSC 経由時に undefined 参照になることがあるため素の script で出す */}
+        <script
+          id="oauth-stray-code-fix"
+          dangerouslySetInnerHTML={{ __html: OAUTH_STRAY_CODE_SCRIPT }}
+        />
         {children}
       </body>
     </html>

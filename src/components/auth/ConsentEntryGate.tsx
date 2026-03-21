@@ -14,7 +14,11 @@ export function ConsentEntryGate({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!readTermsAccepted()) {
-      router.replace(`/consent?next=${encodeURIComponent('/')}`);
+      const nextPath =
+        typeof window !== 'undefined'
+          ? `${window.location.pathname}${window.location.search}`
+          : '/';
+      router.replace(`/consent?next=${encodeURIComponent(nextPath)}`);
       return;
     }
     setAllowed(true);

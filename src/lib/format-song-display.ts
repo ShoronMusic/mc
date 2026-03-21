@@ -4,6 +4,8 @@
  * ref: YTtoWP-YouTube動画をWP新規投稿で開く.js（区切り文字・引用符・不要語の除去を参考）
  */
 
+import { compoundArtistCanonicalIfKnown } from '@/lib/artist-compound-names';
+
 /** アーティスト - 曲名 の区切り（ハイフン・enダッシュ・emダッシュ・水平線） */
 const ARTIST_TITLE_SEPARATOR = /\s*[-\u2013\u2014\u2015]\s*/;
 
@@ -80,6 +82,8 @@ export function getMainArtist(artistPart: string): string {
   let main = artistPart.trim();
   if (!main) return main;
   main = main.replace(FEAT_BLOCK, ' ').replace(/\s+/g, ' ').trim();
+  const compound = compoundArtistCanonicalIfKnown(main);
+  if (compound) return compound;
   const byFeat = main.split(FEAT_SEPARATOR);
   main = (byFeat[0] ?? main).trim();
   const byAmp = main.split(/\s+&\s+/);
@@ -98,6 +102,8 @@ export function getMainArtist(artistPart: string): string {
 export function getArtistDisplayString(artistPart: string): string {
   let s = artistPart.replace(FEAT_BLOCK, ' ').replace(/\s+/g, ' ').trim();
   if (!s) return artistPart.trim();
+  const compound = compoundArtistCanonicalIfKnown(s);
+  if (compound) return compound;
   const parts = s
     .split(FEAT_SEPARATOR)
     .flatMap((p) => p.split(/\s+&\s+/))
@@ -318,9 +324,16 @@ export function getArtistAndSong(
     const right = parsed.song.trim();  // parseArtistTitle上は song 扱い（右側）
 
     const norm = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
+    /** VEVO 等のスラッグ（georgemichael）とタイトル側の「名 姓」（george michael）を突き合わせる */
+    const alnumCompact = (s: string) => norm(s).replace(/[^a-z0-9]/g, '');
+    const MIN_CHANNEL_ALNUM_MATCH = 6;
+
     const chNorm = norm(ch);
     const leftNorm = norm(left);
     const rightNorm = norm(right);
+    const chAc = alnumCompact(ch);
+    const leftAc = alnumCompact(left);
+    const rightAc = alnumCompact(right);
 
     const channelLooksLikeRight =
       Boolean(chNorm) &&
@@ -329,7 +342,10 @@ export function getArtistAndSong(
         rightNorm.startsWith(chNorm + '&') ||
         rightNorm.startsWith(chNorm + ' (') ||
         rightNorm.includes(chNorm + ' &') ||
-        rightNorm.includes(chNorm + ' and'));
+        rightNorm.includes(chNorm + ' and') ||
+        (chAc.length >= MIN_CHANNEL_ALNUM_MATCH &&
+          rightAc.length >= MIN_CHANNEL_ALNUM_MATCH &&
+          chAc === rightAc));
 
     const channelLooksLikeLeft =
       Boolean(chNorm) &&
@@ -338,7 +354,10 @@ export function getArtistAndSong(
         leftNorm.startsWith(chNorm + '&') ||
         leftNorm.startsWith(chNorm + ' (') ||
         leftNorm.includes(chNorm + ' &') ||
-        leftNorm.includes(chNorm + ' and'));
+        leftNorm.includes(chNorm + ' and') ||
+        (chAc.length >= MIN_CHANNEL_ALNUM_MATCH &&
+          leftAc.length >= MIN_CHANNEL_ALNUM_MATCH &&
+          chAc === leftAc));
 
     // 左側が「曲名っぽい」か（MV系の接尾辞や括弧付きなども含めて判定）
     const looksLikeSongTitle = (s: string) => {

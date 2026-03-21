@@ -49,6 +49,7 @@ import {
   setOwnerStateToStorage,
 } from '@/lib/room-owner';
 import { createClient } from '@/lib/supabase/client';
+import { useRoomChatLogPersistence } from '@/hooks/useRoomChatLogPersistence';
 
 const AI_DISPLAY_NAME = 'AI';
 const SILENCE_TIDBIT_SEC = 30;
@@ -109,6 +110,17 @@ function createMessageId(): string {
   return `msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
+/** comment-pack の tidbit UUID（JSON で string 以外が来るケースも許容） */
+function parseTidbitIdFromPack(v: unknown): string | undefined {
+  if (v == null) return undefined;
+  if (typeof v === 'string') {
+    const s = v.trim();
+    return s.length > 0 ? s : undefined;
+  }
+  if (typeof v === 'number' && Number.isFinite(v)) return String(v);
+  return undefined;
+}
+
 interface PresenceMemberData {
   displayName?: string;
   /** 選曲に参加するか。false なら視聴専用。デフォルト true */
@@ -155,6 +167,7 @@ export default function RoomWithSync({
   const [currentTime, setCurrentTime] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  useRoomChatLogPersistence(roomId, messages, { isGuest, myClientId });
   const [myPageOpen, setMyPageOpen] = useState(false);
   const [userTextColor, setUserTextColor] = useState(() => {
     if (typeof window === 'undefined') return DEFAULT_CHAT_TEXT_COLOR;
@@ -238,11 +251,41 @@ export default function RoomWithSync({
     }
   });
   const [candidateOpen, setCandidateOpen] = useState(false);
+  /** AI_TIDBIT_MODERATOR_USER_IDS に含まれるログインユーザーのみ true（NG ボタン） */
+  const [canRejectTidbit, setCanRejectTidbit] = useState(false);
 
   const candidateSongsRef = useRef<CandidateSong[]>(candidateSongs);
   useEffect(() => {
     candidateSongsRef.current = candidateSongs;
   }, [candidateSongs]);
+
+  useEffect(() => {
+    if (isGuest) {
+      setCanRejectTidbit(false);
+      return;
+    }
+    let cancelled = false;
+    const loadModerator = () => {
+      fetch('/api/tidbit-moderator-check', { credentials: 'include' })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => {
+          if (cancelled) return;
+          if (d && typeof d.canRejectTidbit === 'boolean') setCanRejectTidbit(d.canRejectTidbit);
+        })
+        .catch(() => {
+          if (!cancelled) setCanRejectTidbit(false);
+        });
+    };
+    loadModerator();
+    const onVis = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') loadModerator();
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      cancelled = true;
+      document.removeEventListener('visibilitychange', onVis);
+    };
+  }, [isGuest]);
 
   const [candidateButtonFlash, setCandidateButtonFlash] = useState(false);
   const candidateButtonFlashTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -502,6 +545,7 @@ export default function RoomWithSync({
       }
       setMessages((prev) => {
         if (prev.some((m) => m.id === data.id)) return prev;
+        const p = data as ChatMessagePayload & { clientId?: string };
         return [
           ...prev,
           {
@@ -510,7 +554,11 @@ export default function RoomWithSync({
             displayName: data.displayName ?? 'ゲスト',
             messageType: data.messageType ?? 'user',
             createdAt: data.createdAt,
-            clientId: (data as ChatMessagePayload & { clientId?: string }).clientId,
+            clientId: p.clientId,
+            ...(p.tidbitId ? { tidbitId: p.tidbitId } : {}),
+            ...(p.songId != null ? { songId: p.songId } : {}),
+            ...(p.videoId != null ? { videoId: p.videoId } : {}),
+            ...(p.aiSource ? { aiSource: p.aiSource } : {}),
           },
         ];
       });
@@ -679,7 +727,16 @@ export default function RoomWithSync({
   );
 
   const addAiMessage = useCallback(
-    (body: string, options?: { allowWhenAiStopped?: boolean }) => {
+    (
+      body: string,
+      options?: {
+        allowWhenAiStopped?: boolean;
+        tidbitId?: string | null;
+        songId?: string | null;
+        videoId?: string | null;
+        aiSource?: ChatMessage['aiSource'];
+      }
+    ) => {
       if (aiFreeSpeechStopped && !options?.allowWhenAiStopped) return;
       const id = createMessageId();
       const payload: ChatMessagePayload = {
@@ -688,6 +745,10 @@ export default function RoomWithSync({
         displayName: AI_DISPLAY_NAME,
         messageType: 'ai',
         createdAt: new Date().toISOString(),
+        ...(options?.tidbitId ? { tidbitId: options.tidbitId } : {}),
+        ...(options?.songId != null ? { songId: options.songId } : {}),
+        ...(options?.videoId != null ? { videoId: options.videoId } : {}),
+        ...(options?.aiSource ? { aiSource: options.aiSource } : {}),
       };
       safePublish(CHAT_MESSAGE_EVENT, payload);
       setMessages((prev) => [
@@ -698,6 +759,10 @@ export default function RoomWithSync({
           displayName: payload.displayName,
           messageType: payload.messageType,
           createdAt: payload.createdAt,
+          ...(payload.tidbitId ? { tidbitId: payload.tidbitId } : {}),
+          ...(payload.songId != null ? { songId: payload.songId } : {}),
+          ...(payload.videoId != null ? { videoId: payload.videoId } : {}),
+          ...(payload.aiSource ? { aiSource: payload.aiSource } : {}),
         },
       ]);
     },
@@ -992,7 +1057,12 @@ export default function RoomWithSync({
               if (videoIdRef.current !== vid) return;
               /* 曲終了で既に促し済みの場合は「5分経過」は出さない（今流れている曲が5分以上のときだけ使う） */
               if (nextPromptShownForVideoIdRef.current === vid) return;
-              nextPromptShownForVideoIdRef.current = vid;
+              const orderLen = participatingOrderRef.current.length;
+              // 1人ルームでは promptNextTurn が無言 return する。先に案内済みフラグを立てると
+              // 動画終了時の「次の曲をどうぞ」まで潰れるため、複数人のときだけフラグを立てる。
+              if (orderLen > 1) {
+                nextPromptShownForVideoIdRef.current = vid;
+              }
               promptNextTurn({ fiveMinElapsed: true });
             }, FIVE_MIN_MS);
           }
@@ -1015,8 +1085,19 @@ export default function RoomWithSync({
           if (pack?.baseComment) {
             commentPackVideoIdRef.current = vid;
             const packPrefix = pack?.source === 'library' ? '[DB] ' : '[NEW] ';
+            const ids: (string | null | undefined)[] = Array.isArray(pack.tidbitIds) ? pack.tidbitIds : [];
+            const freeTidbitIdsRaw: unknown[] = Array.isArray(pack.freeCommentTidbitIds)
+              ? pack.freeCommentTidbitIds
+              : [];
+            const tid0 = parseTidbitIdFromPack(ids[0]);
             // 基本コメントをすぐ表示（2回目以降は蓄積DBから＝[DB]）
-            addAiMessage(packPrefix + pack.baseComment);
+            addAiMessage(packPrefix + pack.baseComment, {
+              allowWhenAiStopped: true,
+              tidbitId: tid0,
+              songId: pack.songId ?? null,
+              videoId: vid,
+              aiSource: 'tidbit',
+            });
             touchActivity();
             tidbitPreferMainArtistLeftRef.current = 2;
 
@@ -1036,11 +1117,20 @@ export default function RoomWithSync({
             suppressTidbitRef.current = comments.length > 0;
             comments.forEach((c, index) => {
               const delayMs = (index + 1) * 60 * 1000; // 1分ごと
+              const tidN =
+                parseTidbitIdFromPack(freeTidbitIdsRaw[index]) ??
+                parseTidbitIdFromPack(ids[index + 1]);
               const timer = setTimeout(() => {
                 if (videoIdRef.current !== vid) return;
                 // 「次の曲」案内済みならこの曲の自由コメントは出さない
                 if (nextPromptShownForVideoIdRef.current === vid) return;
-                addAiMessage(packPrefix + c);
+                addAiMessage(packPrefix + c, {
+                  allowWhenAiStopped: true,
+                  tidbitId: tidN,
+                  songId: pack.songId ?? null,
+                  videoId: vid,
+                  aiSource: 'tidbit',
+                });
                 touchActivity();
               }, delayMs);
               freeCommentTimeoutsRef.current.push(timer);
@@ -1072,6 +1162,29 @@ export default function RoomWithSync({
     },
     [addAiMessage, addSystemMessage, touchActivity]
   );
+
+  const handleTidbitLibraryReject = useCallback(async (messageId: string, tidbitId: string) => {
+    try {
+      const res = await fetch('/api/ai/reject-tidbit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ tidbitId }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        alert(typeof data?.error === 'string' ? data.error : 'ライブラリからの削除に失敗しました');
+        return;
+      }
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === messageId ? { ...m, tidbitId: undefined, tidbitLibraryRejected: true } : m
+        )
+      );
+    } catch {
+      alert('ライブラリからの削除に失敗しました');
+    }
+  }, []);
 
   const schedulePlaybackHistory = useCallback(
     (rid: string, vid: string) => {
@@ -1553,6 +1666,8 @@ export default function RoomWithSync({
               .filter((p) => p.textColor)
               .map((p) => ({ displayName: p.displayName, textColor: p.textColor }))}
             currentVideoId={videoId}
+            canRejectTidbit={canRejectTidbit && !isGuest}
+            onTidbitLibraryReject={handleTidbitLibraryReject}
           />
         }
         rightTop={

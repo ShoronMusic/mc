@@ -6,6 +6,7 @@
  */
 
 import { getMainArtist } from '@/lib/format-song-display';
+import { resolveArtistNameForMusic8Lookup } from '@/lib/music8-main-artist-lookup';
 export interface Music8OccupationItem {
   value?: string;
   label?: string;
@@ -81,7 +82,7 @@ export function artistNameToMusic8Slug(artistName: string): string {
 
 /** music8 アーティスト JSON の URL */
 export function getMusic8ArtistJsonUrl(artistName: string): string {
-  const slug = artistNameToMusic8Slug(artistName);
+  const slug = artistNameToMusic8Slug(resolveArtistNameForMusic8Lookup(artistName));
   return slug ? `${MUSIC8_ARTISTS_BASE}/${slug}.json` : '';
 }
 

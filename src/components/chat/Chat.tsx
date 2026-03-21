@@ -5,6 +5,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import {
   HandThumbUpIcon,
   HandThumbDownIcon,
@@ -37,6 +38,9 @@ interface ChatProps {
   participantsWithColor?: { displayName: string; textColor?: string }[];
   /** 現在再生中の videoId（AIコメント評価用） */
   currentVideoId?: string | null;
+  /** song_tidbits をライブラリから外す NG（最高管理者のみ） */
+  canRejectTidbit?: boolean;
+  onTidbitLibraryReject?: (messageId: string, tidbitId: string) => void | Promise<void>;
 }
 
 function formatTime(createdAt: string): string {
@@ -56,6 +60,158 @@ function getSelectorNameFromBody(body: string): string | null {
 
 const DEFAULT_MESSAGE_COLOR = '#e5e7eb';
 
+/** AI 曲解説・comment-pack：固有名っぽい箇所を黄色（[NEW]・接続の「の」・括弧の外側は本文色） */
+const AI_ARTIST_SONG_HIGHLIGHT_CLASS = 'font-semibold text-yellow-300';
+
+const PACK_PREFIX_RE = /^(\[(?:NEW|DB)\]\s*)/;
+/** 映画「タイトル」／映画『タイトル』（括弧内のみ黄色） */
+const MOVIE_QUOTED_RE = /映画(「([^」]{1,200})」|『([^』]{1,200})』)/g;
+/** アルバム「タイトル」／アルバム『タイトル』 */
+const ALBUM_QUOTED_RE = /アルバム(「([^」]{1,200})」|『([^』]{1,200})』)/g;
+/** の直後が 『 または 「 でないときの「英字アーティスト名の」（例: Chicagoの輝かしい） */
+const LATIN_ARTIST_NO_RE = /([A-Z][A-Za-z0-9\s&',.\-+]*?)の(?![『「])/g;
+/** 和文内の英語曲名「Look Away」など（映画「…」・アルバム「…」より短い一致は重複解決で後勝ち） */
+const JP_QUOTED_LATIN_TITLE_RE = /「([A-Za-z0-9][A-Za-z0-9\s',.\-+–]*)」/g;
+/** 基本形：アーティストの『曲』／アーティストの「曲」（アーティストに「の」を含めない） */
+const ARTIST_NO_TITLE_RE = /([^の\n]{1,220}?)の(『([^』]{0,300})』|「([^」]{0,300})」)/g;
+
+/*
+ * バンド名・参加アーチストの個人名の自動検出は、文中の一般名詞と区別できず誤爆が多いため未実装。
+ * 必要なら「プロデューサーの〇〇」など限定パターンを別途足す。
+ */
+
+type PlainHighlightSeg = {
+  start: number;
+  end: number;
+  nodes: ReactNode[];
+};
+
+function highlightPlainSegment(rest: string, key: () => string): ReactNode[] {
+  if (!rest) return [];
+  const segs: PlainHighlightSeg[] = [];
+  let m: RegExpExecArray | null;
+
+  const reMovie = new RegExp(MOVIE_QUOTED_RE.source, MOVIE_QUOTED_RE.flags);
+  while ((m = reMovie.exec(rest)) !== null) {
+    const inner = (m[2] ?? m[3] ?? '').trim();
+    const open = m[2] !== undefined ? '「' : '『';
+    const close = open === '「' ? '」' : '』';
+    segs.push({
+      start: m.index,
+      end: m.index + m[0].length,
+      nodes: [
+        '映画',
+        open,
+        <span key={key()} className={AI_ARTIST_SONG_HIGHLIGHT_CLASS}>{inner}</span>,
+        close,
+      ],
+    });
+  }
+  const reAlbum = new RegExp(ALBUM_QUOTED_RE.source, ALBUM_QUOTED_RE.flags);
+  while ((m = reAlbum.exec(rest)) !== null) {
+    const inner = (m[2] ?? m[3] ?? '').trim();
+    const open = m[2] !== undefined ? '「' : '『';
+    const close = open === '「' ? '」' : '』';
+    segs.push({
+      start: m.index,
+      end: m.index + m[0].length,
+      nodes: [
+        'アルバム',
+        open,
+        <span key={key()} className={AI_ARTIST_SONG_HIGHLIGHT_CLASS}>{inner}</span>,
+        close,
+      ],
+    });
+  }
+
+  const reLat = new RegExp(LATIN_ARTIST_NO_RE.source, LATIN_ARTIST_NO_RE.flags);
+  while ((m = reLat.exec(rest)) !== null) {
+    segs.push({
+      start: m.index,
+      end: m.index + m[0].length,
+      nodes: [
+        <span key={key()} className={AI_ARTIST_SONG_HIGHLIGHT_CLASS}>{m[1]}</span>,
+        'の',
+      ],
+    });
+  }
+  const reJp = new RegExp(JP_QUOTED_LATIN_TITLE_RE.source, JP_QUOTED_LATIN_TITLE_RE.flags);
+  while ((m = reJp.exec(rest)) !== null) {
+    segs.push({
+      start: m.index,
+      end: m.index + m[0].length,
+      nodes: [
+        '「',
+        <span key={key()} className={AI_ARTIST_SONG_HIGHLIGHT_CLASS}>{m[1]}</span>,
+        '」',
+      ],
+    });
+  }
+  segs.sort((a, b) => a.start - b.start);
+  const kept: PlainHighlightSeg[] = [];
+  let prevEnd = -1;
+  for (const s of segs) {
+    if (s.start >= prevEnd) {
+      kept.push(s);
+      prevEnd = s.end;
+    }
+  }
+  if (kept.length === 0) return [rest];
+  const out: ReactNode[] = [];
+  let last = 0;
+  for (const s of kept) {
+    if (s.start > last) out.push(rest.slice(last, s.start));
+    out.push(...s.nodes);
+    last = s.end;
+  }
+  if (last < rest.length) out.push(rest.slice(last));
+  return out;
+}
+
+function renderAiBodyWithArtistSongHighlight(body: string): ReactNode {
+  const pm = body.match(PACK_PREFIX_RE);
+  const prefix = pm?.[1] ?? '';
+  const rest = pm ? body.slice(pm[0].length) : body;
+
+  let k = 0;
+  const key = () => `ai-hl-${k++}`;
+
+  const out: ReactNode[] = [];
+  let last = 0;
+  let m: RegExpExecArray | null;
+  const primary = new RegExp(ARTIST_NO_TITLE_RE.source, ARTIST_NO_TITLE_RE.flags);
+  while ((m = primary.exec(rest)) !== null) {
+    if (m.index > last) {
+      out.push(...highlightPlainSegment(rest.slice(last, m.index), key));
+    }
+    const artist = m[1];
+    const song = (m[3] ?? m[4] ?? '').trim();
+    const quote = m[2];
+    const q0 = quote[0] ?? '『';
+    const q1 = quote[quote.length - 1] ?? '』';
+    out.push(<span key={key()} className={AI_ARTIST_SONG_HIGHLIGHT_CLASS}>{artist}</span>);
+    out.push('の');
+    out.push(q0);
+    out.push(<span key={key()} className={AI_ARTIST_SONG_HIGHLIGHT_CLASS}>{song}</span>);
+    out.push(q1);
+    last = m.index + m[0].length;
+  }
+
+  if (last < rest.length) {
+    out.push(...highlightPlainSegment(rest.slice(last), key));
+  }
+
+  if (!prefix && out.length === 0) return body;
+  if (!prefix && out.length === 1 && typeof out[0] === 'string') return out[0] as string;
+
+  return (
+    <>
+      {prefix}
+      {out.length > 0 ? out : rest}
+    </>
+  );
+}
+
 export default function Chat({
   messages,
   currentUserDisplayName,
@@ -63,12 +219,15 @@ export default function Chat({
   participantTextColors = {},
   participantsWithColor = [],
   currentVideoId,
+  canRejectTidbit = false,
+  onTidbitLibraryReject,
 }: ChatProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const [feedbackState, setFeedbackState] = useState<Record<string, 'up' | 'down'>>({});
   const [feedbackModal, setFeedbackModal] = useState<FeedbackModalState>({ open: false });
   const [detailChecks, setDetailChecks] = useState({ duplicate: false, dubious: false, ambiguous: false });
   const [detailComment, setDetailComment] = useState('');
+  const [tidbitRejectingId, setTidbitRejectingId] = useState<string | null>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -198,6 +357,10 @@ export default function Chat({
                   ? participantsWithColor.find((p) => p.displayName === selectorName)?.textColor ?? undefined
                   : undefined;
               const feedback = feedbackState[m.id];
+              const bodyContent: ReactNode =
+                m.messageType === 'ai'
+                  ? renderAiBodyWithArtistSongHighlight(m.body)
+                  : m.body;
 
               return (
               <li
@@ -235,7 +398,7 @@ export default function Chat({
                         : undefined
                   }
                 >
-                  {m.body}
+                  {bodyContent}
                 </p>
                 {m.searchQuery && (
                   <a
@@ -248,7 +411,7 @@ export default function Chat({
                   </a>
                 )}
                 {m.messageType === 'ai' && (m.body.startsWith('[NEW]') || m.body.startsWith('[DB]')) && (
-                  <div className="mt-1 flex items-center gap-1 text-xs">
+                  <div className="mt-1 flex flex-wrap items-center gap-1 text-xs">
                     <button
                       type="button"
                       className={`flex items-center justify-center rounded border px-1.5 py-0.5 ${
@@ -279,6 +442,31 @@ export default function Chat({
                     >
                       <ChatBubbleLeftRightIcon className="h-4 w-4" />
                     </button>
+                    {canRejectTidbit &&
+                      onTidbitLibraryReject &&
+                      m.tidbitId &&
+                      !m.tidbitLibraryRejected && (
+                        <button
+                          type="button"
+                          disabled={tidbitRejectingId === m.id}
+                          className="rounded border border-amber-700/80 bg-amber-950/40 px-2 py-0.5 font-medium text-amber-200/95 hover:bg-amber-900/50 disabled:opacity-50"
+                          title="この1件を song_tidbits から無効化（再利用されません）"
+                          onClick={async () => {
+                            if (!m.tidbitId) return;
+                            setTidbitRejectingId(m.id);
+                            try {
+                              await onTidbitLibraryReject(m.id, m.tidbitId);
+                            } finally {
+                              setTidbitRejectingId((cur) => (cur === m.id ? null : cur));
+                            }
+                          }}
+                        >
+                          {tidbitRejectingId === m.id ? '処理中…' : 'NG（DBから外す）'}
+                        </button>
+                      )}
+                    {m.tidbitLibraryRejected && (
+                      <span className="text-amber-200/80">※ライブラリから削除済</span>
+                    )}
                   </div>
                 )}
               </li>

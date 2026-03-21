@@ -1,7 +1,7 @@
 /**
- * 視聴履歴のスタイル変更を「管理者のみ」に制限する場合のユーザーID一覧。
- * Supabase Authentication → Users で表示される UUID をカンマ区切りで指定。
- * 未設定または空のときは誰でも変更可能（従来どおり）。
+ * 用途1: 視聴履歴のスタイル変更を「管理者のみ」に制限（未設定なら誰でも変更可）。
+ * 用途2: /admin と /api/admin/* は isStyleAdminUserId ではなく admin-access.ts の厳格ルール（未設定なら誰も不可）。
+ * Supabase Authentication → Users の UUID をカンマ区切りで指定。
  */
 export function getStyleAdminUserIds(): string[] {
   const raw = process.env.STYLE_ADMIN_USER_IDS ?? '';
