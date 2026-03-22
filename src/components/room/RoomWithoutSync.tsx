@@ -22,6 +22,10 @@ import {
   DEFAULT_CHAT_TEXT_COLOR,
 } from '@/lib/chat-text-color';
 import { NON_YOUTUBE_URL_SYSTEM_MESSAGE } from '@/lib/chat-non-youtube-url';
+import {
+  SYSTEM_MESSAGE_COMMENTARY_FETCH_FAILED,
+  SYSTEM_MESSAGE_JP_NO_COMMENTARY,
+} from '@/lib/chat-system-copy';
 import { extractVideoId, isStandaloneNonYouTubeUrl } from '@/lib/youtube';
 import type { ChatMessage } from '@/types/chat';
 import { useRoomChatLogPersistence } from '@/hooks/useRoomChatLogPersistence';
@@ -96,6 +100,8 @@ export default function RoomWithoutSync({ displayName: displayNameProp = 'ゲス
   const tidbitCountSinceUserMessageRef = useRef(0);
   const lastEndedVideoIdForTidbitRef = useRef<string | null>(null);
   const tidbitPreferMainArtistLeftRef = useRef(0);
+  /** （邦楽）選曲後〜次の曲まで AI 発言停止 */
+  const jpDomesticSilenceVideoIdRef = useRef<string | null>(null);
   videoIdRef.current = videoId;
 
   /** プレビュー中だけメイン再生音量を落とす */
@@ -170,16 +176,34 @@ export default function RoomWithoutSync({ displayName: displayNameProp = 'ゲス
     setPlaying(state === 'play');
   }, []);
 
-  const addAiMessage = useCallback((body: string) => {
-    const msg: ChatMessage = {
-      id: createMessageId(),
-      body,
-      displayName: AI_DISPLAY_NAME,
-      messageType: 'ai',
-      createdAt: new Date().toISOString(),
-    };
-    setMessages((prev) => [...prev, msg]);
-  }, []);
+  const addAiMessage = useCallback(
+    (
+      body: string,
+      options?: {
+        bypassJpDomesticSilence?: boolean;
+      }
+    ) => {
+      const jpS = jpDomesticSilenceVideoIdRef.current;
+      const cur = videoIdRef.current;
+      if (
+        jpS != null &&
+        cur != null &&
+        jpS === cur &&
+        !options?.bypassJpDomesticSilence
+      ) {
+        return;
+      }
+      const msg: ChatMessage = {
+        id: createMessageId(),
+        body,
+        displayName: AI_DISPLAY_NAME,
+        messageType: 'ai',
+        createdAt: new Date().toISOString(),
+      };
+      setMessages((prev) => [...prev, msg]);
+    },
+    []
+  );
 
   const addSystemMessage = useCallback((body: string, searchQuery?: string) => {
     const msg: ChatMessage = {
@@ -229,6 +253,9 @@ export default function RoomWithoutSync({ displayName: displayNameProp = 'ゲス
   useEffect(() => {
     const t = setInterval(() => {
       if (!hasUserSentMessageRef.current && !videoIdRef.current) return;
+      const jpS = jpDomesticSilenceVideoIdRef.current;
+      const vNow = videoIdRef.current;
+      if (jpS != null && vNow != null && jpS === vNow) return;
       const now = Date.now();
       if (
         now - lastActivityAtRef.current >= SILENCE_TIDBIT_SEC * 1000 &&
@@ -287,6 +314,9 @@ export default function RoomWithoutSync({ displayName: displayNameProp = 'ゲス
   useEffect(() => {
     nextPromptShownForVideoIdRef.current = null;
     lastEndedVideoIdForTidbitRef.current = null;
+    if (!videoId) {
+      jpDomesticSilenceVideoIdRef.current = null;
+    }
     if (nextPromptTimeoutRef.current) {
       clearTimeout(nextPromptTimeoutRef.current);
       nextPromptTimeoutRef.current = null;
@@ -303,7 +333,13 @@ export default function RoomWithoutSync({ displayName: displayNameProp = 'ゲス
         .then((r) => (r.ok ? r.json() : null))
         .then((data) => {
           if (data?.text) {
-            addAiMessage(data.text);
+            const jpDomestic = data?.japaneseDomestic === true;
+            const jpSilence =
+              typeof data?.jpDomesticSilence === 'boolean' ? data.jpDomesticSilence : jpDomestic;
+            if (jpSilence) {
+              jpDomesticSilenceVideoIdRef.current = vid;
+            }
+            addAiMessage(data.text, { bypassJpDomesticSilence: true });
             touchActivity();
           }
           const durationSec =
@@ -335,15 +371,19 @@ export default function RoomWithoutSync({ displayName: displayNameProp = 'ゲス
       })
         .then((r) => (r.ok ? r.json() : null))
         .then((data) => {
+          if (data?.skipAiCommentary) {
+            addSystemMessage(SYSTEM_MESSAGE_JP_NO_COMMENTARY);
+            return;
+          }
           if (data?.text) {
             const prefix = data.source === 'library' ? '[DB] ' : '[NEW] ';
             addAiMessage(prefix + data.text);
             touchActivity();
             tidbitPreferMainArtistLeftRef.current = 2;
-          } else addSystemMessage('曲解説を取得できませんでした。しばらくしてから再度お試しください。');
+          } else addSystemMessage(SYSTEM_MESSAGE_COMMENTARY_FETCH_FAILED);
         })
         .catch(() => {
-          addSystemMessage('曲解説を取得できませんでした。しばらくしてから再度お試しください。');
+          addSystemMessage(SYSTEM_MESSAGE_COMMENTARY_FETCH_FAILED);
         });
     },
     [addAiMessage, addSystemMessage, touchActivity]
@@ -396,6 +436,7 @@ export default function RoomWithoutSync({ displayName: displayNameProp = 'ゲス
     (url: string) => {
       const id = extractVideoId(url);
       if (!id) return;
+      jpDomesticSilenceVideoIdRef.current = null;
       setVideoId(id);
       playerRef.current?.loadVideoById(id);
       fetchAnnounceAndPublish(id);
@@ -433,29 +474,44 @@ export default function RoomWithoutSync({ displayName: displayNameProp = 'ゲス
       touchActivity();
       updateSendTimestamps(lastSendAtRef, sendTimestampsRef);
 
+      const jpUiBlocked =
+        jpDomesticSilenceVideoIdRef.current != null &&
+        jpDomesticSilenceVideoIdRef.current === videoIdRef.current;
+
       if (messages.length === 0) {
-        const greeting = `${displayNameProp}さん、${getTimeBasedGreeting()}`;
-        addAiMessage(greeting);
-        addAiMessage(AI_FIRST_VOICE);
+        if (!jpUiBlocked) {
+          const greeting = `${displayNameProp}さん、${getTimeBasedGreeting()}`;
+          addAiMessage(greeting);
+          addAiMessage(AI_FIRST_VOICE);
+        }
         touchActivity();
         return;
       }
 
       /* 「〇〇さん < おかえり」の歓迎には「おかえりなさい！」だけ返す（API呼び出しなし） */
       if (/さん\s*<\s*おかえり/.test(text.trim())) {
-        addAiMessage('おかえりなさい！');
+        if (!jpUiBlocked) {
+          addAiMessage('おかえりなさい！');
+        }
         touchActivity();
         return;
       }
 
       /* 離席・ROMの意思表明には「〇〇さん、いってらっしゃいませ」と返す（API呼び出しなし） */
       if (isLeaveOrRomPhrase(text)) {
-        addAiMessage(`${displayNameProp}さん、いってらっしゃいませ`);
+        if (!jpUiBlocked) {
+          addAiMessage(`${displayNameProp}さん、いってらっしゃいませ`);
+        }
         touchActivity();
         return;
       }
 
       const doChatReply = () => {
+        const jpS = jpDomesticSilenceVideoIdRef.current;
+        const vCur = videoIdRef.current;
+        if (jpS != null && vCur != null && jpS === vCur) {
+          return;
+        }
         const listForAi = [...messages, userMsg].map((m) => ({
           displayName: m.displayName,
           body: m.body,
@@ -495,6 +551,7 @@ export default function RoomWithoutSync({ displayName: displayNameProp = 'ゲス
           .then((r2) => (r2.ok ? r2.json() : null))
           .then((data2) => {
             if (data2?.ok && data2?.videoId && data2?.artistTitle) {
+              jpDomesticSilenceVideoIdRef.current = null;
               setVideoId(data2.videoId);
               playerRef.current?.loadVideoById(data2.videoId);
               addAiMessage(`${data2.artistTitle} を貼りました！`);
@@ -534,9 +591,14 @@ export default function RoomWithoutSync({ displayName: displayNameProp = 'ゲス
           if (data?.needConfirm && data?.confirmationText && data?.query) {
             pendingSongQueryRef.current = data.query;
             pendingSongConfirmationTextRef.current = data.confirmationText;
-            addAiMessage(
-              `${data.confirmationText} ですね？曲を再生するには、入力欄のまま「検索」ボタンを押して一覧から動画を選んでください。（送信だけでは再生されません）`,
-            );
+            const jpB =
+              jpDomesticSilenceVideoIdRef.current != null &&
+              jpDomesticSilenceVideoIdRef.current === videoIdRef.current;
+            if (!jpB) {
+              addAiMessage(
+                `${data.confirmationText} ですね？曲を再生するには、入力欄のまま「検索」ボタンを押して一覧から動画を選んでください。（送信だけでは再生されません）`,
+              );
+            }
             touchActivity();
             return;
           }

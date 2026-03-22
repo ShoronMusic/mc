@@ -1,12 +1,15 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { fetchOEmbed } from '@/lib/youtube-oembed';
+import { isJpDomesticOfficialChannelAiException } from '@/lib/jp-official-channel-exception';
+import { resolveJapaneseEconomyWithMusicBrainz } from '@/lib/resolve-japanese-economy';
 import {
-  getArtistAndSong,
-  getMainArtist,
-  getArtistDisplayString,
-  parseArtistTitleFromDescription,
+  colorsStudiosTrustsOembedArtistFirst,
+  isAppleMusicChannelAuthor,
+  isGeniusChannelAuthor,
+  shouldSkipAiCommentaryForUncertainArtistResolution,
 } from '@/lib/format-song-display';
+import { resolveArtistSongForPackAsync } from '@/lib/youtube-artist-song-for-pack';
 import { getVideoSnippet } from '@/lib/youtube-search';
 import { getGeminiModel, logGeminiUsage } from '@/lib/gemini';
 import { persistGeminiUsageLog } from '@/lib/gemini-usage-log';
@@ -41,7 +44,9 @@ function isPublishedWithinLastDays(publishedAtIso: string | undefined, days: num
  * - 基本コメント1本 + 自由コメント最大3本（1:栄誉・チャート 2:歌詞 3:サウンド）をまとめて生成する
  * - 動画公開から30日以内は「新曲」とみなし、基本コメントのみ（末尾に注釈）。自由3本は生成しない
  * - 同一動画は song_tidbits から再利用（新曲は注釈付き基本のみキャッシュ、それ以外は4本そろいでキャッシュ）
+ * - 邦楽節約: メタデータが日本語っぽい／音声言語が ja／MusicBrainz で Area=Japan 等のときは AI 曲解説を出さない（skipAiCommentary）。ただし ONE OK ROCK / XG / Ado / ATARASHII GAKKO!（＋88rising）/ YOASOBI の公式 YouTube チャンネル（channelId 固定＋ env 追加分）は除外。COMMENT_PACK_JP_ECONOMY=0 でオフ
  * - COMMENT_PACK_SKIP_CACHE=1 で常に新規生成
+ * - メタからアーティストを信頼できない（曲名も空・キュレーターchでアップローダー名=アーティスト等）は skipAiCommentary。AI_COMMENTARY_ALLOW_UNCERTAIN_ARTIST=1 で無効化
  */
 export async function POST(request: Request) {
   try {
@@ -55,30 +60,26 @@ export async function POST(request: Request) {
 
     const [oembed, snippet] = await Promise.all([fetchOEmbed(videoId), getVideoSnippet(videoId)]);
 
-    let title = oembed?.title ?? snippet?.title ?? videoId;
-    let authorName = oembed?.author_name;
-    let { artist, artistDisplay, song } = getArtistAndSong(title, authorName, {
-      videoDescription: snippet?.description ?? null,
-    });
-
-    if (!artistDisplay || !artist) {
-      if (snippet?.description) {
-        const fromDesc = parseArtistTitleFromDescription(snippet.description);
-        if (fromDesc) {
-          artist = getMainArtist(fromDesc.artist);
-          artistDisplay = getArtistDisplayString(fromDesc.artist);
-          song = fromDesc.song;
-        } else {
-          if (!artist && snippet.channelTitle) {
-            artist = snippet.channelTitle.trim();
-            artistDisplay = artist;
-          }
-          if (!song && snippet.title) song = snippet.title.trim();
-        }
-      }
-    }
+    const title = oembed?.title ?? snippet?.title ?? videoId;
+    const authorName = oembed?.author_name;
+    const { artist, artistDisplay, song } = await resolveArtistSongForPackAsync(
+      title,
+      authorName,
+      snippet,
+    );
 
     const isNewRelease = isPublishedWithinLastDays(snippet?.publishedAt, NEW_RELEASE_DAYS);
+    const isJpEconomy = await resolveJapaneseEconomyWithMusicBrainz({
+      title,
+      artistDisplay,
+      artist,
+      song,
+      description: snippet?.description ?? null,
+      channelTitle: snippet?.channelTitle ?? null,
+      defaultAudioLanguage: snippet?.defaultAudioLanguage ?? null,
+    });
+    /** 新曲のみ基本1本（自由3本なし）。邦楽は公式チャンネル例外を除き生成しない */
+    const baseOnlyPack = isNewRelease;
 
     // songs / song_videos 登録＋ song_id
     let songId: string | null = null;
@@ -92,6 +93,27 @@ export async function POST(request: Request) {
       });
     } catch (e) {
       console.error('[api/ai/comment-pack] upsertSongAndVideo', e);
+    }
+
+    if (isJpEconomy && !isJpDomesticOfficialChannelAiException(snippet?.channelId)) {
+      return NextResponse.json({ skipAiCommentary: true, songId, videoId });
+    }
+
+    if (
+      shouldSkipAiCommentaryForUncertainArtistResolution({
+        artist,
+        artistDisplay,
+        song,
+        authorName,
+        title,
+      })
+    ) {
+      return NextResponse.json({
+        skipAiCommentary: true,
+        songId,
+        videoId,
+        skipReason: 'uncertain_artist',
+      });
     }
 
     const skipCache = process.env.COMMENT_PACK_SKIP_CACHE === '1';
@@ -138,15 +160,29 @@ export async function POST(request: Request) {
     const songLabel = song || title;
     const rawYouTubeTitle = title;
 
+    const colorsOfficialLock = colorsStudiosTrustsOembedArtistFirst(authorName, title)
+      ? `・COLORS（A COLORS SHOW）公式配信: 「${artistLabel}」＝アーティスト、「${songLabel}」＝曲名で確定。逆の対応・別読み・言い逃れは禁止。\n`
+      : '';
+
+    const geniusOfficialLock = isGeniusChannelAuthor(authorName)
+      ? `・Genius 公式チャンネル: タイトル先頭の「Genius」はメディア名です。「${artistLabel}」＝アーティスト、「${songLabel}」＝曲名のみを正とし、Genius をアーティストや「彼ら」の指す先にしないこと。\n`
+      : '';
+
+    const appleMusicOfficialLock = isAppleMusicChannelAuthor(authorName)
+      ? `・Apple Music 公式チャンネル: タイトル先頭の「Apple Music」は配信プラットフォーム名です。「${artistLabel}」＝アーティスト、「${songLabel}」＝曲名のみを正とし、Apple Music をアーティストや「彼ら」の指す先にしないこと。\n`
+      : '';
+
     const metaLockBlock = `【メタデータの前提（厳守）】
 ・YouTube 動画タイトル（原文）: ${rawYouTubeTitle}
 ・【アーティスト（歌手・バンド）】= 「${artistLabel}」のみ。これは人名またはバンド名です。
 ・【曲名】= 「${songLabel}」のみ。これは楽曲のタイトルです。
+${colorsOfficialLock}${geniusOfficialLock}${appleMusicOfficialLock}
 ・絶対禁止: 「${songLabel}」をアーティスト名のように扱い、「${artistLabel}」を曲名のように扱うこと（例:「${songLabel}の代表曲『${artistLabel}』」は誤り。正しくは「${artistLabel}の『${songLabel}』」）。
 ・「〜の代表曲」は必ず アーティスト → 曲 の順で書く（${artistLabel} の代表曲として『${songLabel}』、など）。
 ・アーティスト名と曲名を入れ替えたり、別の架空の曲として語らないこと。
 ・タイトル・チャンネル名と矛盾するリリース年・アルバム名・編成・未来の年号は書かない。不明・不確実ならその一句を省くか「〜として知られる」など弱い表現にとどめる。
-・本APIは Music8 等の外部楽曲DBを参照していません。根拠のない固有名・年号を作らないこと。`;
+・本APIは Music8 等の外部楽曲DBを参照していません。根拠のない固有名・年号を作らないこと。
+・YouTube タイトル原文に (HD Remaster)・[4K Remaster]・Remaster・公式動画向けの副題が付いていても、本文で曲名を示すときは【曲名】だけとすること。リマスター・画質・配信向けの表記を曲名に付けない（例：『Believe』と書き、『Believe [4K Remaster]』のようにしない）。`;
 
     // 1. 基本コメント（/commentary と似た役割だが、このAPI専用に少し短めに生成）
     const basePromptTail = isNewRelease
@@ -225,7 +261,7 @@ ${basePromptTail}`;
 
     const freeComments: string[] = [];
 
-    if (!isNewRelease) {
+    if (!baseOnlyPack) {
       for (let i = 0; i < COMMENT_PACK_MAX_FREE_COMMENTS; i++) {
       const topic = topics[i];
       const isHonorsTopic = i === 0; // 1本目＝栄誉・チャート
@@ -303,7 +339,7 @@ ${isHonorsTopic ? banBlockHonors : banBlockStandard}
     const tidbitIds: (string | null)[] = [];
     if (supabase && songId) {
       const dbWrite = createAdminClient() ?? supabase;
-      const allBodies = isNewRelease
+      const allBodies = baseOnlyPack
         ? [baseText.trim()].filter((t) => t.length > 0)
         : [baseText.trim(), ...freeBodiesForPack].filter((t) => t.length > 0);
 
@@ -340,7 +376,7 @@ ${isHonorsTopic ? banBlockHonors : banBlockStandard}
     }
 
     const freeCommentTidbitIds =
-      !isNewRelease && tidbitIds.length > 1 ? tidbitIds.slice(1) : [];
+      !baseOnlyPack && tidbitIds.length > 1 ? tidbitIds.slice(1) : [];
 
     return NextResponse.json({
       songId,

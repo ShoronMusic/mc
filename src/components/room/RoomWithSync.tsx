@@ -22,6 +22,11 @@ import {
   DEFAULT_CHAT_TEXT_COLOR,
 } from '@/lib/chat-text-color';
 import { NON_YOUTUBE_URL_SYSTEM_MESSAGE } from '@/lib/chat-non-youtube-url';
+import {
+  SYSTEM_MESSAGE_COMMENTARY_FETCH_FAILED,
+  SYSTEM_MESSAGE_JP_NO_COMMENTARY,
+  SYSTEM_MESSAGE_QUEUE_SONG_DEFERRED,
+} from '@/lib/chat-system-copy';
 import { COMMENT_PACK_MAX_FREE_COMMENTS } from '@/lib/song-tidbits';
 import { extractVideoId, isStandaloneNonYouTubeUrl } from '@/lib/youtube';
 import type { PlaybackMessage } from '@/types/playback';
@@ -193,6 +198,11 @@ export default function RoomWithSync({
   const lastChangeVideoPublisherRef = useRef('');
   const fiveMinLimitTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const songLimit5MinEnabledRef = useRef(true);
+  /** いま再生中の曲がこのクライアントで開始扱いになった時刻（複数人・5分キュー用） */
+  const currentTrackStartedAtMsRef = useRef(0);
+  const pendingQueuedVideoIdRef = useRef<string | null>(null);
+  const pendingQueuedPublisherRef = useRef('');
+  const playbackEndedApplyRef = useRef<() => void>(() => {});
   const lastSendAtRef = useRef(0);
   const sendTimestampsRef = useRef<number[]>([]);
   const playbackHistoryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -209,6 +219,8 @@ export default function RoomWithSync({
   const freeCommentTimeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   /** 自由コメント待ちの間は一般豆知識を抑止 */
   const suppressTidbitRef = useRef(false);
+  /** （邦楽）選曲アナウンス後〜次の曲が貼られるまで AI 発言を止める対象の videoId */
+  const jpDomesticSilenceVideoIdRef = useRef<string | null>(null);
   /** 自分が発言したか（ステータスありでも発言あれば在席とみなして豆知識を出す） */
   const hasCurrentUserSentMessageSinceLastTidbitRef = useRef(false);
   const [aiFreeSpeechStopped, setAiFreeSpeechStopped] = useState(false);
@@ -281,9 +293,18 @@ export default function RoomWithSync({
       if (typeof document !== 'undefined' && document.visibilityState === 'visible') loadModerator();
     };
     document.addEventListener('visibilitychange', onVis);
+
+    const sb = createClient();
+    const { data: authSub } = sb
+      ? sb.auth.onAuthStateChange(() => {
+          if (!cancelled) loadModerator();
+        })
+      : { data: { subscription: { unsubscribe: () => {} } } };
+
     return () => {
       cancelled = true;
       document.removeEventListener('visibilitychange', onVis);
+      authSub.subscription.unsubscribe();
     };
   }, [isGuest]);
 
@@ -504,6 +525,9 @@ export default function RoomWithSync({
       lastActivityAtRef.current = Date.now();
       const data = message.data as ChatMessagePayload & { clientId?: string };
       if (!data?.id || !data?.body) return;
+      if (data.messageType === 'ai' && data.jpDomesticSilenceForVideoId) {
+        jpDomesticSilenceVideoIdRef.current = data.jpDomesticSilenceForVideoId;
+      }
       if (data.messageType === 'user') {
         hasUserSentMessageRef.current = true;
         tidbitCountSinceUserMessageRef.current = 0;
@@ -519,7 +543,10 @@ export default function RoomWithSync({
           if (senderId === myClientId) {
             safePublish(TURN_STATE_EVENT, { currentTurnClientId: nextId } as TurnStatePayload);
             const nextDisplayName = nextParticipant?.displayName ?? '次の方';
-            addAiMessage(`${nextDisplayName}さん、次の曲を貼ってください`, { allowWhenAiStopped: true });
+            addAiMessage(`${nextDisplayName}さん、次の曲を貼ってください`, {
+              allowWhenAiStopped: true,
+              bypassJpDomesticSilence: true,
+            });
           }
         }
         /* 離席・ROMの意思表明には「〇〇さん、いってらっしゃいませ」とAIが返す（全員の画面に表示） */
@@ -559,6 +586,9 @@ export default function RoomWithSync({
             ...(p.songId != null ? { songId: p.songId } : {}),
             ...(p.videoId != null ? { videoId: p.videoId } : {}),
             ...(p.aiSource ? { aiSource: p.aiSource } : {}),
+            ...(p.jpDomesticSilenceForVideoId
+              ? { jpDomesticSilenceForVideoId: p.jpDomesticSilenceForVideoId }
+              : {}),
           },
         ];
       });
@@ -566,9 +596,18 @@ export default function RoomWithSync({
     }
     const data = message.data as PlaybackMessage;
     if (!data?.type) return;
+    if (data.type === 'queueSong' && data.videoId) {
+      pendingQueuedVideoIdRef.current = data.videoId;
+      pendingQueuedPublisherRef.current = data.publisherClientId ?? '';
+      addSystemMessage(SYSTEM_MESSAGE_QUEUE_SONG_DEFERRED);
+      return;
+    }
     applyingRemoteRef.current = true;
     try {
       if (data.type === 'changeVideo' && data.videoId) {
+        pendingQueuedVideoIdRef.current = null;
+        pendingQueuedPublisherRef.current = '';
+        jpDomesticSilenceVideoIdRef.current = null;
         setVideoId(data.videoId);
         const pubId = data.publisherClientId ?? '';
         lastChangeVideoPublisherRef.current = pubId;
@@ -650,12 +689,16 @@ export default function RoomWithSync({
     };
   }, []);
 
-  /** 曲を貼った後にターンを次の人に進める */
-  const advanceTurnAfterPost = useCallback(() => {
-    const nextId = getNextTurnClientId(myClientId);
-    setCurrentTurnClientId(nextId);
-    publishRef.current?.(TURN_STATE_EVENT, { currentTurnClientId: nextId } as TurnStatePayload);
-  }, [myClientId, getNextTurnClientId]);
+  /** 曲を貼った後にターンを次の人に進める（`afterClientId` は選曲した人の clientId） */
+  const advanceTurnAfterPost = useCallback(
+    (afterClientId?: string) => {
+      const id = afterClientId ?? myClientId;
+      const nextId = getNextTurnClientId(id);
+      setCurrentTurnClientId(nextId);
+      publishRef.current?.(TURN_STATE_EVENT, { currentTurnClientId: nextId } as TurnStatePayload);
+    },
+    [myClientId, getNextTurnClientId]
+  );
 
   useEffect(() => {
     if (!roomId || ownerStatePublishRef.current) return;
@@ -714,6 +757,11 @@ export default function RoomWithSync({
     (state: 'play' | 'pause' | 'ended', time: number) => {
       if (applyingRemoteRef.current) return;
       setCurrentTime(time);
+      if (state === 'ended') {
+        setPlaying(false);
+        playbackEndedApplyRef.current();
+        return;
+      }
       setPlaying(state === 'play');
       if (state === 'play') {
         safePublish('play', {
@@ -735,9 +783,22 @@ export default function RoomWithSync({
         songId?: string | null;
         videoId?: string | null;
         aiSource?: ChatMessage['aiSource'];
+        /** 選曲アナウンス（邦楽フラグ付きペイロード用）のみ true */
+        bypassJpDomesticSilence?: boolean;
+        jpDomesticSilenceForVideoId?: string;
       }
     ) => {
       if (aiFreeSpeechStopped && !options?.allowWhenAiStopped) return;
+      const jpSilence = jpDomesticSilenceVideoIdRef.current;
+      const curVid = videoIdRef.current;
+      if (
+        jpSilence != null &&
+        curVid != null &&
+        jpSilence === curVid &&
+        !options?.bypassJpDomesticSilence
+      ) {
+        return;
+      }
       const id = createMessageId();
       const payload: ChatMessagePayload = {
         id,
@@ -749,6 +810,9 @@ export default function RoomWithSync({
         ...(options?.songId != null ? { songId: options.songId } : {}),
         ...(options?.videoId != null ? { videoId: options.videoId } : {}),
         ...(options?.aiSource ? { aiSource: options.aiSource } : {}),
+        ...(options?.jpDomesticSilenceForVideoId
+          ? { jpDomesticSilenceForVideoId: options.jpDomesticSilenceForVideoId }
+          : {}),
       };
       safePublish(CHAT_MESSAGE_EVENT, payload);
       setMessages((prev) => [
@@ -763,6 +827,9 @@ export default function RoomWithSync({
           ...(payload.songId != null ? { songId: payload.songId } : {}),
           ...(payload.videoId != null ? { videoId: payload.videoId } : {}),
           ...(payload.aiSource ? { aiSource: payload.aiSource } : {}),
+          ...(payload.jpDomesticSilenceForVideoId
+            ? { jpDomesticSilenceForVideoId: payload.jpDomesticSilenceForVideoId }
+            : {}),
         },
       ]);
     },
@@ -880,6 +947,9 @@ export default function RoomWithSync({
       // comment-pack 由来の自由コメントを小出しにしている間は、一般豆知識は出さない
       if (suppressTidbitRef.current) return;
       if (!hasUserSentMessageRef.current && !videoIdRef.current) return;
+      const jpS = jpDomesticSilenceVideoIdRef.current;
+      const vNow = videoIdRef.current;
+      if (jpS != null && vNow != null && jpS === vNow) return;
       const now = Date.now();
       if (
         now - lastActivityAtRef.current >= SILENCE_TIDBIT_SEC * 1000 &&
@@ -918,7 +988,14 @@ export default function RoomWithSync({
           .then((data) => {
             if (data?.text) {
               const prefix = data.source === 'library' ? '[DB] ' : '[NEW] ';
-              addAiMessage(prefix + data.text);
+              const songRowId =
+                typeof data.songTidbitId === 'string' ? data.songTidbitId : undefined;
+              addAiMessage(prefix + data.text, {
+                allowWhenAiStopped: true,
+                ...(songRowId ? { tidbitId: songRowId } : {}),
+                videoId: tidbitVideoId ?? undefined,
+                aiSource: 'tidbit',
+              });
               tidbitCountSinceUserMessageRef.current += 1;
               if (preferMainArtist) tidbitPreferMainArtistLeftRef.current = Math.max(0, tidbitPreferMainArtistLeftRef.current - 1);
             }
@@ -942,6 +1019,19 @@ export default function RoomWithSync({
   const SEC_AFTER_END_BEFORE_PROMPT = 30;
   const DEFAULT_DURATION_WHEN_UNKNOWN_SEC = 240;
   const FIVE_MIN_MS = 5 * 60 * 1000;
+
+  /** 複数人・5分制限ON・再生中で、開始から5分未満なら次曲はキューのみ（即時は切り替えない） */
+  const shouldDeferMultiSongPost = () => {
+    if (!songLimit5MinEnabledRef.current) return false;
+    const order = participatingOrderRef.current;
+    if (order.length <= 1) return false;
+    const normalizedNames = order.map((p) => (p.displayName ?? '').trim() || 'ゲスト');
+    if (order.length > 1 && new Set(normalizedNames).size === 1) return false;
+    if (!videoIdRef.current) return false;
+    const started = currentTrackStartedAtMsRef.current;
+    if (!started) return false;
+    return Date.now() - started < FIVE_MIN_MS;
+  };
 
   const clearPendingFreeCommentTimers = useCallback(() => {
     if (freeCommentTimeoutsRef.current.length > 0) {
@@ -995,9 +1085,13 @@ export default function RoomWithSync({
   }, [participants, addAiMessage, myClientId, clearPendingFreeCommentTimers]);
 
   useEffect(() => {
+    currentTrackStartedAtMsRef.current = videoId ? Date.now() : 0;
     nextPromptShownForVideoIdRef.current = null;
     lastEndedVideoIdForTidbitRef.current = null;
-    if (!videoId) setCurrentSongPosterClientId('');
+    if (!videoId) {
+      jpDomesticSilenceVideoIdRef.current = null;
+      setCurrentSongPosterClientId('');
+    }
     if (nextPromptTimeoutRef.current) {
       clearTimeout(nextPromptTimeoutRef.current);
       nextPromptTimeoutRef.current = null;
@@ -1033,7 +1127,18 @@ export default function RoomWithSync({
             return;
           }
           if (data?.text) {
-            addAiMessage(data.text, { allowWhenAiStopped: true });
+            const jpDomestic = data?.japaneseDomestic === true;
+            const jpSilence =
+              typeof data?.jpDomesticSilence === 'boolean' ? data.jpDomesticSilence : jpDomestic;
+            if (jpSilence) {
+              jpDomesticSilenceVideoIdRef.current = vid;
+            }
+            addAiMessage(data.text, {
+              allowWhenAiStopped: true,
+              bypassJpDomesticSilence: true,
+              videoId: vid,
+              ...(jpSilence ? { jpDomesticSilenceForVideoId: vid } : {}),
+            });
             touchActivity();
           }
           const durationSec =
@@ -1082,6 +1187,15 @@ export default function RoomWithSync({
       })
         .then((r) => (r.ok ? r.json() : null))
         .then((pack) => {
+          if (pack?.skipAiCommentary) {
+            if (freeCommentTimeoutsRef.current.length > 0) {
+              freeCommentTimeoutsRef.current.forEach((t) => clearTimeout(t));
+              freeCommentTimeoutsRef.current = [];
+            }
+            suppressTidbitRef.current = false;
+            addSystemMessage(SYSTEM_MESSAGE_JP_NO_COMMENTARY);
+            return null;
+          }
           if (pack?.baseComment) {
             commentPackVideoIdRef.current = vid;
             const packPrefix = pack?.source === 'library' ? '[DB] ' : '[NEW] ';
@@ -1144,20 +1258,32 @@ export default function RoomWithSync({
             })
               .then((r) => (r.ok ? r.json() : null))
               .then((data) => {
+                if (data?.skipAiCommentary) {
+                  addSystemMessage(SYSTEM_MESSAGE_JP_NO_COMMENTARY);
+                  return null;
+                }
                 if (data?.text) {
                   const prefix = data.source === 'library' ? '[DB] ' : '[NEW] ';
-                  addAiMessage(prefix + data.text);
+                  const songRowId =
+                    typeof data.songTidbitId === 'string' ? data.songTidbitId : undefined;
+                  addAiMessage(prefix + data.text, {
+                    allowWhenAiStopped: true,
+                    ...(songRowId ? { tidbitId: songRowId } : {}),
+                    songId: typeof data.songId === 'string' ? data.songId : null,
+                    videoId: vid,
+                    aiSource: 'tidbit',
+                  });
                   touchActivity();
                   tidbitPreferMainArtistLeftRef.current = 2;
                 } else {
-                  addSystemMessage('曲解説を取得できませんでした。しばらくしてから再度お試しください。');
+                  addSystemMessage(SYSTEM_MESSAGE_COMMENTARY_FETCH_FAILED);
                 }
               });
           }
           return null;
         })
         .catch(() => {
-          addSystemMessage('曲解説を取得できませんでした。しばらくしてから再度お試しください。');
+          addSystemMessage(SYSTEM_MESSAGE_COMMENTARY_FETCH_FAILED);
         });
     },
     [addAiMessage, addSystemMessage, touchActivity]
@@ -1229,6 +1355,56 @@ export default function RoomWithSync({
     [isGuest, roomId]
   );
 
+  const applyImmediateChangeVideo = useCallback(
+    (id: string, publisherClientId: string) => {
+      pendingQueuedVideoIdRef.current = null;
+      pendingQueuedPublisherRef.current = '';
+      jpDomesticSilenceVideoIdRef.current = null;
+      setVideoId(id);
+      lastChangeVideoPublisherRef.current = publisherClientId;
+      setCurrentSongPosterClientId(publisherClientId);
+      safePublish('changeVideo', {
+        type: 'changeVideo',
+        videoId: id,
+        publisherClientId,
+      } as PlaybackMessage);
+      playerRef.current?.loadVideoById(id);
+      scheduleAutoPlayAfterChangeVideo();
+      advanceTurnAfterPost(publisherClientId);
+      fetchAnnounceAndPublish(id);
+      fetchCommentaryAndPublish(id);
+      saveSongHistory(id);
+      schedulePlaybackHistory(roomId ?? '', id);
+    },
+    [
+      safePublish,
+      scheduleAutoPlayAfterChangeVideo,
+      advanceTurnAfterPost,
+      fetchAnnounceAndPublish,
+      fetchCommentaryAndPublish,
+      saveSongHistory,
+      roomId,
+      schedulePlaybackHistory,
+    ]
+  );
+
+  useEffect(() => {
+    playbackEndedApplyRef.current = () => {
+      if (myClientId !== lastChangeVideoPublisherRef.current) return;
+      const pendingVid = pendingQueuedVideoIdRef.current;
+      const pendingPub = pendingQueuedPublisherRef.current;
+      if (!pendingVid) return;
+      applyingRemoteRef.current = true;
+      try {
+        applyImmediateChangeVideo(pendingVid, pendingPub || myClientId);
+      } finally {
+        setTimeout(() => {
+          applyingRemoteRef.current = false;
+        }, 300);
+      }
+    };
+  }, [myClientId, applyImmediateChangeVideo]);
+
   const handleVideoUrlFromChat = useCallback(
     (url: string) => {
       const id = extractVideoId(url);
@@ -1259,35 +1435,18 @@ export default function RoomWithSync({
         return;
       }
 
-      setVideoId(id);
-      lastChangeVideoPublisherRef.current = myClientId;
-      setCurrentSongPosterClientId(myClientId);
-      safePublish('changeVideo', {
-        type: 'changeVideo',
-        videoId: id,
-        publisherClientId: myClientId,
-      } as PlaybackMessage);
-      playerRef.current?.loadVideoById(id);
-      scheduleAutoPlayAfterChangeVideo();
-      advanceTurnAfterPost();
-      fetchAnnounceAndPublish(id);
-      fetchCommentaryAndPublish(id);
-      saveSongHistory(id);
-      schedulePlaybackHistory(roomId ?? '', id);
+      if (!isOwner && shouldDeferMultiSongPost()) {
+        safePublish('queueSong', {
+          type: 'queueSong',
+          videoId: id,
+          publisherClientId: myClientId,
+        } as PlaybackMessage);
+        return;
+      }
+
+      applyImmediateChangeVideo(id, myClientId);
     },
-    [
-      safePublish,
-      scheduleAutoPlayAfterChangeVideo,
-      advanceTurnAfterPost,
-      fetchAnnounceAndPublish,
-      fetchCommentaryAndPublish,
-      saveSongHistory,
-      roomId,
-      schedulePlaybackHistory,
-      myClientId,
-      isOwner,
-      addSystemMessage,
-    ]
+    [safePublish, applyImmediateChangeVideo, myClientId, isOwner, addSystemMessage]
   );
 
   const handleAddCandidateFromSearch = useCallback(
@@ -1310,7 +1469,7 @@ export default function RoomWithSync({
       };
 
       setCandidateSongs((prev) => [...prev, next]);
-      addSystemMessage('候補リストに追加しました。マイターンのときに「候補リスト」から選んで貼れます。');
+      addSystemMessage('候補リストに追加しました。自分のターンのときに「候補リスト」から選んで貼れます。');
       triggerCandidateButtonFlash();
     },
     [addSystemMessage, triggerCandidateButtonFlash]
@@ -1380,17 +1539,25 @@ export default function RoomWithSync({
         return;
       }
 
+      const jpUiBlocked =
+        jpDomesticSilenceVideoIdRef.current != null &&
+        jpDomesticSilenceVideoIdRef.current === videoIdRef.current;
+
       if (messages.length === 0) {
-        const greeting = `${effectiveDisplayName}さん、${getTimeBasedGreeting()}`;
-        addAiMessage(greeting, { allowWhenAiStopped: true });
-        addAiMessage(AI_FIRST_VOICE, { allowWhenAiStopped: true });
+        if (!jpUiBlocked) {
+          const greeting = `${effectiveDisplayName}さん、${getTimeBasedGreeting()}`;
+          addAiMessage(greeting, { allowWhenAiStopped: true });
+          addAiMessage(AI_FIRST_VOICE, { allowWhenAiStopped: true });
+        }
         touchActivity();
         return;
       }
 
       /* 「〇〇さん < おかえり」の歓迎には「おかえりなさい！」だけ返す（API呼び出しなし） */
       if (/さん\s*<\s*おかえり/.test(text.trim())) {
-        addAiMessage('おかえりなさい！');
+        if (!jpUiBlocked) {
+          addAiMessage('おかえりなさい！');
+        }
         touchActivity();
         return;
       }
@@ -1402,6 +1569,11 @@ export default function RoomWithSync({
       }
 
       const doChatReply = () => {
+        const jpS = jpDomesticSilenceVideoIdRef.current;
+        const vCur = videoIdRef.current;
+        if (jpS != null && vCur != null && jpS === vCur) {
+          return;
+        }
         const listForAi = [...messages, newUserMsg].map((m) => ({
           displayName: m.displayName,
           body: m.body,
@@ -1441,19 +1613,18 @@ export default function RoomWithSync({
           .then((r2) => (r2.ok ? r2.json() : null))
           .then((data2) => {
             if (data2?.ok && data2?.videoId && data2?.artistTitle) {
-              setVideoId(data2.videoId);
-              lastChangeVideoPublisherRef.current = myClientId;
-              setCurrentSongPosterClientId(myClientId);
-              safePublish('changeVideo', { type: 'changeVideo', videoId: data2.videoId, publisherClientId: myClientId } as PlaybackMessage);
-              playerRef.current?.loadVideoById(data2.videoId);
-              scheduleAutoPlayAfterChangeVideo();
-              advanceTurnAfterPost();
+              if (!isOwner && shouldDeferMultiSongPost()) {
+                safePublish('queueSong', {
+                  type: 'queueSong',
+                  videoId: data2.videoId,
+                  publisherClientId: myClientId,
+                } as PlaybackMessage);
+                touchActivity();
+                return;
+              }
+              applyImmediateChangeVideo(data2.videoId, myClientId);
               addAiMessage(`${data2.artistTitle} を貼りました！`);
-              saveSongHistory(data2.videoId);
               touchActivity();
-              fetchAnnounceAndPublish(data2.videoId);
-              fetchCommentaryAndPublish(data2.videoId);
-              schedulePlaybackHistory(roomId ?? '', data2.videoId);
             } else {
               const searchKeyword = confirmationText ?? query;
               if (searchKeyword) addSystemMessage('曲が見つかりませんでした。下のボタンでYouTube検索を開けます。', searchKeyword);
@@ -1485,9 +1656,14 @@ export default function RoomWithSync({
           if (data?.needConfirm && data?.confirmationText && data?.query) {
             pendingSongQueryRef.current = data.query;
             pendingSongConfirmationTextRef.current = data.confirmationText;
-            addAiMessage(
-              `${data.confirmationText} ですね？曲を再生するには、入力欄のまま「検索」ボタンを押して一覧から動画を選んでください。（送信だけでは再生されません）`,
-            );
+            const jpB =
+              jpDomesticSilenceVideoIdRef.current != null &&
+              jpDomesticSilenceVideoIdRef.current === videoIdRef.current;
+            if (!jpB) {
+              addAiMessage(
+                `${data.confirmationText} ですね？曲を再生するには、入力欄のまま「検索」ボタンを押して一覧から動画を選んでください。（送信だけでは再生されません）`,
+              );
+            }
             touchActivity();
             return;
           }
@@ -1502,14 +1678,10 @@ export default function RoomWithSync({
       addAiMessage,
       addSystemMessage,
       touchActivity,
-      saveSongHistory,
       roomId,
-      schedulePlaybackHistory,
       myClientId,
-      scheduleAutoPlayAfterChangeVideo,
-      advanceTurnAfterPost,
-      fetchAnnounceAndPublish,
-      fetchCommentaryAndPublish,
+      applyImmediateChangeVideo,
+      isOwner,
     ]
   );
 

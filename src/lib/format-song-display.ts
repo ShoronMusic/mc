@@ -9,6 +9,31 @@ import { compoundArtistCanonicalIfKnown } from '@/lib/artist-compound-names';
 /** アーティスト - 曲名 の区切り（ハイフン・enダッシュ・emダッシュ・水平線） */
 const ARTIST_TITLE_SEPARATOR = /\s*[-\u2013\u2014\u2015]\s*/;
 
+/**
+ * YouTube タイトルに付くリマスター・画質・配信向けの副題を除き、会話・AI プロンプト用の「曲名だけ」に近づける。
+ * 楽曲の正式タイトルに意図的に含まれる括弧より、配信メタデータ側の付与を想定。
+ */
+function stripStreamingEditionMarkers(title: string): string {
+  let t = title;
+  const reList = [
+    /\s*\[(?:4K|8K|2K|HD|UHD)\s+Remaster(?:ed)?\]\s*/gi,
+    /\s*[\(（](?:4K|8K|2K|HD|UHD)\s+Remaster(?:ed)?[\)）]\s*/gi,
+    /\s*[\(（]HD\s+Remaster(?:ed)?[\)）]\s*/gi,
+    /\s*\[HD\s+Remaster(?:ed)?\]\s*/gi,
+    /\s*[\(（]Remaster(?:ed)?(?:\s+\d{4})?[\)）]\s*/gi,
+    /\s*\[Remaster(?:ed)?(?:\s+\d{4})?]\s*/gi,
+    /\s*[\(（]Mastered\s+for\s+iTunes[\)）]\s*/gi,
+    /\s*[\(（]Album\s+Version[\)）]\s*/gi,
+    /\s*[\(（]Single\s+Version[\)）]\s*/gi,
+    /\s*[\(（]Radio\s+Edit[\)）]\s*/gi,
+    /\s*[\(（]Extended\s+Version[\)）]\s*/gi,
+    /\s*[\(（]Stereo\s+Mix[\)）]\s*/gi,
+    /\s*[\(（]Mono\s+Version[\)）]\s*/gi,
+  ];
+  for (const re of reList) t = t.replace(re, ' ');
+  return t.replace(/\s+/g, ' ').trim();
+}
+
 export function cleanTitle(title: string): string {
   let t = title
     .replace(/\s*\(Official Video\)\s*/gi, ' ')
@@ -27,6 +52,9 @@ export function cleanTitle(title: string): string {
     .replace(/\s*\[Lyrics\]\s*/gi, ' ')
     .replace(/\s*\[HD\]\s*/gi, ' ')
     .replace(/\s*\[4K\]\s*/gi, ' ')
+    .replace(/\s*\[8K\]\s*/gi, ' ')
+    .replace(/\s*\[2K\]\s*/gi, ' ')
+    .replace(/\s*\[UHD\]\s*/gi, ' ')
     .replace(/\s*\[Explicit\]\s*/gi, ' ')
     .replace(/\s*\[Clean\]\s*/gi, ' ')
     .replace(/\s*\[Radio Edit\]\s*/gi, ' ')
@@ -36,6 +64,7 @@ export function cleanTitle(title: string): string {
     .replace(/\s*\([^)]*Official[^)]*\)\s*/gi, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+  t = stripStreamingEditionMarkers(t);
   return t;
 }
 
@@ -46,6 +75,122 @@ export function cleanAuthor(author: string): string {
     .replace(/\s*VEVO\s*$/i, '')
     .replace(/\s*Official\s*$/i, '')
     .trim();
+}
+
+/** タイトル末尾の「| A COLORS SHOW」（https://www.youtube.com/@COLORSxSTUDIOS の定番フォーマット） */
+const COLORS_SHOW_TITLE_SUFFIX = /\|\s*A\s+COLORS\s+SHOW\b/i;
+
+/**
+ * COLORS / COLORSxSTUDIOS 公式、または「… | A COLORS SHOW」タイトル。
+ * oEmbed の「左 - 右」を常にアーティスト - 曲名として採用し、ヒューリスティックの左右入れ替えと MusicBrainz 順推定を行わない。
+ */
+export function colorsStudiosTrustsOembedArtistFirst(
+  authorName: string | null | undefined,
+  title: string,
+): boolean {
+  if (COLORS_SHOW_TITLE_SUFFIX.test((title ?? '').trim())) return true;
+  const raw = (authorName ?? '').trim();
+  if (!raw) return false;
+  const n = cleanAuthor(raw).toLowerCase().replace(/\s+/g, ' ').trim();
+  const compact = n.replace(/[^a-z0-9]/g, '');
+  if (n === 'colors') return true;
+  if (compact === 'colorsxstudios') return true;
+  if (n.includes('colors x studios')) return true;
+  if (/^colors\b/.test(n) && /\bstudios?\b/.test(n)) return true;
+  return false;
+}
+
+/** https://www.youtube.com/channel/UCyFZMEnm1il5Wv3a6tPscbA — タイトルは「Genius - アーティスト "曲名" …」でチャンネル名が先頭に付く */
+export function isGeniusChannelAuthor(authorName: string | null | undefined): boolean {
+  const n = cleanAuthor((authorName ?? '').trim()).toLowerCase();
+  return n === 'genius';
+}
+
+/**
+ * タイトルが「Genius - …」で始まるときだけ接頭辞を外す（チャンネル名に依存しない。再アップ等でも同じパターンを救う）。
+ */
+export function stripGeniusBrandPrefixFromTitleIfPresent(title: string): {
+  rest: string;
+  hadGeniusBrandPrefix: boolean;
+} {
+  const raw = title.trim();
+  const rest = raw.replace(/^\s*Genius\s*[-–—]\s*/i, '').trim();
+  const hadGeniusBrandPrefix = rest.length >= 2 && rest !== raw;
+  return { rest: hadGeniusBrandPrefix ? rest : raw, hadGeniusBrandPrefix };
+}
+
+/** Apple Music 公式など。タイトルは「Apple Music - アーティスト: "曲名" …」で主催者名が先頭 */
+export function isAppleMusicChannelAuthor(authorName: string | null | undefined): boolean {
+  const n = cleanAuthor((authorName ?? '').trim())
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+  return n === 'apple music' || /^apple music\b/.test(n);
+}
+
+/**
+ * タイトルが「Apple Music - …」で始まるときだけ接頭辞を外す（再アップでも同パターンを救う）。
+ */
+export function stripAppleMusicBrandPrefixFromTitleIfPresent(title: string): {
+  rest: string;
+  hadAppleMusicBrandPrefix: boolean;
+} {
+  const raw = title.trim();
+  const rest = raw.replace(/^\s*Apple\s+Music\s*[-–—]\s*/i, '').trim();
+  const hadAppleMusicBrandPrefix = rest.length >= 2 && rest !== raw;
+  return { rest: hadAppleMusicBrandPrefix ? rest : raw, hadAppleMusicBrandPrefix };
+}
+
+function normForArtistCompare(s: string): string {
+  return s.toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+/** Apple Music / Genius / COLORS のようにチャンネル名がレコーディング・アーティストと限らない配信元 */
+export function isCuratorStyleChannel(
+  authorName: string | null | undefined,
+  title: string,
+): boolean {
+  return (
+    isAppleMusicChannelAuthor(authorName) ||
+    isGeniusChannelAuthor(authorName) ||
+    colorsStudiosTrustsOembedArtistFirst(authorName, title)
+  );
+}
+
+/**
+ * レコーディング・アーティストをメタデータで信頼できないとき true（曲解説・comment-pack を生成しない）。
+ * キュレーター公式チャンネルで、アップローダー名やプラットフォーム名だけがアーティスト扱いになっている場合を想定。
+ * AI_COMMENTARY_ALLOW_UNCERTAIN_ARTIST=1 のときは判定を無効化（従来どおり生成する）。
+ */
+export function shouldSkipAiCommentaryForUncertainArtistResolution(params: {
+  artist: string | null;
+  artistDisplay: string | null;
+  song: string | null | undefined;
+  authorName: string | null | undefined;
+  title: string;
+}): boolean {
+  if (process.env.AI_COMMENTARY_ALLOW_UNCERTAIN_ARTIST === '1') return false;
+
+  const song = (params.song ?? '').trim();
+  if (!song) return true;
+
+  const label = (params.artistDisplay || params.artist || '').trim();
+  if (!label) return true;
+
+  const author = cleanAuthor((params.authorName ?? '').trim());
+  const labelNorm = normForArtistCompare(label);
+  const authorNorm = normForArtistCompare(author);
+
+  if (isCuratorStyleChannel(params.authorName, params.title)) {
+    if (authorNorm && labelNorm === authorNorm) return true;
+    if (isAppleMusicChannelAuthor(params.authorName) && labelNorm === 'apple music') return true;
+    if (isGeniusChannelAuthor(params.authorName) && labelNorm === 'genius') return true;
+    if (colorsStudiosTrustsOembedArtistFirst(params.authorName, params.title) && labelNorm === 'colors') {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 /**
@@ -122,28 +267,137 @@ export function getArtistDisplayString(artistPart: string): string {
   return uniq.join(', ') || artistPart.trim();
 }
 
+/** YouTube 概要の日付・公開メタ行が「アーティスト - 曲名」と誤爆しないよう除外する */
+function isYoutubeDescriptionMetadataLine(line: string): boolean {
+  const s = line.trim();
+  if (!s) return true;
+  if (/^provided\s+to\s+youtube\s+by\b/i.test(s)) return true;
+  if (/^released\s+on\s*:/i.test(s)) return true;
+  if (/^premiered\s*:/i.test(s)) return true;
+  if (/^published\s*:/i.test(s)) return true;
+  if (/^posted\s*:/i.test(s)) return true;
+  if (/^upload\s*date\s*:/i.test(s)) return true;
+  if (/^auto-generated\s+by\s+youtube/i.test(s)) return true;
+  return false;
+}
+
+/** 先頭セグメントが「Released on: 1973」のようにメタデータっぽい */
+function looksLikeMetadataArtistSegment(artist: string): boolean {
+  const a = artist.trim();
+  if (!a) return true;
+  if (/^released\s+on\b/i.test(a)) return true;
+  if (/^premiered\b/i.test(a)) return true;
+  if (/^published\b/i.test(a)) return true;
+  if (/^posted\b/i.test(a)) return true;
+  if (/^upload\s+date\b/i.test(a)) return true;
+  if (/^date\s*:/i.test(a)) return true;
+  if (/^listen\s+on\b/i.test(a)) return true;
+  if (/^stream\s+on\b/i.test(a)) return true;
+  if (/^\d{4}\s*$/.test(a)) return true;
+  if (/^[\d\s:.\-–—/]+$/i.test(a) && /\d{4}/.test(a) && a.length < 40) return true;
+  return false;
+}
+
+/** 「10 - 05」のような MM-DD 片だけが曲名扱いになった疑い（9 to 5 などの曲名は誤爆しないよう2桁同士に限定） */
+function looksLikeMetadataSongSegment(song: string): boolean {
+  const t = song.trim();
+  if (!t) return true;
+  if (/^\d{2}\s*[-–—]\s*\d{2}(\s*[-–—]\s*\d{2,4})?\s*$/i.test(t)) return true;
+  if (/^\d{4}\s*[-–—]\s*\d{1,2}\s*[-–—]\s*\d{1,2}\s*$/.test(t)) return true;
+  if (/^\d{4}\s*[-–—]\s*\d{1,2}\s*$/.test(t)) return true;
+  return false;
+}
+
+export function isGarbageArtistSongParse(parsed: { artist: string; song: string }): boolean {
+  if (looksLikeMetadataArtistSegment(parsed.artist)) return true;
+  if (looksLikeMetadataSongSegment(parsed.song) && looksLikeMetadataArtistSegment(parsed.artist)) return true;
+  return false;
+}
+
 /**
  * タイトルからアーティストと曲名を分解。
  * 1) Artist "Song" / Artist 'Song' の引用符パターン
  * 2) 区切り（ - / – / — / ―）で分割（最初の区切りで artist / 残りを song）
  * 取れなければ null
+ * @param allowQuotedSongWithTrailingParens Genius 典型の「Artist "曲" (Live Performance)」のみ true（全体タイトルに付けると誤爆する）
+ * @param allowColonQuotedSongWithTrailingParens Apple Music 典型の「Artist: "曲" (Live at …)」や「Artist: '曲' Live」のみ true
  */
-export function parseArtistTitle(title: string): { artist: string; song: string } | null {
-  const raw = title.trim();
-  if (!raw) return null;
+export function parseArtistTitle(
+  title: string,
+  options?: {
+    allowQuotedSongWithTrailingParens?: boolean;
+    allowColonQuotedSongWithTrailingParens?: boolean;
+  },
+): { artist: string; song: string } | null {
+  const raw0 = title.trim();
+  if (!raw0) return null;
+  const raw = raw0.replace(/[\u201c\u201d]/g, '"').replace(/[\u2018\u2019]/g, "'");
 
   // 引用符: Artist "Song Title" または Artist 'Song Title'
   const doubleQuote = raw.match(/^([^"]+)\s+"([^"]+)"\s*$/);
   if (doubleQuote) {
     const artist = doubleQuote[1].trim();
     const song = cleanTitle(doubleQuote[2]);
-    if (artist && song) return { artist, song };
+    if (artist && song) {
+      const out = { artist, song };
+      if (!isGarbageArtistSongParse(out)) return out;
+    }
   }
+
+  if (options?.allowQuotedSongWithTrailingParens) {
+    // Genius 等: Artist "TITLE" (Live Performance) … | …（曲名直後に括弧付き副題や | が続く）
+    const doubleQuoteWithTail = raw.match(
+      /^(.+?)\s+"([^"]+)"\s*((?:\([^)]*\)\s*)*)(\s*\|\s*[^|]*)?\s*$/i,
+    );
+    if (doubleQuoteWithTail) {
+      const artist = doubleQuoteWithTail[1].trim();
+      const song = cleanTitle(doubleQuoteWithTail[2]);
+      if (artist && song) {
+        const out = { artist, song };
+        if (!isGarbageArtistSongParse(out)) return out;
+      }
+    }
+  }
+
+  if (options?.allowColonQuotedSongWithTrailingParens) {
+    // Apple Music 等: Artist: "TITLE" (Live at …) / Artist: 'TITLE' Live（括弧なしの Live も）
+    const colonQuotedSuffixOk = (suffix: string) => {
+      const t = suffix.trim();
+      if (!t) return true;
+      if (t.length > 120) return false;
+      if (t.startsWith('(')) return true;
+      if (t.startsWith('|')) return true;
+      if (/^live\b/i.test(t)) return true;
+      return false;
+    };
+    const colonDouble = raw.match(/^(.+?):\s+"([^"]+)"\s*(.*)$/i);
+    if (colonDouble && colonQuotedSuffixOk(colonDouble[3] ?? '')) {
+      const artist = colonDouble[1].trim();
+      const song = cleanTitle(colonDouble[2]);
+      if (artist && song) {
+        const out = { artist, song };
+        if (!isGarbageArtistSongParse(out)) return out;
+      }
+    }
+    const colonSingle = raw.match(/^(.+?):\s+'([^']+)'\s*(.*)$/i);
+    if (colonSingle && colonQuotedSuffixOk(colonSingle[3] ?? '')) {
+      const artist = colonSingle[1].trim();
+      const song = cleanTitle(colonSingle[2]);
+      if (artist && song) {
+        const out = { artist, song };
+        if (!isGarbageArtistSongParse(out)) return out;
+      }
+    }
+  }
+
   const singleQuote = raw.match(/^([^']+)\s+'([^']+)'\s*$/);
   if (singleQuote) {
     const artist = singleQuote[1].trim();
     const song = cleanTitle(singleQuote[2]);
-    if (artist && song) return { artist, song };
+    if (artist && song) {
+      const out = { artist, song };
+      if (!isGarbageArtistSongParse(out)) return out;
+    }
   }
 
   // 区切り（Unicode ダッシュ含む）で分割。最初の区切りだけ使い、残りは曲名として結合
@@ -163,7 +417,11 @@ export function parseArtistTitle(title: string): { artist: string; song: string 
       }
     }
     const song = cleanTitle(songRaw);
-    if (artist && song) return { artist, song };
+    if (artist && song) {
+      const out = { artist, song };
+      if (isGarbageArtistSongParse(out)) return null;
+      return out;
+    }
   }
   return null;
 }
@@ -177,9 +435,9 @@ export function parseArtistTitleFromDescription(description: string): { artist: 
   const providedBy = /^\s*provided\s+to\s+youtube\s+by\s+/i;
   const lines = description.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   for (const line of lines) {
-    if (line.length < 4 || providedBy.test(line)) continue;
+    if (line.length < 4 || providedBy.test(line) || isYoutubeDescriptionMetadataLine(line)) continue;
     const parsed = parseArtistTitle(line);
-    if (parsed) return parsed;
+    if (parsed && !isGarbageArtistSongParse(parsed)) return parsed;
   }
   return null;
 }
@@ -311,7 +569,21 @@ export function getArtistAndSong(
   }
 
   const cleaned = cleanTitle(title);
-  const parsed = parseArtistTitle(title);
+  let { rest: titleForParse, hadGeniusBrandPrefix } = stripGeniusBrandPrefixFromTitleIfPresent(title);
+  let hadAppleMusicBrandPrefix = false;
+  if (!hadGeniusBrandPrefix) {
+    const apple = stripAppleMusicBrandPrefixFromTitleIfPresent(titleForParse);
+    titleForParse = apple.rest;
+    hadAppleMusicBrandPrefix = apple.hadAppleMusicBrandPrefix;
+  }
+  const allowQuotedTail =
+    hadGeniusBrandPrefix || isGeniusChannelAuthor(authorName);
+  const allowColonQuoted =
+    hadAppleMusicBrandPrefix || isAppleMusicChannelAuthor(authorName);
+  const parsed = parseArtistTitle(titleForParse, {
+    allowQuotedSongWithTrailingParens: allowQuotedTail,
+    allowColonQuotedSongWithTrailingParens: allowColonQuoted,
+  });
   if (parsed) {
     // 逆パターン対策:
     // 日本のPVや一部チャンネルで「曲名 - アーティスト」になっていることがある。
@@ -379,13 +651,67 @@ export function getArtistAndSong(
       if (/\b(19\d{2}|20\d{2})\b/.test(x)) return false;
       // MV/歌詞などは曲名側に寄ることが多い
       if (/(official|music video|lyric|lyrics|hd|4k|remaster|live|cover)\b/i.test(x)) return false;
-      // 記号はバンド名であり得る範囲だけ許容
-      if (!/^[A-Za-z0-9 '&.\-]+$/.test(x)) return false;
+      // 記号はバンド名であり得る範囲だけ許容（ATARASHII GAKKO! 等）
+      if (!/^[A-Za-z0-9 '&.\-!?]+$/.test(x)) return false;
       return true;
     };
 
+    /** 「ATARASHII GAKKO!」型。末尾 ! はバンド名側の手がかり（曲名 - バンド! の逆順を直す） */
+    const hasTrailingBandExclamation = (s: string) => /![\s]*$/.test(s.trim());
+
+    /** スペース無しの英数字1語がすべて大文字（SPECIALZ, DNA など）— 曲タイトルで多くアーティスト名誤認しやすい */
+    const looksLikeStylizedCapsSongToken = (s: string) => {
+      const x = s.trim();
+      if (x.length < 2 || x.length > 48) return false;
+      if (/\s/.test(x)) return false;
+      if (!/^[A-Z0-9]+$/.test(x)) return false;
+      return /[A-Z]/.test(x);
+    };
+
+    /** 左側が「複数語で各語が大文字始まり」など、アーティスト列の典型（King Gnu, Taylor Swift） */
+    const leftLooksLikeMultiWordArtist = (() => {
+      const parts = left
+        .trim()
+        .split(/\s+/)
+        .filter((w) => w.length > 0 && !FEAT_WORDS.test(w));
+      if (parts.length < 2) return false;
+      return parts.every((w) => /^[A-Za-z]/.test(w) && /^[A-Z]/.test(w[0] ?? ''));
+    })();
+
     const multiArtistOnRight = /\s&\s|\sand\s/i.test(right);
     const multiArtistOnLeft = /\s&\s|\sand\s/i.test(left);
+    /** 右が「HOTEL LOBBY」のように語ごと全大文字の曲タイトル（looksLikeArtistName に空白が入るため誤アーティスト化しやすい） */
+    const rightIsAllCapsWordsTrackStyle = (() => {
+      const w = right
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean);
+      if (w.length < 1) return false;
+      return w.every((token) => /^[A-Z][A-Z0-9]*$/.test(token));
+    })();
+
+    // 左が複数語アーティスト・右がスタイル化された全大文字1語 → ほぼ確実に「アーティスト - 曲名」のまま（公式以外チャンネルで誤スワップしやすい）
+    const keepArtistSongOrderForCapsTitle =
+      leftLooksLikeMultiWordArtist && looksLikeStylizedCapsSongToken(right);
+
+    /** 左が「Jorja Smith」型（複数語・各語が大文字始まりかつアーティスト記号のみ）。右が「Blue Lights」でも弱い長さ条件でスワップしない */
+    /** 「Quavo & Takeoff - HOTEL LOBBY」型: 左の & が leftLooksLikeMultiWordArtist を潰すため、右が全大語タイトルならアーティスト側を維持 */
+    const leftLooksLikeStrongArtistCandidate =
+      (leftLooksLikeMultiWordArtist && looksLikeArtistName(left)) ||
+      (multiArtistOnLeft && looksLikeArtistName(left) && rightIsAllCapsWordsTrackStyle);
+
+    /** 「Kehlani - Folded」のように左右がどちらも単語1つ＋COLORS 等でチャンネル不一致のとき、長さ条件スワップで誤るため抑止 */
+    const bothSingleWordLatinArtistLike =
+      !/\s/.test(left.trim()) &&
+      !/\s/.test(right.trim()) &&
+      looksLikeArtistName(left) &&
+      looksLikeArtistName(right);
+
+    // 両側とも全大文字1語のとき、長い方をアーティスト側に（YOASOBI - IDOL など。短い方だけを「アーティストっぽい」と誤判定しない）
+    const bothStylizedCapsTokens =
+      looksLikeStylizedCapsSongToken(left) && looksLikeStylizedCapsSongToken(right);
+    const keepLongerCapsTokenLeftAsArtist =
+      bothStylizedCapsTokens && left.length >= right.length;
 
     // 3) oEmbed が「曲名 - アーティスト」で、右に & / and（バンド名）・左に無いときは入れ替え。
     //    チャンネルが hueylewisofficial のようにアーティスト文字列と一致しないケースもここで救う。
@@ -397,14 +723,50 @@ export function getArtistAndSong(
       looksLikeArtistName(right) &&
       looksLikeSongTitle(left);
 
+    // 4) 「Boom Boom Pow - The Black Eyed Peas」のように右が "The …" バンド名・左が曲名だが and/& が無いケース
+    const songFirstLeadingTheOnRight =
+      !channelLooksLikeLeft &&
+      looksLikeArtistName(right) &&
+      looksLikeSongTitle(left) &&
+      /^The\s+/i.test(right.trim()) &&
+      !/^The\s+/i.test(left.trim());
+
     // swap条件:
     // 1) チャンネル名が右側に含まれる（強い根拠）
     // 2) もしくは、右がアーティストっぽく左が曲名っぽい（Linkin Park等の公式MVで多い）
     // 3) 上記 shouldSwapTitleArtistOrder
-    const shouldSwap =
+    // 4) 曲名 - The Beatles / The Black Eyed Peas 型（左が The で始まらないときのみ。Taylor Swift - Anti-Hero は誤スワップしない）
+    let shouldSwap =
       (channelLooksLikeRight && !channelLooksLikeLeft && looksLikeSongTitle(left)) ||
-      (!channelLooksLikeLeft && looksLikeArtistName(right) && looksLikeSongTitle(left) && left.length >= right.length) ||
-      shouldSwapTitleArtistOrder;
+      (!channelLooksLikeLeft &&
+        looksLikeArtistName(right) &&
+        looksLikeSongTitle(left) &&
+        left.length >= right.length &&
+        !leftLooksLikeStrongArtistCandidate &&
+        !bothSingleWordLatinArtistLike) ||
+      shouldSwapTitleArtistOrder ||
+      songFirstLeadingTheOnRight;
+
+    if (keepArtistSongOrderForCapsTitle || keepLongerCapsTokenLeftAsArtist) {
+      shouldSwap = false;
+    }
+
+    // 「バンド名! - 曲名」はそのまま、「曲名 - バンド名!」だけ入れ替え（! を looksLikeArtistName に入れても
+    // 「Tokyo Calling」が右側アーティスト扱いされて誤スワップするため、末尾 ! で最終判定する）
+    if (hasTrailingBandExclamation(left) && !hasTrailingBandExclamation(right)) {
+      shouldSwap = false;
+    } else if (
+      hasTrailingBandExclamation(right) &&
+      !hasTrailingBandExclamation(left) &&
+      looksLikeSongTitle(left) &&
+      looksLikeArtistName(right)
+    ) {
+      shouldSwap = true;
+    }
+
+    if (colorsStudiosTrustsOembedArtistFirst(authorName, title)) {
+      shouldSwap = false;
+    }
 
     const artistPart = shouldSwap ? right : left;
     const songPart = shouldSwap ? left : right;
@@ -427,6 +789,103 @@ export function getArtistAndSong(
     artist: useChannelAsArtist ? getMainArtist(channel) : null,
     artistDisplay: useChannelAsArtist ? channel : null,
     song: songFallback,
+  };
+}
+
+/**
+ * MusicBrainz 録音検索での順序補正用。getArtistAndSong 内の looksLikeArtistName と概ね同じ基準。
+ */
+export function segmentLooksLikeLatinArtistNameForMb(s: string): boolean {
+  const x = s.trim();
+  if (x.length < 4 || x.length > 60) return false;
+  if (/\b(19\d{2}|20\d{2})\b/.test(x)) return false;
+  if (/(official|music video|lyric|lyrics|hd|4k|remaster|live|cover)\b/i.test(x)) return false;
+  if (!/^[A-Za-z0-9 '&.\-!?]+$/.test(x)) return false;
+  return true;
+}
+
+/**
+ * 概要欄でアーティスト確定できず、oEmbed の「左 - 右」がチャンネル名とどちらも一致せず、
+ * 左右ともアーティストっぽいときだけ MusicBrainz で順序を当てにいく（1動画あたり最大2リクエスト・スロットル共有）。
+ */
+export function getAmbiguousTitleSegmentsForMusicBrainz(
+  title: string,
+  authorName: string | null | undefined,
+  videoDescription: string | null | undefined,
+): { left: string; right: string } | null {
+  if (process.env.MUSICBRAINZ_TITLE_ORDER === '0') return null;
+  if (colorsStudiosTrustsOembedArtistFirst(authorName, title)) return null;
+  if (isGeniusChannelAuthor(authorName)) return null;
+  if (isAppleMusicChannelAuthor(authorName)) return null;
+  const { hadGeniusBrandPrefix } = stripGeniusBrandPrefixFromTitleIfPresent(title);
+  if (hadGeniusBrandPrefix) return null;
+  if (stripAppleMusicBrandPrefixFromTitleIfPresent(title).hadAppleMusicBrandPrefix) return null;
+  const desc = videoDescription?.trim() ?? '';
+  if (desc) {
+    if (parsePerformingFromDescription(desc) || parseSongPerformedByFromDescription(desc)) {
+      return null;
+    }
+  }
+  const parsed = parseArtistTitle(title);
+  if (!parsed) return null;
+  const left = parsed.artist.trim();
+  const right = parsed.song.trim();
+  if (left.length < 2 || right.length < 2 || left.length > 100 || right.length > 100) return null;
+
+  const channel = authorName && cleanAuthor(authorName) ? cleanAuthor(authorName) : null;
+  const ch = (channel ?? '').trim();
+  if (!ch) return null;
+
+  const norm = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
+  const alnumCompact = (s: string) => norm(s).replace(/[^a-z0-9]/g, '');
+  const MIN_CHANNEL_ALNUM_MATCH = 6;
+
+  const chNorm = norm(ch);
+  const leftNorm = norm(left);
+  const rightNorm = norm(right);
+  const chAc = alnumCompact(ch);
+  const leftAc = alnumCompact(left);
+  const rightAc = alnumCompact(right);
+
+  const channelMatchesSegment = (segNorm: string, segAc: string) =>
+    Boolean(chNorm) &&
+    (segNorm === chNorm ||
+      segNorm.startsWith(chNorm + ' ') ||
+      segNorm.startsWith(chNorm + '&') ||
+      segNorm.startsWith(chNorm + ' (') ||
+      segNorm.includes(chNorm + ' &') ||
+      segNorm.includes(chNorm + ' and') ||
+      (chAc.length >= MIN_CHANNEL_ALNUM_MATCH &&
+        segAc.length >= MIN_CHANNEL_ALNUM_MATCH &&
+        chAc === segAc));
+
+  if (channelMatchesSegment(leftNorm, leftAc) || channelMatchesSegment(rightNorm, rightAc)) {
+    return null;
+  }
+
+  if (!segmentLooksLikeLatinArtistNameForMb(left) || !segmentLooksLikeLatinArtistNameForMb(right)) {
+    return null;
+  }
+
+  if (/![\s]*$/.test(left) || /![\s]*$/.test(right)) return null;
+
+  return { left, right };
+}
+
+/** MusicBrainz で順序が決まったあと、getArtistAndSong と同様に整形 */
+export function buildArtistSongFromTitleSegments(
+  artistPart: string,
+  songPart: string,
+  videoDescription: string | null | undefined,
+): { artist: string | null; artistDisplay: string | null; song: string } {
+  const songClean = cleanTitle(songPart);
+  const song = refineSongTitleWithDescription(songClean, videoDescription);
+  const mainArtist = getMainArtist(artistPart);
+  const artistDisplay = getArtistDisplayString(artistPart);
+  return {
+    artist: mainArtist || artistPart,
+    artistDisplay: artistDisplay || null,
+    song,
   };
 }
 

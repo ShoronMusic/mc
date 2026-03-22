@@ -1,7 +1,13 @@
 import { NextResponse } from 'next/server';
 import { formatArtistTitle } from '@/lib/format-song-display';
+import {
+  isJpDomesticOfficialChannelAiException,
+  suppressJpDomesticAnnounceTagForArtist,
+} from '@/lib/jp-official-channel-exception';
+import { resolveJapaneseEconomyWithMusicBrainz } from '@/lib/resolve-japanese-economy';
 import { fetchOEmbed } from '@/lib/youtube-oembed';
 import { getVideoDurationSeconds, getVideoSnippet } from '@/lib/youtube-search';
+import { resolveArtistSongForPackAsync } from '@/lib/youtube-artist-song-for-pack';
 
 export const dynamic = 'force-dynamic';
 
@@ -56,12 +62,37 @@ export async function POST(request: Request) {
       });
     }
 
-    const artistTitle = formatArtistTitle(title, authorName, snippet?.description);
+    const { artist, artistDisplay, song } = await resolveArtistSongForPackAsync(
+      title,
+      authorName,
+      snippet,
+    );
+    const artistTitleBase =
+      artistDisplay && song
+        ? `${artistDisplay} - ${song}`
+        : formatArtistTitle(title, authorName, snippet?.description);
+    const isJapaneseDomestic = await resolveJapaneseEconomyWithMusicBrainz({
+      title,
+      artistDisplay,
+      artist,
+      song,
+      description: snippet?.description ?? null,
+      channelTitle: snippet?.channelTitle ?? null,
+      defaultAudioLanguage: snippet?.defaultAudioLanguage ?? null,
+    });
+    const jpOfficialChannelException = isJpDomesticOfficialChannelAiException(snippet?.channelId);
+    /** （邦楽）表記は維持しつつ、公式チャンネル例外時は AI サイレンスだけ解除 */
+    const jpDomesticSilence = isJapaneseDomestic && !jpOfficialChannelException;
+    const showJpDomesticTag =
+      isJapaneseDomestic && !suppressJpDomesticAnnounceTagForArtist({ artist, artistDisplay });
+    const artistTitle = showJpDomesticTag ? `${artistTitleBase}（邦楽）` : artistTitleBase;
     const text = `${displayName}さんの選曲です！\n${artistTitle}`;
 
     return NextResponse.json({
       text,
       durationSeconds: durationSeconds ?? undefined,
+      japaneseDomestic: isJapaneseDomestic,
+      jpDomesticSilence,
     });
   } catch (e) {
     console.error('[api/ai/announce-song]', e);

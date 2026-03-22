@@ -109,6 +109,52 @@ export async function getStoredNewReleaseCommentPack(
 }
 
 /**
+ * 邦楽節約モード: ai_commentary のみがあり ai_chat_1 が無いときキャッシュヒット（自由3本なし）
+ */
+export async function getStoredBaseOnlyCommentPackByVideoId(
+  supabase: SupabaseClient | null,
+  videoId: string
+): Promise<{ baseComment: string; freeComments: []; tidbitIds?: string[] } | null> {
+  if (!supabase || !videoId.trim()) return null;
+  const vid = videoId.trim();
+
+  const { data: baseRow, error: e1 } = await supabase
+    .from('song_tidbits')
+    .select('id, body')
+    .eq('video_id', vid)
+    .eq('source', 'ai_commentary')
+    .eq('is_active', true)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (e1) {
+    if ((e1 as { code?: string }).code === '42P01') return null;
+    return null;
+  }
+  const body = typeof baseRow?.body === 'string' ? baseRow.body.trim() : '';
+  if (!body || body.includes(NEW_RELEASE_CACHE_MARKER)) return null;
+
+  const { data: chat1, error: e2 } = await supabase
+    .from('song_tidbits')
+    .select('id')
+    .eq('video_id', vid)
+    .eq('source', 'ai_chat_1')
+    .eq('is_active', true)
+    .limit(1)
+    .maybeSingle();
+
+  if (e2) {
+    if ((e2 as { code?: string }).code === '42P01') return null;
+    return null;
+  }
+  if (chat1) return null;
+
+  const tid = typeof baseRow?.id === 'string' ? baseRow.id : '';
+  return { baseComment: body, freeComments: [], tidbitIds: tid ? [tid] : undefined };
+}
+
+/**
  * 同一 video_id で comment-pack 相当の4本（基本＋自由3）が既にあれば最新セットを返す。
  * service_role または RLS で読めるクライアントが必要（未設定だと他ユーザーの蓄積が読めない場合あり）。
  */

@@ -6,6 +6,7 @@ import { fetchOEmbed } from '@/lib/youtube-oembed';
 import {
   getArtistAndSong,
   getMainArtist,
+  isGarbageArtistSongParse,
   isLikelyPersonalChannelName,
   parseArtistTitleFromDescription,
   cleanAuthor,
@@ -13,6 +14,7 @@ import {
   refineSongTitleWithDescription,
   formatArtistTitle,
 } from '@/lib/format-song-display';
+import { resolveArtistSongForPackAsync } from '@/lib/youtube-artist-song-for-pack';
 import { getVideoSnippet } from '@/lib/youtube-search';
 import { getOrAssignStyle, setStyleInDb } from '@/lib/song-style';
 import { upsertSongAndVideo, updateSongStyle, incrementSongPlayCount } from '@/lib/song-entities';
@@ -164,9 +166,8 @@ export async function POST(request: Request) {
   let snippetDescription =
     snippet?.description && snippet.description.trim() ? snippet.description : null;
 
-  let { artist, song } = getArtistAndSong(title ?? videoId, authorName, {
-    videoDescription: snippetDescription,
-  });
+  const resolved = await resolveArtistSongForPackAsync(title ?? videoId, authorName, snippet);
+  let { artist, artistDisplay, song } = resolved;
 
   const effectiveAuthor =
     authorName && cleanAuthor(authorName) && !isLikelyPersonalChannelName(cleanAuthor(authorName))
@@ -190,14 +191,14 @@ export async function POST(request: Request) {
     if (snippetForArtist?.description) {
       if (!snippetDescription) snippetDescription = snippetForArtist.description;
       const fromDesc = parseArtistTitleFromDescription(snippetForArtist.description);
-      if (fromDesc) {
+      if (fromDesc && !isGarbageArtistSongParse(fromDesc)) {
         artist = getMainArtist(fromDesc.artist);
         song = refineSongTitleWithDescription(fromDesc.song, snippetForArtist.description);
       } else if (
         snippetForArtist.channelTitle &&
         !isLikelyPersonalChannelName(snippetForArtist.channelTitle.trim())
       ) {
-        artist = snippetForArtist.channelTitle.trim();
+        artist = cleanAuthor(snippetForArtist.channelTitle.trim()) || snippetForArtist.channelTitle.trim();
       }
       if (!title && snippetForArtist.title) title = snippetForArtist.title;
     }
@@ -205,8 +206,10 @@ export async function POST(request: Request) {
 
   /** 一覧・スタイル変更モーダル用。oEmbed 生タイトルが「曲名 - アーティスト」のまま残らないようにする */
   const titleForDb =
-    formatArtistTitle(title ?? videoId, authorName ?? undefined, snippetDescription) ||
-    (title ?? videoId);
+    artistDisplay && song
+      ? `${artistDisplay} - ${song}`
+      : formatArtistTitle(title ?? videoId, authorName ?? undefined, snippetDescription) ||
+        (title ?? videoId);
 
   let style: string | null = null;
   try {

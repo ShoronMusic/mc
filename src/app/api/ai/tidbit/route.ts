@@ -80,10 +80,11 @@ export async function POST(request: Request) {
       : null;
 
     if (fromLibrary) {
-      // 既存ライブラリからの豆知識も曲ごとの song_tidbits に記録する
+      // 既存ライブラリからの豆知識も曲ごとの song_tidbits に記録する（NG API は song_tidbits.id を要する）
+      let songTidbitRow = null;
       if (supabase && songId && videoId) {
         try {
-          await insertTidbit(supabase, {
+          songTidbitRow = await insertTidbit(supabase, {
             songId,
             videoId,
             body: fromLibrary.body,
@@ -95,7 +96,10 @@ export async function POST(request: Request) {
       }
       return NextResponse.json({
         text: fromLibrary.body,
+        /** tidbit_library.id（クライアントの recentlyUsed 除外用） */
         tidbitId: fromLibrary.id,
+        /** song_tidbits.id（NG「DBから外す」API 用） */
+        songTidbitId: songTidbitRow?.id ?? null,
         source: 'library',
       });
     }
@@ -132,9 +136,10 @@ export async function POST(request: Request) {
     }
 
     // 曲ごとの豆知識テーブルにも保存（song_tidbits）
+    let songTidbitRow = null;
     if (supabase && songId && videoId) {
       try {
-        await insertTidbit(supabase, {
+        songTidbitRow = await insertTidbit(supabase, {
           songId,
           videoId,
           body: text,
@@ -148,6 +153,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       text,
       tidbitId: inserted?.id ?? null,
+      songTidbitId: songTidbitRow?.id ?? null,
       source: 'generated',
       saved: Boolean(inserted),
     });

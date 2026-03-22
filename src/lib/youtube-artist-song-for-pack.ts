@@ -1,0 +1,77 @@
+import type { VideoSnippet } from '@/lib/youtube-search';
+import {
+  buildArtistSongFromTitleSegments,
+  cleanAuthor,
+  getAmbiguousTitleSegmentsForMusicBrainz,
+  getArtistAndSong,
+  getArtistDisplayString,
+  getMainArtist,
+  parseArtistTitleFromDescription,
+} from '@/lib/format-song-display';
+import { resolveTitleOrderWithMusicBrainz } from '@/lib/musicbrainz-title-order';
+
+function enrichArtistSongFromSnippet(
+  result: { artist: string | null; artistDisplay: string | null; song: string },
+  snippet: VideoSnippet | null,
+): { artist: string | null; artistDisplay: string | null; song: string } {
+  let { artist, artistDisplay, song } = result;
+  if (!artistDisplay || !artist) {
+    if (snippet?.description) {
+      const fromDesc = parseArtistTitleFromDescription(snippet.description);
+      if (fromDesc) {
+        artist = getMainArtist(fromDesc.artist);
+        artistDisplay = getArtistDisplayString(fromDesc.artist);
+        song = fromDesc.song;
+      } else {
+        if (!artist && snippet.channelTitle) {
+          const ch = cleanAuthor(snippet.channelTitle.trim());
+          if (ch) {
+            artist = getMainArtist(ch);
+            artistDisplay = getArtistDisplayString(ch);
+          }
+        }
+        if (!song && snippet.title) song = snippet.title.trim();
+      }
+    }
+  }
+
+  return { artist, artistDisplay, song };
+}
+
+/**
+ * comment-pack / announce-song 共通: oEmbed タイトル・作者・snippet からアーティスト・曲名を解決。
+ */
+export function resolveArtistSongForPack(
+  title: string,
+  authorName: string | null | undefined,
+  snippet: VideoSnippet | null,
+): { artist: string | null; artistDisplay: string | null; song: string } {
+  const base = getArtistAndSong(title, authorName, {
+    videoDescription: snippet?.description ?? null,
+  });
+  return enrichArtistSongFromSnippet(base, snippet);
+}
+
+/**
+ * 上記に加え、タイトルが曖昧なときだけ MusicBrainz 録音検索でアーティスト／曲名の順を補正（サーバー専用）。
+ */
+export async function resolveArtistSongForPackAsync(
+  title: string,
+  authorName: string | null | undefined,
+  snippet: VideoSnippet | null,
+): Promise<{ artist: string | null; artistDisplay: string | null; song: string }> {
+  const desc = snippet?.description ?? null;
+  const amb = getAmbiguousTitleSegmentsForMusicBrainz(title, authorName, desc);
+  if (amb) {
+    const hint = await resolveTitleOrderWithMusicBrainz(amb.left, amb.right);
+    if (hint === 'left_is_artist') {
+      const base = buildArtistSongFromTitleSegments(amb.left, amb.right, desc);
+      return enrichArtistSongFromSnippet(base, snippet);
+    }
+    if (hint === 'right_is_artist') {
+      const base = buildArtistSongFromTitleSegments(amb.right, amb.left, desc);
+      return enrichArtistSongFromSnippet(base, snippet);
+    }
+  }
+  return resolveArtistSongForPack(title, authorName, snippet);
+}

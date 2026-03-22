@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { createClient, isSupabaseConfigured } from '@/lib/supabase/client';
 import { setOAuthReturnPathCookie } from '@/lib/oauth-return-path';
 import { getBrowserAppOrigin } from '@/lib/app-origin';
@@ -30,8 +30,16 @@ export function JoinChoice({ onJoin, roomId }: JoinChoiceProps) {
   const [showGuestForm, setShowGuestForm] = useState(false);
   const [guestHandle, setGuestHandle] = useState(getInitialGuestHandle);
   const [error, setError] = useState<string | null>(null);
+  const [authNotice, setAuthNotice] = useState<string | null>(null);
+  const [devOauthCallbackUrl, setDevOauthCallbackUrl] = useState<string | null>(null);
   const supabase = createClient();
   const hasSupabase = isSupabaseConfigured() && supabase;
+
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'development') {
+      setDevOauthCallbackUrl(`${window.location.origin}/auth/callback`);
+    }
+  }, []);
 
   const handleGuestSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -57,7 +65,7 @@ export function JoinChoice({ onJoin, roomId }: JoinChoiceProps) {
       return;
     }
     setError(null);
-    const origin = getBrowserAppOrigin() || (typeof window !== 'undefined' ? window.location.origin : '');
+    const origin = getBrowserAppOrigin();
     const pathname = typeof window !== 'undefined' ? window.location.pathname : `/${roomId}`;
     setOAuthReturnPathCookie(pathname);
     const redirectTo = `${origin}/auth/callback?next=${encodeURIComponent(pathname)}`;
@@ -81,9 +89,27 @@ export function JoinChoice({ onJoin, roomId }: JoinChoiceProps) {
           <h2 className="mb-4 text-lg font-semibold text-white">簡易登録 / ログイン</h2>
           <SimpleAuthForm
             onSuccess={handleSimpleAuthSuccess}
-            onCancel={() => setShowSimpleForm(false)}
-            onError={setError}
+            onCancel={() => {
+              setShowSimpleForm(false);
+              setError(null);
+              setAuthNotice(null);
+            }}
+            onError={(m) => {
+              if (m) setAuthNotice(null);
+              setError(m || null);
+            }}
+            onAwaitingEmailConfirmation={(email) => {
+              setError(null);
+              setAuthNotice(
+                `登録を受け付けました（${email}）。確認メールのリンクを開いたあと、「すでに登録済みの方はログイン」からログインしてください。迷惑メールフォルダも確認してください。`
+              );
+            }}
           />
+          {authNotice && (
+            <p className="mt-3 text-sm text-emerald-300/95" role="status">
+              {authNotice}
+            </p>
+          )}
           {error && (
             <p className="mt-3 text-sm text-red-400" role="alert">
               {error}
@@ -152,6 +178,20 @@ export function JoinChoice({ onJoin, roomId }: JoinChoiceProps) {
             >
               簡易登録（メールで登録・ログイン）
             </button>
+          )}
+          {process.env.NODE_ENV === 'development' && hasSupabase && devOauthCallbackUrl && (
+            <div className="rounded-lg border border-amber-900/60 bg-amber-950/30 px-3 py-2 text-left text-xs text-amber-100/90">
+              <p className="font-medium text-amber-200">ローカル開発メモ</p>
+              <p className="mt-1 text-amber-100/80">
+                Google 認証に失敗する場合は、まず{' '}
+                <strong className="text-amber-100">このタブのアドレスと同じオリジン</strong>
+                で Supabase に callback を登録してください。
+              </p>
+              <p className="mt-1 break-all font-mono text-[11px] text-amber-200/90">{devOauthCallbackUrl}</p>
+              <p className="mt-1 text-amber-100/70">
+                本番タブ（Vercel）で OAuth を始めると PKCE エラーになります。Google を試さず進めるなら上の「簡易登録」でも開発できます。
+              </p>
+            </div>
           )}
           <button
             type="button"

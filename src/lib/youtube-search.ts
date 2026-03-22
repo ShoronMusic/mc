@@ -187,6 +187,8 @@ export interface VideoSnippet {
   thumbnailUrl?: string;
   /** YouTube channelId */
   channelId?: string;
+  /** 音声トラックの言語（例: ja）。未取得時は undefined */
+  defaultAudioLanguage?: string;
   /** 統計（数値はAPIの都合で文字列で来るため number に変換） */
   viewCount?: number | null;
   likeCount?: number | null;
@@ -215,6 +217,8 @@ export async function getVideoSnippet(videoId: string): Promise<VideoSnippet | n
           channelTitle?: string;
           publishedAt?: string;
           tags?: string[];
+          defaultAudioLanguage?: string;
+          defaultLanguage?: string;
           thumbnails?: {
             default?: { url?: string };
             medium?: { url?: string };
@@ -249,11 +253,18 @@ export async function getVideoSnippet(videoId: string): Promise<VideoSnippet | n
       const n = Number(s);
       return Number.isFinite(n) ? n : null;
     };
+    const defaultAudioLanguage =
+      typeof sn.defaultAudioLanguage === 'string' && sn.defaultAudioLanguage.trim()
+        ? sn.defaultAudioLanguage.trim()
+        : typeof sn.defaultLanguage === 'string' && sn.defaultLanguage.trim()
+          ? sn.defaultLanguage.trim()
+          : undefined;
     return {
       title: sn.title ?? '',
       description: sn.description ?? '',
       channelTitle: sn.channelTitle ?? '',
       publishedAt: sn.publishedAt,
+      defaultAudioLanguage,
       tags: Array.isArray(sn.tags) ? sn.tags : undefined,
       thumbnailUrl: thumbUrl,
       channelId: sn.channelId,

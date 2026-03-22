@@ -27,6 +27,8 @@ export interface ChatMessage {
   tidbitId?: string | null;
   /** モデレーターがNGを押しライブラリから無効化済み（ローカル表示用） */
   tidbitLibraryRejected?: boolean;
+  /** 邦楽アナウンス同期用（表示には使わない） */
+  jpDomesticSilenceForVideoId?: string;
 }
 
 /** Ably で送るチャットイベントのペイロード */
@@ -48,4 +50,6 @@ export interface ChatMessagePayload {
   aiSource?: 'commentary' | 'tidbit' | 'chat_reply' | 'other';
   /** song_tidbits の行ID（comment-pack 由来） */
   tidbitId?: string | null;
+  /** 邦楽選曲アナウンス時のみ。受信クライアントが同じ videoId の間 AI 発言を止める */
+  jpDomesticSilenceForVideoId?: string;
 }

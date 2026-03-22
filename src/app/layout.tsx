@@ -34,8 +34,11 @@ const OAUTH_STRAY_CODE_SCRIPT = `
 export const metadata: Metadata = {
   title: '洋楽AIチャット',
   description: 'AIと語る、YouTube同時視聴型・洋楽サロン',
-  /** public/favicon.ico を明示。無いと /favicon.ico が App Router 経由になり RSC で 500 になることがある */
-  icons: { icon: '/favicon.ico' },
+  /** public の静的アイコン（PNG）をファビコンに使用 */
+  icons: {
+    icon: [{ url: '/musicAI_icon.png', type: 'image/png' }],
+    apple: '/musicAI_icon.png',
+  },
 };
 
 export default function RootLayout({

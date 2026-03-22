@@ -4,6 +4,7 @@
 
 export type PlaybackMessageType =
   | 'changeVideo'
+  | 'queueSong'
   | 'play'
   | 'pause'
   | 'seek'

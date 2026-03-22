@@ -7,9 +7,16 @@ interface SimpleAuthFormProps {
   onSuccess: (displayName: string) => void;
   onCancel: () => void;
   onError: (message: string) => void;
+  /** メール確認が有効なプロジェクトでは signUp 直後に session が無い。このとき案内のみ（ログインは確認後） */
+  onAwaitingEmailConfirmation?: (email: string) => void;
 }
 
-export function SimpleAuthForm({ onSuccess, onCancel, onError }: SimpleAuthFormProps) {
+export function SimpleAuthForm({
+  onSuccess,
+  onCancel,
+  onError,
+  onAwaitingEmailConfirmation,
+}: SimpleAuthFormProps) {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -66,7 +73,17 @@ export function SimpleAuthForm({ onSuccess, onCancel, onError }: SimpleAuthFormP
           data.user?.user_metadata?.name ??
           data.user?.email?.split('@')[0] ??
           'ユーザー';
-        onSuccess(name);
+        if (data.session) {
+          onSuccess(name);
+        } else if (data.user && onAwaitingEmailConfirmation) {
+          onAwaitingEmailConfirmation(email.trim());
+        } else if (data.user) {
+          onError(
+            '登録は完了しましたが、まだログインできません。Supabase でメール確認が有効な場合、届いたメールのリンクを開いてからログインしてください。'
+          );
+        } else {
+          onError('登録に失敗しました。しばらくしてから再度お試しください。');
+        }
       }
     } catch (err: unknown) {
       let msg = err instanceof Error ? err.message : '登録・ログインに失敗しました。';
@@ -75,7 +92,13 @@ export function SimpleAuthForm({ onSuccess, onCancel, onError }: SimpleAuthFormP
       } else if (msg.includes('Password') && msg.toLowerCase().includes('length')) {
         msg = 'パスワードは6文字以上にしてください。';
       } else if (msg.includes('Invalid login credentials') || msg.includes('invalid_credentials')) {
-        msg = 'メールアドレスまたはパスワードが違います。パスワードを確認するか、Supabase で「メール確認」を有効にしている場合は確認メールのリンクをクリックしてから再度ログインしてください。';
+        msg =
+          'ログインできませんでした。パスワードを確認するか、まだ登録していない場合は下の「アカウントを作成する」から登録してください（未登録のメールでも同じ表示になることがあります）。メール確認を有効にしている場合は、確認メールのリンクを開いてからログインしてください。';
+      } else if (msg.toLowerCase().includes('email not confirmed')) {
+        msg =
+          'メールアドレスの確認が済んでいません。受信トレイ（迷惑メールフォルダも）の確認リンクを開いてから、もう一度ログインしてください。';
+      } else if (msg.toLowerCase().includes('signup') && msg.toLowerCase().includes('disabled')) {
+        msg = 'このプロジェクトでは新規のメール登録が無効になっています。Supabase の Authentication 設定を確認するか、Google 認証をお使いください。';
       }
       onError(msg);
     } finally {
