@@ -7,7 +7,11 @@
     "build": "next build",
     "start": "next start -p 3002",
     "lint": "next lint",
-    "test:mb": "tsx src/lib/musicbrainz-artist-area.unit-test.ts"
+    "test:mb": "tsx src/lib/musicbrainz-artist-area.unit-test.ts",
+    "test:policy": "tsx src/lib/ai-output-policy.unit-test.ts",
+    "test:format": "tsx src/lib/format-song-display-feat.unit-test.ts",
+    "test": "npm run test:mb && npm run test:policy && npm run test:format",
+    "validate": "npm run lint && npx tsc --noEmit && npm run test"
   },
   "dependencies": {
     "@google/generative-ai": "^0.21.0",

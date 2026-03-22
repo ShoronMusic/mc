@@ -11,6 +11,7 @@ import {
 } from '@/lib/format-song-display';
 import { resolveArtistSongForPackAsync } from '@/lib/youtube-artist-song-for-pack';
 import { getVideoSnippet } from '@/lib/youtube-search';
+import { containsUnreliableCommentPackClaim } from '@/lib/ai-output-policy';
 import { getGeminiModel, logGeminiUsage } from '@/lib/gemini';
 import { persistGeminiUsageLog } from '@/lib/gemini-usage-log';
 import { createAdminClient } from '@/lib/supabase/admin';
@@ -176,6 +177,7 @@ export async function POST(request: Request) {
 ・YouTube 動画タイトル（原文）: ${rawYouTubeTitle}
 ・【アーティスト（歌手・バンド）】= 「${artistLabel}」のみ。これは人名またはバンド名です。
 ・【曲名】= 「${songLabel}」のみ。これは楽曲のタイトルです。
+・重要：曲名に含まれる英単語「With」は**共演者をつなぐ語ではなくタイトルの一部**です（例: 『Die With A Smile』全体が曲名）。【曲名】を短くした別名にしたり、「With」以降を別人名として新たな共演者にしたりしないこと。架空のアルバム名・プロジェクト名を作らないこと。
 ${colorsOfficialLock}${geniusOfficialLock}${appleMusicOfficialLock}
 ・絶対禁止: 「${songLabel}」をアーティスト名のように扱い、「${artistLabel}」を曲名のように扱うこと（例:「${songLabel}の代表曲『${artistLabel}』」は誤り。正しくは「${artistLabel}の『${songLabel}』」）。
 ・「〜の代表曲」は必ず アーティスト → 曲 の順で書く（${artistLabel} の代表曲として『${songLabel}』、など）。
@@ -204,9 +206,12 @@ ${metaLockBlock}
 ・曲のテーマや雰囲気を1文（解釈は深掘りしない。概要だけ）
 
 【基本情報に含めないもの】
-・チャート順位、週数、売上、グラミー等の受賞・ノミネート（これらは後続の自由コメントで扱います）
+・チャート順位、週数、売上、グラミー等の受賞・ノミネートの**具体**（これらは後続の自由コメント1本目で扱います）
 ・歌詞の詳細な読解や論争の紹介（自由コメント側）
 ・楽器パートの細かい分析（自由コメント側）
+
+【基本情報に足してよい一言（任意）】
+・広く知られた大ヒット曲に限り、テーマの要約のあとに**一文だけ**「2010年代前半に世界的なヒットとなった」など、**時期＋規模の枠**を添えてよい（チャート名・順位・週数は書かない。具体は1本目の自由コメントに任せる）。
 
 ・80〜150文字程度、日本語、です・ます調。
 ・バンド名とリリース年から体制変更の特筆事項（故メンバーの逝去・活動休止・新ボーカル加入など）を知っている場合は、簡潔にひと言触れてよい。故人を「いま歌っている」と誤解されないようにする。
@@ -222,9 +227,9 @@ ${basePromptTail}`;
 
     // 2. 自由コメント3本（基本情報のあと。1本目＝栄誉・チャート、2＝歌詞、3＝サウンド）
     const topics = [
-      '商業的成功と栄誉（世界的な大ヒットに限り、代表チャート・グラミー等の広く知られた事実を簡潔にたたえる。全米シングルチャート（Billboard Hot 100）の1位・首位・上位入りなどを書くときは、必ずその実績が生じた西暦を「1990年」のように明示すること（どの年のチャートか分からない場合は順位の断定を書かない）。可能なら冒頭一句で上記の形で記録に触れてよい。マイナー曲や不明なら受賞に触れずライブ扱いや文化的言及にとどめる）',
-      '歌詞テーマやメッセージ、よく語られる誤解や解釈のポイント',
-      'サウンドの特徴（メロディ/リズム/アレンジ/フックなど）と印象',
+      '商業的成功と社会的な話題性（このスロット専用。**必ず**次のいずれかを含めること：①主要チャートでの成績（西暦の年を明記。例：2011年のBillboard Hot 100で1位）②グラミー等の主要ノミネート・受賞（分かる場合のみ）③複数国でトップ10入りなど、年とともに触れられる**検証しやすい事実**。**禁止**：作詞者の私人の恋愛インスピレーション談・「と言われています」だけの伝聞・歌詞の読み下し（それらはこのスロットでは書かない）。マイナー曲でチャート実績が不明なときのみ、ライブ定番やカバーの多さにとどめる）',
+      '歌詞テーマやメッセージ（1〜2文で要点のみ。デュエットなら「双方の視点の対比」など**ひとつの要約**にまとめる。パートごとの長い列挙は禁止）',
+      'サウンドの特徴（メロディ・リズム・アレンジの**うち1点**に絞って具体化する。「耳に残るフック」など抽象語の積み重ねだけは禁止）',
     ] as const;
     if (topics.length !== COMMENT_PACK_MAX_FREE_COMMENTS) {
       console.warn(
@@ -232,32 +237,6 @@ ${basePromptTail}`;
         topics.length,
       );
     }
-
-    /** チャート・グラミー等を意図的に含めてよい自由コメント（1本目＝栄誉）用は allowChartAwards=true */
-    const containsUnreliableClaim = (txt: string, allowChartAwards: boolean): boolean => {
-      if (!txt) return false;
-      const hasEvidence = /出典|ソース|Wikipedia|公式|根拠/i.test(txt);
-      if (hasEvidence) return false;
-      const rAlways = [
-        /わずか.*(日|日間)|数日で|異例.*速/i,
-        /全ての工程|全工程|ミックスまで|録音では|レコーディングでは/i,
-        /唯一無二|世界観を.*築き/i,
-        /徹底したこだわり|こだわりが.*唯一/i,
-        /ブーム|バズ|巻き起こ|象徴的|影響力|拡散|瞬く間|世界中|世界中の/i,
-        /チャレンジ|挑戦.*動画|BGM.*チャレンジ|TikTok|YouTube.*チャレンジ/i,
-        /若者文化/i,
-      ];
-      if (rAlways.some((x) => x.test(txt))) return true;
-      if (allowChartAwards) return false;
-      const rNoChart = [
-        /チャート.*(トップ|1位|首位)/,
-        /ビルボード/i,
-        /受賞|ノミネート|受賞歴/i,
-        /グラミー/i,
-        /主要.*(国|チャート).*トップ/,
-      ];
-      return rNoChart.some((x) => x.test(txt));
-    };
 
     const freeComments: string[] = [];
 
@@ -269,6 +248,7 @@ ${basePromptTail}`;
 
       const banBlockStandard = `・禁止事項（断定・根拠薄い内容の回避）:
   - チャート順位/ビルボード等の順位・スコア、受賞/グラミー等は書かない（1本目の自由コメントで既に扱います。ここでは触れない）
+  - 「インスピレーションを得て書かれたと言われています」など、裏付けのない私人話・伝聞調は禁止
   - 「数日で」「異例の速さ」など制作期間の断定をしない
   - 「全ての工程を手掛けた」「ミックスまで」など録音工程の断定をしない
   - 「唯一無二」「世界観を築き上げた」など過剰な断定表現をしない
@@ -276,10 +256,12 @@ ${basePromptTail}`;
   - 亡くなった可能性があるメンバーに触れる場合は、現在の歌唱者と誤解される断定表現を避け、無理に名前を出さない`;
 
       const banBlockHonors = `・この1本だけの必須・禁止:
+  - **必須**：チャート成績・主要賞・または複数国での上位入りなど、西暦付きで触れられる事実を**少なくとも1つ**書く（私人のインスピレーション談や歌詞の細読だけで終えない）
   - ビルボードHot 100・全米シングルチャート等の順位（1位・首位・トップ等）を書くときは、必ず西暦の年を添える（例：「1990年の全米シングルチャートで1位」）。年がはっきり分からないときは順位やチャート成績に触れない
   - 数字・順位・受賞名は「広く参照される事実」に限る。不確かな週数や売上、作った受賞歴は書かない
   - マイナー曲・インディーで明確な大ヒットでないと判断したら、チャート/グラミーに触れず「ライブ定番」「カバーが多い」などにとどめる
-  - 制作期間の断定（「数日で」等）、録音工程の断定、TikTokバズや若者文化の誇張はしない`;
+  - 制作期間の断定（「数日で」等）、録音工程の断定、TikTokバズや若者文化の誇張はしない
+  - 「恋人からインスピレーションを得た」等の私人話・作詞秘話に逃げない（その内容は2本目以降でも推測口調は禁止）`;
 
       const freePrompt = `以下の曲について、すでに「基本情報」と他の自由コメントが存在します。
 
@@ -301,10 +283,11 @@ ${isHonorsTopic ? banBlockHonors : banBlockStandard}
 ・前置きは短く。「豆知識ですが」は使わない。
 ・この1本だけを出力してください。説明や箇条書きは禁止。`;
 
+      const maxAttempts = 3;
       try {
         let attempt = 0;
         let prompt = freePrompt;
-        while (attempt < 2) {
+        while (attempt < maxAttempts) {
           attempt += 1;
           const res = await model.generateContent(prompt);
           logGeminiUsage(`comment_pack_free_${i + 1}`, res.response);
@@ -312,16 +295,38 @@ ${isHonorsTopic ? banBlockHonors : banBlockStandard}
             videoId,
           });
           const txt = res.response.text()?.trim() ?? '';
-          if (txt && !containsUnreliableClaim(txt, isHonorsTopic)) {
+          /** 3回目は栄誉枠でもチャート数字を避けるフォールバック → 歌詞・サウンド枠と同じ厳しさで通す */
+          const policyHonors = isHonorsTopic && attempt < maxAttempts;
+          if (txt && !containsUnreliableCommentPackClaim(txt, policyHonors)) {
             freeComments.push(txt);
             break;
           }
-          if (attempt === 2) break;
-          prompt = isHonorsTopic
-            ? prompt +
-              '\n（追加指示）事実として確からしい代表チャート・グラミー等だけを短く。チャート順位を書く場合は西暦年（例：1990年）を必ず添える。年が不明なら順位に触れず書き直す。曖昧なら受賞に触れずに書き直してください。'
-            : prompt +
-              '\n（追加指示）チャート/受賞/制作期間/録音工程に触れず、指定観点だけで短く書き直してください。';
+          if (attempt >= maxAttempts) {
+            if (!txt || containsUnreliableCommentPackClaim(txt, policyHonors)) {
+              console.warn(
+                '[comment-pack] free comment slot',
+                i + 1,
+                'failed after',
+                maxAttempts,
+                'attempts. videoId=',
+                videoId,
+              );
+            }
+            break;
+          }
+          if (attempt === 1) {
+            prompt = isHonorsTopic
+              ? prompt +
+                '\n（追加指示）事実として確からしい代表チャート・グラミー等だけを短く。チャート順位を書く場合は西暦年（例：1990年）を必ず添える。年が不明なら順位に触れず書き直す。曖昧なら受賞に触れずに書き直してください。'
+              : prompt +
+                '\n（追加指示）チャート/受賞/制作期間/録音工程に触れず、指定観点だけで短く書き直してください。';
+          } else if (attempt === 2) {
+            prompt = isHonorsTopic
+              ? prompt +
+                '\n（3回目・最終）ビルボード・グラミー・順位・週数・「〜週連続」は書かないこと。リリース年以降に**広く聴かれ、当時のポップ・シーンで話題となった**など、穏やかな位置づけを1〜2文・60〜100字で。誇張・バズ表現は禁止。'
+              : prompt +
+                '\n（3回目・最終）指定観点だけ、60〜100字。チャート/受賞/制作断定は避け、穏や当な表現に。';
+          }
         }
       } catch (e) {
         console.error('[api/ai/comment-pack] generate free comment', i, e);

@@ -212,8 +212,13 @@ export function isLikelyPersonalChannelName(name: string): boolean {
 
 /** feat./ft./featuring/with の括弧・角括弧ブロックを除去する正規表現 */
 const FEAT_BLOCK = /\s*[(\[]\s*(feat\.?|ft\.?|fet\.?|featuring|with|w\/?)\s+[^)\]]+[)\]]\s*/gi;
-/** feat./ft./featuring/with で区切る（非キャプチャにし、split の結果に ft. 等が含まれないようにする） */
-const FEAT_SEPARATOR = /\s+(?:ft\.?|feat\.?|fet\.?|featuring|with|w\/?)\s+/i;
+/**
+ * feat. / ft. / featuring / w/ で区切る（非キャプチャにし、split の結果に ft. 等が含まれないようにする）。
+ * 単独の英語「with」は含めない。「Die With A Smile」「Be With You」等の曲名・タイトルを
+ * getMainArtist に渡したときに「Die」「Be」へ切り詰められる事故を防ぐため。
+ * （括弧内の "(with X)" は FEAT_BLOCK で別処理）
+ */
+const FEAT_SEPARATOR = /\s+(?:ft\.?|feat\.?|fet\.?|featuring|w\/?)\s+/i;
 /** 表示用リストから除外する区切り語（ft. 等が混入した場合のフォールバック） */
 const FEAT_WORDS = /^(?:ft\.?|feat\.?|fet\.?|featuring|with|w\/?)$/i;
 
