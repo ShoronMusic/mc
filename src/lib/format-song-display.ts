@@ -62,7 +62,7 @@ export function cleanTitle(title: string): string {
     .replace(/\s*\|\s*Vevo\s*/gi, ' ')
     .replace(/\s*\|\s*[^|]*$/g, ' ')
     /** 「曲名 • TopPop」「曲名 · 番組名」など TV・ライブ番組のタグ（曲名の一部ではない） */
-    .replace(/\s+[·•]\s+[^\n]+$/u, ' ')
+    .replace(/\s+[·•]\s+[^\n]+$/, ' ')
     .replace(/\s*-\s*Official[^-]*$/gi, ' ')
     .replace(/\s*\([^)]*Official[^)]*\)\s*/gi, ' ')
     .replace(/\s+/g, ' ')
