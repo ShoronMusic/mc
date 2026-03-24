@@ -57,4 +57,15 @@ assert.equal(cleanTitle('What Is Love • TopPop'), 'What Is Love');
   assert.equal(r.song, 'What Is Love');
 }
 
+{
+  const r = getArtistAndSong('a - ha - Take On Me', null);
+  assert.equal(r.artistDisplay, 'a-ha');
+  assert.equal(r.song, 'Take On Me');
+}
+{
+  const r = getArtistAndSong('a-ha - Take On Me', null);
+  assert.equal(r.artistDisplay, 'a-ha');
+  assert.equal(r.song, 'Take On Me');
+}
+
 console.log('format-song-display feat separator unit tests: OK');

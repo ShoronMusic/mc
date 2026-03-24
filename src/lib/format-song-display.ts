@@ -5,9 +5,40 @@
  */
 
 import { compoundArtistCanonicalIfKnown } from '@/lib/artist-compound-names';
+import artistHyphenNamePrefixes from '@/config/artist-hyphen-name-prefixes.json';
 
 /** アーティスト - 曲名 の区切り（ハイフン・enダッシュ・emダッシュ・水平線） */
 const ARTIST_TITLE_SEPARATOR = /\s*[-\u2013\u2014\u2015]\s*/;
+
+function readHyphenArtistPrefixes(): readonly string[] {
+  const raw = artistHyphenNamePrefixes as unknown;
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((x): x is string => typeof x === 'string' && x.trim().length > 0);
+}
+
+const HYPHEN_ARTIST_TWO_SEGMENTS = readHyphenArtistPrefixes().filter((name) => {
+  const segs = name.split('-');
+  return segs.length === 2 && segs[0]!.trim() !== '' && segs[1]!.trim() !== '';
+});
+
+/**
+ * 「a - ha - Take On Me」「a-ha - Take On Me」のように、ハイフン区切りで先頭2語が
+ * 既知の「ハイフン入りアーティスト名」（例: a-ha）になるときだけ結合する。
+ */
+function mergeKnownHyphenArtistLeadingParts(parts: string[]): { artist: string; songParts: string[] } | null {
+  if (parts.length < 3) return null;
+  const a0 = parts[0]?.trim().toLowerCase() ?? '';
+  const a1 = parts[1]?.trim().toLowerCase() ?? '';
+  if (!a0 || !a1) return null;
+  for (const canonical of HYPHEN_ARTIST_TWO_SEGMENTS) {
+    const [s0, s1] = canonical.split('-');
+    if (!s0 || !s1) continue;
+    if (a0 === s0.trim().toLowerCase() && a1 === s1.trim().toLowerCase()) {
+      return { artist: canonical, songParts: parts.slice(2) };
+    }
+  }
+  return null;
+}
 
 /**
  * YouTube タイトルに付くリマスター・画質・配信向けの副題を除き、会話・AI プロンプト用の「曲名だけ」に近づける。
@@ -411,8 +442,9 @@ export function parseArtistTitle(
   // 区切り（Unicode ダッシュ含む）で分割。最初の区切りだけ使い、残りは曲名として結合
   const parts = raw.split(ARTIST_TITLE_SEPARATOR).map((p) => p.trim()).filter(Boolean);
   if (parts.length >= 2) {
-    let artist = parts[0];
-    let songRaw = parts.slice(1).join(' - ');
+    const hyphenMerged = mergeKnownHyphenArtistLeadingParts(parts);
+    let artist = hyphenMerged ? hyphenMerged.artist : parts[0];
+    let songRaw = hyphenMerged ? hyphenMerged.songParts.join(' - ') : parts.slice(1).join(' - ');
     // 曲名側に " ft. X" / " feat. X" があれば、曲名はその前だけにし、X はアーティストに含める
     // ※ 単独の "with" は含めない。「Be With You」「Walk with Me」等を誤って feat 扱いしないため
     const featInSong = songRaw.match(/^(.+?)\s+(ft\.?|feat\.?|fet\.?|featuring|w\/?)\s+(.+)$/i);
