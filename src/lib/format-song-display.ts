@@ -802,6 +802,12 @@ export function getArtistAndSong(
       !leftLooksLikeStrongArtistCandidate &&
       !bothSingleWordLatinArtistLike;
 
+    /**
+     * 左だけが「A & B」デュオ表記のときは「アーティスト - 曲」が典型（Daryl Hall & John Oates - Maneater）。
+     * leftLooksLikeStrongArtistCandidate が & を単語扱いして false になり、下の branch 2 だけで誤スワップするのを防ぐ。
+     */
+    const artistDuoFormLeftOnly = multiArtistOnLeft && !multiArtistOnRight;
+
     // swap条件:
     // 1) チャンネル名が右側に含まれる（強い根拠）
     // 2) もしくは、右がアーティストっぽく左が曲名っぽい（Linkin Park等の公式MVで多い）
@@ -816,7 +822,8 @@ export function getArtistAndSong(
         left.length >= right.length &&
         !leftLooksLikeStrongArtistCandidate &&
         !bothSingleWordLatinArtistLike &&
-        !artistFirstLikelySingleLeftMultiWordRight) ||
+        !artistFirstLikelySingleLeftMultiWordRight &&
+        !artistDuoFormLeftOnly) ||
       shouldSwapTitleArtistOrder ||
       songFirstLeadingTheOnRight ||
       songFirstMultiWordLeftSingleWordRightLonger;
@@ -934,6 +941,17 @@ export function getAmbiguousTitleSegmentsForMusicBrainz(
         chAc === segAc));
 
   if (channelMatchesSegment(leftNorm, leftAc) || channelMatchesSegment(rightNorm, rightAc)) {
+    return null;
+  }
+
+  /**
+   * 「Daryl Hall & John Oates - Maneater」のように**片側だけ**が「A & B」のデュオ表記のとき、
+   * 公式タイトルは「アーティスト - 曲」がほぼ固定。両側が segmentLooksLikeLatinArtistNameForMb を通すと
+   * MB が逆順を返し、アナウンスが「Maneater - Daryl Hall & John Oates」になることがあるため、ここでは順序推定しない。
+   * （逆タイトル「Maneater - Daryl Hall & John Oates」は getArtistAndSong 側のスワップで救う。）
+   */
+  const hasAmpersandCollaborationForm = (s: string) => /\s&\s/.test(s.trim());
+  if (hasAmpersandCollaborationForm(left) !== hasAmpersandCollaborationForm(right)) {
     return null;
   }
 

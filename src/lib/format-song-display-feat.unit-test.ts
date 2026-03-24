@@ -5,11 +5,16 @@
 import assert from 'node:assert/strict';
 import {
   cleanTitle,
+  getAmbiguousTitleSegmentsForMusicBrainz,
   getArtistAndSong,
   getArtistDisplayString,
   getMainArtist,
 } from './format-song-display';
 import { reapplyCommentaryLibraryBodyPrefix } from './commentary-library';
+import { compoundArtistCanonicalIfKnown } from './artist-compound-names';
+
+assert.equal(compoundArtistCanonicalIfKnown('Hall & Oates'), 'Daryl Hall & John Oates');
+assert.equal(compoundArtistCanonicalIfKnown('Hall and Oates'), 'Daryl Hall & John Oates');
 
 assert.equal(getMainArtist('Die With A Smile'), 'Die With A Smile');
 assert.equal(getArtistDisplayString('Die With A Smile'), 'Die With A Smile');
@@ -66,6 +71,30 @@ assert.equal(cleanTitle('What Is Love • TopPop'), 'What Is Love');
   const r = getArtistAndSong('a-ha - Take On Me', null);
   assert.equal(r.artistDisplay, 'a-ha');
   assert.equal(r.song, 'Take On Me');
+}
+
+// 「A & B - 曲名」は MB 順序推定を掛けない（片側だけ & のデュオ名と誤判定を防ぐ）
+{
+  const amb = getAmbiguousTitleSegmentsForMusicBrainz(
+    'Daryl Hall & John Oates - Maneater (Official Video)',
+    'Totally Unrelated Upload Channel',
+    null,
+  );
+  assert.equal(amb, null);
+}
+{
+  const r = getArtistAndSong(
+    'Daryl Hall & John Oates - Maneater (Official Video)',
+    'Totally Unrelated Upload Channel',
+  );
+  assert.equal(r.artistDisplay, 'Daryl Hall & John Oates');
+  assert.equal(r.song, 'Maneater');
+}
+// 逆順タイトルはスワップで救う
+{
+  const r = getArtistAndSong('Maneater - Daryl Hall & John Oates', 'Totally Unrelated Upload Channel');
+  assert.equal(r.artistDisplay, 'Daryl Hall & John Oates');
+  assert.equal(r.song, 'Maneater');
 }
 
 console.log('format-song-display feat separator unit tests: OK');

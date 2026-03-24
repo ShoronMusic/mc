@@ -8,6 +8,10 @@
   "Chance the Rapper",
   "Coheed and Cambria",
   "D'Angelo and The Vanguard",
+  {
+    "canonical": "Daryl Hall & John Oates",
+    "aliases": ["Hall & Oates", "Hall and Oates"]
+  },
   "Florence + Machine",
   "Florence + The Machine",
   "Guns N' Roses",

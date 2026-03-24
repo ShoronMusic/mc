@@ -2,14 +2,25 @@
 
 ## `artist-compound-extra.json`
 
-`&` や `and` が含まれても**1組のアーティスト**として扱う名前の**マスタ一覧**です（**JSON の文字列配列**）。ここに追記・並べ替えすればよく、コード側の定数は使いません。
+`&` や `and` が含まれても**1組のアーティスト**として扱う名前の**マスタ一覧**です。要素は**文字列**か、略称を正式名に寄せる**オブジェクト**です。
 
-新規追加の例:
+新規追加の例（文字列）:
 
 ```json
 [
   "…既存の行…",
   "Crosby, Stills, Nash & Young"
+]
+```
+
+略称・通称を正式名に揃える例（`Hall & Oates` → `Daryl Hall & John Oates`）:
+
+```json
+[
+  {
+    "canonical": "Daryl Hall & John Oates",
+    "aliases": ["Hall & Oates", "Hall and Oates"]
+  }
 ]
 ```
 
