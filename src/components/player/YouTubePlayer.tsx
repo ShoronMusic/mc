@@ -8,10 +8,12 @@ import {
   forwardRef,
   useCallback,
   useEffect,
+  useId,
   useImperativeHandle,
   useRef,
   useState,
 } from 'react';
+import { playbackLog } from '@/lib/playback-debug';
 
 const SCRIPT_URL = 'https://www.youtube.com/iframe_api';
 
@@ -30,7 +32,11 @@ declare namespace YT {
         videoId?: string;
         height?: string | number;
         width?: string | number;
-        events?: { onStateChange?: (event: { data: number }) => void };
+        playerVars?: Record<string, string | number>;
+        events?: {
+          onReady?: () => void;
+          onStateChange?: (event: { data: number }) => void;
+        };
       }
     );
     getCurrentTime(): number;
@@ -40,6 +46,7 @@ declare namespace YT {
     pauseVideo(): void;
     loadVideoById(videoId: string, startSeconds?: number): void;
     getPlayerState(): number;
+    setSize(width: number, height: number): void;
     /** IFrame API: プレイヤー破棄・DOM から iframe を除去 */
     destroy(): void;
   }
@@ -53,6 +60,10 @@ declare namespace YT {
   };
 }
 
+/** IFrame API の getPlayerState 値（-1 未開始, 0 終了, 1 再生中, 2 一時停止, 3 バッファ, 5 キュー） */
+export const YT_PLAYER_STATE_PLAYING = 1;
+export const YT_PLAYER_STATE_BUFFERING = 3;
+
 export interface YouTubePlayerHandle {
   seekTo(time: number): void;
   playVideo(): void;
@@ -60,6 +71,8 @@ export interface YouTubePlayerHandle {
   loadVideoById(videoId: string, startSeconds?: number): void;
   getCurrentTime(): number;
   getDuration(): number;
+  /** 未初期化・API 未準備時は null */
+  getPlayerState(): number | null;
   setVolume(volume: number): void;
   getVolume(): number;
 }
@@ -71,11 +84,28 @@ interface YouTubePlayerProps {
 
 const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>(
   function YouTubePlayer({ videoId, onStateChange }, ref) {
-    const containerId = useRef(`yt-player-${Math.random().toString(36).slice(2, 9)}`);
+    const reactId = useId().replace(/:/g, '');
+    const containerId = `yt-player-${reactId}`;
     const playerRef = useRef<YT.Player | null>(null);
+    const shellRef = useRef<HTMLDivElement>(null);
     const [apiReady, setApiReady] = useState(false);
     const onStateChangeRef = useRef(onStateChange);
     onStateChangeRef.current = onStateChange;
+
+    const syncPlayerSize = useCallback(() => {
+      const shell = shellRef.current;
+      const p = playerRef.current;
+      if (!shell || !p) return;
+      try {
+        const w = shell.clientWidth;
+        const h = shell.clientHeight;
+        if (w >= 48 && h >= 48 && typeof p.setSize === 'function') {
+          p.setSize(w, h);
+        }
+      } catch {
+        /* noop */
+      }
+    }, []);
 
     useEffect(() => {
       if (typeof window === 'undefined') return;
@@ -100,20 +130,44 @@ const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>(
 
     useEffect(() => {
       if (!apiReady || !videoId) return;
-      const id = containerId.current;
+      const id = containerId;
 
       const setup = () => {
-        if (!document.getElementById(id)) return;
+        if (!document.getElementById(id)) {
+          playbackLog('YT: setup aborted (no DOM node)', { id, videoId });
+          return;
+        }
         if (playerRef.current) return;
+        playbackLog('YT: creating Player', { id, videoId });
+        const pageOrigin =
+          typeof window !== 'undefined' && window.location?.origin ? window.location.origin : undefined;
         playerRef.current = new window.YT.Player(id, {
           videoId,
           height: '100%',
           width: '100%',
+          playerVars: {
+            playsinline: 1,
+            modestbranding: 1,
+            rel: 0,
+            /** localhost 含め親ページ origin と一致させる（postMessage 宛先不一致エラー緩和） */
+            ...(pageOrigin ? { origin: pageOrigin } : {}),
+          },
           events: {
+            onReady() {
+              playbackLog('YT: onReady', { videoId });
+              const bump = () => syncPlayerSize();
+              bump();
+              requestAnimationFrame(bump);
+              requestAnimationFrame(() => requestAnimationFrame(bump));
+              window.setTimeout(bump, 50);
+              window.setTimeout(bump, 200);
+              window.setTimeout(bump, 600);
+            },
             onStateChange(ev: { data: number }) {
               const p = playerRef.current;
               if (!p || !onStateChangeRef.current) return;
               const t = p.getCurrentTime();
+              playbackLog('YT: onStateChange', { state: ev.data, t, videoId });
               if (ev.data === window.YT.PlayerState.PLAYING) {
                 onStateChangeRef.current('play', t);
               } else if (ev.data === window.YT.PlayerState.PAUSED) {
@@ -127,14 +181,17 @@ const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>(
       };
 
       if (playerRef.current) {
+        playbackLog('YT: loadVideoById (existing player)', { videoId });
         playerRef.current.loadVideoById(videoId);
+        requestAnimationFrame(() => syncPlayerSize());
         return;
       }
       // DOM が確実に存在するよう少し遅延してから作成
-      const t = setTimeout(setup, 80);
+      const t = window.setTimeout(setup, 80);
       return () => {
         clearTimeout(t);
         if (playerRef.current) {
+          playbackLog('YT: destroy player (effect cleanup)', { videoId });
           try {
             playerRef.current.destroy();
           } catch {
@@ -143,7 +200,22 @@ const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>(
           playerRef.current = null;
         }
       };
-    }, [apiReady, videoId]);
+    }, [apiReady, videoId, syncPlayerSize]);
+
+    useEffect(() => {
+      if (!apiReady || !videoId) return;
+      const shell = shellRef.current;
+      if (!shell) return;
+      const ro = new ResizeObserver(() => syncPlayerSize());
+      ro.observe(shell);
+      window.addEventListener('resize', syncPlayerSize);
+      const raf = requestAnimationFrame(() => syncPlayerSize());
+      return () => {
+        ro.disconnect();
+        window.removeEventListener('resize', syncPlayerSize);
+        cancelAnimationFrame(raf);
+      };
+    }, [apiReady, videoId, syncPlayerSize]);
 
     useImperativeHandle(
       ref,
@@ -172,6 +244,17 @@ const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>(
           const player = playerRef.current;
           return player && typeof player.getDuration === 'function' ? player.getDuration() : 0;
         },
+        getPlayerState() {
+          const player = playerRef.current as { getPlayerState?: () => number } | null;
+          if (player && typeof player.getPlayerState === 'function') {
+            try {
+              return player.getPlayerState();
+            } catch {
+              return null;
+            }
+          }
+          return null;
+        },
         setVolume(volume: number) {
           const player = playerRef.current as any;
           if (player && typeof player?.setVolume === 'function') player.setVolume(volume);
@@ -193,24 +276,21 @@ const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>(
       );
     }
 
-    // API がまだのときは簡易 iframe で即表示（クリックに反応するように）
-    if (!apiReady) {
-      return (
-        <div className="aspect-video overflow-hidden rounded-lg bg-gray-900">
-          <iframe
-            title="YouTube player"
-            src={`https://www.youtube.com/embed/${videoId}?autoplay=0`}
-            className="h-full w-full"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowFullScreen
-          />
-        </div>
-      );
-    }
-
+    /**
+     * 常に同一の div に YT.Player を載せる（API 準備前の別 iframe との切替をしない）。
+     * モバイルで「音だけ出て映像が止まる／二重に聞こえる」原因になり得るため廃止。
+     */
     return (
-      <div className="aspect-video overflow-hidden rounded-lg bg-gray-900">
-        <div id={containerId.current} className="h-full w-full min-h-[200px]" />
+      <div
+        ref={shellRef}
+        className="relative aspect-video w-full max-w-full overflow-hidden rounded-lg bg-gray-900"
+      >
+        <div id={containerId} className="h-full min-h-[180px] w-full" />
+        {!apiReady && (
+          <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-gray-900/90 text-xs text-gray-500">
+            プレイヤー準備中…
+          </div>
+        )}
       </div>
     );
   }

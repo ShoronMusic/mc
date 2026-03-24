@@ -6,9 +6,11 @@ import Chat from '@/components/chat/Chat';
 import ChatInput, { type ChatInputHandle } from '@/components/chat/ChatInput';
 import YouTubePlayer, {
   type YouTubePlayerHandle,
+  YT_PLAYER_STATE_BUFFERING,
+  YT_PLAYER_STATE_PLAYING,
 } from '@/components/player/YouTubePlayer';
 import MyPage from '@/components/mypage/MyPage';
-import ResizableSection from '@/components/room/ResizableSection';
+import RoomMainLayout from '@/components/room/RoomMainLayout';
 import RoomPlaybackHistory from '@/components/room/RoomPlaybackHistory';
 import UserBar from '@/components/room/UserBar';
 import { getLastExitStorageKey } from '@/components/providers/AblyProviderWrapper';
@@ -28,6 +30,7 @@ import {
   SYSTEM_MESSAGE_QUEUE_SONG_DEFERRED,
 } from '@/lib/chat-system-copy';
 import { COMMENT_PACK_MAX_FREE_COMMENTS } from '@/lib/song-tidbits';
+import { playbackLog } from '@/lib/playback-debug';
 import { extractVideoId, isStandaloneNonYouTubeUrl } from '@/lib/youtube';
 import type { PlaybackMessage } from '@/types/playback';
 import {
@@ -60,8 +63,8 @@ const AI_DISPLAY_NAME = 'AI';
 const SILENCE_TIDBIT_SEC = 30;
 /** 他メンバーの「再生」で巻き戻ししない閾値（秒）。有料/無料で広告の有無により終了時刻がずれるため、遅れた再生は適用しない */
 const PLAY_SYNC_REWIND_THRESHOLD_SEC = 10;
-/** 曲投入後の自動再生まで待つ時間（ミリ秒）。読み込み完了を待つためやや長め */
-const AUTO_PLAY_AFTER_CHANGE_VIDEO_MS = 1200;
+const AUTO_PLAY_POLL_MS = 50;
+const AUTO_PLAY_GIVE_UP_MS = 8000;
 
 /** パス・次へ・飛ばして・キープなど、選曲をスキップする旨の発言か */
 function isPassPhrase(body: string): boolean {
@@ -167,7 +170,10 @@ export default function RoomWithSync({
   const playerRef = useRef<YouTubePlayerHandle>(null);
   const chatInputRef = useRef<ChatInputHandle>(null);
   const applyingRemoteRef = useRef(false);
-  const autoPlayAfterChangeVideoRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** ブラウザでは setInterval の戻り値は number（Node の Timeout 型と食い違うため number で保持） */
+  const autoPlayAfterChangeVideoRef = useRef<number | null>(null);
+  /** scheduleAutoPlay が直近に play を publish した時刻（YT の PLAYING で二重 publish しない） */
+  const lastScheduledPlayPublishAtRef = useRef(0);
   const [videoId, setVideoId] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -602,6 +608,41 @@ export default function RoomWithSync({
       addSystemMessage(SYSTEM_MESSAGE_QUEUE_SONG_DEFERRED);
       return;
     }
+    const msgClientId =
+      message && typeof message === 'object' && 'clientId' in message
+        ? (message as { clientId?: string | null }).clientId
+        : undefined;
+    /**
+     * Ably は発行者本人にも changeVideo を配信する。
+     * ローカルですでに loadVideoById 済みなのでエコーで再度 load すると二重デコードで音が重なる。
+     */
+    if (
+      myClientId &&
+      typeof msgClientId === 'string' &&
+      msgClientId === myClientId &&
+      data.type === 'changeVideo'
+    ) {
+      playbackLog('ably: skip self echo changeVideo', { videoId: data.videoId });
+      return;
+    }
+    /**
+     * 自分の play のエコーは、既に再生・バッファ中なら二重 playVideo（音の重なり）になるので無視する。
+     * 未再生のときだけエコーで seekTo + play をかけ、モバイル等で初回が効かない場合の再試行に使う。
+     */
+    if (
+      data.type === 'play' &&
+      typeof data.currentTime === 'number' &&
+      myClientId &&
+      typeof msgClientId === 'string' &&
+      msgClientId === myClientId
+    ) {
+      const st = playerRef.current?.getPlayerState?.() ?? null;
+      if (st === YT_PLAYER_STATE_PLAYING || st === YT_PLAYER_STATE_BUFFERING) {
+        playbackLog('ably: skip self echo play (already playing/buffering)', { st, currentTime: data.currentTime });
+        return;
+      }
+      playbackLog('ably: apply self echo play (retry path)', { st, currentTime: data.currentTime });
+    }
     applyingRemoteRef.current = true;
     try {
       if (data.type === 'changeVideo' && data.videoId) {
@@ -658,33 +699,80 @@ export default function RoomWithSync({
 
   publishRef.current = safePublish;
 
-  /** 曲投入後に自動再生し、全員に play(currentTime: 0) を配信する */
+  /** 曲投入後に自動再生し、全員に play(currentTime: 0) を配信する（準備完了を短い間隔で待ち、操作コンテキストに近いタイミングで play） */
   const scheduleAutoPlayAfterChangeVideo = useCallback(() => {
-    if (autoPlayAfterChangeVideoRef.current) {
-      clearTimeout(autoPlayAfterChangeVideoRef.current);
+    if (autoPlayAfterChangeVideoRef.current != null) {
+      window.clearInterval(autoPlayAfterChangeVideoRef.current);
       autoPlayAfterChangeVideoRef.current = null;
     }
-    autoPlayAfterChangeVideoRef.current = setTimeout(() => {
+    const startedAt = Date.now();
+    let intervalId: number | null = null;
+
+    const stopPolling = () => {
+      if (intervalId !== null) {
+        window.clearInterval(intervalId);
+        intervalId = null;
+      }
       autoPlayAfterChangeVideoRef.current = null;
+    };
+
+    const tryPlayOnce = (): boolean => {
+      const handle = playerRef.current;
+      if (!handle) {
+        if (Date.now() - startedAt >= AUTO_PLAY_GIVE_UP_MS) {
+          playbackLog('scheduleAutoPlay: give up (no player ref handle)');
+          stopPolling();
+          return true;
+        }
+        playbackLog('scheduleAutoPlay: wait (no player ref handle yet)');
+        return false;
+      }
+      /**
+       * YouTubePlayer の ref は常に playVideo を持つが、内部 YT.Player 未生成時は no-op。
+       * 以前はここで即成功扱いになり publish だけしてポーリング停止→一生再生されなかった。
+       */
+      const ytState = handle.getPlayerState?.() ?? null;
+      if (ytState === null) {
+        if (Date.now() - startedAt >= AUTO_PLAY_GIVE_UP_MS) {
+          playbackLog('scheduleAutoPlay: give up (YT.Player never became ready)');
+          stopPolling();
+          return true;
+        }
+        playbackLog('scheduleAutoPlay: wait (YT.Player not ready)', { elapsedMs: Date.now() - startedAt });
+        return false;
+      }
       applyingRemoteRef.current = true;
       try {
-        playerRef.current?.seekTo(0);
-        playerRef.current?.playVideo();
+        playbackLog('scheduleAutoPlay: seekTo(0) + playVideo()', { ytState });
+        handle.seekTo(0);
+        handle.playVideo();
         setCurrentTime(0);
         setPlaying(true);
+        lastScheduledPlayPublishAtRef.current = Date.now();
         safePublish('play', { type: 'play', currentTime: 0 } as PlaybackMessage);
       } finally {
         setTimeout(() => {
           applyingRemoteRef.current = false;
         }, 300);
       }
-    }, AUTO_PLAY_AFTER_CHANGE_VIDEO_MS);
+      stopPolling();
+      return true;
+    };
+
+    if (!tryPlayOnce()) {
+      playbackLog('scheduleAutoPlay: start polling', { pollMs: AUTO_PLAY_POLL_MS });
+      intervalId = window.setInterval(() => {
+        tryPlayOnce();
+      }, AUTO_PLAY_POLL_MS);
+      autoPlayAfterChangeVideoRef.current = intervalId;
+    }
   }, [safePublish]);
 
   useEffect(() => {
     return () => {
-      if (autoPlayAfterChangeVideoRef.current) {
-        clearTimeout(autoPlayAfterChangeVideoRef.current);
+      if (autoPlayAfterChangeVideoRef.current != null) {
+        window.clearInterval(autoPlayAfterChangeVideoRef.current);
+        autoPlayAfterChangeVideoRef.current = null;
       }
     };
   }, []);
@@ -764,10 +852,14 @@ export default function RoomWithSync({
       }
       setPlaying(state === 'play');
       if (state === 'play') {
-        safePublish('play', {
-          type: 'play',
-          currentTime: time,
-        } as PlaybackMessage);
+        const justPublishedFromSchedule =
+          Date.now() - lastScheduledPlayPublishAtRef.current < 2500;
+        if (!justPublishedFromSchedule) {
+          safePublish('play', {
+            type: 'play',
+            currentTime: time,
+          } as PlaybackMessage);
+        }
       }
       // pause は同期しない（誰かが止めても他メンバーは止めない。広告の有無で終了時刻がずれるため）
     },
@@ -1357,6 +1449,7 @@ export default function RoomWithSync({
 
   const applyImmediateChangeVideo = useCallback(
     (id: string, publisherClientId: string) => {
+      playbackLog('applyImmediateChangeVideo', { id, publisherClientId });
       pendingQueuedVideoIdRef.current = null;
       pendingQueuedPublisherRef.current = '';
       jpDomesticSilenceVideoIdRef.current = null;
@@ -1686,18 +1779,13 @@ export default function RoomWithSync({
   );
 
   return (
-    <main className="flex h-screen flex-col bg-gray-950 p-3">
-      <header className="mb-2 flex items-center justify-between border-b border-gray-800 pb-2">
-        <div className="flex flex-wrap items-baseline gap-3">
-          <h1 className="text-lg font-semibold text-white">
-            洋楽AIチャット{roomId ? ` - ${roomId}` : ''}
-          </h1>
-          <p className="text-xs text-gray-400 whitespace-nowrap">
-            AIのコメントは事実と異なる場合があります。また参加者のご意見やご質問に対して肯定的に答える傾向があります。あくまで参考情報としてお楽しみいただき、内容の正確性はご自身でもご確認ください。
-          </p>
-        </div>
+    <main className="flex h-screen flex-col overflow-hidden bg-gray-950 p-3">
+      <header className="mb-2 flex shrink-0 flex-row items-center justify-between gap-3 border-b border-gray-800 pb-2">
+        <h1 className="min-w-0 flex-1 truncate text-lg font-semibold text-white">
+          洋楽AIチャット{roomId ? ` - ${roomId}` : ''}
+        </h1>
         {onLeave && (
-          <span className="flex items-center gap-2">
+          <div className="flex shrink-0 flex-nowrap items-center justify-end gap-2">
             {!isGuest && (
               <button
                 type="button"
@@ -1720,11 +1808,11 @@ export default function RoomWithSync({
             >
               退室する
             </button>
-          </span>
+          </div>
         )}
       </header>
 
-      <section className="mb-2">
+      <section className="mb-2 shrink-0">
         <UserBar
           displayName={effectiveDisplayName}
           isGuest={isGuest}
@@ -1732,40 +1820,7 @@ export default function RoomWithSync({
           participants={participants}
           myClientId={myClientId}
           currentOwnerClientId={ownerLeftAt === null ? ownerClientId : ''}
-          currentTurnClientId={currentTurnClientId}
           currentSongPosterClientId={currentSongPosterClientId}
-          onForceExit={
-            isOwner
-              ? (targetClientId, targetDisplayName) => {
-                  safePublish(OWNER_FORCE_EXIT_EVENT, {
-                    targetClientId,
-                    targetDisplayName,
-                  } as OwnerForceExitPayload);
-                }
-              : undefined
-          }
-          onTransferOwner={
-            isOwner
-              ? (newOwnerClientId) => {
-                  const next = { ownerClientId: newOwnerClientId, ownerLeftAt: null };
-                  setOwnerState(next);
-                  if (roomId) setOwnerStateToStorage(roomId, next);
-                  safePublish(OWNER_STATE_EVENT, next as OwnerStatePayload);
-                }
-              : undefined
-          }
-          aiFreeSpeechStopped={aiFreeSpeechStopped}
-          onAiFreeSpeechStopToggle={
-            isOwner
-              ? () => {
-                  const next = !aiFreeSpeechStopped;
-                  setAiFreeSpeechStopped(next);
-                  safePublish(OWNER_AI_FREE_SPEECH_STOP_EVENT, {
-                    enabled: next,
-                  } as OwnerAiFreeSpeechStopPayload);
-                }
-              : undefined
-          }
           onParticipantClick={(displayName) => chatInputRef.current?.insertText(`${displayName}さん < `)}
         />
       </section>
@@ -1820,12 +1875,34 @@ export default function RoomWithSync({
                     }
                   : undefined
               }
+              aiFreeSpeechStopped={aiFreeSpeechStopped}
+              onAiFreeSpeechStopToggle={
+                isOwner
+                  ? () => {
+                      const next = !aiFreeSpeechStopped;
+                      setAiFreeSpeechStopped(next);
+                      safePublish(OWNER_AI_FREE_SPEECH_STOP_EVENT, {
+                        enabled: next,
+                      } as OwnerAiFreeSpeechStopPayload);
+                    }
+                  : undefined
+              }
+              onForceExit={
+                isOwner
+                  ? (targetClientId, targetDisplayName) => {
+                      safePublish(OWNER_FORCE_EXIT_EVENT, {
+                        targetClientId,
+                        targetDisplayName,
+                      } as OwnerForceExitPayload);
+                    }
+                  : undefined
+              }
             />
           </div>
         </div>
       )}
 
-      <ResizableSection
+      <RoomMainLayout
         left={
           <Chat
             messages={messages}
@@ -1861,34 +1938,32 @@ export default function RoomWithSync({
         }
       />
 
-      <section className="mt-2">
-        <div className="flex items-start gap-2">
-          <div className="flex-1">
-            <ChatInput
-              ref={chatInputRef}
-              onSendMessage={handleSendMessage}
-              onVideoUrl={handleVideoUrlFromChat}
-              onSystemMessage={addSystemMessage}
-              onAddCandidate={handleAddCandidateFromSearch}
-              onPreviewStart={handlePreviewStart}
-              onPreviewStop={handlePreviewStop}
-            />
-          </div>
-          <button
-            type="button"
-            className={`mt-2 h-[38px] flex-shrink-0 rounded border border-emerald-600 bg-emerald-900/40 px-3 text-xs font-semibold text-emerald-100 hover:bg-emerald-800/70 ${
-              candidateButtonFlash ? 'animate-pulse ring-2 ring-emerald-300' : ''
-            }`}
-            onClick={() => setCandidateOpen(true)}
-          >
-            候補リスト
-            {candidateSongs.length > 0 && (
-              <span className="ml-1 inline-block rounded bg-emerald-700 px-1 text-[10px]">
-                {candidateSongs.length}
-              </span>
-            )}
-          </button>
-        </div>
+      <section className="mt-2 shrink-0">
+        <ChatInput
+          ref={chatInputRef}
+          onSendMessage={handleSendMessage}
+          onVideoUrl={handleVideoUrlFromChat}
+          onSystemMessage={addSystemMessage}
+          onAddCandidate={handleAddCandidateFromSearch}
+          onPreviewStart={handlePreviewStart}
+          onPreviewStop={handlePreviewStop}
+          trailingSlot={
+            <button
+              type="button"
+              className={`flex h-[2.5rem] w-full shrink-0 items-center justify-center gap-0.5 rounded border border-emerald-600 bg-emerald-900/40 px-2 text-xs font-semibold text-emerald-100 hover:bg-emerald-800/70 lg:h-[38px] lg:w-auto lg:px-3 ${
+                candidateButtonFlash ? 'animate-pulse ring-2 ring-emerald-300' : ''
+              }`}
+              onClick={() => setCandidateOpen(true)}
+            >
+              候補リスト
+              {candidateSongs.length > 0 && (
+                <span className="inline-block rounded bg-emerald-700 px-1 text-[10px]">
+                  {candidateSongs.length}
+                </span>
+              )}
+            </button>
+          }
+        />
       </section>
 
       {candidateOpen && (

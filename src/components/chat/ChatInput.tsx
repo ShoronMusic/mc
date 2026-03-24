@@ -4,7 +4,14 @@
  * メッセージ入力欄（送信 / YouTube URL のときは動画再生に転送）
  */
 
-import { forwardRef, useImperativeHandle, useRef, useState, useCallback } from 'react';
+import {
+  forwardRef,
+  useImperativeHandle,
+  useRef,
+  useState,
+  useCallback,
+  type ReactNode,
+} from 'react';
 import { MAX_MESSAGE_LENGTH } from '@/lib/chat-limits';
 import { NON_YOUTUBE_URL_SYSTEM_MESSAGE } from '@/lib/chat-non-youtube-url';
 import { extractVideoId, isStandaloneNonYouTubeUrl } from '@/lib/youtube';
@@ -32,10 +39,12 @@ interface ChatInputProps {
   onPreviewStart?: (videoId: string) => void;
   /** プレビュー終了（メイン再生の音を戻す用途など） */
   onPreviewStop?: () => void;
+  /** 送信・検索と同じ行の右側（モバイルは3段目の横並び）。例: 候補リスト */
+  trailingSlot?: ReactNode;
 }
 
 const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput(
-  { onSendMessage, onVideoUrl, onSystemMessage, onAddCandidate, onPreviewStart, onPreviewStop },
+  { onSendMessage, onVideoUrl, onSystemMessage, onAddCandidate, onPreviewStart, onPreviewStop, trailingSlot },
   ref
 ) {
   const [value, setValue] = useState('');
@@ -339,6 +348,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
       )}
 
       <div className="rounded-lg border border-gray-700 bg-gray-900/50 p-2">
+        {/* モバイル1段目 / PCでも上段フル幅: 使い方 */}
         <details className="mb-2 rounded border border-gray-700/80 bg-gray-900/80 px-2 py-1.5 text-[11px] leading-snug text-gray-400 open:border-amber-900/40 open:bg-amber-950/20">
           <summary className="cursor-pointer select-none text-amber-200/90 marker:text-gray-500 hover:text-amber-100">
             この欄の使い方（送信／検索の2通り）
@@ -358,7 +368,8 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
             </li>
           </ul>
         </details>
-        <div className="flex gap-2">
+        {/* モバイル: 2段目=入力 / 3段目=送信・検索・trailing 横並び。PC: 入力とボタン1行 */}
+        <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:gap-2">
           <input
             ref={inputRef}
             type="text"
@@ -367,30 +378,35 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
             onChange={(e) => setValue(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSubmit()}
             maxLength={MAX_MESSAGE_LENGTH}
-            className="flex-1 rounded border border-gray-600 bg-gray-800 px-3 py-2 text-sm text-white placeholder-gray-500 outline-none focus:border-blue-500"
+            className="w-full min-w-0 rounded border border-gray-600 bg-gray-800 px-3 py-2 text-sm text-white placeholder-gray-500 outline-none focus:border-blue-500 lg:flex-1"
             aria-label="チャット入力"
           />
-          <button
-            type="button"
-            onClick={handleSubmit}
-            title="YouTubeのURLならプレイヤーに反映。それ以外はチャットに表示"
-            className="shrink-0 rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50"
-            disabled={!value.trim()}
-          >
-            送信
-          </button>
-          {onVideoUrl && (
+          <div className="flex w-full min-w-0 gap-2 lg:w-auto lg:shrink-0">
             <button
               type="button"
-              onClick={handleSearchAndPlay}
-              title="キーワードでYouTube検索し、結果一覧を表示（URLを入れた場合は送信と同じくプレイヤーへ）"
-              className="shrink-0 rounded border border-blue-500/60 bg-blue-900/20 px-4 py-2 text-sm font-medium text-blue-200 hover:bg-blue-900/35 disabled:opacity-50"
-              disabled={!value.trim() || searching}
-              aria-label="曲名・キーワードで検索"
+              onClick={handleSubmit}
+              title="YouTubeのURLならプレイヤーに反映。それ以外はチャットに表示"
+              className="min-h-[2.5rem] flex-1 rounded bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50 lg:min-h-0 lg:flex-none lg:px-4"
+              disabled={!value.trim()}
             >
-              {searching ? '…' : '検索'}
+              送信
             </button>
-          )}
+            {onVideoUrl && (
+              <button
+                type="button"
+                onClick={handleSearchAndPlay}
+                title="キーワードでYouTube検索し、結果一覧を表示（URLを入れた場合は送信と同じくプレイヤーへ）"
+                className="min-h-[2.5rem] flex-1 rounded border border-blue-500/60 bg-blue-900/20 px-3 py-2 text-sm font-medium text-blue-200 hover:bg-blue-900/35 disabled:opacity-50 lg:min-h-0 lg:flex-none lg:px-4"
+                disabled={!value.trim() || searching}
+                aria-label="曲名・キーワードで検索"
+              >
+                {searching ? '…' : '検索'}
+              </button>
+            )}
+            {trailingSlot != null && trailingSlot !== false ? (
+              <div className="min-w-0 flex-1 lg:flex-none">{trailingSlot}</div>
+            ) : null}
+          </div>
         </div>
       </div>
     </>

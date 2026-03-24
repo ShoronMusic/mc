@@ -85,6 +85,11 @@ interface MyPageProps {
   /** オーナー時のみ。5分制限ONか。デフォルトON */
   songLimit5MinEnabled?: boolean;
   onSongLimit5MinToggle?: () => void;
+  /** オーナー時のみ。AI 自由発言が停止中か */
+  aiFreeSpeechStopped?: boolean;
+  onAiFreeSpeechStopToggle?: () => void;
+  /** オーナー時のみ。参加者を強制退出 */
+  onForceExit?: (targetClientId: string, targetDisplayName: string) => void;
 }
 
 /** マイページで選べるステータス（参加者名横に表示） */
@@ -115,6 +120,9 @@ export default function MyPage({
   onUserStatusChange,
   songLimit5MinEnabled = true,
   onSongLimit5MinToggle,
+  aiFreeSpeechStopped = false,
+  onAiFreeSpeechStopToggle,
+  onForceExit,
 }: MyPageProps) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(!isGuest);
@@ -480,32 +488,70 @@ export default function MyPage({
         </div>
       )}
 
-      {isChatOwner && onTransferOwner && (
+      {isChatOwner && (onTransferOwner || onAiFreeSpeechStopToggle || onForceExit) && (
         <div className="mb-4 rounded border border-amber-700/50 bg-amber-900/20 p-3">
-          <h3 className="mb-2 flex items-center gap-1.5 text-sm font-medium text-amber-200">
+          <h3 className="mb-3 flex items-center gap-1.5 text-sm font-medium text-amber-200">
             <span aria-hidden>👑</span>
-            チャットオーナーを譲る
+            ルーム管理（オーナー）
           </h3>
-          <p className="mb-2 text-xs text-gray-400">
-            現在在室している参加者のみ譲渡できます。選ぶとその人にオーナーが移ります。
-          </p>
-          {chatOwnerTransferParticipants.length === 0 ? (
-            <p className="text-xs text-gray-500">譲れる相手が在室していません。</p>
-          ) : (
-            <ul className="space-y-1">
-              {chatOwnerTransferParticipants.map((p) => (
-                <li key={p.clientId} className="flex items-center justify-between gap-2">
-                  <span className="text-sm text-gray-200">{p.displayName}</span>
-                  <button
-                    type="button"
-                    onClick={() => onTransferOwner(p.clientId)}
-                    className="rounded border border-amber-600 bg-amber-800/30 px-2 py-1 text-xs text-amber-200 hover:bg-amber-800/50"
-                  >
-                    オーナーを譲る
-                  </button>
-                </li>
-              ))}
-            </ul>
+
+          {onAiFreeSpeechStopToggle && (
+            <div className="mb-4 border-b border-amber-800/30 pb-4">
+              <p className="mb-2 text-xs text-gray-400">
+                沈黙時の AI による雑談発言の ON/OFF です。停止中は再び押すと再開できます。
+              </p>
+              <button
+                type="button"
+                onClick={onAiFreeSpeechStopToggle}
+                className={`rounded border px-2 py-1.5 text-xs ${
+                  aiFreeSpeechStopped
+                    ? 'border-amber-600 bg-amber-900/40 text-amber-200'
+                    : 'border-gray-600 bg-gray-800 text-gray-300 hover:bg-gray-700'
+                }`}
+                title={aiFreeSpeechStopped ? 'AI自由発言を再開' : 'AI自由発言を停止'}
+              >
+                AI自由発言{aiFreeSpeechStopped ? '停止中' : '停止'}
+              </button>
+            </div>
+          )}
+
+          {onTransferOwner && (
+            <>
+              <h4 className="mb-2 text-xs font-medium text-gray-300">チャットオーナーを譲る・参加者の退出</h4>
+              <p className="mb-2 text-xs text-gray-400">
+                現在在室している参加者のみ対象です。譲渡するとその人がオーナーになります。
+              </p>
+              {chatOwnerTransferParticipants.length === 0 ? (
+                <p className="text-xs text-gray-500">ほかに在室している参加者がいません。</p>
+              ) : (
+                <ul className="space-y-2">
+                  {chatOwnerTransferParticipants.map((p) => (
+                    <li key={p.clientId} className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="min-w-0 text-sm text-gray-200">{p.displayName}</span>
+                      <span className="flex shrink-0 flex-wrap justify-end gap-1">
+                        <button
+                          type="button"
+                          onClick={() => onTransferOwner(p.clientId)}
+                          className="rounded border border-amber-600 bg-amber-800/30 px-2 py-1 text-xs text-amber-200 hover:bg-amber-800/50"
+                        >
+                          オーナーを譲る
+                        </button>
+                        {onForceExit && (
+                          <button
+                            type="button"
+                            onClick={() => onForceExit(p.clientId, p.displayName)}
+                            className="rounded border border-red-700 bg-red-900/30 px-2 py-1 text-xs text-red-300 hover:bg-red-800/50"
+                            title={`${p.displayName}さんを強制退出`}
+                          >
+                            強制退出
+                          </button>
+                        )}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </>
           )}
         </div>
       )}

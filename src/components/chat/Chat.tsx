@@ -12,6 +12,7 @@ import {
   ChatBubbleLeftRightIcon,
 } from '@heroicons/react/24/outline';
 import type { ChatMessage as ChatMessageType } from '@/types/chat';
+import { AI_CHAT_DISCLAIMER } from '@/lib/chat-system-copy';
 
 /** 詳細フィードバック用モーダルの状態 */
 type FeedbackModalState =
@@ -330,10 +331,24 @@ export default function Chat({
     setFeedbackModal({ open: false });
   }
 
+  const [disclaimerOpen, setDisclaimerOpen] = useState(false);
+
   return (
     <div className="flex flex-1 flex-col overflow-hidden rounded-lg border border-gray-700 bg-gray-900/50">
-      <div className="border-b border-gray-700 px-3 py-2 text-sm font-medium text-gray-300">
-        チャット
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-700 px-3 py-2">
+        <span className="text-sm font-medium text-gray-300">チャット</span>
+        <button
+          type="button"
+          onClick={() => setDisclaimerOpen(true)}
+          className="inline-flex items-center gap-1.5 text-xs text-amber-200/90 hover:text-amber-100"
+          aria-haspopup="dialog"
+          aria-expanded={disclaimerOpen}
+          aria-label="AIのコメントについて（注意事項を表示）"
+          title="AIのコメントについて"
+        >
+          <ChatBubbleLeftRightIcon className="h-4 w-4 shrink-0" aria-hidden />
+          <span className="underline decoration-dotted underline-offset-2">AIのコメント…</span>
+        </button>
       </div>
       <div className="flex-1 overflow-y-auto p-2">
         {messages.length === 0 ? (
@@ -581,6 +596,35 @@ export default function Chat({
                 </div>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {disclaimerOpen && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="ai-disclaimer-title"
+          onClick={() => setDisclaimerOpen(false)}
+        >
+          <div
+            className="max-h-[min(80vh,28rem)] w-full max-w-md overflow-y-auto rounded-lg border border-gray-600 bg-gray-900 p-4 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="ai-disclaimer-title" className="mb-3 text-sm font-semibold text-white">
+              AIコメントについて
+            </h2>
+            <p className="text-sm leading-relaxed text-gray-300">{AI_CHAT_DISCLAIMER}</p>
+            <div className="mt-4 flex justify-end">
+              <button
+                type="button"
+                className="rounded border border-gray-600 bg-gray-800 px-4 py-2 text-sm text-gray-200 hover:bg-gray-700"
+                onClick={() => setDisclaimerOpen(false)}
+              >
+                閉じる
+              </button>
+            </div>
           </div>
         </div>
       )}

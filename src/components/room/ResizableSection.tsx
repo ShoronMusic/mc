@@ -69,7 +69,7 @@ export default function ResizableSection({ left, rightTop, rightBottom }: Resiza
     };
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
-  }, [leftPct]);
+  }, []);
 
   const startVertical = useCallback((e: React.MouseEvent) => {
     e.preventDefault();

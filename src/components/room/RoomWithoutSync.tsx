@@ -8,7 +8,7 @@ import YouTubePlayer, {
 } from '@/components/player/YouTubePlayer';
 import MyPage from '@/components/mypage/MyPage';
 import NowPlaying from '@/components/room/NowPlaying';
-import ResizableSection from '@/components/room/ResizableSection';
+import RoomMainLayout from '@/components/room/RoomMainLayout';
 import RoomPlaybackHistory from '@/components/room/RoomPlaybackHistory';
 import UserBar from '@/components/room/UserBar';
 import { getLastExitStorageKey } from '@/components/providers/AblyProviderWrapper';
@@ -26,6 +26,7 @@ import {
   SYSTEM_MESSAGE_COMMENTARY_FETCH_FAILED,
   SYSTEM_MESSAGE_JP_NO_COMMENTARY,
 } from '@/lib/chat-system-copy';
+import { playbackLog } from '@/lib/playback-debug';
 import { extractVideoId, isStandaloneNonYouTubeUrl } from '@/lib/youtube';
 import type { ChatMessage } from '@/types/chat';
 import { useRoomChatLogPersistence } from '@/hooks/useRoomChatLogPersistence';
@@ -94,6 +95,7 @@ export default function RoomWithoutSync({ displayName: displayNameProp = 'ゲス
   const lastSendAtRef = useRef(0);
   const sendTimestampsRef = useRef<number[]>([]);
   const playbackHistoryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoPlayPollRef = useRef<number | null>(null);
   const [playbackHistoryRefreshKey, setPlaybackHistoryRefreshKey] = useState(0);
   const [favoritedVideoIds, setFavoritedVideoIds] = useState<string[]>([]);
   const recentlyUsedTidbitIdsRef = useRef<string[]>([]);
@@ -417,7 +419,60 @@ export default function RoomWithoutSync({ displayName: displayNameProp = 'ゲス
   useEffect(() => {
     return () => {
       if (playbackHistoryTimeoutRef.current) clearTimeout(playbackHistoryTimeoutRef.current);
+      if (autoPlayPollRef.current != null) {
+        window.clearInterval(autoPlayPollRef.current);
+        autoPlayPollRef.current = null;
+      }
     };
+  }, []);
+
+  /** モバイル等で遅延した playVideo がユーザー操作コンテキスト外になり再生されないのを防ぐ */
+  const scheduleLocalAutoPlayAfterLoad = useCallback(() => {
+    if (autoPlayPollRef.current != null) {
+      window.clearInterval(autoPlayPollRef.current);
+      autoPlayPollRef.current = null;
+    }
+    const pollMs = 50;
+    const giveUpMs = 8000;
+    const startedAt = Date.now();
+    let intervalId: number | null = null;
+    const stop = () => {
+      if (intervalId !== null) {
+        window.clearInterval(intervalId);
+        intervalId = null;
+      }
+      autoPlayPollRef.current = null;
+    };
+    const tryOnce = (): boolean => {
+      const handle = playerRef.current;
+      if (!handle) {
+        if (Date.now() - startedAt >= giveUpMs) {
+          playbackLog('localAutoPlay: give up (no handle)');
+          stop();
+          return true;
+        }
+        return false;
+      }
+      if (handle.getPlayerState?.() === null) {
+        if (Date.now() - startedAt >= giveUpMs) {
+          playbackLog('localAutoPlay: give up (YT never ready)');
+          stop();
+          return true;
+        }
+        playbackLog('localAutoPlay: wait YT.Player');
+        return false;
+      }
+      playbackLog('localAutoPlay: seekTo + playVideo');
+      handle.seekTo(0);
+      handle.playVideo();
+      setPlaying(true);
+      stop();
+      return true;
+    };
+    if (!tryOnce()) {
+      intervalId = window.setInterval(() => tryOnce(), pollMs);
+      autoPlayPollRef.current = intervalId;
+    }
   }, []);
 
   const saveSongHistory = useCallback(
@@ -439,12 +494,20 @@ export default function RoomWithoutSync({ displayName: displayNameProp = 'ゲス
       jpDomesticSilenceVideoIdRef.current = null;
       setVideoId(id);
       playerRef.current?.loadVideoById(id);
+      scheduleLocalAutoPlayAfterLoad();
       fetchAnnounceAndPublish(id);
       fetchCommentaryAndPublish(id);
       saveSongHistory(id);
       schedulePlaybackHistory(roomId ?? '', id);
     },
-    [fetchAnnounceAndPublish, fetchCommentaryAndPublish, saveSongHistory, roomId, schedulePlaybackHistory]
+    [
+      fetchAnnounceAndPublish,
+      fetchCommentaryAndPublish,
+      saveSongHistory,
+      roomId,
+      schedulePlaybackHistory,
+      scheduleLocalAutoPlayAfterLoad,
+    ]
   );
 
   const handleSendMessage = useCallback(
@@ -554,6 +617,7 @@ export default function RoomWithoutSync({ displayName: displayNameProp = 'ゲス
               jpDomesticSilenceVideoIdRef.current = null;
               setVideoId(data2.videoId);
               playerRef.current?.loadVideoById(data2.videoId);
+              scheduleLocalAutoPlayAfterLoad();
               addAiMessage(`${data2.artistTitle} を貼りました！`);
               saveSongHistory(data2.videoId);
               touchActivity();
@@ -617,36 +681,34 @@ export default function RoomWithoutSync({ displayName: displayNameProp = 'ゲス
       schedulePlaybackHistory,
       fetchAnnounceAndPublish,
       fetchCommentaryAndPublish,
+      scheduleLocalAutoPlayAfterLoad,
     ]
   );
 
   return (
-    <main className="flex h-screen flex-col bg-gray-950 p-3">
-      <div className="mb-2 rounded border border-amber-700 bg-amber-900/50 px-3 py-2 text-sm text-amber-200">
+    <main className="flex h-screen flex-col overflow-hidden bg-gray-950 p-3">
+      <div className="mb-2 shrink-0 rounded border border-amber-700 bg-amber-900/50 px-3 py-2 text-sm leading-snug text-amber-200">
         .env.local に <strong>NEXT_PUBLIC_ABLY_API_KEY</strong> を設定すると、複数ブラウザ・タブが「同じルームの別々の参加者」として扱われ、参加者一覧・同期再生・チャット共有が利用できます。未設定の場合は各ウィンドウが独立して動作します。
       </div>
-      <header className="mb-2 flex items-center justify-between border-b border-gray-800 pb-2">
-        <div className="flex flex-wrap items-baseline gap-3">
-          <h1 className="text-lg font-semibold text-white">
-            洋楽AIチャット{roomId ? ` - ${roomId}` : ''}
-          </h1>
-          <p className="text-xs text-gray-400 whitespace-nowrap">
-            AIのコメントは事実と異なる場合があります。また参加者のご意見やご質問に対して肯定的に答える傾向があります。あくまで参考情報としてお楽しみいただき、内容の正確性はご自身でもご確認ください。
-          </p>
-        </div>
+      <header className="mb-2 flex shrink-0 flex-row items-center justify-between gap-3 border-b border-gray-800 pb-2">
+        <h1 className="min-w-0 flex-1 truncate text-lg font-semibold text-white">
+          洋楽AIチャット{roomId ? ` - ${roomId}` : ''}
+        </h1>
         {onLeave && (
-          <button
-            type="button"
-            onClick={onLeave}
-            className="rounded border border-gray-600 bg-gray-800 px-4 py-2 text-sm font-medium text-gray-200 hover:bg-gray-700 hover:text-white"
-            aria-label="ルームを退室して最初の画面に戻る"
-          >
-            退室する
-          </button>
+          <div className="flex shrink-0 flex-nowrap items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={onLeave}
+              className="rounded border border-gray-600 bg-gray-800 px-4 py-2 text-sm font-medium text-gray-200 hover:bg-gray-700 hover:text-white"
+              aria-label="ルームを退室して最初の画面に戻る"
+            >
+              退室する
+            </button>
+          </div>
         )}
       </header>
 
-      <section className="mb-2">
+      <section className="mb-2 shrink-0">
         <UserBar
           displayName={displayNameProp}
           isGuest={isGuest}
@@ -677,7 +739,7 @@ export default function RoomWithoutSync({ displayName: displayNameProp = 'ゲス
         </div>
       )}
 
-      <ResizableSection
+      <RoomMainLayout
         left={
           <Chat
             messages={messages}
@@ -708,7 +770,7 @@ export default function RoomWithoutSync({ displayName: displayNameProp = 'ゲス
         }
       />
 
-      <section className="mt-2">
+      <section className="mt-2 shrink-0">
         <ChatInput
           onSendMessage={handleSendMessage}
           onVideoUrl={handleVideoUrlFromChat}
