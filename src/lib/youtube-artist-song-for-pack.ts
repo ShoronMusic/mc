@@ -7,6 +7,7 @@ import {
   getArtistDisplayString,
   getMainArtist,
   parseArtistTitleFromDescription,
+  swapIfCompoundArtistStuckInSongSlot,
 } from '@/lib/format-song-display';
 import { resolveTitleOrderWithMusicBrainz } from '@/lib/musicbrainz-title-order';
 
@@ -38,6 +39,13 @@ function enrichArtistSongFromSnippet(
   return { artist, artistDisplay, song };
 }
 
+function finalizePackArtistSong(
+  r: { artist: string | null; artistDisplay: string | null; song: string },
+  description: string | null | undefined,
+): { artist: string | null; artistDisplay: string | null; song: string } {
+  return swapIfCompoundArtistStuckInSongSlot(r.artist, r.artistDisplay, r.song, description ?? null);
+}
+
 /**
  * comment-pack / announce-song 共通: oEmbed タイトル・作者・snippet からアーティスト・曲名を解決。
  */
@@ -49,7 +57,7 @@ export function resolveArtistSongForPack(
   const base = getArtistAndSong(title, authorName, {
     videoDescription: snippet?.description ?? null,
   });
-  return enrichArtistSongFromSnippet(base, snippet);
+  return finalizePackArtistSong(enrichArtistSongFromSnippet(base, snippet), snippet?.description);
 }
 
 /**
@@ -93,7 +101,7 @@ export async function resolveArtistSongForPackAsync(
         'musicbrainz:left_is_artist',
         title,
         authorName,
-        enrichArtistSongFromSnippet(base, snippet),
+        finalizePackArtistSong(enrichArtistSongFromSnippet(base, snippet), snippet?.description),
       );
     }
     if (hint === 'right_is_artist') {
@@ -102,7 +110,7 @@ export async function resolveArtistSongForPackAsync(
         'musicbrainz:right_is_artist',
         title,
         authorName,
-        enrichArtistSongFromSnippet(base, snippet),
+        finalizePackArtistSong(enrichArtistSongFromSnippet(base, snippet), snippet?.description),
       );
     }
   }

@@ -7,6 +7,35 @@
 import { compoundArtistCanonicalIfKnown } from '@/lib/artist-compound-names';
 import artistHyphenNamePrefixes from '@/config/artist-hyphen-name-prefixes.json';
 
+/**
+ * 曲名列に `artist-compound-extra` の合体アーティストだけが載り、アーティスト列には載っていない
+ * （概要の performing 誤解析などで「Maneater / Daryl Hall & John Oates」が逆）とき、列を入れ替える。
+ */
+export function swapIfCompoundArtistStuckInSongSlot(
+  artist: string | null,
+  artistDisplay: string | null,
+  song: string,
+  videoDescription?: string | null,
+): { artist: string | null; artistDisplay: string | null; song: string } {
+  const colArtist = (artistDisplay ?? artist ?? '').trim();
+  const colSong = song.trim();
+  if (!colArtist || !colSong) return { artist, artistDisplay, song };
+  if (!compoundArtistCanonicalIfKnown(colSong)) return { artist, artistDisplay, song };
+  if (compoundArtistCanonicalIfKnown(colArtist)) return { artist, artistDisplay, song };
+  const newArtistPart = colSong;
+  const newSongPart = colArtist;
+  const songClean = cleanTitle(newSongPart);
+  const songOut =
+    videoDescription != null && videoDescription.trim() !== ''
+      ? refineSongTitleWithDescription(songClean, videoDescription)
+      : songClean;
+  return {
+    artist: getMainArtist(newArtistPart) || newArtistPart,
+    artistDisplay: getArtistDisplayString(newArtistPart) || null,
+    song: songOut,
+  };
+}
+
 /** アーティスト - 曲名 の区切り（ハイフン・enダッシュ・emダッシュ・水平線） */
 const ARTIST_TITLE_SEPARATOR = /\s*[-\u2013\u2014\u2015]\s*/;
 
@@ -599,11 +628,12 @@ export function getArtistAndSong(
       const artistPart = fromDesc.artist;
       const songPart = cleanTitle(fromDesc.song);
       if (artistPart && songPart) {
-        return {
+        const interim = {
           artist: getMainArtist(artistPart) || artistPart,
           artistDisplay: getArtistDisplayString(artistPart) || null,
           song: refineSongTitleWithDescription(songPart, desc),
         };
+        return swapIfCompoundArtistStuckInSongSlot(interim.artist, interim.artistDisplay, interim.song, desc);
       }
     }
   }
@@ -856,21 +886,22 @@ export function getArtistAndSong(
     const artistDisplay = getArtistDisplayString(artistPart);
     const songClean = cleanTitle(songPart);
     const song = refineSongTitleWithDescription(songClean, options?.videoDescription);
-    return {
-      artist: mainArtist || artistPart,
-      artistDisplay: artistDisplay || null,
-      // swap した場合、左側は raw なので不要語を除去して曲名を整える
+    return swapIfCompoundArtistStuckInSongSlot(
+      mainArtist || artistPart,
+      artistDisplay || null,
       song,
-    };
+      options?.videoDescription ?? null,
+    );
   }
   const channel = authorName && cleanAuthor(authorName) ? cleanAuthor(authorName) : null;
   const useChannelAsArtist = channel && !isLikelyPersonalChannelName(channel);
   const songFallback = refineSongTitleWithDescription(cleaned, options?.videoDescription);
-  return {
-    artist: useChannelAsArtist ? getMainArtist(channel) : null,
-    artistDisplay: useChannelAsArtist ? channel : null,
-    song: songFallback,
-  };
+  return swapIfCompoundArtistStuckInSongSlot(
+    useChannelAsArtist ? getMainArtist(channel) : null,
+    useChannelAsArtist ? channel : null,
+    songFallback,
+    options?.videoDescription ?? null,
+  );
 }
 
 /**

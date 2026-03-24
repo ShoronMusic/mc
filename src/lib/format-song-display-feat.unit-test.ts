@@ -12,6 +12,7 @@ import {
 } from './format-song-display';
 import { reapplyCommentaryLibraryBodyPrefix } from './commentary-library';
 import { compoundArtistCanonicalIfKnown } from './artist-compound-names';
+import { resolveArtistSongForPack } from './youtube-artist-song-for-pack';
 
 assert.equal(compoundArtistCanonicalIfKnown('Hall & Oates'), 'Daryl Hall & John Oates');
 assert.equal(compoundArtistCanonicalIfKnown('Hall and Oates'), 'Daryl Hall & John Oates');
@@ -93,6 +94,28 @@ assert.equal(cleanTitle('What Is Love • TopPop'), 'What Is Love');
 // 逆順タイトルはスワップで救う
 {
   const r = getArtistAndSong('Maneater - Daryl Hall & John Oates', 'Totally Unrelated Upload Channel');
+  assert.equal(r.artistDisplay, 'Daryl Hall & John Oates');
+  assert.equal(r.song, 'Maneater');
+}
+
+// 概要の performing が逆でも、合体アーティスト名が曲列に来ていれば補正
+{
+  const desc = 'Music video by Maneater performing Daryl Hall & John Oates\n\nMore';
+  const r = getArtistAndSong(
+    'Daryl Hall & John Oates - Maneater (Official Video)',
+    'Unrelated Channel',
+    { videoDescription: desc },
+  );
+  assert.equal(r.artistDisplay, 'Daryl Hall & John Oates');
+  assert.equal(r.song, 'Maneater');
+}
+{
+  const desc = 'Music video by Maneater performing Daryl Hall & John Oates\n\nMore';
+  const r = resolveArtistSongForPack('Daryl Hall & John Oates - Maneater (Official Video)', 'Unrelated', {
+    title: 'Daryl Hall & John Oates - Maneater (Official Video)',
+    description: desc,
+    channelTitle: 'Unrelated',
+  });
   assert.equal(r.artistDisplay, 'Daryl Hall & John Oates');
   assert.equal(r.song, 'Maneater');
 }
