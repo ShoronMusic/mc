@@ -615,7 +615,7 @@ export default function Chat({
             <h2 id="ai-disclaimer-title" className="mb-3 text-sm font-semibold text-white">
               AIコメントについて
             </h2>
-            <p className="text-sm leading-relaxed text-gray-300">{AI_CHAT_DISCLAIMER}</p>
+            <p className="whitespace-pre-line text-sm leading-relaxed text-gray-300">{AI_CHAT_DISCLAIMER}</p>
             <div className="mt-4 flex justify-end">
               <button
                 type="button"

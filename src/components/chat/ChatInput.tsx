@@ -376,7 +376,12 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
             placeholder="URL・メッセージ・曲名のどれでも入力…"
             value={value}
             onChange={(e) => setValue(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSubmit()}
+            onKeyDown={(e) => {
+              if (e.key !== 'Enter' || e.shiftKey) return;
+              if (e.nativeEvent.isComposing) return;
+              e.preventDefault();
+              handleSubmit();
+            }}
             maxLength={MAX_MESSAGE_LENGTH}
             className="w-full min-w-0 rounded border border-gray-600 bg-gray-800 px-3 py-2 text-sm text-white placeholder-gray-500 outline-none focus:border-blue-500 lg:flex-1"
             aria-label="チャット入力"

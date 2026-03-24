@@ -4,13 +4,11 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { getStyleAdminUserIds } from '@/lib/style-admin';
 import { fetchOEmbed } from '@/lib/youtube-oembed';
 import {
-  getArtistAndSong,
   getMainArtist,
   isGarbageArtistSongParse,
   isLikelyPersonalChannelName,
   parseArtistTitleFromDescription,
   cleanAuthor,
-  songTitleMayNeedDescriptionCrossCheck,
   refineSongTitleWithDescription,
   formatArtistTitle,
 } from '@/lib/format-song-display';
@@ -159,14 +157,21 @@ export async function POST(request: Request) {
   let title = oembed?.title ?? null;
   let authorName = oembed?.author_name ?? null;
 
-  const pre = getArtistAndSong(title ?? videoId, authorName);
-  const needSnippet =
-    !pre.artist || songTitleMayNeedDescriptionCrossCheck(pre.song);
-  const snippet = needSnippet ? await getVideoSnippet(videoId) : null;
+  /** announce-song と同様に常に snippet を取り、概要欄の performing 行で順序を揃える */
+  const snippet = await getVideoSnippet(videoId);
   let snippetDescription =
     snippet?.description && snippet.description.trim() ? snippet.description : null;
 
   const resolved = await resolveArtistSongForPackAsync(title ?? videoId, authorName, snippet);
+  if (process.env.DEBUG_YT_ARTIST === '1') {
+    console.info('[room-playback-history POST] resolved', {
+      videoId,
+      oembedTitle: title?.slice(0, 120),
+      authorName,
+      artistDisplay: resolved.artistDisplay,
+      song: resolved.song,
+    });
+  }
   let { artist, artistDisplay, song } = resolved;
 
   const effectiveAuthor =

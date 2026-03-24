@@ -1,6 +1,16 @@
 import type { NextResponse } from 'next/server';
 
 /**
+ * OAuth 2.0 の認可レスポンスは通常 `code` と `state` の両方が付く。
+ * `?code=` だけ（短い誤パラメータや他サービスの code 名）を拾うとルーム URL が /auth/callback に飛びフルリロードに見えるため、両方あるときだけ救済する。
+ */
+export function hasOAuthAuthorizationQuery(searchParams: URLSearchParams): boolean {
+  const code = searchParams.get('code')?.trim();
+  const state = searchParams.get('state')?.trim();
+  return !!code && !!state;
+}
+
+/**
  * Supabase が Site URL 直下（/?code=）に戻すと URL に next が無くルーム等の戻り先が失われる。
  * OAuth 直前にクッキーへ保存し、ミドルウェア / クライアント救済で /auth/callback の next に載せる。
  */

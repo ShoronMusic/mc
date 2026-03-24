@@ -29,6 +29,7 @@ import {
 import { playbackLog } from '@/lib/playback-debug';
 import { extractVideoId, isStandaloneNonYouTubeUrl } from '@/lib/youtube';
 import type { ChatMessage } from '@/types/chat';
+import { useIsLgViewport } from '@/hooks/useLgViewport';
 import { useRoomChatLogPersistence } from '@/hooks/useRoomChatLogPersistence';
 
 const AI_DISPLAY_NAME = 'AI';
@@ -83,6 +84,8 @@ export default function RoomWithoutSync({ displayName: displayNameProp = 'ゲス
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   useRoomChatLogPersistence(roomId, messages, { isGuest, myClientId: '' });
   const [myPageOpen, setMyPageOpen] = useState(false);
+  const [playbackHistoryModalOpen, setPlaybackHistoryModalOpen] = useState(false);
+  const isLg = useIsLgViewport();
   const [userTextColor, setUserTextColor] = useState(DEFAULT_CHAT_TEXT_COLOR);
   const lastActivityAtRef = useRef(Date.now());
   const lastTidbitAtRef = useRef(0);
@@ -708,11 +711,12 @@ export default function RoomWithoutSync({ displayName: displayNameProp = 'ゲス
         )}
       </header>
 
-      <section className="mb-2 shrink-0">
+      <section className="mb-1 shrink-0">
         <UserBar
           displayName={displayNameProp}
           isGuest={isGuest}
           onMyPageClick={!isGuest ? () => setMyPageOpen(true) : undefined}
+          onPlaybackHistoryClick={isLg ? undefined : () => setPlaybackHistoryModalOpen(true)}
         />
       </section>
 
@@ -768,6 +772,8 @@ export default function RoomWithoutSync({ displayName: displayNameProp = 'ゲス
             onFavoriteClick={handleFavoriteClick}
           />
         }
+        playbackHistoryModalOpen={playbackHistoryModalOpen}
+        onPlaybackHistoryModalClose={() => setPlaybackHistoryModalOpen(false)}
       />
 
       <section className="mt-2 shrink-0">

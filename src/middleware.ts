@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { OAUTH_RETURN_COOKIE, safeOauthNextPath, clearOauthReturnCookieOn } from '@/lib/oauth-return-path';
+import {
+  OAUTH_RETURN_COOKIE,
+  safeOauthNextPath,
+  clearOauthReturnCookieOn,
+  hasOAuthAuthorizationQuery,
+} from '@/lib/oauth-return-path';
 
 /**
  * Supabase OAuth が Site URL 直下（例: /?code=）に戻すと /auth/callback を通らずセッションが確立しない。
@@ -13,7 +18,7 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  if (!url.searchParams.has('code')) {
+  if (!hasOAuthAuthorizationQuery(url.searchParams)) {
     return NextResponse.next();
   }
 

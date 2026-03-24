@@ -17,6 +17,18 @@ export interface SongCommentaryRow {
 /**
  * video_id でライブラリを検索。ヒットすればその1件を返す。
  */
+/** アーティスト／曲名の解決が変わったあとに誤本文を残さないため */
+export async function deleteCommentaryByVideoId(
+  supabase: SupabaseClient | null,
+  videoId: string,
+): Promise<void> {
+  if (!supabase || !videoId.trim()) return;
+  const { error } = await supabase.from('song_commentary').delete().eq('video_id', videoId.trim());
+  if (error && error.code !== '42P01') {
+    console.error('[commentary-library] delete', error);
+  }
+}
+
 export async function getCommentaryByVideoId(
   supabase: SupabaseClient | null,
   videoId: string
@@ -48,6 +60,36 @@ export interface InsertCommentaryParams {
 /**
  * 曲の基本情報を1件登録。同じ video_id が既にあれば登録せず既存を返す。
  */
+/**
+ * DB に保存した曲解説は先頭が「アーティスト - 曲名\n\n」形式。
+ * 返却時は最新の解決結果で先頭行だけ差し替え、古い誤順のプレフィックスを矯正する。
+ */
+export function reapplyCommentaryLibraryBodyPrefix(
+  storedBody: string,
+  artistDisplay: string | null,
+  song: string | null,
+  mainArtistFallback: string | null,
+): string {
+  const prefix =
+    artistDisplay && song
+      ? `${artistDisplay} - ${song}`
+      : mainArtistFallback && song
+        ? `${mainArtistFallback} - ${song}`
+        : '';
+  if (!prefix) return storedBody;
+  const t = storedBody.trimStart();
+  const sep = '\n\n';
+  const idx = t.indexOf(sep);
+  if (idx !== -1) {
+    const head = t.slice(0, idx);
+    if (/ - /.test(head)) {
+      const rest = t.slice(idx + sep.length);
+      return `${prefix}${sep}${rest}`;
+    }
+  }
+  return `${prefix}${sep}${t}`;
+}
+
 export async function insertCommentaryToLibrary(
   supabase: SupabaseClient | null,
   params: InsertCommentaryParams

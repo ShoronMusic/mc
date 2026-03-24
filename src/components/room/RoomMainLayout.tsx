@@ -2,58 +2,46 @@
 
 /**
  * ルーム中央エリア:
- * - モバイル: YouTube は常時表示。視聴履歴はモーダル。
+ * - モバイル: YouTube は常時表示。視聴履歴はモーダル（開閉は親が UserBar 経由で制御）。
  * - PC: ResizableSection（左チャット / 右は上下リサイズ）。
  *
- * 重要: Tailwind の `lg:hidden` と `hidden lg:flex` で同じ {rightTop} を並べると、
- * React は YouTube プレイヤーを 2 インスタンスマウントする。結果、iframe が二重になり
- * www-widgetapi.js の postMessage が誤ったウィンドウに届き「音だけ／映像が止まる」等になる。
- * そのため lg 未満と lg 以上は matchMedia で排他的にレンダーする。
+ * モバイル/PC で同一 {rightTop} を同時マウントしない（YouTube 二重化防止）— useIsLgViewport で排他レンダー。
  */
 
-import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect } from 'react';
+import { useIsLgViewport } from '@/hooks/useLgViewport';
 import ResizableSection from '@/components/room/ResizableSection';
-
-const LG_MEDIA = '(min-width: 1024px)';
-
-function subscribeLg(callback: () => void) {
-  const mq = window.matchMedia(LG_MEDIA);
-  mq.addEventListener('change', callback);
-  return () => mq.removeEventListener('change', callback);
-}
-
-function getLgSnapshot(): boolean {
-  return window.matchMedia(LG_MEDIA).matches;
-}
-
-function getLgServerSnapshot(): boolean {
-  return false;
-}
-
-function useIsLgViewport(): boolean {
-  return useSyncExternalStore(subscribeLg, getLgSnapshot, getLgServerSnapshot);
-}
 
 interface RoomMainLayoutProps {
   left: React.ReactNode;
   rightTop: React.ReactNode;
   rightBottom: React.ReactNode;
+  /** モバイル: 視聴履歴モーダル表示（UserBar のボタンから親が true にする） */
+  playbackHistoryModalOpen?: boolean;
+  onPlaybackHistoryModalClose?: () => void;
 }
 
-export default function RoomMainLayout({ left, rightTop, rightBottom }: RoomMainLayoutProps) {
+export default function RoomMainLayout({
+  left,
+  rightTop,
+  rightBottom,
+  playbackHistoryModalOpen = false,
+  onPlaybackHistoryModalClose,
+}: RoomMainLayoutProps) {
   const isLg = useIsLgViewport();
-  const [historyModalOpen, setHistoryModalOpen] = useState(false);
 
-  const closeHistoryModal = useCallback(() => setHistoryModalOpen(false), []);
+  const closeHistoryModal = useCallback(() => {
+    onPlaybackHistoryModalClose?.();
+  }, [onPlaybackHistoryModalClose]);
 
   useEffect(() => {
-    if (!historyModalOpen) return;
+    if (!playbackHistoryModalOpen) return;
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') closeHistoryModal();
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [historyModalOpen, closeHistoryModal]);
+  }, [playbackHistoryModalOpen, closeHistoryModal]);
 
   return (
     <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
@@ -62,26 +50,19 @@ export default function RoomMainLayout({ left, rightTop, rightBottom }: RoomMain
           <ResizableSection left={left} rightTop={rightTop} rightBottom={rightBottom} />
         </div>
       ) : (
-        <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden">
-          <div className="grid min-h-0 flex-1 grid-rows-2 gap-2">
-            <div className="flex min-h-0 flex-col gap-2 overflow-hidden">
-              <div className="shrink-0">{rightTop}</div>
-              <div className="flex shrink-0 border-t border-gray-800 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setHistoryModalOpen(true)}
-                  className="w-full rounded-lg border border-gray-600 bg-gray-800 py-2.5 text-sm font-medium text-gray-200 hover:bg-gray-700"
-                >
-                  視聴履歴を表示
-                </button>
-              </div>
-            </div>
-            <div className="flex h-full min-h-0 flex-col overflow-hidden border-t border-gray-800 pt-2">
+        <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-hidden">
+          {/**
+           * 旧 grid-rows-2 は 1fr 1fr で上下が同じ高さになり、プレイヤー（aspect-video）の下に
+           * 大きな空きができる。上段を auto、チャットを minmax(0,1fr) で残り領域いっぱいにする。
+           */}
+          <div className="grid min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)] gap-1">
+            <div className="shrink-0">{rightTop}</div>
+            <div className="flex min-h-0 flex-col overflow-hidden border-t border-gray-800 pt-1">
               {left}
             </div>
           </div>
 
-          {historyModalOpen && (
+          {playbackHistoryModalOpen && (
             <div
               className="fixed inset-0 z-[60] flex flex-col justify-end bg-black/65 sm:items-center sm:justify-center sm:p-4"
               onClick={(e) => e.target === e.currentTarget && closeHistoryModal()}

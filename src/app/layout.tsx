@@ -8,7 +8,7 @@ const OAUTH_STRAY_CODE_SCRIPT = `
     var path = window.location.pathname || '';
     if (path.indexOf('/auth/callback') === 0) return;
     var sp = new URLSearchParams(window.location.search);
-    if (!sp.get('code')) return;
+    if (!sp.get('code') || !sp.get('state')) return;
     var cb = new URL('/auth/callback', window.location.origin);
     sp.forEach(function(v, k) { cb.searchParams.set(k, v); });
     var next = cb.searchParams.get('next');

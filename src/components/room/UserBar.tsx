@@ -16,6 +16,8 @@ interface UserBarProps {
   displayName?: string;
   isGuest?: boolean;
   onMyPageClick?: () => void;
+  /** モバイル等: マイページの右隣に「視聴履歴」ボタンを出す */
+  onPlaybackHistoryClick?: () => void;
   participants?: ParticipantItem[];
   myClientId?: string;
   currentOwnerClientId?: string;
@@ -27,6 +29,7 @@ export default function UserBar({
   displayName = 'ゲスト',
   isGuest = false,
   onMyPageClick,
+  onPlaybackHistoryClick,
   participants = [],
   myClientId = '',
   currentOwnerClientId = '',
@@ -118,12 +121,33 @@ export default function UserBar({
       <button
         type="button"
         onClick={onMyPageClick}
-        className="shrink-0 rounded border border-gray-600 bg-gray-800 px-4 py-2 text-sm font-medium text-gray-200 hover:bg-gray-700 hover:text-white"
+        className="shrink-0 rounded border border-gray-600 bg-gray-800 px-3 py-2 text-sm font-medium text-gray-200 hover:bg-gray-700 hover:text-white sm:px-4"
         aria-label="マイページを開く"
         title="マイページ"
       >
         マイページ
       </button>
+    ) : null;
+
+  const playbackHistoryButton =
+    onPlaybackHistoryClick ? (
+      <button
+        type="button"
+        onClick={onPlaybackHistoryClick}
+        className="shrink-0 rounded border border-gray-600 bg-gray-800 px-3 py-2 text-sm font-medium text-gray-200 hover:bg-gray-700 hover:text-white"
+        aria-label="視聴履歴を表示"
+        title="視聴履歴を表示"
+      >
+        視聴履歴
+      </button>
+    ) : null;
+
+  const trailing =
+    myPageButton || playbackHistoryButton ? (
+      <div className="flex shrink-0 items-center gap-2">
+        {myPageButton}
+        {playbackHistoryButton}
+      </div>
     ) : null;
 
   return (
@@ -132,7 +156,7 @@ export default function UserBar({
         <span className="shrink-0 text-xs text-gray-500">参加者</span>
         {participantChips}
       </div>
-      {myPageButton}
+      {trailing}
     </div>
   );
 }

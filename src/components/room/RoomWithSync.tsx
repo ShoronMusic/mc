@@ -57,6 +57,7 @@ import {
   setOwnerStateToStorage,
 } from '@/lib/room-owner';
 import { createClient } from '@/lib/supabase/client';
+import { useIsLgViewport } from '@/hooks/useLgViewport';
 import { useRoomChatLogPersistence } from '@/hooks/useRoomChatLogPersistence';
 
 const AI_DISPLAY_NAME = 'AI';
@@ -180,6 +181,8 @@ export default function RoomWithSync({
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   useRoomChatLogPersistence(roomId, messages, { isGuest, myClientId });
   const [myPageOpen, setMyPageOpen] = useState(false);
+  const [playbackHistoryModalOpen, setPlaybackHistoryModalOpen] = useState(false);
+  const isLg = useIsLgViewport();
   const [userTextColor, setUserTextColor] = useState(() => {
     if (typeof window === 'undefined') return DEFAULT_CHAT_TEXT_COLOR;
     try {
@@ -1812,11 +1815,12 @@ export default function RoomWithSync({
         )}
       </header>
 
-      <section className="mb-2 shrink-0">
+      <section className="mb-1 shrink-0">
         <UserBar
           displayName={effectiveDisplayName}
           isGuest={isGuest}
           onMyPageClick={() => setMyPageOpen(true)}
+          onPlaybackHistoryClick={isLg ? undefined : () => setPlaybackHistoryModalOpen(true)}
           participants={participants}
           myClientId={myClientId}
           currentOwnerClientId={ownerLeftAt === null ? ownerClientId : ''}
@@ -1936,6 +1940,8 @@ export default function RoomWithSync({
             onFavoriteClick={handleFavoriteClick}
           />
         }
+        playbackHistoryModalOpen={playbackHistoryModalOpen}
+        onPlaybackHistoryModalClose={() => setPlaybackHistoryModalOpen(false)}
       />
 
       <section className="mt-2 shrink-0">

@@ -5,9 +5,9 @@
  * 固定列幅・はみ出しは...、ソート（時間デフォルト／参加者名）、アクティブ行表示。
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { RoomPlaybackHistoryRow } from '@/app/api/room-playback-history/route';
-import { formatArtistTitle, getMainArtist } from '@/lib/format-song-display';
+import { getArtistAndSong, getMainArtist } from '@/lib/format-song-display';
 import { getMusic8ArtistJsonUrl } from '@/lib/music8-artist-display';
 import { fetchMusic8SongDataForPlaybackRow } from '@/lib/music8-song-lookup';
 import { SONG_STYLE_OPTIONS } from '@/lib/song-styles';
@@ -161,9 +161,16 @@ function normalizeArtistNameForMusic8Lookup(mixedArtistName: string): string {
   return getMainArtist(raw);
 }
 
+/**
+ * DB の title は過去に誤って「曲名 - アーティスト」で保存された行がある。
+ * artist_name を formatArtistTitle に渡すと「チャンネル扱い」になり誤順が固定されるため、
+ * 保存文字列だけを getArtistAndSong(..., null) で再解決する。
+ */
 function artistTitle(row: RoomPlaybackHistoryRow): string {
   if (!row.title) return row.video_id;
-  return formatArtistTitle(row.title, row.artist_name ?? undefined) || row.video_id;
+  const r = getArtistAndSong(row.title.trim(), null);
+  if (r.artistDisplay && r.song) return `${r.artistDisplay} - ${r.song}`;
+  return row.title;
 }
 
 interface RoomPlaybackHistoryProps {
@@ -206,6 +213,25 @@ export default function RoomPlaybackHistory({
 
   const currentRowForTabs = currentVideoId ? items.find((r) => r.video_id === currentVideoId) : undefined;
 
+  /** メインアーティスト／ソングデータタブ用。DB の artist_name が誤っていても title 文字列から再解決する */
+  const playbackTabsResolve = useMemo(() => {
+    const t = currentRowForTabs?.title?.trim();
+    if (!t) return null;
+    const r = getArtistAndSong(t, null);
+    if (r.artistDisplay && r.song) {
+      return {
+        tabArtist: normalizeArtistNameForMusic8Lookup(r.artist ?? r.artistDisplay),
+        tabSong: r.song,
+      };
+    }
+    const fallbackArtist = currentRowForTabs?.artist_name?.trim();
+    if (!fallbackArtist) return null;
+    return {
+      tabArtist: normalizeArtistNameForMusic8Lookup(fallbackArtist),
+      tabSong: t,
+    };
+  }, [currentRowForTabs?.title, currentRowForTabs?.artist_name]);
+
   useEffect(() => {
     fetch('/api/style-admin-check', { credentials: 'include' })
       .then((r) => (r.ok ? r.json() : null))
@@ -216,9 +242,7 @@ export default function RoomPlaybackHistory({
   }, []);
 
   useEffect(() => {
-    const rawName = currentRowForTabs?.artist_name?.trim();
-    const nameForLookup = rawName ? normalizeArtistNameForMusic8Lookup(rawName) : '';
-    if (!rawName || !nameForLookup.trim()) {
+    if (!playbackTabsResolve?.tabArtist?.trim()) {
       setHasMainArtistData(false);
       setHasSongData(false);
       setActiveTab((t) => (t !== 'history' ? 'history' : t));
@@ -229,8 +253,8 @@ export default function RoomPlaybackHistory({
     setHasMainArtistData(false);
     setHasSongData(false);
 
-    const artistName = nameForLookup;
-    const songTitle = currentRowForTabs?.title ?? '';
+    const artistName = playbackTabsResolve.tabArtist;
+    const songTitle = playbackTabsResolve.tabSong;
     let cancelled = false;
     let artistOk = false;
     const controller = new AbortController();
@@ -274,7 +298,7 @@ export default function RoomPlaybackHistory({
       cancelled = true;
       controller.abort();
     };
-  }, [currentRowForTabs?.video_id, currentRowForTabs?.artist_name, currentRowForTabs?.title]);
+  }, [currentRowForTabs?.video_id, playbackTabsResolve]);
 
   const handleHeartClick = useCallback(
     (row: RoomPlaybackHistoryRow) => {
@@ -446,15 +470,15 @@ export default function RoomPlaybackHistory({
         )}
       </div>
       <div className="min-h-0 flex-1 overflow-auto">
-        {activeTab === 'artist' && currentRow?.artist_name ? (
+        {activeTab === 'artist' && playbackTabsResolve?.tabArtist ? (
           <MainArtistTabPanel
-            artistName={normalizeArtistNameForMusic8Lookup(currentRow.artist_name)}
-            songTitle={currentRow.title ?? null}
+            artistName={playbackTabsResolve.tabArtist}
+            songTitle={playbackTabsResolve.tabSong}
           />
-        ) : activeTab === 'songdata' && currentRow?.artist_name ? (
+        ) : activeTab === 'songdata' && playbackTabsResolve?.tabArtist ? (
           <SongDataTabPanel
-            artistName={normalizeArtistNameForMusic8Lookup(currentRow.artist_name)}
-            songTitle={currentRow.title ?? null}
+            artistName={playbackTabsResolve.tabArtist}
+            songTitle={playbackTabsResolve.tabSong}
           />
         ) : (
         <table className="w-full table-fixed border-collapse text-left text-sm">

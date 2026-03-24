@@ -3,15 +3,46 @@ import { createClient } from '@/lib/supabase/server';
 import { generateCommentary } from '@/lib/gemini';
 import { fetchOEmbed } from '@/lib/youtube-oembed';
 import { getVideoSnippet } from '@/lib/youtube-search';
-import { getCommentaryByVideoId, insertCommentaryToLibrary } from '@/lib/commentary-library';
+import {
+  deleteCommentaryByVideoId,
+  getCommentaryByVideoId,
+  insertCommentaryToLibrary,
+  reapplyCommentaryLibraryBodyPrefix,
+} from '@/lib/commentary-library';
 import { upsertSongAndVideo } from '@/lib/song-entities';
 import { insertTidbit } from '../../../../lib/song-tidbits';
 import { isJpDomesticOfficialChannelAiException } from '@/lib/jp-official-channel-exception';
 import { resolveJapaneseEconomyWithMusicBrainz } from '@/lib/resolve-japanese-economy';
+import { fetchMusicBrainzCommentaryFactsBlock } from '@/lib/musicbrainz-commentary-facts';
 import { resolveArtistSongForPackAsync } from '@/lib/youtube-artist-song-for-pack';
 import { shouldSkipAiCommentaryForUncertainArtistResolution } from '@/lib/format-song-display';
 
 export const dynamic = 'force-dynamic';
+
+function normArtistSongToken(s: string): string {
+  return s.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+/** 保存時のメタと今回の解決が食い違うライブラリ行は本文が誤生成のままなので使わない */
+function commentaryLibraryMetadataMatchesResolution(
+  row: { artist_name: string | null; song_title: string | null },
+  artist: string | null,
+  artistDisplay: string | null,
+  song: string | null,
+): boolean {
+  const sa = row.artist_name?.trim() ?? '';
+  const ss = row.song_title?.trim() ?? '';
+  if (!sa || !ss) return true;
+  const ws = song?.trim() ?? '';
+  if (!ws) return true;
+  const wa = artist?.trim() ?? '';
+  const wd = artistDisplay?.trim() ?? '';
+  const nArtistOk =
+    normArtistSongToken(sa) === normArtistSongToken(wa) ||
+    (wd.length > 0 && normArtistSongToken(sa) === normArtistSongToken(wd));
+  const nSongOk = normArtistSongToken(ss) === normArtistSongToken(ws);
+  return nArtistOk && nSongOk;
+}
 
 export async function POST(request: Request) {
   try {
@@ -73,12 +104,56 @@ export async function POST(request: Request) {
 
     const fromLibrary = supabase ? await getCommentaryByVideoId(supabase, videoId) : null;
     if (fromLibrary) {
-      return NextResponse.json({ text: fromLibrary.body, source: 'library' });
+      const metaOk = commentaryLibraryMetadataMatchesResolution(
+        fromLibrary,
+        artist,
+        artistDisplay,
+        song,
+      );
+      if (!metaOk) {
+        if (process.env.DEBUG_YT_ARTIST === '1') {
+          console.info('[api/ai/commentary] library skipped (stale metadata)', {
+            videoId,
+            storedArtist: fromLibrary.artist_name,
+            storedSong: fromLibrary.song_title,
+            resolvedArtist: artist,
+            resolvedDisplay: artistDisplay,
+            resolvedSong: song,
+          });
+        }
+        await deleteCommentaryByVideoId(supabase, videoId);
+      } else {
+        const text = reapplyCommentaryLibraryBodyPrefix(
+          fromLibrary.body,
+          artistDisplay,
+          song,
+          artist ?? authorName ?? null,
+        );
+        if (process.env.DEBUG_YT_ARTIST === '1') {
+          console.info('[api/ai/commentary] library hit', {
+            videoId,
+            artistDisplay,
+            song,
+            prefixRewritten: text.slice(0, 80),
+          });
+        }
+        return NextResponse.json({ text, source: 'library' });
+      }
+    }
+
+    let groundedFactsBlock: string | null = null;
+    if (artist?.trim() && song?.trim()) {
+      try {
+        groundedFactsBlock = await fetchMusicBrainzCommentaryFactsBlock(artist.trim(), song.trim());
+      } catch (e) {
+        console.warn('[api/ai/commentary] MusicBrainz commentary facts', e);
+      }
     }
 
     const text = await generateCommentary(song, artist ?? undefined, {
       videoId,
       rawYouTubeTitle: title,
+      groundedFactsBlock,
     });
     if (text == null) {
       return NextResponse.json(

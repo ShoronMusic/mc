@@ -10,7 +10,8 @@
     "test:mb": "tsx src/lib/musicbrainz-artist-area.unit-test.ts",
     "test:policy": "tsx src/lib/ai-output-policy.unit-test.ts",
     "test:format": "tsx src/lib/format-song-display-feat.unit-test.ts",
-    "test": "npm run test:mb && npm run test:policy && npm run test:format",
+    "test:mb-facts": "tsx src/lib/musicbrainz-commentary-facts.unit-test.ts",
+    "test": "npm run test:mb && npm run test:policy && npm run test:format && npm run test:mb-facts",
     "validate": "npm run lint && npx tsc --noEmit && npm run test"
   },
   "dependencies": {

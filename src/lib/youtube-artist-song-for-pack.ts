@@ -55,23 +55,61 @@ export function resolveArtistSongForPack(
 /**
  * 上記に加え、タイトルが曖昧なときだけ MusicBrainz 録音検索でアーティスト／曲名の順を補正（サーバー専用）。
  */
+type ResolvedArtistSong = {
+  artist: string | null;
+  artistDisplay: string | null;
+  song: string;
+};
+
+function logArtistPackResolution(
+  trace: string,
+  title: string,
+  authorName: string | null | undefined,
+  r: ResolvedArtistSong,
+): ResolvedArtistSong {
+  if (process.env.DEBUG_YT_ARTIST === '1') {
+    console.info(`[resolveArtistSongForPackAsync] ${trace}`, {
+      title: title.slice(0, 120),
+      authorName: authorName?.slice(0, 80),
+      artistDisplay: r.artistDisplay,
+      song: r.song,
+    });
+  }
+  return r;
+}
+
 export async function resolveArtistSongForPackAsync(
   title: string,
   authorName: string | null | undefined,
   snippet: VideoSnippet | null,
-): Promise<{ artist: string | null; artistDisplay: string | null; song: string }> {
+): Promise<ResolvedArtistSong> {
   const desc = snippet?.description ?? null;
   const amb = getAmbiguousTitleSegmentsForMusicBrainz(title, authorName, desc);
   if (amb) {
     const hint = await resolveTitleOrderWithMusicBrainz(amb.left, amb.right);
     if (hint === 'left_is_artist') {
       const base = buildArtistSongFromTitleSegments(amb.left, amb.right, desc);
-      return enrichArtistSongFromSnippet(base, snippet);
+      return logArtistPackResolution(
+        'musicbrainz:left_is_artist',
+        title,
+        authorName,
+        enrichArtistSongFromSnippet(base, snippet),
+      );
     }
     if (hint === 'right_is_artist') {
       const base = buildArtistSongFromTitleSegments(amb.right, amb.left, desc);
-      return enrichArtistSongFromSnippet(base, snippet);
+      return logArtistPackResolution(
+        'musicbrainz:right_is_artist',
+        title,
+        authorName,
+        enrichArtistSongFromSnippet(base, snippet),
+      );
     }
   }
-  return resolveArtistSongForPack(title, authorName, snippet);
+  return logArtistPackResolution(
+    'heuristic',
+    title,
+    authorName,
+    resolveArtistSongForPack(title, authorName, snippet),
+  );
 }

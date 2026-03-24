@@ -21,6 +21,7 @@ function stripStreamingEditionMarkers(title: string): string {
     /\s*[\(（]HD\s+Remaster(?:ed)?[\)）]\s*/gi,
     /\s*\[HD\s+Remaster(?:ed)?\]\s*/gi,
     /\s*[\(（]Remaster(?:ed)?(?:\s+\d{4})?[\)）]\s*/gi,
+    /\s*[\(（]\d{4}\s+Remaster(?:ed)?[\)）]\s*/gi,
     /\s*\[Remaster(?:ed)?(?:\s+\d{4})?]\s*/gi,
     /\s*[\(（]Mastered\s+for\s+iTunes[\)）]\s*/gi,
     /\s*[\(（]Album\s+Version[\)）]\s*/gi,
@@ -60,6 +61,8 @@ export function cleanTitle(title: string): string {
     .replace(/\s*\[Radio Edit\]\s*/gi, ' ')
     .replace(/\s*\|\s*Vevo\s*/gi, ' ')
     .replace(/\s*\|\s*[^|]*$/g, ' ')
+    /** 「曲名 • TopPop」「曲名 · 番組名」など TV・ライブ番組のタグ（曲名の一部ではない） */
+    .replace(/\s+[·•]\s+[^\n]+$/u, ' ')
     .replace(/\s*-\s*Official[^-]*$/gi, ' ')
     .replace(/\s*\([^)]*Official[^)]*\)\s*/gi, ' ')
     .replace(/\s+/g, ' ')
@@ -699,10 +702,20 @@ export function getArtistAndSong(
     const keepArtistSongOrderForCapsTitle =
       leftLooksLikeMultiWordArtist && looksLikeStylizedCapsSongToken(right);
 
-    /** 左が「Jorja Smith」型（複数語・各語が大文字始まりかつアーティスト記号のみ）。右が「Blue Lights」でも弱い長さ条件でスワップしない */
+    /** 左が「Jorja Smith」型。ただし「Too Shy」のように先頭語が3文字以下の曲名も Title Case になり得るため、各語4文字以上で強アーティスト扱い */
+    const leftStrongArtistWords = left
+      .trim()
+      .split(/\s+/)
+      .filter((w) => w.length > 0 && !FEAT_WORDS.test(w));
+    const leftEveryArtistWordMinLen4 =
+      leftStrongArtistWords.length >= 2 &&
+      leftStrongArtistWords.every((w) => w.replace(/^[^\w]+|[^\w]+$/g, '').length >= 4);
+
     /** 「Quavo & Takeoff - HOTEL LOBBY」型: 左の & が leftLooksLikeMultiWordArtist を潰すため、右が全大語タイトルならアーティスト側を維持 */
     const leftLooksLikeStrongArtistCandidate =
-      (leftLooksLikeMultiWordArtist && looksLikeArtistName(left)) ||
+      (leftLooksLikeMultiWordArtist &&
+        looksLikeArtistName(left) &&
+        leftEveryArtistWordMinLen4) ||
       (multiArtistOnLeft && looksLikeArtistName(left) && rightIsAllCapsWordsTrackStyle);
 
     /** 「Kehlani - Folded」のように左右がどちらも単語1つ＋COLORS 等でチャンネル不一致のとき、長さ条件スワップで誤るため抑止 */
@@ -711,6 +724,14 @@ export function getArtistAndSong(
       !/\s/.test(right.trim()) &&
       looksLikeArtistName(left) &&
       looksLikeArtistName(right);
+
+    /**
+     * MV タイトルは「単語バンド名 - 複語曲名」が多く（Kajagoogoo - Too Shy）、左のほうが文字数で長いこともある。
+     * 下の「左>=右なら曲先」と併用すると正しい順を誤スワップするため、長さ条件スワップから除外する。
+     * 逆順「Too Shy - Kajagoogoo」は songFirstMultiWord… やチャンネル一致で救う。
+     */
+    const artistFirstLikelySingleLeftMultiWordRight =
+      !/\s/.test(left.trim()) && /\s/.test(right.trim());
 
     // 両側とも全大文字1語のとき、長い方をアーティスト側に（YOASOBI - IDOL など。短い方だけを「アーティストっぽい」と誤判定しない）
     const bothStylizedCapsTokens =
@@ -736,11 +757,25 @@ export function getArtistAndSong(
       /^The\s+/i.test(right.trim()) &&
       !/^The\s+/i.test(left.trim());
 
+    // 5) 「Too Shy - Kajagoogoo」型: 左が複語の曲名・右が1語のバンド名（右のほうが長い）。強アーティスト候補でないときだけ。
+    const songFirstMultiWordLeftSingleWordRightLonger =
+      !channelLooksLikeLeft &&
+      !channelLooksLikeRight &&
+      looksLikeArtistName(right) &&
+      looksLikeSongTitle(left) &&
+      /\s/.test(left.trim()) &&
+      !/\s/.test(right.trim()) &&
+      left.length < right.length &&
+      alnumCompact(right).length > alnumCompact(left).length &&
+      !leftLooksLikeStrongArtistCandidate &&
+      !bothSingleWordLatinArtistLike;
+
     // swap条件:
     // 1) チャンネル名が右側に含まれる（強い根拠）
     // 2) もしくは、右がアーティストっぽく左が曲名っぽい（Linkin Park等の公式MVで多い）
     // 3) 上記 shouldSwapTitleArtistOrder
     // 4) 曲名 - The Beatles / The Black Eyed Peas 型（左が The で始まらないときのみ。Taylor Swift - Anti-Hero は誤スワップしない）
+    // 5) 曲名 - 単語バンド名（Too Shy - Kajagoogoo）
     let shouldSwap =
       (channelLooksLikeRight && !channelLooksLikeLeft && looksLikeSongTitle(left)) ||
       (!channelLooksLikeLeft &&
@@ -748,9 +783,11 @@ export function getArtistAndSong(
         looksLikeSongTitle(left) &&
         left.length >= right.length &&
         !leftLooksLikeStrongArtistCandidate &&
-        !bothSingleWordLatinArtistLike) ||
+        !bothSingleWordLatinArtistLike &&
+        !artistFirstLikelySingleLeftMultiWordRight) ||
       shouldSwapTitleArtistOrder ||
-      songFirstLeadingTheOnRight;
+      songFirstLeadingTheOnRight ||
+      songFirstMultiWordLeftSingleWordRightLonger;
 
     if (keepArtistSongOrderForCapsTitle || keepLongerCapsTokenLeftAsArtist) {
       shouldSwap = false;

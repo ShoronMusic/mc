@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { cleanAuthor, formatArtistTitle } from '@/lib/format-song-display';
+import { cleanAuthor, cleanTitle, formatArtistTitle, getArtistAndSong } from '@/lib/format-song-display';
 import { generateTidbit } from '@/lib/gemini';
 import { fetchOEmbed } from '@/lib/youtube-oembed';
 import { getStyleFromDb } from '@/lib/song-style';
@@ -42,7 +42,13 @@ export async function POST(request: Request) {
       const rawAuthor = oembed?.author_name ?? null;
       artistName = rawAuthor ? (cleanAuthor(rawAuthor) || null) : null;
       songTitle = title;
-      currentSong = formatArtistTitle(title, rawAuthor ?? undefined) || null;
+      const authorForParse = rawAuthor ? cleanAuthor(rawAuthor) : null;
+      const cleaned = cleanTitle(title);
+      const parsed = getArtistAndSong(cleaned, authorForParse);
+      currentSong =
+        parsed.artistDisplay && parsed.song
+          ? `${parsed.artistDisplay} - ${parsed.song}`
+          : formatArtistTitle(title, rawAuthor ?? undefined) || null;
     }
 
     const supabase = await createClient();
