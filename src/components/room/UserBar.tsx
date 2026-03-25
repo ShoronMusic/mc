@@ -13,6 +13,7 @@ import {
   UsersIcon,
   ChevronDownIcon,
   XMarkIcon,
+  HeartIcon,
 } from '@heroicons/react/24/outline';
 import { useIsLgViewport } from '@/hooks/useLgViewport';
 
@@ -29,6 +30,12 @@ interface UserBarProps {
   onMyPageClick?: () => void;
   /** モバイル等: マイページの右隣に「視聴履歴」ボタンを出す */
   onPlaybackHistoryClick?: () => void;
+  /** いま再生中の videoId（モバイルの♡トグル用） */
+  currentVideoId?: string | null;
+  /** 自分がお気に入り登録した videoId 一覧（モバイルの♡点灯用） */
+  favoritedVideoIds?: string[];
+  /** いま再生中の曲をお気に入りトグル */
+  onFavoriteCurrentClick?: (params: { videoId: string; isFavorited: boolean }) => void;
   participants?: ParticipantItem[];
   myClientId?: string;
   currentOwnerClientId?: string;
@@ -51,6 +58,9 @@ export default function UserBar({
   isGuest = false,
   onMyPageClick,
   onPlaybackHistoryClick,
+  currentVideoId = null,
+  favoritedVideoIds = [],
+  onFavoriteCurrentClick,
   participants = [],
   myClientId = '',
   currentOwnerClientId = '',
@@ -119,6 +129,48 @@ export default function UserBar({
         title="視聴履歴"
       >
         <ClockIcon className="h-5 w-5" aria-hidden />
+      </button>
+    ) : null;
+
+  const currentIsFavorited =
+    Boolean(currentVideoId) && favoritedVideoIds.includes(currentVideoId);
+  const canToggleCurrentFavorite =
+    Boolean(currentVideoId) && Boolean(onFavoriteCurrentClick) && !isGuest;
+
+  const favoriteCurrentButton =
+    currentVideoId ? (
+      <button
+        type="button"
+        onClick={() => {
+          if (!currentVideoId) return;
+          if (!onFavoriteCurrentClick) return;
+          if (isGuest) return;
+          setListOpen(false);
+          onFavoriteCurrentClick({ videoId: currentVideoId, isFavorited: currentIsFavorited });
+        }}
+        disabled={!canToggleCurrentFavorite}
+        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-600 bg-gray-800 text-gray-200 hover:bg-gray-700 disabled:opacity-50 ${
+          currentIsFavorited ? 'ring-1 ring-red-500/40' : ''
+        }`}
+        aria-label={
+          isGuest
+            ? 'お気に入り（ログインで利用可）'
+            : currentIsFavorited
+              ? 'お気に入り解除（再生中の曲）'
+              : 'お気に入りに追加（再生中の曲）'
+        }
+        title={
+          isGuest
+            ? 'お気に入り（ログインで利用可）'
+            : currentIsFavorited
+              ? 'お気に入り解除（再生中）'
+              : 'お気に入りに追加（再生中）'
+        }
+      >
+        <HeartIcon
+          className={`h-5 w-5 ${currentIsFavorited ? 'text-red-500' : 'text-gray-400'}`}
+          aria-hidden
+        />
       </button>
     ) : null;
 
@@ -250,8 +302,10 @@ export default function UserBar({
     );
 
   const mobileTrailing =
-    myPageButton || playbackHistoryButton ? (
-      <div className="flex shrink-0 items-center gap-1">{myPageButton}
+    favoriteCurrentButton || myPageButton || playbackHistoryButton ? (
+      <div className="flex shrink-0 items-center gap-1">
+        {favoriteCurrentButton}
+        {myPageButton}
         {playbackHistoryButton}
       </div>
     ) : null;

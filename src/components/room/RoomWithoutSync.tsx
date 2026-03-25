@@ -169,6 +169,30 @@ export default function RoomWithoutSync({ displayName: displayNameProp = 'ゲス
     [isGuest, fetchFavoritedIds]
   );
 
+  const handleFavoriteCurrentClick = useCallback(
+    async ({ videoId: vid, isFavorited }: { videoId: string; isFavorited: boolean }) => {
+      if (isGuest) return;
+      const videoIdTrim = (vid ?? '').trim();
+      if (!videoIdTrim) return;
+      if (isFavorited) {
+        await fetch(`/api/favorites?videoId=${encodeURIComponent(videoIdTrim)}`, { method: 'DELETE' });
+        fetchFavoritedIds();
+        return;
+      }
+      await fetch('/api/favorites', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          videoId: videoIdTrim,
+          displayName: displayNameProp,
+          playedAt: new Date().toISOString(),
+        }),
+      });
+      fetchFavoritedIds();
+    },
+    [isGuest, fetchFavoritedIds, displayNameProp]
+  );
+
   const isShortConfirmation = (t: string) =>
     /^(はい|うん|ええ|お願い|そうです|お願いします|いいです|お願いね|はい!?|うん!?|ええ!?)$/i.test(t.trim());
 
@@ -717,6 +741,9 @@ export default function RoomWithoutSync({ displayName: displayNameProp = 'ゲス
           isGuest={isGuest}
           onMyPageClick={!isGuest ? () => setMyPageOpen(true) : undefined}
           onPlaybackHistoryClick={isLg ? undefined : () => setPlaybackHistoryModalOpen(true)}
+          currentVideoId={videoId}
+          favoritedVideoIds={favoritedVideoIds}
+          onFavoriteCurrentClick={handleFavoriteCurrentClick}
         />
       </section>
 

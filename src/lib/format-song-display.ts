@@ -208,6 +208,22 @@ function normForArtistCompare(s: string): string {
   return s.toLowerCase().replace(/\s+/g, ' ').trim();
 }
 
+/**
+ * 曲名が「Artist: Song Title」のように、先頭でアーティスト名が再掲されている場合に
+ * `Artist:` 部分だけ取り除き、二重表記を防ぐ。
+ * 例: artist="Paramore", song="Paramore: Hard Times" -> "Hard Times"
+ */
+function stripRepeatedArtistColonPrefix(song: string, artist: string): string {
+  const s = (song ?? '').trim();
+  const a = (artist ?? '').trim();
+  if (!s || !a) return song;
+
+  const esc = a.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp(`^\\s*${esc}\\s*[:：]\\s*`, 'i');
+  if (!re.test(s)) return song;
+  return s.replace(re, '').trim();
+}
+
 /** Apple Music / Genius / COLORS のようにチャンネル名がレコーディング・アーティストと限らない配信元 */
 export function isCuratorStyleChannel(
   authorName: string | null | undefined,
@@ -886,20 +902,24 @@ export function getArtistAndSong(
     const artistDisplay = getArtistDisplayString(artistPart);
     const songClean = cleanTitle(songPart);
     const song = refineSongTitleWithDescription(songClean, options?.videoDescription);
+    const artistForStrip = mainArtist || artistPart;
+    const songNormalized = stripRepeatedArtistColonPrefix(song, artistForStrip);
     return swapIfCompoundArtistStuckInSongSlot(
       mainArtist || artistPart,
       artistDisplay || null,
-      song,
+      songNormalized,
       options?.videoDescription ?? null,
     );
   }
   const channel = authorName && cleanAuthor(authorName) ? cleanAuthor(authorName) : null;
   const useChannelAsArtist = channel && !isLikelyPersonalChannelName(channel);
   const songFallback = refineSongTitleWithDescription(cleaned, options?.videoDescription);
+  const artistForStrip = useChannelAsArtist ? getMainArtist(channel) ?? channel ?? '' : '';
+  const songNormalized = stripRepeatedArtistColonPrefix(songFallback, artistForStrip);
   return swapIfCompoundArtistStuckInSongSlot(
     useChannelAsArtist ? getMainArtist(channel) : null,
     useChannelAsArtist ? channel : null,
-    songFallback,
+    songNormalized,
     options?.videoDescription ?? null,
   );
 }

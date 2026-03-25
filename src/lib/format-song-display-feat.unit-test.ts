@@ -121,3 +121,10 @@ assert.equal(cleanTitle('What Is Love • TopPop'), 'What Is Love');
 }
 
 console.log('format-song-display feat separator unit tests: OK');
+
+// 「Paramore - Paramore: Hard Times」のような二重アーティスト表記を落とす
+{
+  const r = getArtistAndSong('Paramore - Paramore: Hard Times', null);
+  assert.equal(r.artistDisplay, 'Paramore');
+  assert.equal(r.song, 'Hard Times');
+}
