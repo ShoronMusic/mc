@@ -86,6 +86,10 @@ function stripStreamingEditionMarkers(title: string): string {
     /\s*[\(（]Mastered\s+for\s+iTunes[\)）]\s*/gi,
     /\s*[\(（]Album\s+Version[\)）]\s*/gi,
     /\s*[\(（]Single\s+Version[\)）]\s*/gi,
+    /\s*[\(（][^()（）]*\bVersion\b[^()（）]*[\)）]\s*$/gi,
+    /\s*[\(（][^()（）]*\bMix\b[^()（）]*[\)）]\s*$/gi,
+    /\s*[\(（][^()（）]*\bEdit\b[^()（）]*[\)）]\s*$/gi,
+    /\s*[\(（][^()（）]*\bRemix\b[^()（）]*[\)）]\s*$/gi,
     /\s*[\(（]Radio\s+Edit[\)）]\s*/gi,
     /\s*[\(（]Extended\s+Version[\)）]\s*/gi,
     /\s*[\(（]Stereo\s+Mix[\)）]\s*/gi,
@@ -828,11 +832,22 @@ export function getArtistAndSong(
       looksLikeSongTitle(left);
 
     // 4) 「Boom Boom Pow - The Black Eyed Peas」のように右が "The …" バンド名・左が曲名だが and/& が無いケース
+    //    ただし "The Messiah Will Come Again" のような通常の曲名は誤スワップしないよう、
+    //    語数と機能語で「バンド名っぽさ」を絞る。
+    const rightTheWords = right
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+    const rightLooksLikeTheBandName =
+      /^The\s+/i.test(right.trim()) &&
+      rightTheWords.length >= 2 &&
+      rightTheWords.length <= 4 &&
+      !/\b(will|come|again|you|me|my|your|our|this|that|to|for|of|in|on)\b/i.test(right);
     const songFirstLeadingTheOnRight =
       !channelLooksLikeLeft &&
       looksLikeArtistName(right) &&
       looksLikeSongTitle(left) &&
-      /^The\s+/i.test(right.trim()) &&
+      rightLooksLikeTheBandName &&
       !/^The\s+/i.test(left.trim());
 
     // 5) 「Too Shy - Kajagoogoo」型: 左が複語の曲名・右が1語のバンド名（右のほうが長い）。強アーティスト候補でないときだけ。

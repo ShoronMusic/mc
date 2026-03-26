@@ -193,7 +193,15 @@ function normalizeArtistNameForMusic8Lookup(mixedArtistName: string): string {
 function artistTitle(row: RoomPlaybackHistoryRow): string {
   if (!row.title) return row.video_id;
   const r = getArtistAndSong(row.title.trim(), null);
-  if (r.artistDisplay && r.song) return `${r.artistDisplay} - ${r.song}`;
+  if (r.artistDisplay && r.song) {
+    const artistRaw = (r.artist ?? r.artistDisplay).trim();
+    const looksLikeSongPhrase =
+      r.artistDisplay.includes(',') &&
+      /\band\b/i.test(artistRaw) &&
+      /\b(it|you|me|my|your|our|the|a|an)\b/i.test(artistRaw.toLowerCase());
+    const artistForView = looksLikeSongPhrase ? artistRaw : r.artistDisplay;
+    return `${artistForView} - ${r.song}`;
+  }
   return row.title;
 }
 
@@ -488,21 +496,21 @@ export default function RoomPlaybackHistory({
           )}
           <button
             type="button"
-            onClick={() => setStyleDistOpen(true)}
+            onClick={() => setEraDistOpen(true)}
             className="ml-1 flex items-center gap-1 border-l border-gray-600 pl-2 text-sm text-gray-400 transition hover:text-gray-200"
-            title="スタイル分布を表示"
+            title="年代を表示"
           >
-            <ChartBarIcon className="h-4 w-4 flex-shrink-0" aria-hidden />
-            <span className="rounded px-2 py-1 hover:bg-gray-700/50">スタイル分布</span>
+            <CalendarDaysIcon className="h-4 w-4 flex-shrink-0" aria-hidden />
+            <span className="rounded px-2 py-1 hover:bg-gray-700/50">年代</span>
           </button>
           <button
             type="button"
-            onClick={() => setEraDistOpen(true)}
+            onClick={() => setStyleDistOpen(true)}
             className="flex items-center gap-1 text-sm text-gray-400 transition hover:text-gray-200"
-            title="年代分布を表示"
+            title="スタイルを表示"
           >
-            <CalendarDaysIcon className="h-4 w-4 flex-shrink-0" aria-hidden />
-            <span className="rounded px-2 py-1 hover:bg-gray-700/50">年代分布</span>
+            <ChartBarIcon className="h-4 w-4 flex-shrink-0" aria-hidden />
+            <span className="rounded px-2 py-1 hover:bg-gray-700/50">スタイル</span>
           </button>
         </div>
         {watchInNewTabUrl && (
@@ -846,3 +854,4 @@ export default function RoomPlaybackHistory({
     </div>
   );
 }
+
