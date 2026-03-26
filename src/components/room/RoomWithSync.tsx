@@ -200,9 +200,6 @@ export default function RoomWithSync({
   const pendingSongConfirmationTextRef = useRef<string | null>(null);
   const nextPromptShownForVideoIdRef = useRef<string | null>(null);
   const initialGreetingDoneRef = useRef(false);
-  const zeroSongPromptTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  /** 定期「どなたでも…」のコールバック内で最新人数を参照する */
-  const participantsCountForPromptRef = useRef(0);
   /** 現在再生中の曲を貼った人の clientId（次の曲促しを誰が出すか） */
   const lastChangeVideoPublisherRef = useRef('');
   const fiveMinLimitTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -392,7 +389,6 @@ export default function RoomWithSync({
     () => participants.filter((p) => p.participatesInSelection),
     [participants]
   );
-  participantsCountForPromptRef.current = participants.length;
   /** 次の選曲者 clientId を取得（参加者リストで次の人、末尾なら先頭に戻る） */
   const getNextTurnClientId = useCallback(
     (afterClientId: string): string => {
@@ -471,6 +467,34 @@ export default function RoomWithSync({
       fetchFavoritedIds();
     },
     [isGuest, fetchFavoritedIds]
+  );
+
+  const handleFavoriteCurrentClick = useCallback(
+    async ({ videoId: vid, isFavorited }: { videoId: string; isFavorited: boolean }) => {
+      if (isGuest) return;
+      const videoIdTrim = (vid ?? '').trim();
+      if (!videoIdTrim) return;
+      if (isFavorited) {
+        await fetch(`/api/favorites?videoId=${encodeURIComponent(videoIdTrim)}`, { method: 'DELETE' });
+        fetchFavoritedIds();
+        return;
+      }
+      const posterName =
+        currentSongPosterClientId && participants.length > 0
+          ? participants.find((p) => p.clientId === currentSongPosterClientId)?.displayName
+          : undefined;
+      await fetch('/api/favorites', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          videoId: videoIdTrim,
+          displayName: posterName ?? effectiveDisplayName,
+          playedAt: new Date().toISOString(),
+        }),
+      });
+      fetchFavoritedIds();
+    },
+    [isGuest, participants, currentSongPosterClientId, effectiveDisplayName, fetchFavoritedIds]
   );
 
   const isShortConfirmation = (t: string) =>
@@ -1002,40 +1026,6 @@ export default function RoomWithSync({
     }
     touchActivity();
   }, [messages.length, effectiveDisplayName, roomId, participatingOrder, addAiMessage, touchActivity]);
-
-  const ZERO_SONG_PROMPT_INTERVAL_MS = 3 * 60 * 1000; // 3分に1回（複数人ルーム向け）
-  useEffect(() => {
-    if (videoId) {
-      if (zeroSongPromptTimeoutRef.current) {
-        clearTimeout(zeroSongPromptTimeoutRef.current);
-        zeroSongPromptTimeoutRef.current = null;
-      }
-      return;
-    }
-    // 参加者が1人だけのときは入室時の「どなたでも…」のみとし、定期的な催促は出さない
-    if (participants.length <= 1) {
-      if (zeroSongPromptTimeoutRef.current) {
-        clearTimeout(zeroSongPromptTimeoutRef.current);
-        zeroSongPromptTimeoutRef.current = null;
-      }
-      return;
-    }
-    const schedule = () => {
-      zeroSongPromptTimeoutRef.current = setTimeout(() => {
-        zeroSongPromptTimeoutRef.current = null;
-        if (videoIdRef.current) return;
-        if (participantsCountForPromptRef.current <= 1) return;
-        addAiMessage('どなたでもどうぞ貼ってください', { allowWhenAiStopped: true });
-        schedule();
-      }, ZERO_SONG_PROMPT_INTERVAL_MS);
-    };
-    schedule();
-    return () => {
-      if (zeroSongPromptTimeoutRef.current) {
-        clearTimeout(zeroSongPromptTimeoutRef.current);
-      }
-    };
-  }, [videoId, addAiMessage, participants.length]);
 
   useEffect(() => {
     const t = setInterval(() => {
@@ -1821,6 +1811,9 @@ export default function RoomWithSync({
           isGuest={isGuest}
           onMyPageClick={() => setMyPageOpen(true)}
           onPlaybackHistoryClick={isLg ? undefined : () => setPlaybackHistoryModalOpen(true)}
+          currentVideoId={videoId}
+          favoritedVideoIds={favoritedVideoIds}
+          onFavoriteCurrentClick={handleFavoriteCurrentClick}
           participants={participants}
           myClientId={myClientId}
           currentOwnerClientId={ownerLeftAt === null ? ownerClientId : ''}

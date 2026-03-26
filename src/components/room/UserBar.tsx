@@ -1,9 +1,21 @@
 'use client';
 
 /**
- * 参加ユーザー一覧バー。1行: 左に参加者、右にマイページ。
- * オーナー名の直後に 👑。一覧ボタン・AI停止はマイページへ。
+ * 参加ユーザー一覧バー。
+ * - PC (lg+): 左に参加者チップ、右にマイページ・視聴履歴（従来どおり）。
+ * - モバイル: 1行固定。左＝全員表示トグル、中央＝再生中の選曲者＋波形、右＝アイコン（マイページ・履歴）。
  */
+
+import { useEffect, useState } from 'react';
+import {
+  UserCircleIcon,
+  ClockIcon,
+  UsersIcon,
+  ChevronDownIcon,
+  XMarkIcon,
+  HeartIcon,
+} from '@heroicons/react/24/outline';
+import { useIsLgViewport } from '@/hooks/useLgViewport';
 
 export interface ParticipantItem {
   clientId: string;
@@ -18,6 +30,12 @@ interface UserBarProps {
   onMyPageClick?: () => void;
   /** モバイル等: マイページの右隣に「視聴履歴」ボタンを出す */
   onPlaybackHistoryClick?: () => void;
+  /** いま再生中の videoId（モバイルの♡トグル用） */
+  currentVideoId?: string | null;
+  /** 自分がお気に入り登録した videoId 一覧（モバイルの♡点灯用） */
+  favoritedVideoIds?: string[];
+  /** いま再生中の曲をお気に入りトグル */
+  onFavoriteCurrentClick?: (params: { videoId: string; isFavorited: boolean }) => void;
   participants?: ParticipantItem[];
   myClientId?: string;
   currentOwnerClientId?: string;
@@ -25,29 +43,136 @@ interface UserBarProps {
   onParticipantClick?: (displayName: string) => void;
 }
 
+function participantDisplayName(
+  p: ParticipantItem,
+  myClientId: string,
+  isGuest: boolean,
+): string {
+  return p.clientId === myClientId
+    ? `${p.displayName}${isGuest ? '（ゲスト）' : ''} (自分)`
+    : p.displayName;
+}
+
 export default function UserBar({
   displayName = 'ゲスト',
   isGuest = false,
   onMyPageClick,
   onPlaybackHistoryClick,
+  currentVideoId = null,
+  favoritedVideoIds = [],
+  onFavoriteCurrentClick,
   participants = [],
   myClientId = '',
   currentOwnerClientId = '',
   currentSongPosterClientId = '',
   onParticipantClick,
 }: UserBarProps) {
+  const isLg = useIsLgViewport();
+  const [listOpen, setListOpen] = useState(false);
   const label = isGuest ? `${displayName}（ゲスト）` : displayName;
 
   const participantNamesTitle =
     participants.length > 0
       ? participants
           .map((p, i) => {
-            const name =
-              p.clientId === myClientId ? `${p.displayName}${isGuest ? '（ゲスト）' : ''} (自分)` : p.displayName;
+            const name = participantDisplayName(p, myClientId, isGuest);
             return `[${i + 1}] ${name}`;
           })
           .join(' ')
       : label;
+
+  useEffect(() => {
+    if (!listOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setListOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [listOpen]);
+
+  const poster =
+    currentSongPosterClientId !== ''
+      ? participants.find((p) => p.clientId === currentSongPosterClientId)
+      : undefined;
+
+  const myPageButton =
+    onMyPageClick != null ? (
+      <button
+        type="button"
+        onClick={() => {
+          setListOpen(false);
+          onMyPageClick();
+        }}
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-600 bg-gray-800 text-gray-200 hover:bg-gray-700"
+        aria-label="マイページを開く"
+        title="マイページ"
+      >
+        <UserCircleIcon className="h-5 w-5" aria-hidden />
+      </button>
+    ) : null;
+
+  const playbackHistoryButton =
+    onPlaybackHistoryClick != null ? (
+      <button
+        type="button"
+        onClick={() => {
+          setListOpen(false);
+          onPlaybackHistoryClick();
+        }}
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-600 bg-gray-800 text-gray-200 hover:bg-gray-700"
+        aria-label="視聴履歴を表示"
+        title="視聴履歴"
+      >
+        <ClockIcon className="h-5 w-5" aria-hidden />
+      </button>
+    ) : null;
+
+  const currentIsFavorited =
+    currentVideoId != null && favoritedVideoIds.includes(currentVideoId);
+  const canToggleCurrentFavorite =
+    Boolean(currentVideoId) && Boolean(onFavoriteCurrentClick) && !isGuest;
+
+  const favoriteCurrentButton =
+    currentVideoId ? (
+      <button
+        type="button"
+        onClick={() => {
+          if (!currentVideoId) return;
+          if (!onFavoriteCurrentClick) return;
+          if (isGuest) return;
+          setListOpen(false);
+          onFavoriteCurrentClick({ videoId: currentVideoId, isFavorited: currentIsFavorited });
+        }}
+        disabled={!canToggleCurrentFavorite}
+        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-600 bg-gray-800 text-gray-200 hover:bg-gray-700 disabled:opacity-50 ${
+          currentIsFavorited ? 'ring-1 ring-red-500/40' : ''
+        }`}
+        aria-label={
+          isGuest
+            ? 'お気に入り（ログインで利用可）'
+            : currentIsFavorited
+              ? 'お気に入り解除（再生中の曲）'
+              : 'お気に入りに追加（再生中の曲）'
+        }
+        title={
+          isGuest
+            ? 'お気に入り（ログインで利用可）'
+            : currentIsFavorited
+              ? 'お気に入り解除（再生中）'
+              : 'お気に入りに追加（再生中）'
+        }
+      >
+        <HeartIcon
+          className={`h-5 w-5 ${currentIsFavorited ? 'text-red-500' : 'text-gray-400'}`}
+          aria-hidden
+        />
+      </button>
+    ) : null;
 
   const participantChips =
     participants.length > 0 ? (
@@ -56,10 +181,7 @@ export default function UserBar({
         title={participantNamesTitle}
       >
         {participants.map((p, i) => {
-          const name =
-            p.clientId === myClientId
-              ? `${p.displayName}${isGuest ? '（ゲスト）' : ''} (自分)`
-              : p.displayName;
+          const name = participantDisplayName(p, myClientId, isGuest);
           const color = p.textColor ?? '#e5e7eb';
           const isCurrentSongPoster = p.clientId === currentSongPosterClientId;
           const isRoomOwner = Boolean(currentOwnerClientId && p.clientId === currentOwnerClientId);
@@ -116,47 +238,210 @@ export default function UserBar({
       <span className="text-sm text-gray-200">{label}</span>
     );
 
-  const myPageButton =
-    onMyPageClick ? (
-      <button
-        type="button"
-        onClick={onMyPageClick}
-        className="shrink-0 rounded border border-gray-600 bg-gray-800 px-3 py-2 text-sm font-medium text-gray-200 hover:bg-gray-700 hover:text-white sm:px-4"
-        aria-label="マイページを開く"
-        title="マイページ"
-      >
-        マイページ
-      </button>
-    ) : null;
-
-  const playbackHistoryButton =
-    onPlaybackHistoryClick ? (
-      <button
-        type="button"
-        onClick={onPlaybackHistoryClick}
-        className="shrink-0 rounded border border-gray-600 bg-gray-800 px-3 py-2 text-sm font-medium text-gray-200 hover:bg-gray-700 hover:text-white"
-        aria-label="視聴履歴を表示"
-        title="視聴履歴を表示"
-      >
-        視聴履歴
-      </button>
-    ) : null;
-
-  const trailing =
+  const desktopTrailing =
     myPageButton || playbackHistoryButton ? (
       <div className="flex shrink-0 items-center gap-2">
+        {onMyPageClick != null ? (
+          <button
+            type="button"
+            onClick={onMyPageClick}
+            className="shrink-0 rounded border border-gray-600 bg-gray-800 px-3 py-2 text-sm font-medium text-gray-200 hover:bg-gray-700 hover:text-white sm:px-4"
+            aria-label="マイページを開く"
+            title="マイページ"
+          >
+            マイページ
+          </button>
+        ) : null}
+        {onPlaybackHistoryClick != null ? (
+          <button
+            type="button"
+            onClick={onPlaybackHistoryClick}
+            className="shrink-0 rounded border border-gray-600 bg-gray-800 px-3 py-2 text-sm font-medium text-gray-200 hover:bg-gray-700 hover:text-white"
+            aria-label="視聴履歴を表示"
+            title="視聴履歴を表示"
+          >
+            視聴履歴
+          </button>
+        ) : null}
+      </div>
+    ) : null;
+
+  /** モバイル: 中央の再生中ユーザー */
+  const mobileCenter =
+    participants.length === 0 ? (
+      <span className="min-w-0 truncate text-center text-sm text-gray-200">{label}</span>
+    ) : poster ? (
+      <div
+        className="flex min-w-0 max-w-full items-center justify-center gap-1.5 px-1"
+        title="今の曲の選曲者（再生中）"
+      >
+        <span
+          className="animate-now-playing-wave inline-flex h-3 shrink-0 items-end gap-0.5"
+          style={{ transformOrigin: 'bottom' }}
+          aria-hidden
+        >
+          {[1, 2, 3, 4, 5].map((j) => (
+            <span
+              key={j}
+              className="inline-block w-0.5 rounded-full bg-amber-400"
+              style={{ height: '0.75rem', transformOrigin: 'bottom' }}
+            />
+          ))}
+        </span>
+        <span className="min-w-0 truncate text-sm font-medium text-amber-100">
+          {participantDisplayName(poster, myClientId, isGuest)}
+        </span>
+        {currentOwnerClientId && poster.clientId === currentOwnerClientId ? (
+          <span className="shrink-0 text-amber-400" title="チャットオーナー" aria-label="チャットオーナー">
+            👑
+          </span>
+        ) : null}
+      </div>
+    ) : (
+      <span className="min-w-0 truncate text-center text-xs text-gray-500">再生中の選曲なし</span>
+    );
+
+  const mobileTrailing =
+    favoriteCurrentButton || myPageButton || playbackHistoryButton ? (
+      <div className="flex shrink-0 items-center gap-1">
+        {favoriteCurrentButton}
         {myPageButton}
         {playbackHistoryButton}
       </div>
     ) : null;
 
-  return (
-    <div className="flex items-center justify-between gap-3 overflow-x-auto rounded-lg border border-gray-700 bg-gray-900/50 px-3 py-2">
-      <div className="flex min-w-0 flex-1 items-center gap-2">
-        <span className="shrink-0 text-xs text-gray-500">参加者</span>
-        {participantChips}
+  const listOpener =
+    participants.length > 0 ? (
+      <button
+        type="button"
+        onClick={() => setListOpen(true)}
+        className="flex h-9 shrink-0 items-center gap-0.5 rounded-lg border border-gray-600 bg-gray-800 px-1.5 text-gray-200 hover:bg-gray-700"
+        aria-expanded={listOpen}
+        aria-haspopup="dialog"
+        aria-label="参加者をすべて表示"
+        title="参加者一覧"
+      >
+        <UsersIcon className="h-5 w-5 shrink-0" aria-hidden />
+        <ChevronDownIcon className="h-4 w-4 shrink-0 opacity-80" aria-hidden />
+      </button>
+    ) : (
+      <div className="w-9 shrink-0" aria-hidden />
+    );
+
+  if (isLg) {
+    return (
+      <div className="flex items-center justify-between gap-3 overflow-x-auto rounded-lg border border-gray-700 bg-gray-900/50 px-3 py-2">
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <span className="shrink-0 text-xs text-gray-500">参加者</span>
+          {participantChips}
+        </div>
+        {desktopTrailing}
       </div>
-      {trailing}
-    </div>
+    );
+  }
+
+  return (
+    <>
+      <div className="flex h-11 shrink-0 items-center gap-2 overflow-hidden rounded-lg border border-gray-700 bg-gray-900/50 px-2">
+        {listOpener}
+        <div className="min-w-0 flex-1 overflow-hidden">{mobileCenter}</div>
+        {mobileTrailing}
+      </div>
+
+      {listOpen && participants.length > 0 && (
+        <div className="fixed inset-0 z-[80]">
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/60"
+            aria-label="参加者一覧を閉じる"
+            onClick={() => setListOpen(false)}
+          />
+          <div
+            className="relative z-10 mx-2 mt-[max(0.5rem,env(safe-area-inset-top))] flex max-h-[min(72vh,520px)] flex-col overflow-hidden rounded-xl border border-gray-600 bg-gray-900 shadow-2xl"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="user-bar-participant-list-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-gray-700 px-3 py-2.5">
+              <h2 id="user-bar-participant-list-title" className="text-sm font-semibold text-gray-100">
+                参加者（{participants.length}人）
+              </h2>
+              <button
+                type="button"
+                onClick={() => setListOpen(false)}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-600 bg-gray-800 text-gray-200 hover:bg-gray-700"
+                aria-label="閉じる"
+              >
+                <XMarkIcon className="h-5 w-5" />
+              </button>
+            </div>
+            <ul className="min-h-0 flex-1 overflow-y-auto py-1">
+              {participants.map((p, i) => {
+                const name = participantDisplayName(p, myClientId, isGuest);
+                const color = p.textColor ?? '#e5e7eb';
+                const isCurrentSongPoster = p.clientId === currentSongPosterClientId;
+                const isRoomOwner = Boolean(currentOwnerClientId && p.clientId === currentOwnerClientId);
+                return (
+                  <li
+                    key={p.clientId}
+                    className={`flex flex-col gap-0.5 border-b border-gray-800/80 px-3 py-2.5 last:border-b-0 ${isCurrentSongPoster ? 'bg-amber-950/25' : ''}`}
+                  >
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <span className="text-xs text-gray-500">[{i + 1}]</span>
+                      {isCurrentSongPoster && (
+                        <span
+                          className="animate-now-playing-wave inline-flex h-3 items-end gap-0.5"
+                          style={{ transformOrigin: 'bottom' }}
+                          aria-hidden
+                        >
+                          {[1, 2, 3, 4, 5].map((j) => (
+                            <span
+                              key={j}
+                              className="inline-block w-0.5 rounded-full bg-amber-400"
+                              style={{ height: '0.75rem', transformOrigin: 'bottom' }}
+                            />
+                          ))}
+                        </span>
+                      )}
+                      {isRoomOwner && (
+                        <span className="text-amber-400" title="チャットオーナー" aria-label="チャットオーナー">
+                          👑
+                        </span>
+                      )}
+                      {p.clientId !== myClientId && onParticipantClick ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onParticipantClick(p.displayName);
+                            setListOpen(false);
+                          }}
+                          className="min-w-0 flex-1 cursor-pointer rounded border-0 bg-transparent p-0 text-left text-sm underline decoration-dotted underline-offset-2 hover:opacity-90"
+                          style={{ color }}
+                        >
+                          {name}
+                        </button>
+                      ) : (
+                        <span className="min-w-0 flex-1 text-sm" style={{ color }}>
+                          {name}
+                        </span>
+                      )}
+                    </div>
+                    {isCurrentSongPoster && (
+                      <span className="pl-6 text-[11px] text-amber-200/80">再生中の選曲</span>
+                    )}
+                    {p.status ? (
+                      <span className="pl-6 text-xs text-gray-400" title={`ステータス: ${p.status}`}>
+                        [{p.status}]
+                      </span>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
