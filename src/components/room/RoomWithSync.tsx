@@ -2007,7 +2007,7 @@ export default function RoomWithSync({
                 <ul className="space-y-2">
                   {candidateSongs
                     .slice()
-                    .sort((a, b) => a.addedAt - b.addedAt)
+                    .sort((a, b) => (b.addedAt ?? 0) - (a.addedAt ?? 0))
                     .map((c) => (
                       <li key={c.videoId}>
                         <div className="flex items-center gap-3 rounded border border-gray-700 bg-gray-800/60 px-3 py-2">

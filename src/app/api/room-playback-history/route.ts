@@ -14,6 +14,7 @@ import {
 } from '@/lib/format-song-display';
 import { resolveArtistSongForPackAsync } from '@/lib/youtube-artist-song-for-pack';
 import { getVideoSnippet } from '@/lib/youtube-search';
+import { getOrAssignEra } from '@/lib/song-era';
 import { getOrAssignStyle, setStyleInDb } from '@/lib/song-style';
 import { upsertSongAndVideo, updateSongStyle, incrementSongPlayCount } from '@/lib/song-entities';
 import { SONG_STYLE_OPTIONS } from '@/lib/song-styles';
@@ -45,6 +46,8 @@ export type RoomPlaybackHistoryRow = {
   title: string | null;
   artist_name: string | null;
   style: string | null;
+  /** `song_era` テーブル由来（GET 時に video_id で結合） */
+  era: string | null;
 };
 
 /**
@@ -80,7 +83,33 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const res = NextResponse.json({ items: data ?? [] });
+  const rows = data ?? [];
+  let items: RoomPlaybackHistoryRow[] = rows.map((row) => ({
+    ...row,
+    era: null,
+  }));
+  const videoIds = Array.from(new Set(items.map((r) => r.video_id).filter(Boolean)));
+  if (videoIds.length > 0) {
+    const { data: eraRows, error: eraError } = await supabase
+      .from('song_era')
+      .select('video_id, era')
+      .in('video_id', videoIds);
+    if (eraError && eraError.code !== '42P01') {
+      console.error('[room-playback-history GET] song_era', eraError);
+    }
+    if (!eraError && eraRows?.length) {
+      const eraMap = new Map(eraRows.map((r) => [r.video_id, r.era]));
+      items = items.map((row) => {
+        const e = eraMap.get(row.video_id);
+        return {
+          ...row,
+          era: typeof e === 'string' && e.trim() ? e.trim() : null,
+        };
+      });
+    }
+  }
+
+  const res = NextResponse.json({ items });
   res.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate');
   return res;
 }
@@ -221,14 +250,26 @@ export async function POST(request: Request) {
     style = await getOrAssignStyle(
       supabase,
       videoId,
-      song,
-      artist
+      song ?? title ?? videoId,
+      artist,
+      title
     );
     if (style && songId) {
       await updateSongStyle(supabase, songId, style);
     }
   } catch (e) {
     console.error('[room-playback-history] getOrAssignStyle', e);
+  }
+
+  try {
+    await getOrAssignEra(supabase, videoId, {
+      songTitle: (song ?? title ?? videoId) as string,
+      artistName: artist,
+      oembedTitle: title,
+      description: snippetDescription,
+    });
+  } catch (e) {
+    console.error('[room-playback-history] getOrAssignEra', e);
   }
 
   const { error } = await supabase.from('room_playback_history').insert({

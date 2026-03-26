@@ -1,10 +1,11 @@
 'use client';
 
 /**
- * ルーム視聴履歴（プレイヤー下）。参加者名・時間・アーティスト-タイトル・YouTubeリンク。
+ * ルーム視聴履歴（プレイヤー下）。参加者名・時間・年代・スタイル・アーティスト-タイトル・YouTubeリンク。
  * 固定列幅・はみ出しは...、ソート（時間デフォルト／参加者名）、アクティブ行表示。
  */
 
+import { CalendarDaysIcon, ChartBarIcon } from '@heroicons/react/24/outline';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { RoomPlaybackHistoryRow } from '@/app/api/room-playback-history/route';
 import { getArtistAndSong, getMainArtist } from '@/lib/format-song-display';
@@ -13,6 +14,8 @@ import { fetchMusic8SongDataForPlaybackRow } from '@/lib/music8-song-lookup';
 import { SONG_STYLE_OPTIONS } from '@/lib/song-styles';
 import MainArtistTabPanel from './MainArtistTabPanel';
 import SongDataTabPanel from './SongDataTabPanel';
+import EraDistributionModal from './EraDistributionModal';
+import StyleDistributionModal from './StyleDistributionModal';
 
 type SortKey = 'played_at' | 'display_name';
 type SortOrder = 'desc' | 'asc';
@@ -21,6 +24,7 @@ const COL_PARTICIPANT = '参加者名';
 const COL_TIME = '時間';
 const COL_ARTIST_TITLE = 'アーティスト - タイトル';
 const COL_STYLE = 'スタイル';
+const COL_ERA = '年代';
 const COL_LINK = 'リンク';
 const COL_FAV = '♡';
 
@@ -29,6 +33,7 @@ const COL_WIDTH_TIME = 52;
 /** アーティスト - タイトルは残り幅を使うため minWidth のみ（横スクロールを出さない） */
 const COL_MIN_WIDTH_ARTIST_TITLE = 80;
 const COL_WIDTH_STYLE = 56;
+const COL_WIDTH_ERA = 48;
 const COL_WIDTH_LINK = 56;
 const COL_WIDTH_FAV = 36;
 
@@ -46,6 +51,25 @@ const STYLE_TEXT_COLORS: Record<string, string> = {
   Others: '#BDBDBD',
   Jazz: '#BDBDBD',
 };
+
+/** 年代（十年）列の文字色 */
+const ERA_TEXT_COLORS: Record<string, string> = {
+  'Pre-50s': '#9e9e9e',
+  '50s': '#a1887f',
+  '60s': '#90caf9',
+  '70s': '#81c784',
+  '80s': '#ffab91',
+  '90s': '#ce93d8',
+  '00s': '#fff176',
+  '10s': '#80deea',
+  '20s': '#aed581',
+  Other: '#9e9e9e',
+};
+
+function getEraTextColor(era: string | null | undefined): string | undefined {
+  if (!era || !era.trim()) return undefined;
+  return ERA_TEXT_COLORS[era] ?? '#b0bec5';
+}
 
 function getStyleTextColor(style: string | null | undefined): string | undefined {
   if (!style || !style.trim()) return undefined;
@@ -210,6 +234,8 @@ export default function RoomPlaybackHistory({
   const [hasSongData, setHasSongData] = useState(false);
   /** STYLE_ADMIN_USER_IDS 未設定なら true。設定時は管理者ログイン時のみ true */
   const [canEditStyles, setCanEditStyles] = useState(true);
+  const [styleDistOpen, setStyleDistOpen] = useState(false);
+  const [eraDistOpen, setEraDistOpen] = useState(false);
 
   const currentRowForTabs = currentVideoId ? items.find((r) => r.video_id === currentVideoId) : undefined;
 
@@ -323,7 +349,13 @@ export default function RoomPlaybackHistory({
     try {
       const res = await fetch(`/api/room-playback-history?roomId=${encodeURIComponent(roomId)}`);
       const data = await res.json().catch(() => ({}));
-      setItems(Array.isArray(data?.items) ? data.items : []);
+      const raw = Array.isArray(data?.items) ? data.items : [];
+      setItems(
+        raw.map((r: RoomPlaybackHistoryRow) => ({
+          ...r,
+          era: r.era ?? null,
+        })),
+      );
     } catch {
       setItems([]);
     } finally {
@@ -454,6 +486,24 @@ export default function RoomPlaybackHistory({
               ソングデータ
             </button>
           )}
+          <button
+            type="button"
+            onClick={() => setStyleDistOpen(true)}
+            className="ml-1 flex items-center gap-1 border-l border-gray-600 pl-2 text-sm text-gray-400 transition hover:text-gray-200"
+            title="スタイル分布を表示"
+          >
+            <ChartBarIcon className="h-4 w-4 flex-shrink-0" aria-hidden />
+            <span className="rounded px-2 py-1 hover:bg-gray-700/50">スタイル分布</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setEraDistOpen(true)}
+            className="flex items-center gap-1 text-sm text-gray-400 transition hover:text-gray-200"
+            title="年代分布を表示"
+          >
+            <CalendarDaysIcon className="h-4 w-4 flex-shrink-0" aria-hidden />
+            <span className="rounded px-2 py-1 hover:bg-gray-700/50">年代分布</span>
+          </button>
         </div>
         {watchInNewTabUrl && (
           <a
@@ -501,6 +551,14 @@ export default function RoomPlaybackHistory({
                 onClick={setSortByTime}
               >
                 <span className="block truncate">{COL_TIME}</span>
+              </th>
+              <th
+                className="border-b border-gray-600 py-1 pr-1 font-medium text-gray-400"
+                style={{ width: COL_WIDTH_ERA, minWidth: COL_WIDTH_ERA, maxWidth: COL_WIDTH_ERA }}
+                scope="col"
+                title="録音・ヒットの十年（Music8 / AI）"
+              >
+                <span className="block truncate">{COL_ERA}</span>
               </th>
               <th
                 className="border-b border-gray-600 py-1 pr-1 font-medium text-gray-400"
@@ -552,13 +610,13 @@ export default function RoomPlaybackHistory({
           <tbody>
             {loading && items.length === 0 ? (
               <tr>
-                <td colSpan={7} className="py-2 text-center text-gray-500">
+                <td colSpan={8} className="py-2 text-center text-gray-500">
                   読み込み中...
                 </td>
               </tr>
             ) : sorted.length === 0 ? (
               <tr>
-                <td colSpan={7} className="py-2 text-center text-gray-500">
+                <td colSpan={8} className="py-2 text-center text-gray-500">
                   履歴がありません
                 </td>
               </tr>
@@ -586,6 +644,18 @@ export default function RoomPlaybackHistory({
                         style={{ width: COL_WIDTH_TIME, minWidth: COL_WIDTH_TIME, maxWidth: COL_WIDTH_TIME }}
                       >
                         {formatPlayedAt(row.played_at)}
+                      </td>
+                      <td
+                        className="truncate border-b border-gray-700/80 py-0.5 pr-1 text-gray-400"
+                        style={{
+                          width: COL_WIDTH_ERA,
+                          minWidth: COL_WIDTH_ERA,
+                          maxWidth: COL_WIDTH_ERA,
+                          color: getEraTextColor(row.era),
+                        }}
+                        title={row.era ? `年代: ${row.era}` : '年代未設定（新規再生で付与）'}
+                      >
+                        {row.era?.trim() ? row.era : '—'}
                       </td>
                       <td
                         className={
@@ -687,7 +757,7 @@ export default function RoomPlaybackHistory({
                   if (played && played.key !== lastDateKey) {
                     nodes.push(
                       <tr key={`sep-${played.key}`} className="bg-gray-800/25">
-                        <td colSpan={7} className="border-b border-gray-700/80 px-2 py-1.5 text-xs font-semibold text-gray-200">
+                        <td colSpan={8} className="border-b border-gray-700/80 px-2 py-1.5 text-xs font-semibold text-gray-200">
                           {played.label}
                         </td>
                       </tr>
@@ -708,6 +778,18 @@ export default function RoomPlaybackHistory({
           ユーザー登録で利用できます
         </p>
       )}
+
+      <StyleDistributionModal
+        roomId={roomId}
+        open={styleDistOpen}
+        onClose={() => setStyleDistOpen(false)}
+      />
+
+      <EraDistributionModal
+        roomId={roomId}
+        open={eraDistOpen}
+        onClose={() => setEraDistOpen(false)}
+      />
 
       {styleEditRow && (
         <div

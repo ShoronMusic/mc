@@ -8,6 +8,7 @@ import {
   isRejectedChatOrTidbitOutput,
 } from '@/lib/ai-output-policy';
 import { persistGeminiUsageLog } from '@/lib/gemini-usage-log';
+import { SONG_ERA_OPTIONS, type SongEraOption } from '@/lib/song-era-options';
 
 const MODEL = 'gemini-2.5-flash';
 
@@ -529,6 +530,51 @@ ${input}
     return 'Other';
   } catch (e) {
     console.error('[gemini] getSongStyle:', e);
+    return 'Other';
+  }
+}
+
+/**
+ * 曲タイトル・アーティスト・任意の説明から、録音／ヒットの十年を1つ返す。分からない場合は Other。
+ */
+export async function getSongEra(
+  title: string,
+  artistName?: string,
+  description?: string
+): Promise<SongEraOption> {
+  const model = getGeminiModel();
+  if (!model) return 'Other';
+
+  const parts: string[] = [];
+  if (artistName?.trim()) parts.push(`アーティスト: ${artistName.trim()}`);
+  parts.push(`曲名: ${title.trim()}`);
+  if (description?.trim()) {
+    parts.push(`補足: ${description.trim().slice(0, 2000)}`);
+  }
+  const input = parts.join('\n');
+
+  const eraList = SONG_ERA_OPTIONS.join(' / ');
+  const prompt = `以下の曲について、主に録音またはヒットしたと思われる年代（十年単位）を、次のリストのいずれか1つをそのままの表記で答えてください。分からない場合は Other。
+年代一覧: ${eraList}
+
+${input}
+
+・Pre-50s = 1950年以前、50s = 1950年代、…、20s = 2020年代
+上記以外のラベルは使わないこと。`;
+
+  try {
+    const result = await model.generateContent(prompt);
+    logGeminiUsage('get_song_era', result.response);
+    await persistGeminiUsageLog('get_song_era', result.response.usageMetadata);
+    const text = result.response.text()?.trim() ?? '';
+    if (SONG_ERA_OPTIONS.includes(text as SongEraOption)) return text as SongEraOption;
+    const firstToken = text.split(/\s+/)[0]?.trim() ?? '';
+    if (SONG_ERA_OPTIONS.includes(firstToken as SongEraOption)) {
+      return firstToken as SongEraOption;
+    }
+    return 'Other';
+  } catch (e) {
+    console.error('[gemini] getSongEra:', e);
     return 'Other';
   }
 }

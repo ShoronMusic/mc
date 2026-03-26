@@ -1,0 +1,43 @@
+{
+  "name": "musicaichat",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 3002",
+    "build": "next build",
+    "start": "next start -p 3002",
+    "lint": "next lint",
+    "test:mb": "tsx src/lib/musicbrainz-artist-area.unit-test.ts",
+    "test:policy": "tsx src/lib/ai-output-policy.unit-test.ts",
+    "test:format": "tsx src/lib/format-song-display-feat.unit-test.ts",
+    "test:mb-facts": "tsx src/lib/musicbrainz-commentary-facts.unit-test.ts",
+    "test": "npm run test:mb && npm run test:policy && npm run test:format && npm run test:mb-facts",
+    "verify:utf8": "node scripts/verify-source-utf8.mjs",
+    "verify:utf8:fix": "node scripts/verify-source-utf8.mjs --fix",
+    "validate": "npm run verify:utf8 && npm run lint && npx tsc --noEmit && npm run test"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.21.0",
+    "@heroicons/react": "^2.2.0",
+    "@supabase/ssr": "^0.9.0",
+    "@supabase/supabase-js": "^2.99.1",
+    "ably": "^2.20.0",
+    "next": "14.2.18",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "resend": "^4.0.0",
+    "socket.io": "^4.8.1",
+    "socket.io-client": "^4.8.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "eslint": "^8",
+    "eslint-config-next": "14.2.18",
+    "postcss": "^8",
+    "tailwindcss": "^3.4.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5"
+  }
+}
