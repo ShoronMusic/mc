@@ -104,6 +104,12 @@ export function JoinChoice({ onJoin, roomId }: JoinChoiceProps) {
                 `登録を受け付けました（${email}）。確認メールのリンクを開いたあと、「すでに登録済みの方はログイン」からログインしてください。迷惑メールフォルダも確認してください。`
               );
             }}
+            onResetEmailSent={(email) => {
+              setError(null);
+              setAuthNotice(
+                `パスワード再設定用のメールを送信しました（${email}）。メール内のリンクを開き、新しいパスワードを設定してください。迷惑メールフォルダもご確認ください。`
+              );
+            }}
           />
           {authNotice && (
             <p className="mt-3 text-sm text-emerald-300/95" role="status">

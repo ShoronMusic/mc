@@ -133,7 +133,7 @@ export default function UserBar({
     ) : null;
 
   const currentIsFavorited =
-    Boolean(currentVideoId) && favoritedVideoIds.includes(currentVideoId);
+    currentVideoId != null && favoritedVideoIds.includes(currentVideoId);
   const canToggleCurrentFavorite =
     Boolean(currentVideoId) && Boolean(onFavoriteCurrentClick) && !isGuest;
 
