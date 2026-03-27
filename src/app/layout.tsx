@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { Suspense } from 'react';
 import './globals.css';
 import GoogleAnalytics from '@/components/analytics/GoogleAnalytics';
 
@@ -57,7 +58,9 @@ export default function RootLayout({
           id="oauth-stray-code-fix"
           dangerouslySetInnerHTML={{ __html: OAUTH_STRAY_CODE_SCRIPT }}
         />
-        <GoogleAnalytics measurementId={gaMeasurementId} />
+        <Suspense fallback={null}>
+          <GoogleAnalytics measurementId={gaMeasurementId} />
+        </Suspense>
         {children}
       </body>
     </html>
