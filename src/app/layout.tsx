@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import GoogleAnalytics from '@/components/analytics/GoogleAnalytics';
 
 /** OAuth 戻りが Site URL 直下に ?code= で付いたとき、React・同意ゲートより先に /auth/callback へ送る */
 const OAUTH_STRAY_CODE_SCRIPT = `
@@ -46,6 +47,8 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const gaMeasurementId = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID ?? '';
+
   return (
     <html lang="ja">
       <body className="antialiased min-h-screen bg-[var(--background)] text-[var(--foreground)]">
@@ -54,6 +57,7 @@ export default function RootLayout({
           id="oauth-stray-code-fix"
           dangerouslySetInnerHTML={{ __html: OAUTH_STRAY_CODE_SCRIPT }}
         />
+        <GoogleAnalytics measurementId={gaMeasurementId} />
         {children}
       </body>
     </html>

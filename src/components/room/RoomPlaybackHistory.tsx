@@ -499,18 +499,20 @@ export default function RoomPlaybackHistory({
             onClick={() => setEraDistOpen(true)}
             className="ml-1 flex items-center gap-1 border-l border-gray-600 pl-2 text-sm text-gray-400 transition hover:text-gray-200"
             title="年代を表示"
+            aria-label="年代を表示"
           >
             <CalendarDaysIcon className="h-4 w-4 flex-shrink-0" aria-hidden />
-            <span className="rounded px-2 py-1 hover:bg-gray-700/50">年代</span>
+            <span className="hidden rounded px-2 py-1 hover:bg-gray-700/50 sm:inline">年代</span>
           </button>
           <button
             type="button"
             onClick={() => setStyleDistOpen(true)}
             className="flex items-center gap-1 text-sm text-gray-400 transition hover:text-gray-200"
             title="スタイルを表示"
+            aria-label="スタイルを表示"
           >
             <ChartBarIcon className="h-4 w-4 flex-shrink-0" aria-hidden />
-            <span className="rounded px-2 py-1 hover:bg-gray-700/50">スタイル</span>
+            <span className="hidden rounded px-2 py-1 hover:bg-gray-700/50 sm:inline">スタイル</span>
           </button>
         </div>
         {watchInNewTabUrl && (
