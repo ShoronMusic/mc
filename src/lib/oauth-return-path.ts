@@ -2,12 +2,15 @@ import type { NextResponse } from 'next/server';
 
 /**
  * OAuth 2.0 の認可レスポンスは通常 `code` と `state` の両方が付く。
- * `?code=` だけ（短い誤パラメータや他サービスの code 名）を拾うとルーム URL が /auth/callback に飛びフルリロードに見えるため、両方あるときだけ救済する。
+ * ただしプロバイダ/構成によっては `/?code=` のみで戻るケースがあるため、
+ * トップ (`/`) に限っては `code` 単独でも救済を許可する。
  */
-export function hasOAuthAuthorizationQuery(searchParams: URLSearchParams): boolean {
+export function hasOAuthAuthorizationQuery(searchParams: URLSearchParams, pathname?: string): boolean {
   const code = searchParams.get('code')?.trim();
   const state = searchParams.get('state')?.trim();
-  return !!code && !!state;
+  if (!code) return false;
+  if (state) return true;
+  return pathname === '/';
 }
 
 /**

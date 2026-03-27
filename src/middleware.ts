@@ -18,7 +18,7 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  if (!hasOAuthAuthorizationQuery(url.searchParams)) {
+  if (!hasOAuthAuthorizationQuery(url.searchParams, url.pathname)) {
     return NextResponse.next();
   }
 
