@@ -209,6 +209,8 @@ export default function RoomWithSync({
   const pendingQueuedVideoIdRef = useRef<string | null>(null);
   const pendingQueuedPublisherRef = useRef('');
   const playbackEndedApplyRef = useRef<() => void>(() => {});
+  /** 選曲キュー: 投稿者の ended が来ないとき最古参加者が遅延で適用するタイマー */
+  const playbackQueueFallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSendAtRef = useRef(0);
   const sendTimestampsRef = useRef<number[]>([]);
   const playbackHistoryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -630,6 +632,10 @@ export default function RoomWithSync({
     const data = message.data as PlaybackMessage;
     if (!data?.type) return;
     if (data.type === 'queueSong' && data.videoId) {
+      if (playbackQueueFallbackTimerRef.current) {
+        clearTimeout(playbackQueueFallbackTimerRef.current);
+        playbackQueueFallbackTimerRef.current = null;
+      }
       pendingQueuedVideoIdRef.current = data.videoId;
       pendingQueuedPublisherRef.current = data.publisherClientId ?? '';
       addSystemMessage(SYSTEM_MESSAGE_QUEUE_SONG_DEFERRED);
@@ -673,6 +679,10 @@ export default function RoomWithSync({
     applyingRemoteRef.current = true;
     try {
       if (data.type === 'changeVideo' && data.videoId) {
+        if (playbackQueueFallbackTimerRef.current) {
+          clearTimeout(playbackQueueFallbackTimerRef.current);
+          playbackQueueFallbackTimerRef.current = null;
+        }
         pendingQueuedVideoIdRef.current = null;
         pendingQueuedPublisherRef.current = '';
         jpDomesticSilenceVideoIdRef.current = null;
@@ -1195,7 +1205,8 @@ export default function RoomWithSync({
   }, [videoId]);
 
   const fetchAnnounceAndPublish = useCallback(
-    (vid: string) => {
+    (vid: string, options?: { silent?: boolean }) => {
+      const silent = options?.silent === true;
       fetch('/api/ai/announce-song', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1211,7 +1222,7 @@ export default function RoomWithSync({
             touchActivity();
             return;
           }
-          if (data?.text) {
+          if (!silent && data?.text) {
             const jpDomestic = data?.japaneseDomestic === true;
             const jpSilence =
               typeof data?.jpDomesticSilence === 'boolean' ? data.jpDomesticSilence : jpDomestic;
@@ -1425,6 +1436,7 @@ export default function RoomWithSync({
   useEffect(() => {
     return () => {
       if (playbackHistoryTimeoutRef.current) clearTimeout(playbackHistoryTimeoutRef.current);
+      if (playbackQueueFallbackTimerRef.current) clearTimeout(playbackQueueFallbackTimerRef.current);
     };
   }, []);
 
@@ -1443,8 +1455,14 @@ export default function RoomWithSync({
   const applyImmediateChangeVideo = useCallback(
     (id: string, publisherClientId: string) => {
       playbackLog('applyImmediateChangeVideo', { id, publisherClientId });
+      if (playbackQueueFallbackTimerRef.current) {
+        clearTimeout(playbackQueueFallbackTimerRef.current);
+        playbackQueueFallbackTimerRef.current = null;
+      }
       pendingQueuedVideoIdRef.current = null;
       pendingQueuedPublisherRef.current = '';
+      const previousVideoId = videoIdRef.current;
+      const sameVideoReplay = Boolean(previousVideoId && previousVideoId === id);
       jpDomesticSilenceVideoIdRef.current = null;
       setVideoId(id);
       lastChangeVideoPublisherRef.current = publisherClientId;
@@ -1457,8 +1475,8 @@ export default function RoomWithSync({
       playerRef.current?.loadVideoById(id);
       scheduleAutoPlayAfterChangeVideo();
       advanceTurnAfterPost(publisherClientId);
-      fetchAnnounceAndPublish(id);
-      fetchCommentaryAndPublish(id);
+      fetchAnnounceAndPublish(id, sameVideoReplay ? { silent: true } : undefined);
+      if (!sameVideoReplay) fetchCommentaryAndPublish(id);
       saveSongHistory(id);
       schedulePlaybackHistory(roomId ?? '', id);
     },
@@ -1474,19 +1492,61 @@ export default function RoomWithSync({
     ]
   );
 
+  /** 複数人・5分制限でキューした曲は、原則「いま流れている曲を貼った人」の ended で次曲へ進む。
+   * その人のタブが閉じている・YT が ended を出さない場合に備え、最古入室者が遅延フォールバックで適用する。 */
+  const QUEUE_APPLY_FALLBACK_MS = 1800;
+
   useEffect(() => {
     playbackEndedApplyRef.current = () => {
-      if (myClientId !== lastChangeVideoPublisherRef.current) return;
       const pendingVid = pendingQueuedVideoIdRef.current;
       const pendingPub = pendingQueuedPublisherRef.current;
       if (!pendingVid) return;
-      applyingRemoteRef.current = true;
-      try {
-        applyImmediateChangeVideo(pendingVid, pendingPub || myClientId);
-      } finally {
-        setTimeout(() => {
-          applyingRemoteRef.current = false;
-        }, 300);
+
+      const poster = lastChangeVideoPublisherRef.current;
+      const imPoster = Boolean(myClientId && poster && myClientId === poster);
+      const posterInRoom =
+        !!poster && participatingOrderRef.current.some((p) => p.clientId === poster);
+      const imOldest = Boolean(myClientId && oldestRef.current && myClientId === oldestRef.current);
+
+      const tryApplyQueued = () => {
+        const pv = pendingQueuedVideoIdRef.current;
+        const pp = pendingQueuedPublisherRef.current;
+        if (!pv) return;
+        if (playbackQueueFallbackTimerRef.current) {
+          clearTimeout(playbackQueueFallbackTimerRef.current);
+          playbackQueueFallbackTimerRef.current = null;
+        }
+        applyingRemoteRef.current = true;
+        try {
+          applyImmediateChangeVideo(pv, pp || myClientId);
+        } finally {
+          setTimeout(() => {
+            applyingRemoteRef.current = false;
+          }, 300);
+        }
+      };
+
+      if (imPoster) {
+        tryApplyQueued();
+        return;
+      }
+
+      if (!posterInRoom && imOldest) {
+        tryApplyQueued();
+        return;
+      }
+
+      if (posterInRoom && imOldest) {
+        if (playbackQueueFallbackTimerRef.current) {
+          clearTimeout(playbackQueueFallbackTimerRef.current);
+        }
+        const vidSnapshot = pendingVid;
+        playbackQueueFallbackTimerRef.current = setTimeout(() => {
+          playbackQueueFallbackTimerRef.current = null;
+          if (pendingQueuedVideoIdRef.current !== vidSnapshot) return;
+          if (myClientId !== oldestRef.current) return;
+          tryApplyQueued();
+        }, QUEUE_APPLY_FALLBACK_MS);
       }
     };
   }, [myClientId, applyImmediateChangeVideo]);

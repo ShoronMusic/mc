@@ -353,7 +353,8 @@ export default function RoomWithoutSync({ displayName: displayNameProp = 'ゲス
   }, [videoId]);
 
   const fetchAnnounceAndPublish = useCallback(
-    (vid: string) => {
+    (vid: string, options?: { silent?: boolean }) => {
+      const silent = options?.silent === true;
       fetch('/api/ai/announce-song', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -361,7 +362,7 @@ export default function RoomWithoutSync({ displayName: displayNameProp = 'ゲス
       })
         .then((r) => (r.ok ? r.json() : null))
         .then((data) => {
-          if (data?.text) {
+          if (!silent && data?.text) {
             const jpDomestic = data?.japaneseDomestic === true;
             const jpSilence =
               typeof data?.jpDomesticSilence === 'boolean' ? data.jpDomesticSilence : jpDomestic;
@@ -518,12 +519,14 @@ export default function RoomWithoutSync({ displayName: displayNameProp = 'ゲス
     (url: string) => {
       const id = extractVideoId(url);
       if (!id) return;
+      const prevId = videoIdRef.current;
+      const sameReplay = Boolean(prevId && prevId === id);
       jpDomesticSilenceVideoIdRef.current = null;
       setVideoId(id);
       playerRef.current?.loadVideoById(id);
       scheduleLocalAutoPlayAfterLoad();
-      fetchAnnounceAndPublish(id);
-      fetchCommentaryAndPublish(id);
+      fetchAnnounceAndPublish(id, sameReplay ? { silent: true } : undefined);
+      if (!sameReplay) fetchCommentaryAndPublish(id);
       saveSongHistory(id);
       schedulePlaybackHistory(roomId ?? '', id);
     },
@@ -641,16 +644,19 @@ export default function RoomWithoutSync({ displayName: displayNameProp = 'ゲス
           .then((r2) => (r2.ok ? r2.json() : null))
           .then((data2) => {
             if (data2?.ok && data2?.videoId && data2?.artistTitle) {
+              const vid = data2.videoId;
+              const prevId = videoIdRef.current;
+              const sameReplay = Boolean(prevId && prevId === vid);
               jpDomesticSilenceVideoIdRef.current = null;
-              setVideoId(data2.videoId);
-              playerRef.current?.loadVideoById(data2.videoId);
+              setVideoId(vid);
+              playerRef.current?.loadVideoById(vid);
               scheduleLocalAutoPlayAfterLoad();
               addAiMessage(`${data2.artistTitle} を貼りました！`);
-              saveSongHistory(data2.videoId);
+              saveSongHistory(vid);
               touchActivity();
-              fetchAnnounceAndPublish(data2.videoId);
-              fetchCommentaryAndPublish(data2.videoId);
-              schedulePlaybackHistory(roomId ?? '', data2.videoId);
+              fetchAnnounceAndPublish(vid, sameReplay ? { silent: true } : undefined);
+              if (!sameReplay) fetchCommentaryAndPublish(vid);
+              schedulePlaybackHistory(roomId ?? '', vid);
             } else {
               const searchKeyword = confirmationText ?? query;
               if (searchKeyword) addSystemMessage('曲が見つかりませんでした。下のボタンでYouTube検索を開けます。', searchKeyword);
