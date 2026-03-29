@@ -1,8 +1,9 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import { useEffect, useMemo, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { getOrCreateRoomClientId } from '@/lib/room-owner';
 import type { User } from '@supabase/supabase-js';
 import {
   CHAT_TEXT_COLOR_PALETTE,
@@ -274,6 +275,27 @@ export default function MyPage({
   onForceExit,
   roomId = '',
 }: MyPageProps) {
+  const routeParams = useParams();
+  const roomIdFromRoute = useMemo(() => {
+    const p = routeParams?.roomId;
+    if (typeof p === 'string') return p.trim();
+    if (Array.isArray(p) && typeof p[0] === 'string') return p[0].trim();
+    return '';
+  }, [routeParams?.roomId]);
+  const effectiveRoomId = (roomId && roomId.trim()) || roomIdFromRoute;
+  const effectiveClientId =
+    (myClientId && myClientId.trim()) ||
+    (effectiveRoomId ? getOrCreateRoomClientId(effectiveRoomId) : '');
+
+  const showLobbyEditor = isChatOwner && Boolean(effectiveRoomId && effectiveClientId);
+  const showOwnerAmberSection =
+    isChatOwner &&
+    (showLobbyEditor ||
+      onTransferOwner ||
+      onAiFreeSpeechStopToggle ||
+      onForceExit ||
+      onSongLimit5MinToggle);
+
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(!isGuest);
   const [error, setError] = useState<string | null>(null);
@@ -505,13 +527,13 @@ export default function MyPage({
         </div>
         <p className="mb-4 text-sm text-gray-500">表示名・テキスト色・選曲参加の設定ができます。</p>
 
-        {isChatOwner && roomId && myClientId ? (
+        {showLobbyEditor ? (
           <div className="mb-4 rounded border border-amber-700/50 bg-amber-900/20 p-3">
             <h3 className="mb-2 flex items-center gap-1.5 text-sm font-medium text-amber-200">
               <span aria-hidden>👑</span>
               ルーム管理（オーナー）
             </h3>
-            <LobbyMessageOwnerBlock roomId={roomId} clientId={myClientId} />
+            <LobbyMessageOwnerBlock roomId={effectiveRoomId} clientId={effectiveClientId} />
           </div>
         ) : null}
 
@@ -648,14 +670,16 @@ export default function MyPage({
         </div>
       )}
 
-      {isChatOwner && (onTransferOwner || onAiFreeSpeechStopToggle || onForceExit) && (
+      {showOwnerAmberSection && (
         <div className="mb-4 rounded border border-amber-700/50 bg-amber-900/20 p-3">
           <h3 className="mb-3 flex items-center gap-1.5 text-sm font-medium text-amber-200">
             <span aria-hidden>👑</span>
             ルーム管理（オーナー）
           </h3>
 
-          {roomId && myClientId ? <LobbyMessageOwnerBlock roomId={roomId} clientId={myClientId} /> : null}
+          {showLobbyEditor ? (
+            <LobbyMessageOwnerBlock roomId={effectiveRoomId} clientId={effectiveClientId} />
+          ) : null}
 
           {onAiFreeSpeechStopToggle && (
             <div className="mb-4 border-b border-amber-800/30 pb-4">
