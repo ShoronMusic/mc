@@ -152,4 +152,6 @@ create policy "room_lobby_message_select_anon"
   using (true);
 ```
 
-（`insert` / `update` は anon には付けず、サーバー API のサービスロールのみが RLS をバイパスして書き込みます。）
+（`insert` / `update` / `delete` は anon には付けず、サーバー API のサービスロールのみが RLS をバイパスして書き込みます。）
+
+トップページが参加人数を取得するたび（約 20 秒ごと）、**在室 0 人のルームの入室前メッセージ行は自動で削除**されます。本番でも `SUPABASE_SERVICE_ROLE_KEY` をデプロイ環境に設定してください（未設定だと削除はスキップされますが、API 側では在室 0 のときメッセージを返さないため一覧には出ません）。
