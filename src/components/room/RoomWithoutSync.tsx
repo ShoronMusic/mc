@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Chat from '@/components/chat/Chat';
 import ChatInput from '@/components/chat/ChatInput';
@@ -724,9 +725,19 @@ export default function RoomWithoutSync({ displayName: displayNameProp = 'ゲス
         .env.local に <strong>NEXT_PUBLIC_ABLY_API_KEY</strong> を設定すると、複数ブラウザ・タブが「同じルームの別々の参加者」として扱われ、参加者一覧・同期再生・チャット共有が利用できます。未設定の場合は各ウィンドウが独立して動作します。
       </div>
       <header className="mb-2 flex shrink-0 flex-row items-center justify-between gap-3 border-b border-gray-800 pb-2">
-        <h1 className="min-w-0 flex-1 truncate text-lg font-semibold text-white">
-          洋楽AIチャット{roomId ? ` - ${roomId}` : ''}
-        </h1>
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <Image
+            src="/music_ai_chat_wh.png"
+            alt=""
+            width={180}
+            height={36}
+            className="h-9 w-auto max-h-9 shrink-0 object-contain object-left"
+            priority
+          />
+          <h1 className="min-w-0 flex-1 truncate text-lg font-semibold text-white">
+            洋楽AIチャット{roomId ? ` - ${roomId}` : ''}
+          </h1>
+        </div>
         {onLeave && (
           <div className="flex shrink-0 flex-nowrap items-center justify-end gap-2">
             <button

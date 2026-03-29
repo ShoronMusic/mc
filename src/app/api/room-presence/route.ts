@@ -1,6 +1,7 @@
 import Ably from 'ably';
-import type { Channel, PresenceMessage } from 'ably';
 import { NextResponse } from 'next/server';
+import { allPresenceMembers } from '@/lib/ably-channel-presence';
+import { createClient } from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
 
@@ -36,23 +37,12 @@ function displayNameFromPresenceData(data: unknown): string {
   return 'ゲスト';
 }
 
-async function allPresenceMembers(channel: Channel): Promise<PresenceMessage[]> {
-  const out: PresenceMessage[] = [];
-  let page = await channel.presence.get();
-  out.push(...page.items);
-  while (page.hasNext()) {
-    const next = await page.next();
-    if (!next) break;
-    page = next;
-    out.push(...page.items);
-  }
-  return out;
-}
-
 export type RoomPresencePayload = {
   roomId: string;
   count: number;
   names: string[];
+  /** オーナーが設定した入室前メッセージ（未設定・DB なし時は省略） */
+  lobbyMessage?: string;
   error?: boolean;
 };
 
@@ -93,6 +83,29 @@ export async function GET(request: Request) {
       }
     })
   );
+
+  const supabase = await createClient();
+  if (supabase && unique.length > 0) {
+    const { data: lobbyRows, error: lobbyErr } = await supabase
+      .from('room_lobby_message')
+      .select('room_id, message')
+      .in('room_id', unique);
+    if (lobbyErr && lobbyErr.code !== '42P01') {
+      console.error('[room-presence] room_lobby_message', lobbyErr);
+    }
+    if (!lobbyErr && lobbyRows?.length) {
+      const byRoom = new Map<string, string>();
+      for (const row of lobbyRows as { room_id?: string; message?: string }[]) {
+        const rid = typeof row.room_id === 'string' ? row.room_id : '';
+        const msg = typeof row.message === 'string' ? row.message.trim() : '';
+        if (rid && msg) byRoom.set(rid, msg);
+      }
+      for (const r of rooms) {
+        const m = byRoom.get(r.roomId);
+        if (m) r.lobbyMessage = m;
+      }
+    }
+  }
 
   return NextResponse.json(
     { configured: true as const, rooms },

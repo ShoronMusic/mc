@@ -130,3 +130,26 @@ Google認証で参加できるようにするには、Supabase 側で Google を
 ## 8. マイページの「貼った曲の履歴」を使う場合
 
 マイページで、参加したチャットで貼った曲の履歴（日付・ルーム・アーティスト・タイトル・URL・貼った時間）を表示するには、Supabase に履歴用テーブルを作成する必要があります。手順は **docs/supabase-song-history-table.md** を参照してください。
+
+---
+
+## 9. トップページ「ルーム入室前メッセージ」を使う場合
+
+チャットオーナーがマイページから設定する、入室前一覧に表示する短いメッセージ（100 文字以内）を保存するには、次の SQL を **SQL Editor** で実行してください。**書き込みは API がサービスロールで行う**ため、`SUPABASE_SERVICE_ROLE_KEY` を `.env.local` に設定している必要があります（7 章と同じキー）。
+
+```sql
+create table if not exists public.room_lobby_message (
+  room_id text primary key,
+  message text not null default '',
+  updated_at timestamptz not null default now(),
+  constraint room_lobby_message_len check (char_length(message) <= 100)
+);
+
+alter table public.room_lobby_message enable row level security;
+
+create policy "room_lobby_message_select_anon"
+  on public.room_lobby_message for select
+  using (true);
+```
+
+（`insert` / `update` は anon には付けず、サーバー API のサービスロールのみが RLS をバイパスして書き込みます。）

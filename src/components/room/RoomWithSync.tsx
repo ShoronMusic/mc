@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useChannel, usePresence, usePresenceListener } from 'ably/react';
 import Chat from '@/components/chat/Chat';
@@ -1834,9 +1835,19 @@ export default function RoomWithSync({
   return (
     <main className="flex h-screen flex-col overflow-hidden bg-gray-950 p-3">
       <header className="mb-2 flex shrink-0 flex-row items-center justify-between gap-3 border-b border-gray-800 pb-2">
-        <h1 className="min-w-0 flex-1 truncate text-lg font-semibold text-white">
-          洋楽AIチャット{roomId ? ` - ${roomId}` : ''}
-        </h1>
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <Image
+            src="/music_ai_chat_wh.png"
+            alt=""
+            width={180}
+            height={36}
+            className="h-9 w-auto max-h-9 shrink-0 object-contain object-left"
+            priority
+          />
+          <h1 className="min-w-0 flex-1 truncate text-lg font-semibold text-white">
+            洋楽AIチャット{roomId ? ` - ${roomId}` : ''}
+          </h1>
+        </div>
         {onLeave && (
           <div className="flex shrink-0 flex-nowrap items-center justify-end gap-2">
             {!isGuest && (
@@ -1954,6 +1965,7 @@ export default function RoomWithSync({
                     }
                   : undefined
               }
+              roomId={roomId}
             />
           </div>
         </div>

@@ -7,7 +7,13 @@ const DEFAULT_ROOM_IDS = ['01', '02', '03'] as const;
 const POLL_MS = 20_000;
 const NAME_PREVIEW_MAX = 8;
 
-type RoomPayload = { roomId: string; count: number; names: string[]; error?: boolean };
+type RoomPayload = {
+  roomId: string;
+  count: number;
+  names: string[];
+  lobbyMessage?: string;
+  error?: boolean;
+};
 
 type ApiResponse = {
   configured: boolean;
@@ -59,12 +65,17 @@ function RoomRow({
     }
   }
 
+  const lobby = payload?.lobbyMessage?.trim();
+
   return (
     <Link
       href={`/${roomId}`}
       className="flex flex-col gap-1.5 rounded-lg border border-gray-600 bg-gray-800 px-4 py-3 text-white transition hover:bg-gray-700"
     >
       <span className="text-center font-medium">{label}</span>
+      {lobby && (
+        <span className="text-center text-xs leading-snug text-gray-300 break-words whitespace-pre-wrap">{lobby}</span>
+      )}
       {sub && <span className="text-center text-xs leading-snug break-words">{sub}</span>}
     </Link>
   );
