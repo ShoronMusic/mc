@@ -65,6 +65,8 @@ export interface ParticipantForTransfer {
 }
 
 const LOBBY_SAVE_FETCH_MS = 25_000;
+/** 一部環境で res.json() / body 読み取りだけが終わらない事例への上限 */
+const LOBBY_RESPONSE_BODY_MS = 8_000;
 
 function LobbyMessageOwnerBlock({ roomId, clientId }: { roomId: string; clientId: string }) {
   const [value, setValue] = useState('');
@@ -76,16 +78,31 @@ function LobbyMessageOwnerBlock({ roomId, clientId }: { roomId: string; clientId
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    void fetch(`/api/room-lobby-message?roomId=${encodeURIComponent(roomId)}`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        if (cancelled || !data || typeof data.message !== 'string') return;
-        setValue(data.message);
-      })
-      .catch(() => {})
-      .finally(() => {
+    void (async () => {
+      try {
+        const r = await fetch(`/api/room-lobby-message?roomId=${encodeURIComponent(roomId)}`);
         if (!cancelled) setLoading(false);
-      });
+        if (!r.ok || cancelled) return;
+        let message = '';
+        try {
+          const text = await Promise.race([
+            r.text(),
+            new Promise<string>((_, reject) =>
+              setTimeout(() => reject(new Error('timeout')), LOBBY_RESPONSE_BODY_MS)
+            ),
+          ]);
+          if (text.trim()) {
+            const data = JSON.parse(text) as { message?: unknown };
+            if (typeof data.message === 'string') message = data.message;
+          }
+        } catch {
+          /* 表示は空のまま */
+        }
+        if (!cancelled) setValue(message);
+      } catch {
+        if (!cancelled) setLoading(false);
+      }
+    })();
     return () => {
       cancelled = true;
     };
@@ -111,8 +128,27 @@ function LobbyMessageOwnerBlock({ roomId, clientId }: { roomId: string; clientId
         body: JSON.stringify({ roomId, clientId, message: value }),
         signal: ac.signal,
       });
-      const data = (await res.json().catch(() => ({}))) as { error?: string };
-      if (!res.ok) throw new Error(data?.error ?? '保存に失敗しました。');
+      // サーバー処理は完了しているのに body 読み取りだけ固まるブラウザがあるため、先に UI を戻す
+      setSaving(false);
+
+      let data: { error?: string } = {};
+      try {
+        const text = await Promise.race([
+          res.text(),
+          new Promise<string>((_, reject) =>
+            setTimeout(() => reject(new Error('body read timeout')), LOBBY_RESPONSE_BODY_MS)
+          ),
+        ]);
+        if (text.trim()) {
+          data = JSON.parse(text) as { error?: string };
+        }
+      } catch {
+        /* body 不明時は HTTP ステータスのみで判定 */
+      }
+
+      if (!res.ok) {
+        throw new Error(data?.error ?? '保存に失敗しました。');
+      }
       setSavedOk(true);
       window.setTimeout(() => setSavedOk(false), 4000);
     } catch (e) {
@@ -156,7 +192,8 @@ function LobbyMessageOwnerBlock({ roomId, clientId }: { roomId: string; clientId
               type="button"
               onClick={() => void save()}
               disabled={saving || over}
-              className="rounded bg-amber-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-600 disabled:opacity-50"
+              className="rounded bg-amber-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-600 disabled:opacity-50 enabled:cursor-pointer"
+              style={{ cursor: saving ? 'wait' : undefined }}
             >
               {saving ? '保存中…' : '保存'}
             </button>
