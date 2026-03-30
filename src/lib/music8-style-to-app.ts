@@ -1,74 +1,54 @@
-/**
- * Music8 曲 JSON のスタイル名を、アプリの song_style / Gemini と同じ SongStyle に正規化する。
- */
-
 import type { SongStyle } from '@/lib/gemini';
 import { fetchMusic8SongDataForPlaybackRow } from '@/lib/music8-song-lookup';
 import { extractMusic8SongFields } from '@/lib/music8-song-fields';
-import { SONG_STYLE_OPTIONS, type SongStyleOption } from '@/lib/song-styles';
 
-export function mapMusic8StyleLabelToSongStyle(raw: string): SongStyle | null {
-  const s = (raw ?? '').trim();
-  if (!s) return null;
+const STYLE_NAME_TO_APP: Array<{ re: RegExp; style: SongStyle }> = [
+  { re: /\b(?:r&b|soul|afrobeats?)\b/i, style: 'R&B' },
+  { re: /\b(?:hip[\s-]?hop|rap|trap)\b/i, style: 'Hip-hop' },
+  { re: /\b(?:electronica|electronic|edm|house|techno|trance|drum\s*&?\s*bass|d&b|synthwave)\b/i, style: 'Electronica' },
+  { re: /\b(?:dance|disco|funk)\b/i, style: 'Dance' },
+  { re: /\b(?:alternative|indie|grunge|post[-\s]?punk)\b/i, style: 'Alternative rock' },
+  { re: /\b(?:metal|hard\s*rock|heavy\s*metal)\b/i, style: 'Metal' },
+  { re: /\b(?:rock|new wave|punk)\b/i, style: 'Rock' },
+  { re: /\b(?:jazz|fusion|swing|bop)\b/i, style: 'Jazz' },
+  { re: /\b(?:pop|adult contemporary|singer[-\s]?songwriter)\b/i, style: 'Pop' },
+];
 
-  if (SONG_STYLE_OPTIONS.includes(s as SongStyleOption)) {
-    return s as SongStyle;
+function normalizeFromMusic8Texts(texts: string[]): SongStyle | null {
+  const merged = texts
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .join(' | ');
+  if (!merged) return null;
+
+  for (const rule of STYLE_NAME_TO_APP) {
+    if (rule.re.test(merged)) return rule.style;
   }
-
-  const lower = s.toLowerCase().replace(/\s+/g, ' ');
-  const aliases: Record<string, SongStyle> = {
-    'hip-hop': 'Hip-hop',
-    'hip hop': 'Hip-hop',
-    alternative: 'Alternative rock',
-    'alternative rock': 'Alternative rock',
-    others: 'Other',
-    other: 'Other',
-    pop: 'Pop',
-    dance: 'Dance',
-    electronica: 'Electronica',
-    'r&b': 'R&B',
-    rock: 'Rock',
-    metal: 'Metal',
-    jazz: 'Jazz',
-    /** Music8 など「Soft rock」「New wave」表記 */
-    'soft rock': 'Rock',
-    'hard rock': 'Rock',
-    'new wave': 'Alternative rock',
-    'progressive rock': 'Rock',
-    'classic rock': 'Rock',
-    'soul': 'R&B',
-    funk: 'Dance',
-    disco: 'Dance',
-  };
-  const hit = aliases[lower];
-  return hit ?? null;
+  return null;
 }
 
 /**
- * Music8 に曲がマッチし style が取れたときだけ SongStyle を返す。
+ * Music8 の style / genre からアプリの SongStyle に寄せる。
+ * マップできない場合は null（呼び出し側で DB キャッシュ or Gemini へフォールバック）。
  */
 export async function trySongStyleFromMusic8(
   artistName: string | null | undefined,
   fullVideoTitle: string | null | undefined
 ): Promise<SongStyle | null> {
-  const main = (artistName ?? '').trim();
-  const yt = (fullVideoTitle ?? '').trim();
-  if (!main && !yt) return null;
+  const artist = (artistName ?? '').trim();
+  const title = (fullVideoTitle ?? '').trim();
+  if (!artist || !title) return null;
 
   try {
-    const data = await fetchMusic8SongDataForPlaybackRow(main, yt || main);
+    const data = await fetchMusic8SongDataForPlaybackRow(artist, title);
     if (!data) return null;
-    const fields = extractMusic8SongFields(data);
-    for (const name of fields.styleNames) {
-      const mapped = mapMusic8StyleLabelToSongStyle(name);
-      if (mapped) return mapped;
-    }
-    for (const g of fields.genres) {
-      const mapped = mapMusic8StyleLabelToSongStyle(g);
-      if (mapped) return mapped;
-    }
+
+    const extracted = extractMusic8SongFields(data);
+    const hit = normalizeFromMusic8Texts([...extracted.styleNames, ...extracted.genres]);
+    return hit ?? null;
   } catch (e) {
-    console.error('[music8-style-to-app] trySongStyleFromMusic8', e);
+    console.warn('[music8-style-to-app] lookup failed', e);
+    return null;
   }
-  return null;
 }
+

@@ -31,6 +31,48 @@ export const dynamic = 'force-dynamic';
 /** YouTube 動画の公開日がこの日数以内なら「新曲」とみなし、基本コメントのみ出す */
 const NEW_RELEASE_DAYS = 30;
 
+function normalizeForDuplicateCheck(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[「」『』（）()\[\]、。.,!?！？:：;；"'`]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function tokenizeForDuplicateCheck(text: string): string[] {
+  const normalized = normalizeForDuplicateCheck(text);
+  if (!normalized) return [];
+  return normalized.split(' ').filter((t) => t.length >= 2);
+}
+
+function overlapRatio(a: string[], b: string[]): number {
+  if (a.length === 0 || b.length === 0) return 0;
+  const setA = new Set(a);
+  const setB = new Set(b);
+  let inter = 0;
+  Array.from(setA).forEach((t) => {
+    if (setB.has(t)) inter += 1;
+  });
+  const minSize = Math.min(setA.size, setB.size);
+  return minSize > 0 ? inter / minSize : 0;
+}
+
+function isSimilarToExistingComment(candidate: string, existing: string[]): boolean {
+  const cand = normalizeForDuplicateCheck(candidate);
+  if (!cand) return false;
+  const candTokens = tokenizeForDuplicateCheck(cand);
+  for (const e of existing) {
+    const ex = normalizeForDuplicateCheck(e);
+    if (!ex) continue;
+    if (cand === ex) return true;
+    if (cand.length >= 24 && ex.includes(cand)) return true;
+    if (ex.length >= 24 && cand.includes(ex)) return true;
+    const ratio = overlapRatio(candTokens, tokenizeForDuplicateCheck(ex));
+    if (ratio >= 0.75) return true;
+  }
+  return false;
+}
+
 function isPublishedWithinLastDays(publishedAtIso: string | undefined, days: number): boolean {
   if (!publishedAtIso || typeof publishedAtIso !== 'string') return false;
   const d = new Date(publishedAtIso.trim());
@@ -58,7 +100,7 @@ export async function POST(request: Request) {
     const requestedMode =
       body?.mode === 'full' || body?.mode === 'base_only' || body?.mode === 'off'
         ? body.mode
-        : 'full';
+        : 'base_only';
     if (!videoId) {
       return NextResponse.json({ error: 'videoId is required' }, { status: 400 });
     }
@@ -321,12 +363,13 @@ ${isHonorsTopic ? banBlockHonors : banBlockStandard}
           const txt = res.response.text()?.trim() ?? '';
           /** 3回目は栄誉枠でもチャート数字を避けるフォールバック → 歌詞・サウンド枠と同じ厳しさで通す */
           const policyHonors = isHonorsTopic && attempt < maxAttempts;
-          if (txt && !containsUnreliableCommentPackClaim(txt, policyHonors)) {
+          const tooSimilar = isSimilarToExistingComment(txt, [baseText, ...freeComments]);
+          if (txt && !containsUnreliableCommentPackClaim(txt, policyHonors) && !tooSimilar) {
             freeComments.push(txt);
             break;
           }
           if (attempt >= maxAttempts) {
-            if (!txt || containsUnreliableCommentPackClaim(txt, policyHonors)) {
+            if (!txt || containsUnreliableCommentPackClaim(txt, policyHonors) || tooSimilar) {
               console.warn(
                 '[comment-pack] free comment slot',
                 i + 1,
@@ -343,13 +386,13 @@ ${isHonorsTopic ? banBlockHonors : banBlockStandard}
               ? prompt +
                 '\n（追加指示）チャートは**順位の数字を出さず**（9位・33位・1位など禁止）、西暦＋国またはチャート種＋大ヒット・チャート入りなど定性的に。グラミーは正式名が確かなときだけ。英国と米国の両方に触れる場合も数字順位は使わない。'
               : prompt +
-                '\n（追加指示）チャート/受賞/制作期間/録音工程に触れず、指定観点だけで短く書き直してください。';
+                '\n（追加指示）チャート/受賞/制作期間/録音工程に触れず、指定観点だけで短く書き直してください。すでに出した文と同じ内容・同じ言い換えは避けてください。';
           } else if (attempt === 2) {
             prompt = isHonorsTopic
               ? prompt +
-                '\n（3回目・最終）ビルボード・グラミー・順位・週数・「〜週連続」は書かないこと。リリース年以降に**広く聴かれ、当時のポップ・シーンで話題となった**など、穏やかな位置づけを1〜2文・60〜100字で。誇張・バズ表現は禁止。'
+                '\n（3回目・最終）ビルボード・グラミー・順位・週数・「〜週連続」は書かないこと。リリース年以降に**広く聴かれ、当時のポップ・シーンで話題となった**など、穏やかな位置づけを1〜2文・60〜100字で。誇張・バズ表現は禁止。前に出た文の焼き直しは不可。'
               : prompt +
-                '\n（3回目・最終）指定観点だけ、60〜100字。チャート/受賞/制作断定は避け、穏や当な表現に。';
+                '\n（3回目・最終）指定観点だけ、60〜100字。チャート/受賞/制作断定は避け、穏や当な表現に。前に出た文の焼き直しは不可。';
           }
         }
       } catch (e) {

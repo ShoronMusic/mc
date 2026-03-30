@@ -276,7 +276,7 @@ export default function MyPage({
   onSongLimit5MinToggle,
   aiFreeSpeechStopped = false,
   onAiFreeSpeechStopToggle,
-  commentPackMode = 'full',
+  commentPackMode = 'base_only',
   onCommentPackModeChange,
   onForceExit,
   roomId = '',
@@ -712,20 +712,9 @@ export default function MyPage({
             <div className="mb-4 border-b border-amber-800/30 pb-4">
               <h4 className="mb-2 text-xs font-medium text-gray-300">曲紹介コメント本数</h4>
               <p className="mb-2 text-xs text-gray-400">
-                デフォルトは基本1本+自由3本です。必要に応じて基本1本のみ、または全てなしにできます。
+                デフォルトは基本1本です。必要に応じて4本（基本+自由3）または全てなしにできます。
               </p>
               <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => onCommentPackModeChange('full')}
-                  className={`rounded px-3 py-1.5 text-sm ${
-                    commentPackMode === 'full'
-                      ? 'bg-amber-600 text-white'
-                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                  }`}
-                >
-                  デフォルト
-                </button>
                 <button
                   type="button"
                   onClick={() => onCommentPackModeChange('base_only')}
@@ -735,7 +724,18 @@ export default function MyPage({
                       : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
                   }`}
                 >
-                  1本（基本情報のみ）
+                  1本（デフォルト）
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onCommentPackModeChange('full')}
+                  className={`rounded px-3 py-1.5 text-sm ${
+                    commentPackMode === 'full'
+                      ? 'bg-amber-600 text-white'
+                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  }`}
+                >
+                  4本（基本+自由3）
                 </button>
                 <button
                   type="button"

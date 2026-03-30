@@ -32,3 +32,10 @@ export interface PlaybackMessage {
 export const REQUEST_PLAYBACK_SYNC_EVENT = 'room:requestPlaybackSync';
 /** 最古入室者が上記に答えて送るスナップショット */
 export const PLAYBACK_SNAPSHOT_EVENT = 'room:playbackSnapshot';
+/** 視聴履歴が更新されたので、全員が再取得するための通知 */
+export const PLAYBACK_HISTORY_UPDATED_EVENT = 'room:playbackHistoryUpdated';
+
+export interface PlaybackHistoryUpdatedPayload {
+  videoId?: string;
+  at?: number;
+}

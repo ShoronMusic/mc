@@ -36,6 +36,8 @@ import { playbackLog } from '@/lib/playback-debug';
 import { extractVideoId, isStandaloneNonYouTubeUrl } from '@/lib/youtube';
 import {
   type PlaybackMessage,
+  type PlaybackHistoryUpdatedPayload,
+  PLAYBACK_HISTORY_UPDATED_EVENT,
   PLAYBACK_SNAPSHOT_EVENT,
   REQUEST_PLAYBACK_SYNC_EVENT,
 } from '@/types/playback';
@@ -75,6 +77,7 @@ const SILENCE_TIDBIT_SEC = 30;
 const PLAY_SYNC_REWIND_THRESHOLD_SEC = 10;
 const AUTO_PLAY_POLL_MS = 50;
 const AUTO_PLAY_GIVE_UP_MS = 8000;
+const JOIN_CHIME_AUDIO_PATH = '/audio/success-chime.mp3';
 
 /** パス・次へ・飛ばして・キープなど、選曲をスキップする旨の発言か */
 function isPassPhrase(body: string): boolean {
@@ -182,6 +185,8 @@ export default function RoomWithSync({
   const applyingRemoteRef = useRef(false);
   /** ブラウザでは setInterval の戻り値は number（Node の Timeout 型と食い違うため number で保持） */
   const autoPlayAfterChangeVideoRef = useRef<number | null>(null);
+  /** 再生開始が取りこぼされたときの短期リトライ用ポーリング */
+  const ensurePlayRetryRef = useRef<number | null>(null);
   /** scheduleAutoPlay が直近に play を publish した時刻（YT の PLAYING で二重 publish しない） */
   const lastScheduledPlayPublishAtRef = useRef(0);
   const [videoId, setVideoId] = useState<string | null>(null);
@@ -208,6 +213,7 @@ export default function RoomWithSync({
   const hasUserSentMessageRef = useRef(false);
   const pendingSongQueryRef = useRef<string | null>(null);
   const pendingSongConfirmationTextRef = useRef<string | null>(null);
+  const lastJoinChimeMessageIdRef = useRef<string | null>(null);
   const nextPromptShownForVideoIdRef = useRef<string | null>(null);
   const initialGreetingDoneRef = useRef(false);
   /** 現在再生中の曲を貼った人の clientId（次の曲促しを誰が出すか） */
@@ -266,8 +272,8 @@ export default function RoomWithSync({
   /** オーナーによる5分制限。デフォルトON。そのセッションのみ */
   const [songLimit5MinEnabled, setSongLimit5MinEnabled] = useState(true);
   /** オーナーによる曲紹介コメント本数設定。full=基本+自由3、base_only=基本のみ、off=なし */
-  const [commentPackMode, setCommentPackMode] = useState<OwnerCommentPackMode>('full');
-  const commentPackModeRef = useRef<OwnerCommentPackMode>('full');
+  const [commentPackMode, setCommentPackMode] = useState<OwnerCommentPackMode>('base_only');
+  const commentPackModeRef = useRef<OwnerCommentPackMode>('base_only');
   commentPackModeRef.current = commentPackMode;
   songLimit5MinEnabledRef.current = songLimit5MinEnabled;
   videoIdRef.current = videoId;
@@ -609,8 +615,17 @@ export default function RoomWithSync({
     if (message.name === OWNER_COMMENT_PACK_MODE_EVENT) {
       const d = message.data as OwnerCommentPackModePayload;
       if (d && (d.mode === 'full' || d.mode === 'base_only' || d.mode === 'off')) {
+        commentPackModeRef.current = d.mode;
         setCommentPackMode(d.mode);
       }
+      return;
+    }
+    if (message.name === PLAYBACK_HISTORY_UPDATED_EVENT) {
+      const d = message.data as PlaybackHistoryUpdatedPayload;
+      const targetVid = typeof d?.videoId === 'string' ? d.videoId : null;
+      // 現在再生中の曲に紐づく更新だけを即時反映（過去曲通知で不要再取得しない）
+      if (targetVid && videoIdRef.current && targetVid !== videoIdRef.current) return;
+      setPlaybackHistoryRefreshKey((k) => k + 1);
       return;
     }
     if (message.name === REQUEST_PLAYBACK_SYNC_EVENT) {
@@ -768,6 +783,7 @@ export default function RoomWithSync({
         currentTrackStartedAtMsRef.current = Date.now();
       }
       if (data.commentPackMode === 'full' || data.commentPackMode === 'base_only' || data.commentPackMode === 'off') {
+        commentPackModeRef.current = data.commentPackMode;
         setCommentPackMode(data.commentPackMode);
       }
 
@@ -804,6 +820,7 @@ export default function RoomWithSync({
           handle.seekTo(safeTime);
           if (syncPlay) {
             handle.playVideo();
+            ensurePlayingWithRetry(safeTime, 'snapshot-sync');
             setPlaying(true);
           } else {
             handle.pauseVideo();
@@ -893,6 +910,11 @@ export default function RoomWithSync({
       const pv = pendingQueuedVideoIdRef.current;
       const pp = pendingQueuedPublisherRef.current;
       if (pv && pv !== targetVid) {
+        // 次曲への確定遷移はスキップ操作を送信したクライアントだけが行う。
+        // 全員が applyImmediateChangeVideo を実行すると、曲紹介生成が重複する。
+        if (!myClientId || !msgClientId || myClientId !== msgClientId) {
+          return;
+        }
         if (playbackQueueFallbackTimerRef.current) {
           clearTimeout(playbackQueueFallbackTimerRef.current);
           playbackQueueFallbackTimerRef.current = null;
@@ -908,24 +930,16 @@ export default function RoomWithSync({
         return;
       }
 
-      // キューが無い場合は、終端付近へシークして ended を促す（次曲無しなら UI はすでに解除済み）
-      const trySeek = (attempt: number) => {
-        const h = playerRef.current;
-        if (!h || videoIdRef.current !== targetVid) return;
-        const d = h.getDuration();
-        if (d > 0.5) {
-          h.seekTo(Math.max(0, d - 0.25));
-          h.playVideo();
-          playbackLog('ably: skipToEnd seek', { d, targetVid, attempt });
-          return;
-        }
-        if (attempt < 25) {
-          window.setTimeout(() => trySeek(attempt + 1), 120);
-        } else {
-          playbackLog('ably: skipToEnd give up (no duration)', { targetVid });
-        }
-      };
-      trySeek(0);
+      // キューが無い場合は、同曲を再始動させず停止して次の選曲案内へ進む
+      try {
+        playerRef.current?.pauseVideo();
+      } catch {
+        // noop
+      }
+      setVideoId(null);
+      setPlaying(false);
+      setCurrentTime(0);
+      promptNextTurn();
       return;
     }
     /**
@@ -972,6 +986,7 @@ export default function RoomWithSync({
         jpDomesticSilenceVideoIdRef.current = null;
         setVideoId(data.videoId);
         if (data.commentPackMode === 'full' || data.commentPackMode === 'base_only' || data.commentPackMode === 'off') {
+          commentPackModeRef.current = data.commentPackMode;
           setCommentPackMode(data.commentPackMode);
         }
         /* 5分待機判定用。useEffect([videoId]) では上書きしない（スナップショットの trackStartedAtMs を壊さない） */
@@ -998,8 +1013,7 @@ export default function RoomWithSync({
         }
         setCurrentTime(data.currentTime);
         setPlaying(true);
-        playerRef.current?.seekTo(data.currentTime);
-        playerRef.current?.playVideo();
+        ensurePlayingWithRetry(data.currentTime, 'remote-play-event');
       } else if (data.type === 'seek' && typeof data.time === 'number') {
         setCurrentTime(data.time);
         playerRef.current?.seekTo(data.time);
@@ -1143,11 +1157,60 @@ export default function RoomWithSync({
     }
   }, [safePublish]);
 
+  /**
+   * play 指示後に実際の PLAYER_STATE が PLAYING/BUFFERING になるまで短時間リトライ。
+   * ブラウザや端末差で最初の playVideo() が効かないケースを吸収する。
+   */
+  const ensurePlayingWithRetry = useCallback((targetTime: number, reason: string) => {
+    if (ensurePlayRetryRef.current != null) {
+      window.clearInterval(ensurePlayRetryRef.current);
+      ensurePlayRetryRef.current = null;
+    }
+    const startedAt = Date.now();
+    const runOnce = (): boolean => {
+      const handle = playerRef.current;
+      if (!handle) {
+        return Date.now() - startedAt >= AUTO_PLAY_GIVE_UP_MS;
+      }
+      const st = handle.getPlayerState?.() ?? null;
+      if (st === YT_PLAYER_STATE_PLAYING || st === YT_PLAYER_STATE_BUFFERING) {
+        setPlaying(true);
+        return true;
+      }
+      applyingRemoteRef.current = true;
+      try {
+        if (Number.isFinite(targetTime)) {
+          handle.seekTo(Math.max(0, targetTime));
+          setCurrentTime(Math.max(0, targetTime));
+        }
+        handle.playVideo();
+        playbackLog('ensurePlayingWithRetry: retry playVideo()', { reason, st, targetTime });
+      } finally {
+        window.setTimeout(() => {
+          applyingRemoteRef.current = false;
+        }, 220);
+      }
+      return Date.now() - startedAt >= AUTO_PLAY_GIVE_UP_MS;
+    };
+
+    if (runOnce()) return;
+    ensurePlayRetryRef.current = window.setInterval(() => {
+      if (runOnce() && ensurePlayRetryRef.current != null) {
+        window.clearInterval(ensurePlayRetryRef.current);
+        ensurePlayRetryRef.current = null;
+      }
+    }, AUTO_PLAY_POLL_MS);
+  }, []);
+
   useEffect(() => {
     return () => {
       if (autoPlayAfterChangeVideoRef.current != null) {
         window.clearInterval(autoPlayAfterChangeVideoRef.current);
         autoPlayAfterChangeVideoRef.current = null;
+      }
+      if (ensurePlayRetryRef.current != null) {
+        window.clearInterval(ensurePlayRetryRef.current);
+        ensurePlayRetryRef.current = null;
       }
     };
   }, []);
@@ -1164,16 +1227,33 @@ export default function RoomWithSync({
   );
 
   const nextPromptTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const promptNextTurnRef = useRef<(() => void) | null>(null);
   const handlePlayerStateChange = useCallback(
     (state: 'play' | 'pause' | 'ended', time: number) => {
       if (applyingRemoteRef.current) return;
       setCurrentTime(time);
       if (state === 'ended') {
+        const endedVideoId = videoIdRef.current;
         setPlaying(false);
         // 曲終了直後に UI の「再生中」枠・スキップ表示を解除し、次の方へ切り替える
-        setSkipUsedForVideoId(videoIdRef.current);
+        setSkipUsedForVideoId(endedVideoId);
         setCurrentSongPosterClientId('');
         playbackEndedApplyRef.current();
+        // 実際の ended を基準に、30秒後の次曲案内を必ず予約（予測タイマーの取りこぼし対策）
+        if (nextPromptTimeoutRef.current) {
+          clearTimeout(nextPromptTimeoutRef.current);
+          nextPromptTimeoutRef.current = null;
+        }
+        if (endedVideoId) {
+          nextPromptTimeoutRef.current = setTimeout(() => {
+            nextPromptTimeoutRef.current = null;
+            if (videoIdRef.current !== endedVideoId) return;
+            if (nextPromptShownForVideoIdRef.current === endedVideoId) return;
+            nextPromptShownForVideoIdRef.current = endedVideoId;
+            lastEndedVideoIdForTidbitRef.current = endedVideoId;
+            promptNextTurnRef.current?.();
+          }, SEC_AFTER_END_BEFORE_PROMPT * 1000);
+        }
         return;
       }
       setPlaying(state === 'play');
@@ -1332,12 +1412,7 @@ export default function RoomWithSync({
 
     if (previousParticipantsRef.current === null) {
       previousParticipantsRef.current = currentMap;
-      if (
-        imOldest &&
-        currentMap.size === 1 &&
-        myClientId &&
-        [...currentMap.keys()][0] === myClientId
-      ) {
+      if (imOldest && currentMap.size === 1 && myClientId && currentMap.has(myClientId)) {
         const displayName = currentMap.get(myClientId) ?? 'ゲスト';
         addAiMessage(`${displayName}さん入室\n${displayName}さんチャットオーナー`, {
           allowWhenAiStopped: true,
@@ -1379,6 +1454,23 @@ export default function RoomWithSync({
     }
     previousParticipantsRef.current = currentMap;
   }, [participants, addAiMessage, oldestParticipantClientId, myClientId]);
+
+  useEffect(() => {
+    const latest = messages[messages.length - 1];
+    if (!latest) return;
+    if (latest.id === lastJoinChimeMessageIdRef.current) return;
+    // 「◯◯さん入室」「◯◯さん入室\n◯◯さんチャットオーナー」に反応
+    if (latest.messageType === 'ai' && /さん入室/.test(latest.body)) {
+      lastJoinChimeMessageIdRef.current = latest.id;
+      try {
+        const audio = new Audio(JOIN_CHIME_AUDIO_PATH);
+        audio.volume = 0.85;
+        void audio.play().catch(() => {});
+      } catch {
+        // noop
+      }
+    }
+  }, [messages]);
 
   useEffect(() => {
     if (initialGreetingDoneRef.current || messages.length > 0) return;
@@ -1565,6 +1657,10 @@ export default function RoomWithSync({
       addAiMessage(`${prefix}次の曲を貼ってください`, { allowWhenAiStopped: true });
     }
   }, [participants, addAiMessage, myClientId, clearPendingFreeCommentTimers]);
+
+  useEffect(() => {
+    promptNextTurnRef.current = () => promptNextTurn();
+  }, [promptNextTurn]);
 
   useEffect(() => {
     /* 曲開始時刻は applyImmediateChangeVideo / リモート changeVideo / 再生スナップショットで設定する */
@@ -1833,12 +1929,35 @@ export default function RoomWithSync({
           }),
         })
           .then((r) => r.json())
-          .then((data) => { if (data?.ok && data?.skipped !== 'duplicate') setPlaybackHistoryRefreshKey((k) => k + 1); })
+          .then((data) => {
+            if (!data?.ok) return;
+            // 自分のUI更新
+            setPlaybackHistoryRefreshKey((k) => k + 1);
+            // 同室メンバーへ再取得通知
+            safePublish(PLAYBACK_HISTORY_UPDATED_EVENT, {
+              videoId: vid,
+              at: Date.now(),
+            } as PlaybackHistoryUpdatedPayload);
+          })
           .catch(() => {});
       }, 10000);
     },
-    [effectiveDisplayName, isGuest]
+    [effectiveDisplayName, isGuest, safePublish]
   );
+
+  /**
+   * 視聴履歴の INSERT は投稿者側クライアントが10秒後に実行する。
+   * ほかの参加者も同じ履歴を見られるよう、全クライアントで少し遅れて再取得する。
+   */
+  useEffect(() => {
+    if (!roomId || !videoId) return;
+    const targetVideoId = videoId;
+    const t = window.setTimeout(() => {
+      if (videoIdRef.current !== targetVideoId) return;
+      setPlaybackHistoryRefreshKey((k) => k + 1);
+    }, 11500);
+    return () => window.clearTimeout(t);
+  }, [roomId, videoId]);
 
   useEffect(() => {
     return () => {
@@ -2405,6 +2524,7 @@ export default function RoomWithSync({
               onCommentPackModeChange={
                 isOwner
                   ? (mode) => {
+                      commentPackModeRef.current = mode;
                       setCommentPackMode(mode);
                       safePublish(OWNER_COMMENT_PACK_MODE_EVENT, {
                         mode,

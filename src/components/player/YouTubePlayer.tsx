@@ -202,6 +202,24 @@ const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>(
       };
     }, [apiReady, videoId, syncPlayerSize]);
 
+    /**
+     * 再生対象が無くなったとき（skip で videoId=null など）は
+     * iframe を破棄して音の取り残しを防ぐ。
+     * DOM ノード自体は残す（React 側の removeChild 競合回避）。
+     */
+    useEffect(() => {
+      if (!apiReady) return;
+      if (videoId) return;
+      if (!playerRef.current) return;
+      playbackLog('YT: destroy player (no videoId)');
+      try {
+        playerRef.current.destroy();
+      } catch {
+        /* noop */
+      }
+      playerRef.current = null;
+    }, [apiReady, videoId]);
+
     useEffect(() => {
       if (!apiReady || !videoId) return;
       const shell = shellRef.current;
@@ -268,17 +286,10 @@ const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>(
       []
     );
 
-    if (!videoId) {
-      return (
-        <div className="aspect-video flex items-center justify-center rounded-lg bg-gray-800 text-sm text-gray-500">
-          YouTube URL を貼って再生
-        </div>
-      );
-    }
-
     /**
-     * 常に同一の div に YT.Player を載せる（API 準備前の別 iframe との切替をしない）。
-     * モバイルで「音だけ出て映像が止まる／二重に聞こえる」原因になり得るため廃止。
+     * 常に同一の DOM ノードに YT.Player を載せる。
+     * videoId の有無でルート要素を差し替えると、
+     * IFrame API 側の非同期 DOM 操作と衝突することがあるため固定化する。
      */
     return (
       <div
@@ -286,6 +297,11 @@ const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>(
         className="relative aspect-video w-full max-w-full overflow-hidden rounded-lg bg-gray-900"
       >
         <div id={containerId} className="h-full min-h-[180px] w-full" />
+        {!videoId && (
+          <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-gray-800 text-sm text-gray-500">
+            YouTube URL を貼って再生
+          </div>
+        )}
         {!apiReady && (
           <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-gray-900/90 text-xs text-gray-500">
             プレイヤー準備中…

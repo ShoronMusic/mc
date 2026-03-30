@@ -214,20 +214,14 @@ export default function RoomWithoutSync({ displayName: displayNameProp = 'ゲス
     const vid = videoIdRef.current;
     if (!vid) return;
     setSkipUsedForVideoId(vid);
-    const trySeek = (attempt: number) => {
-      const h = playerRef.current;
-      if (!h || videoIdRef.current !== vid) return;
-      const d = h.getDuration();
-      if (d > 0.5) {
-        h.seekTo(Math.max(0, d - 0.25));
-        h.playVideo();
-        return;
-      }
-      if (attempt < 25) {
-        window.setTimeout(() => trySeek(attempt + 1), 120);
-      }
-    };
-    trySeek(0);
+    try {
+      playerRef.current?.pauseVideo();
+    } catch {
+      // noop
+    }
+    setVideoId(null);
+    setPlaying(false);
+    addAiMessage('次の曲をどうぞ', { bypassJpDomesticSilence: true });
   }, []);
 
   const addAiMessage = useCallback(
@@ -504,6 +498,20 @@ export default function RoomWithoutSync({ displayName: displayNameProp = 'ゲス
     },
     [displayNameProp, isGuest]
   );
+
+  /**
+   * 視聴履歴の INSERT は投稿者側クライアントが10秒後に実行する。
+   * 同室の他クライアントでも一覧が揃うよう、少し遅れて全員が再取得する。
+   */
+  useEffect(() => {
+    if (!roomId || !videoId) return;
+    const targetVideoId = videoId;
+    const t = window.setTimeout(() => {
+      if (videoIdRef.current !== targetVideoId) return;
+      setPlaybackHistoryRefreshKey((k) => k + 1);
+    }, 11500);
+    return () => window.clearTimeout(t);
+  }, [roomId, videoId]);
 
   useEffect(() => {
     return () => {
