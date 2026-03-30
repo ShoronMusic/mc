@@ -68,7 +68,7 @@ function isSimilarToExistingComment(candidate: string, existing: string[]): bool
     if (cand.length >= 24 && ex.includes(cand)) return true;
     if (ex.length >= 24 && cand.includes(ex)) return true;
     const ratio = overlapRatio(candTokens, tokenizeForDuplicateCheck(ex));
-    if (ratio >= 0.75) return true;
+    if (ratio >= 0.68) return true;
   }
   return false;
 }
@@ -81,6 +81,37 @@ function isPublishedWithinLastDays(publishedAtIso: string | undefined, days: num
   const diffMs = now - d.getTime();
   if (diffMs < 0) return false;
   return diffMs <= days * 24 * 60 * 60 * 1000;
+}
+
+/**
+ * artistDisplay（カンマ区切りの複数クレジット）を検出したとき、共演・フィーチャリング向けの追指示。
+ */
+function buildCollaborationPromptBlock(
+  mainArtist: string | null | undefined,
+  artistDisplayLabel: string,
+): string {
+  const raw = artistDisplayLabel.trim();
+  if (!raw) return '';
+  const parts = raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter((p) => p.length > 0 && !/^(feat\.?|ft\.?|featuring)$/i.test(p));
+  if (parts.length < 2) return '';
+  const names = parts.join('、');
+  const main = (mainArtist ?? '').trim();
+  const secondary = main
+    ? parts.filter((p) => p.toLowerCase() !== main.toLowerCase())
+    : parts.slice(1);
+  const secondaryHint =
+    secondary.length > 0
+      ? `・メインと別枠のクレジット（${secondary.join('、')}）は、**曲の中での音楽的役割**（例：メインの歌に対するラップ・フック・コーラス）を必ず踏まえ、片方だけの紹介で終わらせないこと。\n`
+      : '';
+  return `【コラボ・共演（${parts.length}名）】
+・メタデータ上、この曲には複数名のクレジットが関わっています（${names}）。**解説全体を通じ、可能な限り複数人に触れてください**。
+${secondaryHint}・世界的知名度の高い客演者がいる一曲では、その参加がトラックにもたらした**対比・掛け合い・話題性**を、**広く知られる事実の範囲**で述べてください（例：ラップ／歌唱の役割分担が曲の特徴になっている、など）。
+・「共演が実現した経緯・当人同士の関係性」は、**公的に繰り返し語られている内容**に限ります。裏付けのない私人話・根拠のない制作秘話は書かないこと。
+・各スロット（基本・栄誉・歌詞・サウンド）で**同じ趣旨の焼き直し**にせず、観点を分けてください。
+`;
 }
 
 /**
@@ -239,9 +270,11 @@ export async function POST(request: Request) {
       ? `・Apple Music 公式チャンネル: タイトル先頭の「Apple Music」は配信プラットフォーム名です。「${artistLabel}」＝アーティスト、「${songLabel}」＝曲名のみを正とし、Apple Music をアーティストや「彼ら」の指す先にしないこと。\n`
       : '';
 
+    const collaborationBlock = buildCollaborationPromptBlock(artist, artistLabel);
+
     const metaLockBlock = `【メタデータの前提（厳守）】
 ・YouTube 動画タイトル（原文）: ${rawYouTubeTitle}
-・【アーティスト（歌手・バンド）】= 「${artistLabel}」のみ。これは人名またはバンド名です。
+・【アーティスト（歌手・バンド）】= 「${artistLabel}」。カンマ区切りは**複数の歌唱・演奏クレジット**（共演・フィーチャリング）を表す。各名を曲名と取り違えないこと。
 ・【曲名】= 「${songLabel}」のみ。これは楽曲のタイトルです。
 ・重要：曲名に含まれる英単語「With」は**共演者をつなぐ語ではなくタイトルの一部**です（例: 『Die With A Smile』全体が曲名）。【曲名】を短くした別名にしたり、「With」以降を別人名として新たな共演者にしたりしないこと。架空のアルバム名・プロジェクト名を作らないこと。
 ${colorsOfficialLock}${geniusOfficialLock}${appleMusicOfficialLock}
@@ -263,6 +296,7 @@ ${colorsOfficialLock}${geniusOfficialLock}${appleMusicOfficialLock}
 
     const basePrompt = `選曲アナウンスの直後に、最初にだけ表示する「曲の基本情報」を1本だけ書いてください。現在は${currentYear}年です。
 ${metaLockBlock}
+${collaborationBlock}
 
 【書き出しの型（必須）】
 ・本文の最初の文は、必ず「${artistLabel}の『${songLabel}』」で始めてください（全角かぎかっこ『』で曲名を囲む）。別の言い回しで始めないこと。
@@ -272,6 +306,7 @@ ${metaLockBlock}
 ・リリース年（分かる範囲）
 ・収録アルバム名（分かれば）
 ・ジャンルや当時の位置づけを一言（例：ニューウェーブ全盛期の代表曲のひとつ、など）
+・クレジットが複数いる場合は、**同じ段落内で**メインと客演の**役割の違い**をそれぞれ一言（例：一方が歌、他方がラップ／フック）触れてください。
 ・曲のテーマや雰囲気を1文（解釈は深掘りしない。概要だけ）
 
 【基本情報に含めないもの】
@@ -296,9 +331,9 @@ ${basePromptTail}`;
 
     // 2. 自由コメント3本（基本情報のあと。1本目＝栄誉・チャート、2＝歌詞、3＝サウンド）
     const topics = [
-      '商業的成功と社会的な話題性（このスロット専用。**必ず**次のいずれかを含めること：①主要チャートでの**定性的**な成功（西暦の年を明記。**1位・9位・33位など順位の数字は書かない**。例：1983年頃に全英シングルチャートで大きなヒット、翌年には米ビルボードでもチャート入り）②グラミー等の主要ノミネート・受賞（分かる場合のみ）③複数国で広く再生・話題となったことなど、年とともに触れられる事実。**禁止**：○位・最高○位・第○位・「〜週1位」など順位や週数の具体数字、作詞者の私人話、伝聞だけの表現、歌詞の読み下し。マイナー曲はライブ定番やカバーの多さにとどめる）',
-      '歌詞テーマやメッセージ（1〜2文で要点のみ。デュエットなら「双方の視点の対比」など**ひとつの要約**にまとめる。パートごとの長い列挙は禁止）',
-      'サウンドの特徴（メロディ・リズム・アレンジの**うち1点**に絞って具体化する。「耳に残るフック」など抽象語の積み重ねだけは禁止）',
+      '商業的成功と社会的な話題性（このスロット専用。**必ず**次のいずれかを含めること：①主要チャートでの**定性的**な成功（西暦の年を明記。**1位・9位・33位など順位の数字は書かない**。例：1983年頃に全英シングルチャートで大きなヒット、翌年には米ビルボードでもチャート入り）②グラミー等の主要ノミネート・受賞（分かる場合のみ。**Rap/Sung Collaboration 等、共演枠の賞がある場合はその性質に触れてよい**）③複数国で広く再生・話題となったことなど、年とともに触れられる事実。**禁止**：○位・最高○位・第○位・「〜週1位」など順位や週数の具体数字、作詞者の私人話、伝聞だけの表現、歌詞の読み下し。マイナー曲はライブ定番やカバーの多さにとどめる）',
+      '歌詞テーマやメッセージ（共演・フィーチャリングでは**客演側のパートが担う役割**（例：ラップ対メインヴォーカル）を必ず含め、双方の対比を1〜2文で。パートの長い列挙は禁止）',
+      'サウンドの特徴（メロディ・リズム・アレンジの**うち1点**に絞って具体化。共演がある場合は**声質やパートの違いがサウンドに与える効果**を一言入れてよい。「耳に残るフック」など抽象語の積み重ねだけは禁止）',
     ] as const;
     if (topics.length !== COMMENT_PACK_MAX_FREE_COMMENTS) {
       console.warn(
@@ -336,6 +371,7 @@ ${basePromptTail}`;
       const freePrompt = `以下の曲について、すでに「基本情報」と他の自由コメントが存在します。
 
 ${metaLockBlock}
+${collaborationBlock}
 
 【すでに出ているコメント（重複禁止）】
 ${used || 'まだありません'}
@@ -344,6 +380,14 @@ ${used || 'まだありません'}
 ・今回は「${topic}」の観点【だけ】から、この曲について新しい情報を1つ紹介してください。
 ・基本情報で既に述べたリリース年・アルバム名・テーマの概要を繰り返さないこと。
 ・他の自由コメントと同じ趣旨の繰り返しも避けること。
+${
+        i === 1
+          ? `
+
+・【歌詞枠の重複防止（必須）】基本情報ですでに触れた「曲の主題・時代背景の一行要約」（例：反戦・特定の紛争への怒り）は繰り返さないこと。
+・事件・地名・年号の説明や「なぜ書かれたか」のストーリーは基本情報に任せ、この枠では**表現面に限定**すること（比喩・反復フレーズ・語り口・感情の起伏など）。`
+          : ''
+      }
 
 ${isHonorsTopic ? banBlockHonors : banBlockStandard}
 
