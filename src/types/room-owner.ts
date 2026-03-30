@@ -34,3 +34,12 @@ export const OWNER_5MIN_LIMIT_EVENT = 'owner:5minLimit';
 export interface Owner5MinLimitPayload {
   enabled: boolean;
 }
+
+/** オーナーによる曲紹介コメント本数設定（そのルームのセッションのみ） */
+export const OWNER_COMMENT_PACK_MODE_EVENT = 'owner:commentPackMode';
+
+export type OwnerCommentPackMode = 'full' | 'base_only' | 'off';
+
+export interface OwnerCommentPackModePayload {
+  mode: OwnerCommentPackMode;
+}

@@ -13,6 +13,7 @@ import {
   ROOM_LOBBY_MESSAGE_MAX_CHARS,
   countLobbyMessageChars,
 } from '@/lib/room-lobby-message';
+import type { OwnerCommentPackMode } from '@/types/room-owner';
 
 function getDisplayName(user: User | null): string {
   if (!user) return '';
@@ -235,6 +236,9 @@ interface MyPageProps {
   /** オーナー時のみ。AI 自由発言が停止中か */
   aiFreeSpeechStopped?: boolean;
   onAiFreeSpeechStopToggle?: () => void;
+  /** オーナー時のみ。曲紹介コメントの本数モード */
+  commentPackMode?: OwnerCommentPackMode;
+  onCommentPackModeChange?: (mode: OwnerCommentPackMode) => void;
   /** オーナー時のみ。参加者を強制退出 */
   onForceExit?: (targetClientId: string, targetDisplayName: string) => void;
   /** 入室前メッセージ用。同期ルームの roomId（例: 01） */
@@ -272,6 +276,8 @@ export default function MyPage({
   onSongLimit5MinToggle,
   aiFreeSpeechStopped = false,
   onAiFreeSpeechStopToggle,
+  commentPackMode = 'full',
+  onCommentPackModeChange,
   onForceExit,
   roomId = '',
 }: MyPageProps) {
@@ -293,6 +299,7 @@ export default function MyPage({
     (showLobbyEditor ||
       onTransferOwner ||
       onAiFreeSpeechStopToggle ||
+      onCommentPackModeChange ||
       onForceExit ||
       onSongLimit5MinToggle);
 
@@ -698,6 +705,50 @@ export default function MyPage({
               >
                 AI自由発言{aiFreeSpeechStopped ? '停止中' : '停止'}
               </button>
+            </div>
+          )}
+
+          {onCommentPackModeChange && (
+            <div className="mb-4 border-b border-amber-800/30 pb-4">
+              <h4 className="mb-2 text-xs font-medium text-gray-300">曲紹介コメント本数</h4>
+              <p className="mb-2 text-xs text-gray-400">
+                デフォルトは基本1本+自由3本です。必要に応じて基本1本のみ、または全てなしにできます。
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => onCommentPackModeChange('full')}
+                  className={`rounded px-3 py-1.5 text-sm ${
+                    commentPackMode === 'full'
+                      ? 'bg-amber-600 text-white'
+                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  }`}
+                >
+                  デフォルト
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onCommentPackModeChange('base_only')}
+                  className={`rounded px-3 py-1.5 text-sm ${
+                    commentPackMode === 'base_only'
+                      ? 'bg-amber-600 text-white'
+                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  }`}
+                >
+                  1本（基本情報のみ）
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onCommentPackModeChange('off')}
+                  className={`rounded px-3 py-1.5 text-sm ${
+                    commentPackMode === 'off'
+                      ? 'bg-amber-600 text-white'
+                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  }`}
+                >
+                  全てなし
+                </button>
+              </div>
             </div>
           )}
 

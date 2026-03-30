@@ -46,6 +46,8 @@ interface UserBarProps {
   skipCurrentTrackActive?: boolean;
   /** 上記以外: グレーアウト（クリック不可） */
   skipCurrentTrackDisabled?: boolean;
+  /** 次の選曲ターン（再生終了後に仮アクティブとして表示するため） */
+  nextTurnClientId?: string;
   /** 再生末尾へシークして終了扱い（active 時のみ呼ぶ） */
   onSkipCurrentTrack?: () => void;
   onParticipantClick?: (displayName: string) => void;
@@ -74,6 +76,7 @@ export default function UserBar({
   currentOwnerClientId = '',
   currentSongPosterClientId = '',
   queuedSongPublisherClientId = '',
+  nextTurnClientId = '',
   skipCurrentTrackActive = false,
   skipCurrentTrackDisabled = false,
   onSkipCurrentTrack,
@@ -198,16 +201,31 @@ export default function UserBar({
           const isCurrentSongPoster = p.clientId === currentSongPosterClientId;
           const isQueuedSongPoster =
             Boolean(queuedSongPublisherClientId) && p.clientId === queuedSongPublisherClientId;
+            const isNextTurnPoster =
+              Boolean(nextTurnClientId) &&
+              !isCurrentSongPoster &&
+              !isQueuedSongPoster &&
+              p.clientId === nextTurnClientId;
           const isRoomOwner = Boolean(currentOwnerClientId && p.clientId === currentOwnerClientId);
           const chipTitle = isCurrentSongPoster
             ? '今の曲の選曲者（再生中）'
             : isQueuedSongPoster
               ? '選曲済み。前の曲終了後に再生されます'
+                : isNextTurnPoster
+                  ? '次の選曲者（選曲待ち）'
               : undefined;
           return (
             <span
               key={p.clientId}
-              className={`inline-flex flex-col items-start gap-0 rounded px-1 ${isCurrentSongPoster ? 'bg-amber-900/40 ring-1 ring-amber-600/50' : isQueuedSongPoster ? 'bg-sky-950/35 ring-1 ring-sky-700/40' : ''}`}
+                className={`inline-flex flex-col items-start gap-0 rounded px-1 ${
+                  isCurrentSongPoster
+                    ? 'bg-amber-900/40 ring-1 ring-amber-600/50'
+                    : isQueuedSongPoster
+                      ? 'bg-sky-950/35 ring-1 ring-sky-700/40'
+                      : isNextTurnPoster
+                        ? 'bg-emerald-950/35 ring-1 ring-emerald-700/40'
+                        : ''
+                }`}
               title={chipTitle}
             >
               <span className="inline-flex items-center gap-0.5">
@@ -253,6 +271,9 @@ export default function UserBar({
               </span>
               {isQueuedSongPoster && (
                 <span className="pl-5 text-[10px] leading-tight text-sky-300/95">選曲済み（待機中）</span>
+              )}
+              {isNextTurnPoster && (
+                <span className="pl-5 text-[10px] leading-tight text-emerald-200/95">NEXT（選曲待ち）</span>
               )}
               {isCurrentSongPoster && skipCurrentTrackActive && onSkipCurrentTrack ? (
                 <button
@@ -403,6 +424,22 @@ export default function UserBar({
           </span>
         ) : null}
       </div>
+    ) : nextTurnClientId ? (
+      (() => {
+        const nextP = participants.find((p) => p.clientId === nextTurnClientId);
+        if (!nextP) return null;
+        return (
+          <div
+            className="flex min-w-0 max-w-full flex-col items-center justify-center gap-0.5 px-1"
+            title="次の選曲者（選曲待ち）"
+          >
+            <div className="min-w-0 truncate text-sm font-medium text-emerald-100">
+              {participantDisplayName(nextP, myClientId, isGuest)}
+            </div>
+            <div className="text-[11px] text-emerald-200/85">選曲待ち</div>
+          </div>
+        );
+      })()
     ) : (
       <span className="min-w-0 truncate text-center text-xs text-gray-500">再生中の選曲なし</span>
     );
@@ -489,11 +526,16 @@ export default function UserBar({
                 const isCurrentSongPoster = p.clientId === currentSongPosterClientId;
                 const isQueuedSongPoster =
                   Boolean(queuedSongPublisherClientId) && p.clientId === queuedSongPublisherClientId;
+                const isNextTurnPoster =
+                  Boolean(nextTurnClientId) &&
+                  !isCurrentSongPoster &&
+                  !isQueuedSongPoster &&
+                  p.clientId === nextTurnClientId;
                 const isRoomOwner = Boolean(currentOwnerClientId && p.clientId === currentOwnerClientId);
                 return (
                   <li
                     key={p.clientId}
-                    className={`flex flex-col gap-0.5 border-b border-gray-800/80 px-3 py-2.5 last:border-b-0 ${isCurrentSongPoster ? 'bg-amber-950/25' : ''} ${isQueuedSongPoster && !isCurrentSongPoster ? 'bg-sky-950/20' : ''}`}
+                    className={`flex flex-col gap-0.5 border-b border-gray-800/80 px-3 py-2.5 last:border-b-0 ${isCurrentSongPoster ? 'bg-amber-950/25' : ''} ${isQueuedSongPoster && !isCurrentSongPoster ? 'bg-sky-950/20' : ''} ${isNextTurnPoster ? 'bg-emerald-950/20' : ''}`}
                   >
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                       <span className="text-xs text-gray-500">[{i + 1}]</span>
@@ -566,6 +608,9 @@ export default function UserBar({
                     ) : null}
                     {isQueuedSongPoster && (
                       <span className="pl-6 text-[11px] text-sky-200/85">選曲済み（待機中）</span>
+                    )}
+                    {isNextTurnPoster && (
+                      <span className="pl-6 text-[11px] text-emerald-200/85">NEXT（選曲待ち）</span>
                     )}
                     {p.status ? (
                       <span className="pl-6 text-xs text-gray-400" title={`ステータス: ${p.status}`}>

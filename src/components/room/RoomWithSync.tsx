@@ -47,11 +47,14 @@ import {
 import {
   OWNER_FORCE_EXIT_EVENT,
   OWNER_AI_FREE_SPEECH_STOP_EVENT,
+  OWNER_COMMENT_PACK_MODE_EVENT,
   OWNER_STATE_EVENT,
   TURN_STATE_EVENT,
   OWNER_5MIN_LIMIT_EVENT,
   type OwnerForceExitPayload,
   type OwnerAiFreeSpeechStopPayload,
+  type OwnerCommentPackMode,
+  type OwnerCommentPackModePayload,
   type OwnerStatePayload,
   type TurnStatePayload,
   type Owner5MinLimitPayload,
@@ -262,6 +265,10 @@ export default function RoomWithSync({
   const [currentSongPosterClientId, setCurrentSongPosterClientId] = useState('');
   /** オーナーによる5分制限。デフォルトON。そのセッションのみ */
   const [songLimit5MinEnabled, setSongLimit5MinEnabled] = useState(true);
+  /** オーナーによる曲紹介コメント本数設定。full=基本+自由3、base_only=基本のみ、off=なし */
+  const [commentPackMode, setCommentPackMode] = useState<OwnerCommentPackMode>('full');
+  const commentPackModeRef = useRef<OwnerCommentPackMode>('full');
+  commentPackModeRef.current = commentPackMode;
   songLimit5MinEnabledRef.current = songLimit5MinEnabled;
   videoIdRef.current = videoId;
   playingRef.current = playing;
@@ -388,15 +395,42 @@ export default function RoomWithSync({
     }
   }, [candidateSongs, candidateStorageKey]);
   /** 入室した順（timestamp 昇順）の参加者一覧 */
+  const joinOrderByClientIdRef = useRef<Map<string, number>>(new Map());
+
+  // presenceData の timestamp が更新されても、初回登場順を固定する
+  useEffect(() => {
+    const idsInPresence = new Set(presenceData.map((p) => p.clientId));
+    // presence に存在するものは初回登場順を記録
+    presenceData.forEach((p) => {
+      const id = p.clientId;
+      if (!joinOrderByClientIdRef.current.has(id)) {
+        joinOrderByClientIdRef.current.set(id, typeof p.timestamp === 'number' ? p.timestamp : Date.now());
+      }
+    });
+    // presence から消えた clientId は削除（再入室したら末尾扱いにする）
+    joinOrderByClientIdRef.current.forEach((_v, id) => {
+      if (!idsInPresence.has(id)) joinOrderByClientIdRef.current.delete(id);
+    });
+  }, [presenceData]);
+
   const participants = useMemo(() => {
     return [...presenceData]
-      .sort((a, b) => (a.timestamp ?? 0) - (b.timestamp ?? 0))
+      .sort((a, b) => {
+        const at = joinOrderByClientIdRef.current.get(a.clientId) ?? (a.timestamp ?? 0);
+        const bt = joinOrderByClientIdRef.current.get(b.clientId) ?? (b.timestamp ?? 0);
+        if (at !== bt) return at - bt;
+        return a.clientId.localeCompare(b.clientId);
+      })
       .map((p) => ({
         clientId: p.clientId,
         displayName: (p.data?.displayName ?? 'ゲスト').trim() || 'ゲスト',
         participatesInSelection: p.data?.participatesInSelection !== false,
-        timestamp: p.timestamp ?? 0,
-        textColor: typeof p.data?.textColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(p.data.textColor) ? p.data.textColor : undefined,
+        // 並び順固定のため、timestamp には固定済みの初回登場順を入れる
+        timestamp: joinOrderByClientIdRef.current.get(p.clientId) ?? (p.timestamp ?? 0),
+        textColor:
+          typeof p.data?.textColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(p.data.textColor)
+            ? p.data.textColor
+            : undefined,
         status: typeof p.data?.status === 'string' && p.data.status.trim() ? p.data.status.trim() : undefined,
       }));
   }, [presenceData]);
@@ -572,19 +606,48 @@ export default function RoomWithSync({
       }
       return;
     }
+    if (message.name === OWNER_COMMENT_PACK_MODE_EVENT) {
+      const d = message.data as OwnerCommentPackModePayload;
+      if (d && (d.mode === 'full' || d.mode === 'base_only' || d.mode === 'off')) {
+        setCommentPackMode(d.mode);
+      }
+      return;
+    }
     if (message.name === REQUEST_PLAYBACK_SYNC_EVENT) {
       const vid = videoIdRef.current;
       const pubId = lastChangeVideoPublisherRef.current;
       if (!vid || !pubId) return;
+      const handle = playerRef.current;
+      const ytState = handle?.getPlayerState?.() ?? null;
+      const isPlayingLike =
+        playingRef.current ||
+        ytState === YT_PLAYER_STATE_PLAYING ||
+        ytState === YT_PLAYER_STATE_BUFFERING;
+      if (!isPlayingLike) return;
+      let currentTime = 0;
+      let duration = 0;
+      try {
+        currentTime = handle?.getCurrentTime?.() ?? 0;
+      } catch {
+        currentTime = 0;
+      }
+      try {
+        duration = handle?.getDuration?.() ?? 0;
+      } catch {
+        duration = 0;
+      }
+      // 再生終端付近（実質 ended）では遅延入室へ「再生中」と誤通知しない
+      if (duration > 0.5 && currentTime >= Math.max(0, duration - 0.8)) return;
       /** 複数クライアントが返しても、受信側は同一動画なら二重適用を捨てる */
       publishRef.current?.(PLAYBACK_SNAPSHOT_EVENT, {
         type: 'sync',
         videoId: vid,
         publisherClientId: pubId,
-        currentTime: playerRef.current?.getCurrentTime?.() ?? 0,
-        playing: playingRef.current,
+        currentTime,
+        playing: true,
         currentTurnClientId: currentTurnClientIdRef.current,
         trackStartedAtMs: currentTrackStartedAtMsRef.current || Date.now(),
+        commentPackMode: commentPackModeRef.current,
       } as PlaybackMessage);
       return;
     }
@@ -704,6 +767,9 @@ export default function RoomWithSync({
       } else {
         currentTrackStartedAtMsRef.current = Date.now();
       }
+      if (data.commentPackMode === 'full' || data.commentPackMode === 'base_only' || data.commentPackMode === 'off') {
+        setCommentPackMode(data.commentPackMode);
+      }
 
       playerRef.current?.loadVideoById(targetVid);
 
@@ -752,7 +818,7 @@ export default function RoomWithSync({
       };
       window.setTimeout(trySeekSynced, 80);
 
-      if (wasWithoutPlayback) {
+      if (wasWithoutPlayback && syncPlay) {
         const order = participatingOrderRef.current;
         const posterName =
           order.find((p) => p.clientId === pubId)?.displayName?.trim() || '参加者';
@@ -760,6 +826,23 @@ export default function RoomWithSync({
           allowWhenAiStopped: true,
           bypassJpDomesticSilence: true,
         });
+        fetch('/api/ai/announce-song', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ videoId: targetVid, displayName: posterName }),
+        })
+          .then((r) => (r.ok ? r.json() : null))
+          .then((data) => {
+            if (!data?.text || typeof data.text !== 'string') return;
+            const songLine = data.text.split('\n')[1]?.trim();
+            if (!songLine) return;
+            addAiMessage(songLine, {
+              allowWhenAiStopped: true,
+              bypassJpDomesticSilence: true,
+              localOnly: true,
+            });
+          })
+          .catch(() => {});
       }
 
       return;
@@ -773,7 +856,12 @@ export default function RoomWithSync({
       pendingQueuedVideoIdRef.current = data.videoId;
       pendingQueuedPublisherRef.current = data.publisherClientId ?? '';
       setQueuedSongPublisherClientId(data.publisherClientId ?? '');
-      addSystemMessage(SYSTEM_MESSAGE_QUEUE_SONG_DEFERRED);
+      const publisherDisplayName =
+        participants.find((p) => p.clientId === data.publisherClientId)?.displayName?.trim() ||
+        '参加者';
+      addSystemMessage(
+        `${publisherDisplayName}さんの選曲を受け付けました。現在の曲の再生が終わり次第、次の曲を再生します。`
+      );
       return;
     }
     const msgClientId =
@@ -793,6 +881,34 @@ export default function RoomWithSync({
       }
       const targetVid = data.videoId;
       if (targetVid !== videoIdRef.current) return;
+      // 全員で UI を「再生中」扱いから外す（ended を待たない）
+      setSkipUsedForVideoId(targetVid);
+      setCurrentSongPosterClientId('');
+
+      const posterName =
+        participants.find((p) => p.clientId === poster)?.displayName?.trim() || '選曲者';
+      addSystemMessage(`${posterName}さんの曲がスキップされました`);
+
+      // キューが残っているなら、即座に待機中の曲へ切り替える
+      const pv = pendingQueuedVideoIdRef.current;
+      const pp = pendingQueuedPublisherRef.current;
+      if (pv && pv !== targetVid) {
+        if (playbackQueueFallbackTimerRef.current) {
+          clearTimeout(playbackQueueFallbackTimerRef.current);
+          playbackQueueFallbackTimerRef.current = null;
+        }
+        applyingRemoteRef.current = true;
+        try {
+          applyImmediateChangeVideo(pv, pp || myClientId);
+        } finally {
+          setTimeout(() => {
+            applyingRemoteRef.current = false;
+          }, 300);
+        }
+        return;
+      }
+
+      // キューが無い場合は、終端付近へシークして ended を促す（次曲無しなら UI はすでに解除済み）
       const trySeek = (attempt: number) => {
         const h = playerRef.current;
         if (!h || videoIdRef.current !== targetVid) return;
@@ -855,6 +971,9 @@ export default function RoomWithSync({
         setQueuedSongPublisherClientId('');
         jpDomesticSilenceVideoIdRef.current = null;
         setVideoId(data.videoId);
+        if (data.commentPackMode === 'full' || data.commentPackMode === 'base_only' || data.commentPackMode === 'off') {
+          setCommentPackMode(data.commentPackMode);
+        }
         /* 5分待機判定用。useEffect([videoId]) では上書きしない（スナップショットの trackStartedAtMs を壊さない） */
         currentTrackStartedAtMsRef.current = Date.now();
         const pubId = data.publisherClientId ?? '';
@@ -920,6 +1039,25 @@ export default function RoomWithSync({
     }, 650);
     return () => window.clearTimeout(timer);
   }, [myClientId, participants, videoId]);
+
+  // 遅れて入室した参加者にも現在のコメント本数モードを共有する
+  useEffect(() => {
+    if (!isOwner) return;
+    publishRef.current?.(OWNER_COMMENT_PACK_MODE_EVENT, {
+      mode: commentPackMode,
+    } as OwnerCommentPackModePayload);
+  }, [isOwner, commentPackMode, participants.length]);
+
+  // mode イベントの取りこぼし対策（オーナーが定期的に再配信）
+  useEffect(() => {
+    if (!isOwner) return;
+    const t = window.setInterval(() => {
+      publishRef.current?.(OWNER_COMMENT_PACK_MODE_EVENT, {
+        mode: commentPackModeRef.current,
+      } as OwnerCommentPackModePayload);
+    }, 5000);
+    return () => window.clearInterval(t);
+  }, [isOwner]);
 
   const handleSkipCurrentTrack = useCallback(() => {
     const vid = videoIdRef.current;
@@ -1032,6 +1170,9 @@ export default function RoomWithSync({
       setCurrentTime(time);
       if (state === 'ended') {
         setPlaying(false);
+        // 曲終了直後に UI の「再生中」枠・スキップ表示を解除し、次の方へ切り替える
+        setSkipUsedForVideoId(videoIdRef.current);
+        setCurrentSongPosterClientId('');
         playbackEndedApplyRef.current();
         return;
       }
@@ -1525,11 +1666,22 @@ export default function RoomWithSync({
 
   const fetchCommentaryAndPublish = useCallback(
     (vid: string) => {
+      const mode = commentPackModeRef.current;
+      if (mode === 'off') {
+        if (freeCommentTimeoutsRef.current.length > 0) {
+          freeCommentTimeoutsRef.current.forEach((t) => clearTimeout(t));
+          freeCommentTimeoutsRef.current = [];
+        }
+        // 「全てなし」では同一曲中の補助解説(tidbit)も出さない
+        suppressTidbitRef.current = true;
+        commentPackVideoIdRef.current = null;
+        return;
+      }
       // まず comment-pack を試し、基本コメント＋自由コメント3本をまとめて取得して小出しにする
       fetch('/api/ai/comment-pack', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ videoId: vid }),
+        body: JSON.stringify({ videoId: vid, mode }),
       })
         .then((r) => (r.ok ? r.json() : null))
         .then((pack) => {
@@ -1573,8 +1725,9 @@ export default function RoomWithSync({
                 ? pack.freeComments.filter((c: unknown) => typeof c === 'string' && c.trim())
                 : []
             ).slice(0, COMMENT_PACK_MAX_FREE_COMMENTS);
-            // 自由コメントが残っている間は tidbit を抑止（曲が変わるまで維持し、4本目の豆知識が割り込まないようにする）
-            suppressTidbitRef.current = comments.length > 0;
+            // mode=base_only では同一曲中の補助解説(tidbit)も抑止し、実質1本だけにする。
+            // mode=full では自由コメントが残っている間のみ抑止（4本目の割り込み防止）。
+            suppressTidbitRef.current = mode === 'base_only' || comments.length > 0;
             comments.forEach((c, index) => {
               const delayMs = (index + 1) * 60 * 1000; // 1分ごと
               const tidN =
@@ -1727,6 +1880,7 @@ export default function RoomWithSync({
         type: 'changeVideo',
         videoId: id,
         publisherClientId,
+        commentPackMode: commentPackModeRef.current,
       } as PlaybackMessage);
       playerRef.current?.loadVideoById(id);
       scheduleAutoPlayAfterChangeVideo();
@@ -2148,6 +2302,7 @@ export default function RoomWithSync({
           currentOwnerClientId={ownerLeftAt === null ? ownerClientId : ''}
           currentSongPosterClientId={currentSongPosterClientId}
           queuedSongPublisherClientId={queuedSongPublisherClientId}
+          nextTurnClientId={currentTurnClientId}
           skipCurrentTrackActive={Boolean(
             videoId &&
               currentSongPosterClientId &&
@@ -2246,6 +2401,17 @@ export default function RoomWithSync({
                   : undefined
               }
               roomId={roomId}
+              commentPackMode={commentPackMode}
+              onCommentPackModeChange={
+                isOwner
+                  ? (mode) => {
+                      setCommentPackMode(mode);
+                      safePublish(OWNER_COMMENT_PACK_MODE_EVENT, {
+                        mode,
+                      } as OwnerCommentPackModePayload);
+                    }
+                  : undefined
+              }
             />
           </div>
         </div>

@@ -55,6 +55,10 @@ export async function POST(request: Request) {
   try {
     const body = await request.json().catch(() => ({}));
     const videoId = typeof body?.videoId === 'string' ? body.videoId.trim() : '';
+    const requestedMode =
+      body?.mode === 'full' || body?.mode === 'base_only' || body?.mode === 'off'
+        ? body.mode
+        : 'full';
     if (!videoId) {
       return NextResponse.json({ error: 'videoId is required' }, { status: 400 });
     }
@@ -83,7 +87,11 @@ export async function POST(request: Request) {
       defaultAudioLanguage: snippet?.defaultAudioLanguage ?? null,
     });
     /** 新曲のみ基本1本（自由3本なし）。開発フラグ時も同様。邦楽は公式チャンネル例外を除き生成しない */
-    const baseOnlyPack = isNewRelease || devMinimalSongAi;
+    const baseOnlyPack = requestedMode === 'base_only' || isNewRelease || devMinimalSongAi;
+
+    if (requestedMode === 'off') {
+      return NextResponse.json({ videoId, disabledByOwner: true, baseComment: '', freeComments: [] });
+    }
 
     // songs / song_videos 登録＋ song_id
     let songId: string | null = null;
@@ -139,12 +147,12 @@ export async function POST(request: Request) {
       } else {
         const cached = await getStoredCommentPackByVideoId(reader, videoId);
         if (cached) {
-          const stripFreeForDev = devMinimalSongAi && !isNewRelease;
+          const stripFreeForMode = baseOnlyPack && !isNewRelease;
           const tidbitIdsFull = cached.tidbitIds ?? [];
-          const tidbitIdsForClient = stripFreeForDev ? tidbitIdsFull.slice(0, 1) : [...tidbitIdsFull];
-          const freeCommentsForClient = stripFreeForDev ? [] : [...cached.freeComments];
+          const tidbitIdsForClient = stripFreeForMode ? tidbitIdsFull.slice(0, 1) : [...tidbitIdsFull];
+          const freeCommentsForClient = stripFreeForMode ? [] : [...cached.freeComments];
           const freeCommentTidbitIds =
-            !stripFreeForDev && tidbitIdsForClient.length > 1
+            !stripFreeForMode && tidbitIdsForClient.length > 1
               ? tidbitIdsForClient.slice(1)
               : [];
           return NextResponse.json({
@@ -203,7 +211,7 @@ ${colorsOfficialLock}${geniusOfficialLock}${appleMusicOfficialLock}
     const basePromptTail = isNewRelease
       ? `・この動画は公開から約1ヶ月以内の新曲扱いです。周辺情報が不十分な可能性があるため、断定を避け、分かる範囲の紹介にとどめてください（推測や詳細な背景説明は控えめに）。
 ・この後に自由コメントは出しません。ここ1本で完結する基本紹介にしてください。`
-      : devMinimalSongAi
+      : devMinimalSongAi || requestedMode === 'base_only'
         ? `・開発中モードのため、自由コメントは生成しません。ここ1本で完結する基本紹介にしてください。`
         : `・この1本は「基本情報」専用です。あとから3本の自由コメント（解釈・サウンド・栄誉など）が続くため、ここでは深い解説や歌詞の細かい読み下しは書かないでください。`;
 
