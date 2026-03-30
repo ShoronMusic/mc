@@ -25,6 +25,7 @@ type PlaybackRow = {
   display_name: string;
   video_id: string;
   style: string | null;
+  artist_name: string | null;
 };
 
 type EraRow = {
@@ -150,7 +151,7 @@ async function generateDailySummary(
 
   const { data: playData, error: playError } = await supabase
     .from('room_playback_history')
-    .select('played_at, display_name, video_id, style')
+    .select('played_at, display_name, video_id, style, artist_name')
     .eq('room_id', roomId)
     .gte('played_at', range.startIso)
     .lt('played_at', range.endIso)
