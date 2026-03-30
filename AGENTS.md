@@ -13,7 +13,7 @@
 |------|------|------|
 | Gemini プロンプト | `src/lib/gemini.ts` | チャット返答、tidbit、選曲クエリ抽出、曲解説、スタイル分類 |
 | 生成文ポリシー | `src/lib/ai-output-policy.ts` | 根拠なしチャート/バズ等の**再生成判定**（変更時は単体テスト必須） |
-| 曲解説パック API | `src/app/api/ai/comment-pack/route.ts` | 基本1本＋自由3本。上記ポリシーを利用 |
+| 曲解説パック API | `src/app/api/ai/comment-pack/route.ts` | 基本1本＋自由3本。上記ポリシーを利用。開発で基本1本のみ＋選曲直後の announce 非表示は `.env.local` に `NEXT_PUBLIC_DEV_MINIMAL_SONG_AI=1` |
 
 ## コマンド
 

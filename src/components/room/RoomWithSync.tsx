@@ -30,10 +30,15 @@ import {
   SYSTEM_MESSAGE_JP_NO_COMMENTARY,
   SYSTEM_MESSAGE_QUEUE_SONG_DEFERRED,
 } from '@/lib/chat-system-copy';
+import { isDevMinimalSongAi } from '@/lib/dev-minimal-song-ai';
 import { COMMENT_PACK_MAX_FREE_COMMENTS } from '@/lib/song-tidbits';
 import { playbackLog } from '@/lib/playback-debug';
 import { extractVideoId, isStandaloneNonYouTubeUrl } from '@/lib/youtube';
-import type { PlaybackMessage } from '@/types/playback';
+import {
+  type PlaybackMessage,
+  PLAYBACK_SNAPSHOT_EVENT,
+  REQUEST_PLAYBACK_SYNC_EVENT,
+} from '@/types/playback';
 import {
   CHAT_MESSAGE_EVENT,
   type ChatMessage,
@@ -179,6 +184,7 @@ export default function RoomWithSync({
   const [videoId, setVideoId] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [playing, setPlaying] = useState(false);
+  const playingRef = useRef(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   useRoomChatLogPersistence(roomId, messages, { isGuest, myClientId });
   const [myPageOpen, setMyPageOpen] = useState(false);
@@ -215,7 +221,13 @@ export default function RoomWithSync({
   const lastSendAtRef = useRef(0);
   const sendTimestampsRef = useRef<number[]>([]);
   const playbackHistoryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** 遅延入室の再生問い合わせを短時間に連打しない（presence 更新でタイマーが何度も張り直されるため） */
+  const lastPlaybackSyncRequestAtRef = useRef(0);
   const [playbackHistoryRefreshKey, setPlaybackHistoryRefreshKey] = useState(0);
+  /** スキップ押下後、その動画IDではボタンを出さない（選曲者・オーナー各自のクライアント） */
+  const [skipUsedForVideoId, setSkipUsedForVideoId] = useState<string | null>(null);
+  /** 5分制限キューで次に再生予定の曲を貼った参加者（参加者欄のステータス用） */
+  const [queuedSongPublisherClientId, setQueuedSongPublisherClientId] = useState('');
   const [favoritedVideoIds, setFavoritedVideoIds] = useState<string[]>([]);
   const recentlyUsedTidbitIdsRef = useRef<string[]>([]);
   const tidbitCountSinceUserMessageRef = useRef(0);
@@ -252,6 +264,7 @@ export default function RoomWithSync({
   const [songLimit5MinEnabled, setSongLimit5MinEnabled] = useState(true);
   songLimit5MinEnabledRef.current = songLimit5MinEnabled;
   videoIdRef.current = videoId;
+  playingRef.current = playing;
   /** 自分のステータス（離席・ROM・食事中など）。参加者名横に表示 */
   const [userStatus, setUserStatus] = useState('');
   /** 自分専用の「次に貼りたい曲」候補リスト（ブラウザ内保存） */
@@ -418,8 +431,10 @@ export default function RoomWithSync({
   const publishRef = useRef<((name: string, data: unknown) => void) | null>(null);
 
   const ownerLeftAtRef = useRef(ownerLeftAt);
+  const ownerClientIdRef = useRef(ownerClientId);
   const oldestRef = useRef(oldestParticipantClientId);
   ownerLeftAtRef.current = ownerLeftAt;
+  ownerClientIdRef.current = ownerClientId;
   oldestRef.current = oldestParticipantClientId;
   useEffect(() => {
     if (!roomId) return;
@@ -557,6 +572,22 @@ export default function RoomWithSync({
       }
       return;
     }
+    if (message.name === REQUEST_PLAYBACK_SYNC_EVENT) {
+      const vid = videoIdRef.current;
+      const pubId = lastChangeVideoPublisherRef.current;
+      if (!vid || !pubId) return;
+      /** 複数クライアントが返しても、受信側は同一動画なら二重適用を捨てる */
+      publishRef.current?.(PLAYBACK_SNAPSHOT_EVENT, {
+        type: 'sync',
+        videoId: vid,
+        publisherClientId: pubId,
+        currentTime: playerRef.current?.getCurrentTime?.() ?? 0,
+        playing: playingRef.current,
+        currentTurnClientId: currentTurnClientIdRef.current,
+        trackStartedAtMs: currentTrackStartedAtMsRef.current || Date.now(),
+      } as PlaybackMessage);
+      return;
+    }
     if (message.name === CHAT_MESSAGE_EVENT) {
       lastActivityAtRef.current = Date.now();
       const data = message.data as ChatMessagePayload & { clientId?: string };
@@ -632,6 +663,108 @@ export default function RoomWithSync({
     }
     const data = message.data as PlaybackMessage;
     if (!data?.type) return;
+
+    if (message.name === PLAYBACK_SNAPSHOT_EVENT && data.type === 'sync') {
+      if (!data.videoId || !data.publisherClientId) return;
+      const snapMsgClientId =
+        message && typeof message === 'object' && 'clientId' in message
+          ? (message as { clientId?: string | null }).clientId
+          : undefined;
+      if (myClientId && typeof snapMsgClientId === 'string' && snapMsgClientId === myClientId) {
+        return;
+      }
+      if (
+        videoIdRef.current === data.videoId &&
+        lastChangeVideoPublisherRef.current === data.publisherClientId
+      ) {
+        return;
+      }
+
+      const wasWithoutPlayback = !videoIdRef.current;
+      const targetVid = data.videoId;
+
+      if (playbackQueueFallbackTimerRef.current) {
+        clearTimeout(playbackQueueFallbackTimerRef.current);
+        playbackQueueFallbackTimerRef.current = null;
+      }
+      pendingQueuedVideoIdRef.current = null;
+      pendingQueuedPublisherRef.current = '';
+      setQueuedSongPublisherClientId('');
+      jpDomesticSilenceVideoIdRef.current = null;
+
+      setVideoId(targetVid);
+      const pubId = data.publisherClientId;
+      lastChangeVideoPublisherRef.current = pubId;
+      setCurrentSongPosterClientId(pubId);
+      if (typeof data.currentTurnClientId === 'string') {
+        setCurrentTurnClientId(data.currentTurnClientId);
+      }
+      if (typeof data.trackStartedAtMs === 'number' && data.trackStartedAtMs > 0) {
+        currentTrackStartedAtMsRef.current = data.trackStartedAtMs;
+      } else {
+        currentTrackStartedAtMsRef.current = Date.now();
+      }
+
+      playerRef.current?.loadVideoById(targetVid);
+
+      const syncCt =
+        typeof data.currentTime === 'number' && Number.isFinite(data.currentTime)
+          ? data.currentTime
+          : 0;
+      const syncPlay = data.playing === true;
+      const syncStartedAt = Date.now();
+      const trySeekSynced = () => {
+        const handle = playerRef.current;
+        if (!handle || videoIdRef.current !== targetVid) return;
+        const ytState = handle.getPlayerState?.() ?? null;
+        if (ytState === null) {
+          if (Date.now() - syncStartedAt < AUTO_PLAY_GIVE_UP_MS) {
+            window.setTimeout(trySeekSynced, AUTO_PLAY_POLL_MS);
+          }
+          return;
+        }
+        applyingRemoteRef.current = true;
+        try {
+          let dur = 0;
+          try {
+            dur = handle.getDuration?.() ?? 0;
+          } catch {
+            dur = 0;
+          }
+          const safeTime =
+            dur > 0.5
+              ? Math.min(Math.max(0, syncCt), Math.max(0, dur - 0.25))
+              : Math.max(0, syncCt);
+          handle.seekTo(safeTime);
+          if (syncPlay) {
+            handle.playVideo();
+            setPlaying(true);
+          } else {
+            handle.pauseVideo();
+            setPlaying(false);
+          }
+          setCurrentTime(safeTime);
+        } finally {
+          setTimeout(() => {
+            applyingRemoteRef.current = false;
+          }, 300);
+        }
+      };
+      window.setTimeout(trySeekSynced, 80);
+
+      if (wasWithoutPlayback) {
+        const order = participatingOrderRef.current;
+        const posterName =
+          order.find((p) => p.clientId === pubId)?.displayName?.trim() || '参加者';
+        addAiMessage(`現在${posterName}さんの選曲が再生中です。`, {
+          allowWhenAiStopped: true,
+          bypassJpDomesticSilence: true,
+        });
+      }
+
+      return;
+    }
+
     if (data.type === 'queueSong' && data.videoId) {
       if (playbackQueueFallbackTimerRef.current) {
         clearTimeout(playbackQueueFallbackTimerRef.current);
@@ -639,6 +772,7 @@ export default function RoomWithSync({
       }
       pendingQueuedVideoIdRef.current = data.videoId;
       pendingQueuedPublisherRef.current = data.publisherClientId ?? '';
+      setQueuedSongPublisherClientId(data.publisherClientId ?? '');
       addSystemMessage(SYSTEM_MESSAGE_QUEUE_SONG_DEFERRED);
       return;
     }
@@ -646,6 +780,38 @@ export default function RoomWithSync({
       message && typeof message === 'object' && 'clientId' in message
         ? (message as { clientId?: string | null }).clientId
         : undefined;
+    if (data.type === 'skipToEnd' && data.videoId) {
+      const poster = lastChangeVideoPublisherRef.current;
+      const ownerId = ownerClientIdRef.current;
+      const ownerActive = ownerLeftAtRef.current === null && Boolean(ownerId);
+      const allowedSender =
+        typeof msgClientId === 'string' &&
+        ((poster && msgClientId === poster) || (ownerActive && msgClientId === ownerId));
+      if (!allowedSender) {
+        playbackLog('ably: ignore skipToEnd', { msgClientId, poster, ownerId, ownerActive });
+        return;
+      }
+      const targetVid = data.videoId;
+      if (targetVid !== videoIdRef.current) return;
+      const trySeek = (attempt: number) => {
+        const h = playerRef.current;
+        if (!h || videoIdRef.current !== targetVid) return;
+        const d = h.getDuration();
+        if (d > 0.5) {
+          h.seekTo(Math.max(0, d - 0.25));
+          h.playVideo();
+          playbackLog('ably: skipToEnd seek', { d, targetVid, attempt });
+          return;
+        }
+        if (attempt < 25) {
+          window.setTimeout(() => trySeek(attempt + 1), 120);
+        } else {
+          playbackLog('ably: skipToEnd give up (no duration)', { targetVid });
+        }
+      };
+      trySeek(0);
+      return;
+    }
     /**
      * Ably は発行者本人にも changeVideo を配信する。
      * ローカルですでに loadVideoById 済みなのでエコーで再度 load すると二重デコードで音が重なる。
@@ -686,8 +852,11 @@ export default function RoomWithSync({
         }
         pendingQueuedVideoIdRef.current = null;
         pendingQueuedPublisherRef.current = '';
+        setQueuedSongPublisherClientId('');
         jpDomesticSilenceVideoIdRef.current = null;
         setVideoId(data.videoId);
+        /* 5分待機判定用。useEffect([videoId]) では上書きしない（スナップショットの trackStartedAtMs を壊さない） */
+        currentTrackStartedAtMsRef.current = Date.now();
         const pubId = data.publisherClientId ?? '';
         lastChangeVideoPublisherRef.current = pubId;
         setCurrentSongPosterClientId(pubId);
@@ -736,6 +905,36 @@ export default function RoomWithSync({
   );
 
   publishRef.current = safePublish;
+
+  useEffect(() => {
+    if (!myClientId) return;
+    if (videoId != null) return;
+    const otherPresent = participants.some((p) => p.clientId !== myClientId);
+    if (!otherPresent) return;
+    const timer = window.setTimeout(() => {
+      if (videoIdRef.current != null) return;
+      const now = Date.now();
+      if (now - lastPlaybackSyncRequestAtRef.current < 1800) return;
+      lastPlaybackSyncRequestAtRef.current = now;
+      publishRef.current?.(REQUEST_PLAYBACK_SYNC_EVENT, {});
+    }, 650);
+    return () => window.clearTimeout(timer);
+  }, [myClientId, participants, videoId]);
+
+  const handleSkipCurrentTrack = useCallback(() => {
+    const vid = videoIdRef.current;
+    const poster = lastChangeVideoPublisherRef.current;
+    if (!vid || !myClientId) return;
+    const isPoster = Boolean(poster && myClientId === poster);
+    const isOwnerSkip =
+      ownerLeftAt === null && Boolean(ownerClientId) && myClientId === ownerClientId;
+    if (!isPoster && !isOwnerSkip) return;
+    setSkipUsedForVideoId(vid);
+    safePublish('skipToEnd', {
+      type: 'skipToEnd',
+      videoId: vid,
+    } as PlaybackMessage);
+  }, [myClientId, safePublish, ownerLeftAt, ownerClientId]);
 
   /** 曲投入後に自動再生し、全員に play(currentTime: 0) を配信する（準備完了を短い間隔で待ち、操作コンテキストに近いタイミングで play） */
   const scheduleAutoPlayAfterChangeVideo = useCallback(() => {
@@ -826,58 +1025,6 @@ export default function RoomWithSync({
     [myClientId, getNextTurnClientId]
   );
 
-  useEffect(() => {
-    if (!roomId || ownerStatePublishRef.current) return;
-    const pub = publishRef.current;
-    if (!pub) return;
-    const apply = (next: OwnerStatePayload) => {
-      setOwnerState({ ownerClientId: next.ownerClientId, ownerLeftAt: next.ownerLeftAt });
-      setOwnerStateToStorage(roomId, next);
-    };
-    if (participants.length === 0) return;
-    const now = Date.now();
-    if (!ownerClientId) {
-      const next = { ownerClientId: oldestParticipantClientId, ownerLeftAt: null };
-      apply(next);
-      ownerStatePublishRef.current = true;
-      pub(OWNER_STATE_EVENT, next as OwnerStatePayload);
-      setTimeout(() => {
-        ownerStatePublishRef.current = false;
-      }, 500);
-      return;
-    }
-    const ownerStillPresent = participants.some((p) => p.clientId === ownerClientId);
-    if (!ownerStillPresent) {
-      if (ownerLeftAt === null) {
-        const next = { ownerClientId, ownerLeftAt: now };
-        apply(next);
-        ownerStatePublishRef.current = true;
-        pub(OWNER_STATE_EVENT, next as OwnerStatePayload);
-        setTimeout(() => {
-          ownerStatePublishRef.current = false;
-        }, 500);
-      } else if (now - ownerLeftAt >= OWNER_ABSENCE_MS) {
-        const next = { ownerClientId: oldestParticipantClientId, ownerLeftAt: null };
-        apply(next);
-        ownerStatePublishRef.current = true;
-        pub(OWNER_STATE_EVENT, next as OwnerStatePayload);
-        setTimeout(() => {
-          ownerStatePublishRef.current = false;
-        }, 500);
-      }
-      return;
-    }
-    if (ownerLeftAt !== null) {
-      const next = { ownerClientId, ownerLeftAt: null };
-      apply(next);
-      ownerStatePublishRef.current = true;
-      pub(OWNER_STATE_EVENT, next as OwnerStatePayload);
-      setTimeout(() => {
-        ownerStatePublishRef.current = false;
-      }, 500);
-    }
-  }, [roomId, participants, oldestParticipantClientId, ownerClientId, ownerLeftAt]);
-
   const nextPromptTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handlePlayerStateChange = useCallback(
     (state: 'play' | 'pause' | 'ended', time: number) => {
@@ -916,6 +1063,8 @@ export default function RoomWithSync({
         /** 選曲アナウンス（邦楽フラグ付きペイロード用）のみ true */
         bypassJpDomesticSilence?: boolean;
         jpDomesticSilenceForVideoId?: string;
+        /** このブラウザのみに表示（Ably に送らない。入室時の自分向け案内など） */
+        localOnly?: boolean;
       }
     ) => {
       if (aiFreeSpeechStopped && !options?.allowWhenAiStopped) return;
@@ -944,7 +1093,9 @@ export default function RoomWithSync({
           ? { jpDomesticSilenceForVideoId: options.jpDomesticSilenceForVideoId }
           : {}),
       };
-      safePublish(CHAT_MESSAGE_EVENT, payload);
+      if (!options?.localOnly) {
+        safePublish(CHAT_MESSAGE_EVENT, payload);
+      }
       setMessages((prev) => [
         ...prev,
         {
@@ -966,6 +1117,57 @@ export default function RoomWithSync({
     [safePublish, aiFreeSpeechStopped]
   );
 
+  useEffect(() => {
+    if (!roomId || ownerStatePublishRef.current) return;
+    const pub = publishRef.current;
+    if (!pub) return;
+    const apply = (next: OwnerStatePayload) => {
+      setOwnerState({ ownerClientId: next.ownerClientId, ownerLeftAt: next.ownerLeftAt });
+      setOwnerStateToStorage(roomId, next);
+    };
+    if (participants.length === 0) return;
+    if (!ownerClientId) {
+      const next = { ownerClientId: oldestParticipantClientId, ownerLeftAt: null };
+      apply(next);
+      ownerStatePublishRef.current = true;
+      pub(OWNER_STATE_EVENT, next as OwnerStatePayload);
+      setTimeout(() => {
+        ownerStatePublishRef.current = false;
+      }, 500);
+      return;
+    }
+    const ownerStillPresent = participants.some((p) => p.clientId === ownerClientId);
+    if (!ownerStillPresent) {
+      const nextOwnerId = oldestParticipantClientId;
+      if (nextOwnerId) {
+        const next = { ownerClientId: nextOwnerId, ownerLeftAt: null };
+        apply(next);
+        ownerStatePublishRef.current = true;
+        pub(OWNER_STATE_EVENT, next as OwnerStatePayload);
+        setTimeout(() => {
+          ownerStatePublishRef.current = false;
+        }, 500);
+      }
+      return;
+    }
+    if (ownerLeftAt !== null) {
+      const next = { ownerClientId, ownerLeftAt: null };
+      apply(next);
+      ownerStatePublishRef.current = true;
+      pub(OWNER_STATE_EVENT, next as OwnerStatePayload);
+      setTimeout(() => {
+        ownerStatePublishRef.current = false;
+      }, 500);
+    }
+  }, [
+    roomId,
+    participants,
+    oldestParticipantClientId,
+    ownerClientId,
+    ownerLeftAt,
+    myClientId,
+  ]);
+
   const addSystemMessage = useCallback((body: string, searchQuery?: string) => {
     const msg: ChatMessage = {
       id: createMessageId(),
@@ -981,19 +1183,61 @@ export default function RoomWithSync({
   const previousParticipantsRef = useRef<Map<string, string> | null>(null);
   useEffect(() => {
     const currentMap = new Map(participants.map((p) => [p.clientId, p.displayName]));
+    /** 全員が同じ差分を検知して addAiMessage すると Ably で同文言が複数回飛ぶ。最古入室者だけが配信する */
+    const imOldest =
+      Boolean(myClientId) &&
+      oldestParticipantClientId !== '' &&
+      myClientId === oldestParticipantClientId;
+
     if (previousParticipantsRef.current === null) {
       previousParticipantsRef.current = currentMap;
+      if (
+        imOldest &&
+        currentMap.size === 1 &&
+        myClientId &&
+        [...currentMap.keys()][0] === myClientId
+      ) {
+        const displayName = currentMap.get(myClientId) ?? 'ゲスト';
+        addAiMessage(`${displayName}さん入室\n${displayName}さんチャットオーナー`, {
+          allowWhenAiStopped: true,
+        });
+      }
       return;
     }
     const prev = previousParticipantsRef.current;
     const currentIds = new Set(currentMap.keys());
-    prev.forEach((displayName, clientId) => {
-      if (!currentIds.has(clientId)) {
-        addAiMessage(`${displayName}さんが退出しました`, { allowWhenAiStopped: true });
+
+    if (imOldest) {
+      let ownerLeftDetected = false;
+      prev.forEach((displayName, clientId) => {
+        if (!currentIds.has(clientId)) {
+          addAiMessage(`${displayName}さん退出`, { allowWhenAiStopped: true });
+          if (clientId === ownerClientIdRef.current) {
+            ownerLeftDetected = true;
+          }
+        }
+      });
+      currentMap.forEach((displayName, clientId) => {
+        if (!prev.has(clientId)) {
+          const soloFirst = prev.size === 0 && currentMap.size === 1;
+          const body = soloFirst
+            ? `${displayName}さん入室\n${displayName}さんチャットオーナー`
+            : `${displayName}さん入室`;
+          addAiMessage(body, { allowWhenAiStopped: true });
+        }
+      });
+      if (ownerLeftDetected && myClientId === oldestParticipantClientId) {
+        const newOwnerName =
+          currentMap.get(oldestParticipantClientId)?.trim() ||
+          participants.find((p) => p.clientId === oldestParticipantClientId)?.displayName?.trim() ||
+          'ゲスト';
+        addAiMessage(`${newOwnerName}さんオーナー引き継ぎ`, {
+          allowWhenAiStopped: true,
+        });
       }
-    });
+    }
     previousParticipantsRef.current = currentMap;
-  }, [participants, addAiMessage]);
+  }, [participants, addAiMessage, oldestParticipantClientId, myClientId]);
 
   useEffect(() => {
     if (initialGreetingDoneRef.current || messages.length > 0) return;
@@ -1024,16 +1268,17 @@ export default function RoomWithSync({
     } catch {
       greeting = `${effectiveDisplayName}さん、${getTimeBasedGreeting()}`;
     }
-    addAiMessage(greeting, { allowWhenAiStopped: true });
-    if (!isWelcomeBack) addAiMessage(AI_FIRST_VOICE, { allowWhenAiStopped: true });
-    addAiMessage(TURN_ORDER_VOICE, { allowWhenAiStopped: true });
+    const localGuide = { allowWhenAiStopped: true, localOnly: true } as const;
+    addAiMessage(greeting, localGuide);
+    if (!isWelcomeBack) addAiMessage(AI_FIRST_VOICE, localGuide);
+    addAiMessage(TURN_ORDER_VOICE, localGuide);
     if (participatingOrder.length > 0) {
       const first = participatingOrder[0];
       setCurrentTurnClientId(first.clientId);
       publishRef.current?.(TURN_STATE_EVENT, { currentTurnClientId: first.clientId } as TurnStatePayload);
-      addAiMessage(`${first.displayName}さん、曲を貼ってください`, { allowWhenAiStopped: true });
+      addAiMessage(`${first.displayName}さん、曲を貼ってください`, localGuide);
     } else {
-      addAiMessage('どなたでもどうぞ貼ってください', { allowWhenAiStopped: true });
+      addAiMessage('どなたでもどうぞ貼ってください', localGuide);
     }
     touchActivity();
   }, [messages.length, effectiveDisplayName, roomId, participatingOrder, addAiMessage, touchActivity]);
@@ -1116,7 +1361,7 @@ export default function RoomWithSync({
   const DEFAULT_DURATION_WHEN_UNKNOWN_SEC = 240;
   const FIVE_MIN_MS = 5 * 60 * 1000;
 
-  /** 複数人・5分制限ON・再生中で、開始から5分未満なら次曲はキューのみ（即時は切り替えない） */
+  /** 複数人・5分制限ON・再生中で、開始から5分未満なら次曲はキューのみ（オーナー含む全員。即時切替しない） */
   const shouldDeferMultiSongPost = () => {
     if (!songLimit5MinEnabledRef.current) return false;
     const order = participatingOrderRef.current;
@@ -1181,7 +1426,10 @@ export default function RoomWithSync({
   }, [participants, addAiMessage, myClientId, clearPendingFreeCommentTimers]);
 
   useEffect(() => {
-    currentTrackStartedAtMsRef.current = videoId ? Date.now() : 0;
+    /* 曲開始時刻は applyImmediateChangeVideo / リモート changeVideo / 再生スナップショットで設定する */
+    if (!videoId) {
+      currentTrackStartedAtMsRef.current = 0;
+    }
     nextPromptShownForVideoIdRef.current = null;
     lastEndedVideoIdForTidbitRef.current = null;
     if (!videoId) {
@@ -1203,6 +1451,7 @@ export default function RoomWithSync({
     }
     suppressTidbitRef.current = false;
     commentPackVideoIdRef.current = null;
+    setSkipUsedForVideoId(null);
   }, [videoId]);
 
   const fetchAnnounceAndPublish = useCallback(
@@ -1347,6 +1596,10 @@ export default function RoomWithSync({
               freeCommentTimeoutsRef.current.push(timer);
             });
           } else {
+            if (isDevMinimalSongAi()) {
+              addSystemMessage(SYSTEM_MESSAGE_COMMENTARY_FETCH_FAILED);
+              return null;
+            }
             // パック取得に失敗した場合は従来の commentary API にフォールバック
             return fetch('/api/ai/commentary', {
               method: 'POST',
@@ -1462,10 +1715,12 @@ export default function RoomWithSync({
       }
       pendingQueuedVideoIdRef.current = null;
       pendingQueuedPublisherRef.current = '';
+      setQueuedSongPublisherClientId('');
       const previousVideoId = videoIdRef.current;
       const sameVideoReplay = Boolean(previousVideoId && previousVideoId === id);
       jpDomesticSilenceVideoIdRef.current = null;
       setVideoId(id);
+      currentTrackStartedAtMsRef.current = Date.now();
       lastChangeVideoPublisherRef.current = publisherClientId;
       setCurrentSongPosterClientId(publisherClientId);
       safePublish('changeVideo', {
@@ -1476,7 +1731,10 @@ export default function RoomWithSync({
       playerRef.current?.loadVideoById(id);
       scheduleAutoPlayAfterChangeVideo();
       advanceTurnAfterPost(publisherClientId);
-      fetchAnnounceAndPublish(id, sameVideoReplay ? { silent: true } : undefined);
+      fetchAnnounceAndPublish(
+        id,
+        (sameVideoReplay || isDevMinimalSongAi()) ? { silent: true } : undefined,
+      );
       if (!sameVideoReplay) fetchCommentaryAndPublish(id);
       saveSongHistory(id);
       schedulePlaybackHistory(roomId ?? '', id);
@@ -1582,7 +1840,7 @@ export default function RoomWithSync({
         return;
       }
 
-      if (!isOwner && shouldDeferMultiSongPost()) {
+      if (shouldDeferMultiSongPost()) {
         safePublish('queueSong', {
           type: 'queueSong',
           videoId: id,
@@ -1693,8 +1951,9 @@ export default function RoomWithSync({
       if (messages.length === 0) {
         if (!jpUiBlocked) {
           const greeting = `${effectiveDisplayName}さん、${getTimeBasedGreeting()}`;
-          addAiMessage(greeting, { allowWhenAiStopped: true });
-          addAiMessage(AI_FIRST_VOICE, { allowWhenAiStopped: true });
+          const localGuide = { allowWhenAiStopped: true, localOnly: true } as const;
+          addAiMessage(greeting, localGuide);
+          addAiMessage(AI_FIRST_VOICE, localGuide);
         }
         touchActivity();
         return;
@@ -1760,7 +2019,7 @@ export default function RoomWithSync({
           .then((r2) => (r2.ok ? r2.json() : null))
           .then((data2) => {
             if (data2?.ok && data2?.videoId && data2?.artistTitle) {
-              if (!isOwner && shouldDeferMultiSongPost()) {
+              if (shouldDeferMultiSongPost()) {
                 safePublish('queueSong', {
                   type: 'queueSong',
                   videoId: data2.videoId,
@@ -1828,7 +2087,6 @@ export default function RoomWithSync({
       roomId,
       myClientId,
       applyImmediateChangeVideo,
-      isOwner,
     ]
   );
 
@@ -1889,6 +2147,23 @@ export default function RoomWithSync({
           myClientId={myClientId}
           currentOwnerClientId={ownerLeftAt === null ? ownerClientId : ''}
           currentSongPosterClientId={currentSongPosterClientId}
+          queuedSongPublisherClientId={queuedSongPublisherClientId}
+          skipCurrentTrackActive={Boolean(
+            videoId &&
+              currentSongPosterClientId &&
+              myClientId &&
+              skipUsedForVideoId !== videoId &&
+              (myClientId === currentSongPosterClientId ||
+                (ownerLeftAt === null && ownerClientId && myClientId === ownerClientId)),
+          )}
+          skipCurrentTrackDisabled={Boolean(
+            videoId && currentSongPosterClientId && myClientId &&
+              !(
+                myClientId === currentSongPosterClientId ||
+                (ownerLeftAt === null && ownerClientId && myClientId === ownerClientId)
+              ),
+          )}
+          onSkipCurrentTrack={handleSkipCurrentTrack}
           onParticipantClick={(displayName) => chatInputRef.current?.insertText(`${displayName}さん < `)}
         />
       </section>
@@ -1918,10 +2193,15 @@ export default function RoomWithSync({
               onTransferOwner={
                 isOwner
                   ? (newOwnerClientId) => {
+                      const newOwnerDisplayName =
+                        participants.find((p) => p.clientId === newOwnerClientId)?.displayName?.trim() || 'ゲスト';
                       const next = { ownerClientId: newOwnerClientId, ownerLeftAt: null };
                       setOwnerState(next);
                       if (roomId) setOwnerStateToStorage(roomId, next);
                       safePublish(OWNER_STATE_EVENT, next as OwnerStatePayload);
+                      addAiMessage(`${newOwnerDisplayName}さんオーナー引き継ぎ`, {
+                        allowWhenAiStopped: true,
+                      });
                       setMyPageOpen(false);
                     }
                   : undefined

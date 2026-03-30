@@ -27,6 +27,7 @@ import {
   SYSTEM_MESSAGE_COMMENTARY_FETCH_FAILED,
   SYSTEM_MESSAGE_JP_NO_COMMENTARY,
 } from '@/lib/chat-system-copy';
+import { isDevMinimalSongAi } from '@/lib/dev-minimal-song-ai';
 import { playbackLog } from '@/lib/playback-debug';
 import { extractVideoId, isStandaloneNonYouTubeUrl } from '@/lib/youtube';
 import type { ChatMessage } from '@/types/chat';
@@ -101,6 +102,7 @@ export default function RoomWithoutSync({ displayName: displayNameProp = 'ゲス
   const playbackHistoryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoPlayPollRef = useRef<number | null>(null);
   const [playbackHistoryRefreshKey, setPlaybackHistoryRefreshKey] = useState(0);
+  const [skipUsedForVideoId, setSkipUsedForVideoId] = useState<string | null>(null);
   const [favoritedVideoIds, setFavoritedVideoIds] = useState<string[]>([]);
   const recentlyUsedTidbitIdsRef = useRef<string[]>([]);
   const tidbitCountSinceUserMessageRef = useRef(0);
@@ -108,6 +110,8 @@ export default function RoomWithoutSync({ displayName: displayNameProp = 'ゲス
   const tidbitPreferMainArtistLeftRef = useRef(0);
   /** （邦楽）選曲後〜次の曲まで AI 発言停止 */
   const jpDomesticSilenceVideoIdRef = useRef<string | null>(null);
+  /** 開発簡略モードで comment-pack 基本を出した動画。豆知識を当該曲中は抑止 */
+  const commentPackVideoIdRef = useRef<string | null>(null);
   videoIdRef.current = videoId;
 
   /** プレビュー中だけメイン再生音量を落とす */
@@ -206,6 +210,26 @@ export default function RoomWithoutSync({ displayName: displayNameProp = 'ゲス
     setPlaying(state === 'play');
   }, []);
 
+  const handleSkipCurrentTrack = useCallback(() => {
+    const vid = videoIdRef.current;
+    if (!vid) return;
+    setSkipUsedForVideoId(vid);
+    const trySeek = (attempt: number) => {
+      const h = playerRef.current;
+      if (!h || videoIdRef.current !== vid) return;
+      const d = h.getDuration();
+      if (d > 0.5) {
+        h.seekTo(Math.max(0, d - 0.25));
+        h.playVideo();
+        return;
+      }
+      if (attempt < 25) {
+        window.setTimeout(() => trySeek(attempt + 1), 120);
+      }
+    };
+    trySeek(0);
+  }, []);
+
   const addAiMessage = useCallback(
     (
       body: string,
@@ -286,6 +310,10 @@ export default function RoomWithoutSync({ displayName: displayNameProp = 'ゲス
       const jpS = jpDomesticSilenceVideoIdRef.current;
       const vNow = videoIdRef.current;
       if (jpS != null && vNow != null && jpS === vNow) return;
+      if (isDevMinimalSongAi()) {
+        const packed = commentPackVideoIdRef.current;
+        if (packed != null && packed === vNow) return;
+      }
       const now = Date.now();
       if (
         now - lastActivityAtRef.current >= SILENCE_TIDBIT_SEC * 1000 &&
@@ -344,6 +372,8 @@ export default function RoomWithoutSync({ displayName: displayNameProp = 'ゲス
   useEffect(() => {
     nextPromptShownForVideoIdRef.current = null;
     lastEndedVideoIdForTidbitRef.current = null;
+    commentPackVideoIdRef.current = null;
+    setSkipUsedForVideoId(null);
     if (!videoId) {
       jpDomesticSilenceVideoIdRef.current = null;
     }
@@ -395,6 +425,36 @@ export default function RoomWithoutSync({ displayName: displayNameProp = 'ゲス
 
   const fetchCommentaryAndPublish = useCallback(
     (vid: string) => {
+      if (isDevMinimalSongAi()) {
+        fetch('/api/ai/comment-pack', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ videoId: vid }),
+        })
+          .then((r) => (r.ok ? r.json() : null))
+          .then((pack) => {
+            if (pack?.skipAiCommentary) {
+              commentPackVideoIdRef.current = null;
+              addSystemMessage(SYSTEM_MESSAGE_JP_NO_COMMENTARY);
+              return;
+            }
+            if (pack?.baseComment) {
+              commentPackVideoIdRef.current = vid;
+              const packPrefix = pack?.source === 'library' ? '[DB] ' : '[NEW] ';
+              addAiMessage(packPrefix + pack.baseComment);
+              touchActivity();
+              tidbitPreferMainArtistLeftRef.current = 2;
+              return;
+            }
+            commentPackVideoIdRef.current = null;
+            addSystemMessage(SYSTEM_MESSAGE_COMMENTARY_FETCH_FAILED);
+          })
+          .catch(() => {
+            commentPackVideoIdRef.current = null;
+            addSystemMessage(SYSTEM_MESSAGE_COMMENTARY_FETCH_FAILED);
+          });
+        return;
+      }
       fetch('/api/ai/commentary', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -526,7 +586,10 @@ export default function RoomWithoutSync({ displayName: displayNameProp = 'ゲス
       setVideoId(id);
       playerRef.current?.loadVideoById(id);
       scheduleLocalAutoPlayAfterLoad();
-      fetchAnnounceAndPublish(id, sameReplay ? { silent: true } : undefined);
+      fetchAnnounceAndPublish(
+        id,
+        (sameReplay || isDevMinimalSongAi()) ? { silent: true } : undefined,
+      );
       if (!sameReplay) fetchCommentaryAndPublish(id);
       saveSongHistory(id);
       schedulePlaybackHistory(roomId ?? '', id);
@@ -655,7 +718,10 @@ export default function RoomWithoutSync({ displayName: displayNameProp = 'ゲス
               addAiMessage(`${data2.artistTitle} を貼りました！`);
               saveSongHistory(vid);
               touchActivity();
-              fetchAnnounceAndPublish(vid, sameReplay ? { silent: true } : undefined);
+              fetchAnnounceAndPublish(
+                vid,
+                (sameReplay || isDevMinimalSongAi()) ? { silent: true } : undefined,
+              );
               if (!sameReplay) fetchCommentaryAndPublish(vid);
               schedulePlaybackHistory(roomId ?? '', vid);
             } else {
@@ -761,6 +827,9 @@ export default function RoomWithoutSync({ displayName: displayNameProp = 'ゲス
           currentVideoId={videoId}
           favoritedVideoIds={favoritedVideoIds}
           onFavoriteCurrentClick={handleFavoriteCurrentClick}
+          skipCurrentTrackActive={Boolean(videoId && skipUsedForVideoId !== videoId)}
+          skipCurrentTrackDisabled={false}
+          onSkipCurrentTrack={handleSkipCurrentTrack}
         />
       </section>
 

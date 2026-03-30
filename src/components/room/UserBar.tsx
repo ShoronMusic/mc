@@ -40,6 +40,14 @@ interface UserBarProps {
   myClientId?: string;
   currentOwnerClientId?: string;
   currentSongPosterClientId?: string;
+  /** 次に再生予定の曲をキュー済みの参加者（5分制限・複数人時） */
+  queuedSongPublisherClientId?: string;
+  /** 選曲者またはチャットオーナー: スキップが押せる見た目 */
+  skipCurrentTrackActive?: boolean;
+  /** 上記以外: グレーアウト（クリック不可） */
+  skipCurrentTrackDisabled?: boolean;
+  /** 再生末尾へシークして終了扱い（active 時のみ呼ぶ） */
+  onSkipCurrentTrack?: () => void;
   onParticipantClick?: (displayName: string) => void;
 }
 
@@ -65,6 +73,10 @@ export default function UserBar({
   myClientId = '',
   currentOwnerClientId = '',
   currentSongPosterClientId = '',
+  queuedSongPublisherClientId = '',
+  skipCurrentTrackActive = false,
+  skipCurrentTrackDisabled = false,
+  onSkipCurrentTrack,
   onParticipantClick,
 }: UserBarProps) {
   const isLg = useIsLgViewport();
@@ -184,58 +196,110 @@ export default function UserBar({
           const name = participantDisplayName(p, myClientId, isGuest);
           const color = p.textColor ?? '#e5e7eb';
           const isCurrentSongPoster = p.clientId === currentSongPosterClientId;
+          const isQueuedSongPoster =
+            Boolean(queuedSongPublisherClientId) && p.clientId === queuedSongPublisherClientId;
           const isRoomOwner = Boolean(currentOwnerClientId && p.clientId === currentOwnerClientId);
+          const chipTitle = isCurrentSongPoster
+            ? '今の曲の選曲者（再生中）'
+            : isQueuedSongPoster
+              ? '選曲済み。前の曲終了後に再生されます'
+              : undefined;
           return (
             <span
               key={p.clientId}
-              className={`inline-flex items-center gap-0.5 rounded px-1 ${isCurrentSongPoster ? 'bg-amber-900/40 ring-1 ring-amber-600/50' : ''}`}
-              title={isCurrentSongPoster ? '今の曲の選曲者（再生中）' : undefined}
+              className={`inline-flex flex-col items-start gap-0 rounded px-1 ${isCurrentSongPoster ? 'bg-amber-900/40 ring-1 ring-amber-600/50' : isQueuedSongPoster ? 'bg-sky-950/35 ring-1 ring-sky-700/40' : ''}`}
+              title={chipTitle}
             >
-              <span className="text-gray-500">[{i + 1}]</span>
-              {isCurrentSongPoster && (
-                <span
-                  className="animate-now-playing-wave inline-flex h-3 items-end gap-0.5"
-                  style={{ transformOrigin: 'bottom' }}
-                  aria-hidden
-                >
-                  {[1, 2, 3, 4, 5].map((j) => (
-                    <span
-                      key={j}
-                      className="inline-block w-0.5 rounded-full bg-amber-400"
-                      style={{ height: '0.75rem', transformOrigin: 'bottom' }}
-                    />
-                  ))}
-                </span>
+              <span className="inline-flex items-center gap-0.5">
+                <span className="text-gray-500">[{i + 1}]</span>
+                {isCurrentSongPoster && (
+                  <span
+                    className="animate-now-playing-wave inline-flex h-3 items-end gap-0.5"
+                    style={{ transformOrigin: 'bottom' }}
+                    aria-hidden
+                  >
+                    {[1, 2, 3, 4, 5].map((j) => (
+                      <span
+                        key={j}
+                        className="inline-block w-0.5 rounded-full bg-amber-400"
+                        style={{ height: '0.75rem', transformOrigin: 'bottom' }}
+                      />
+                    ))}
+                  </span>
+                )}
+                {isRoomOwner && (
+                  <span className="shrink-0 text-amber-400" title="チャットオーナー" aria-label="チャットオーナー">
+                    👑
+                  </span>
+                )}
+                {p.clientId !== myClientId && onParticipantClick ? (
+                  <button
+                    type="button"
+                    onClick={() => onParticipantClick(p.displayName)}
+                    className="cursor-pointer rounded border-0 bg-transparent p-0 text-left underline decoration-dotted underline-offset-1 hover:opacity-90"
+                    style={{ color }}
+                    title={`${p.displayName}さんをメンション（発言欄に挿入）`}
+                  >
+                    {name}
+                  </button>
+                ) : (
+                  <span style={{ color }}>{name}</span>
+                )}
+                {p.status && (
+                  <span className="ml-0.5 text-xs text-white" title={`ステータス: ${p.status}`}>
+                    [{p.status}]
+                  </span>
+                )}
+              </span>
+              {isQueuedSongPoster && (
+                <span className="pl-5 text-[10px] leading-tight text-sky-300/95">選曲済み（待機中）</span>
               )}
-              {isRoomOwner && (
-                <span className="shrink-0 text-amber-400" title="チャットオーナー" aria-label="チャットオーナー">
-                  👑
-                </span>
-              )}
-              {p.clientId !== myClientId && onParticipantClick ? (
+              {isCurrentSongPoster && skipCurrentTrackActive && onSkipCurrentTrack ? (
                 <button
                   type="button"
-                  onClick={() => onParticipantClick(p.displayName)}
-                  className="cursor-pointer rounded border-0 bg-transparent p-0 text-left underline decoration-dotted underline-offset-1 hover:opacity-90"
-                  style={{ color }}
-                  title={`${p.displayName}さんをメンション（発言欄に挿入）`}
+                  onClick={onSkipCurrentTrack}
+                  className="mt-0.5 rounded border border-amber-600/60 bg-amber-950/40 px-2 py-0.5 text-[10px] font-medium leading-tight text-amber-100 hover:bg-amber-900/50"
+                  aria-label="この曲を終了扱いにスキップ"
+                  title="再生を最後まで進め、曲終了と同じ扱いにします"
                 >
-                  {name}
+                  スキップ
                 </button>
-              ) : (
-                <span style={{ color }}>{name}</span>
-              )}
-              {p.status && (
-                <span className="ml-0.5 text-xs text-white" title={`ステータス: ${p.status}`}>
-                  [{p.status}]
+              ) : isCurrentSongPoster && skipCurrentTrackDisabled ? (
+                <span
+                  className="mt-0.5 inline-flex rounded border border-gray-700 bg-gray-800/50 px-2 py-0.5 text-[10px] font-medium leading-tight text-gray-500"
+                  aria-hidden
+                  title="選曲した方かチャットオーナーのみスキップできます"
+                >
+                  スキップ
                 </span>
-              )}
+              ) : null}
             </span>
           );
         })}
       </span>
     ) : (
-      <span className="text-sm text-gray-200">{label}</span>
+      <span className="flex flex-col items-start gap-1">
+        <span className="text-sm text-gray-200">{label}</span>
+        {skipCurrentTrackActive && onSkipCurrentTrack ? (
+          <button
+            type="button"
+            onClick={onSkipCurrentTrack}
+            className="rounded border border-amber-600/60 bg-amber-950/40 px-2 py-0.5 text-[10px] font-medium text-amber-100 hover:bg-amber-900/50"
+            aria-label="この曲を終了扱いにスキップ"
+            title="再生を最後まで進め、曲終了と同じ扱いにします"
+          >
+            スキップ
+          </button>
+        ) : skipCurrentTrackDisabled ? (
+          <span
+            className="inline-flex rounded border border-gray-700 bg-gray-800/50 px-2 py-0.5 text-[10px] font-medium text-gray-500"
+            aria-hidden
+            title="選曲した方かチャットオーナーのみスキップできます"
+          >
+            スキップ
+          </span>
+        ) : null}
+      </span>
     );
 
   const desktopTrailing =
@@ -269,31 +333,73 @@ export default function UserBar({
   /** モバイル: 中央の再生中ユーザー */
   const mobileCenter =
     participants.length === 0 ? (
-      <span className="min-w-0 truncate text-center text-sm text-gray-200">{label}</span>
+      <div className="flex min-w-0 max-w-full flex-col items-center justify-center gap-0.5 px-0.5">
+        <span className="min-w-0 truncate text-center text-sm text-gray-200">{label}</span>
+        {skipCurrentTrackActive && onSkipCurrentTrack ? (
+          <button
+            type="button"
+            onClick={onSkipCurrentTrack}
+            className="shrink-0 rounded border border-amber-600/60 bg-amber-950/40 px-2 py-0.5 text-[10px] font-medium text-amber-100 hover:bg-amber-900/50"
+            aria-label="この曲を終了扱いにスキップ"
+            title="再生を最後まで進め、曲終了と同じ扱いにします"
+          >
+            スキップ
+          </button>
+        ) : skipCurrentTrackDisabled ? (
+          <span
+            className="shrink-0 rounded border border-gray-700 bg-gray-800/50 px-2 py-0.5 text-[10px] font-medium text-gray-500"
+            aria-hidden
+            title="選曲した方かチャットオーナーのみスキップできます"
+          >
+            スキップ
+          </span>
+        ) : null}
+      </div>
     ) : poster ? (
       <div
-        className="flex min-w-0 max-w-full items-center justify-center gap-1.5 px-1"
+        className="flex min-w-0 max-w-full flex-col items-center justify-center gap-0.5 px-1"
         title="今の曲の選曲者（再生中）"
       >
-        <span
-          className="animate-now-playing-wave inline-flex h-3 shrink-0 items-end gap-0.5"
-          style={{ transformOrigin: 'bottom' }}
-          aria-hidden
-        >
-          {[1, 2, 3, 4, 5].map((j) => (
-            <span
-              key={j}
-              className="inline-block w-0.5 rounded-full bg-amber-400"
-              style={{ height: '0.75rem', transformOrigin: 'bottom' }}
-            />
-          ))}
-        </span>
-        <span className="min-w-0 truncate text-sm font-medium text-amber-100">
-          {participantDisplayName(poster, myClientId, isGuest)}
-        </span>
-        {currentOwnerClientId && poster.clientId === currentOwnerClientId ? (
-          <span className="shrink-0 text-amber-400" title="チャットオーナー" aria-label="チャットオーナー">
-            👑
+        <div className="flex min-w-0 max-w-full items-center justify-center gap-1.5">
+          <span
+            className="animate-now-playing-wave inline-flex h-3 shrink-0 items-end gap-0.5"
+            style={{ transformOrigin: 'bottom' }}
+            aria-hidden
+          >
+            {[1, 2, 3, 4, 5].map((j) => (
+              <span
+                key={j}
+                className="inline-block w-0.5 rounded-full bg-amber-400"
+                style={{ height: '0.75rem', transformOrigin: 'bottom' }}
+              />
+            ))}
+          </span>
+          <span className="min-w-0 truncate text-sm font-medium text-amber-100">
+            {participantDisplayName(poster, myClientId, isGuest)}
+          </span>
+          {currentOwnerClientId && poster.clientId === currentOwnerClientId ? (
+            <span className="shrink-0 text-amber-400" title="チャットオーナー" aria-label="チャットオーナー">
+              👑
+            </span>
+          ) : null}
+        </div>
+        {skipCurrentTrackActive && onSkipCurrentTrack ? (
+          <button
+            type="button"
+            onClick={onSkipCurrentTrack}
+            className="shrink-0 rounded border border-amber-600/60 bg-amber-950/40 px-2 py-0.5 text-[10px] font-medium text-amber-100 hover:bg-amber-900/50"
+            aria-label="この曲を終了扱いにスキップ"
+            title="再生を最後まで進め、曲終了と同じ扱いにします"
+          >
+            スキップ
+          </button>
+        ) : skipCurrentTrackDisabled ? (
+          <span
+            className="shrink-0 rounded border border-gray-700 bg-gray-800/50 px-2 py-0.5 text-[10px] font-medium text-gray-500"
+            aria-hidden
+            title="選曲した方かチャットオーナーのみスキップできます"
+          >
+            スキップ
           </span>
         ) : null}
       </div>
@@ -342,7 +448,7 @@ export default function UserBar({
 
   return (
     <>
-      <div className="flex h-11 shrink-0 items-center gap-2 overflow-hidden rounded-lg border border-gray-700 bg-gray-900/50 px-2">
+      <div className="flex min-h-11 shrink-0 items-center gap-2 overflow-x-hidden overflow-y-auto rounded-lg border border-gray-700 bg-gray-900/50 px-2 py-1">
         {listOpener}
         <div className="min-w-0 flex-1 overflow-hidden">{mobileCenter}</div>
         {mobileTrailing}
@@ -381,11 +487,13 @@ export default function UserBar({
                 const name = participantDisplayName(p, myClientId, isGuest);
                 const color = p.textColor ?? '#e5e7eb';
                 const isCurrentSongPoster = p.clientId === currentSongPosterClientId;
+                const isQueuedSongPoster =
+                  Boolean(queuedSongPublisherClientId) && p.clientId === queuedSongPublisherClientId;
                 const isRoomOwner = Boolean(currentOwnerClientId && p.clientId === currentOwnerClientId);
                 return (
                   <li
                     key={p.clientId}
-                    className={`flex flex-col gap-0.5 border-b border-gray-800/80 px-3 py-2.5 last:border-b-0 ${isCurrentSongPoster ? 'bg-amber-950/25' : ''}`}
+                    className={`flex flex-col gap-0.5 border-b border-gray-800/80 px-3 py-2.5 last:border-b-0 ${isCurrentSongPoster ? 'bg-amber-950/25' : ''} ${isQueuedSongPoster && !isCurrentSongPoster ? 'bg-sky-950/20' : ''}`}
                   >
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                       <span className="text-xs text-gray-500">[{i + 1}]</span>
@@ -429,6 +537,35 @@ export default function UserBar({
                     </div>
                     {isCurrentSongPoster && (
                       <span className="pl-6 text-[11px] text-amber-200/80">再生中の選曲</span>
+                    )}
+                    {isCurrentSongPoster && skipCurrentTrackActive && onSkipCurrentTrack ? (
+                      <div className="pl-6 pt-0.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onSkipCurrentTrack();
+                            setListOpen(false);
+                          }}
+                          className="rounded border border-amber-600/60 bg-amber-950/40 px-2 py-1 text-[11px] font-medium text-amber-100 hover:bg-amber-900/50"
+                          aria-label="この曲を終了扱いにスキップ"
+                          title="再生を最後まで進め、曲終了と同じ扱いにします"
+                        >
+                          スキップ
+                        </button>
+                      </div>
+                    ) : isCurrentSongPoster && skipCurrentTrackDisabled ? (
+                      <div className="pl-6 pt-0.5">
+                        <span
+                          className="inline-flex rounded border border-gray-700 bg-gray-800/50 px-2 py-1 text-[11px] font-medium text-gray-500"
+                          aria-hidden
+                          title="選曲した方かチャットオーナーのみスキップできます"
+                        >
+                          スキップ
+                        </span>
+                      </div>
+                    ) : null}
+                    {isQueuedSongPoster && (
+                      <span className="pl-6 text-[11px] text-sky-200/85">選曲済み（待機中）</span>
                     )}
                     {p.status ? (
                       <span className="pl-6 text-xs text-gray-400" title={`ステータス: ${p.status}`}>

@@ -16,6 +16,7 @@ import { getGeminiModel, logGeminiUsage } from '@/lib/gemini';
 import { persistGeminiUsageLog } from '@/lib/gemini-usage-log';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { upsertSongAndVideo } from '@/lib/song-entities';
+import { isDevMinimalSongAi } from '@/lib/dev-minimal-song-ai';
 import {
   COMMENT_PACK_MAX_FREE_COMMENTS,
   COMMENT_PACK_NEW_RELEASE_DISCLAIMER,
@@ -47,6 +48,7 @@ function isPublishedWithinLastDays(publishedAtIso: string | undefined, days: num
  * - 同一動画は song_tidbits から再利用（新曲は注釈付き基本のみキャッシュ、それ以外は4本そろいでキャッシュ）
  * - 邦楽節約: メタデータが日本語っぽい／音声言語が ja／MusicBrainz で Area=Japan 等のときは AI 曲解説を出さない（skipAiCommentary）。ただし ONE OK ROCK / XG / Ado / ATARASHII GAKKO!（＋88rising）/ YOASOBI の公式 YouTube チャンネル（channelId 固定＋ env 追加分）は除外。COMMENT_PACK_JP_ECONOMY=0 でオフ
  * - COMMENT_PACK_SKIP_CACHE=1 で常に新規生成
+ * - NEXT_PUBLIC_DEV_MINIMAL_SONG_AI=1 で開発簡略: 基本1本のみ生成・キャッシュ返却も自由3本を落とす（新曲30日以内扱いと同様）
  * - メタからアーティストを信頼できない（曲名も空・キュレーターchでアップローダー名=アーティスト等）は skipAiCommentary。AI_COMMENTARY_ALLOW_UNCERTAIN_ARTIST=1 で無効化
  */
 export async function POST(request: Request) {
@@ -70,6 +72,7 @@ export async function POST(request: Request) {
     );
 
     const isNewRelease = isPublishedWithinLastDays(snippet?.publishedAt, NEW_RELEASE_DAYS);
+    const devMinimalSongAi = isDevMinimalSongAi();
     const isJpEconomy = await resolveJapaneseEconomyWithMusicBrainz({
       title,
       artistDisplay,
@@ -79,8 +82,8 @@ export async function POST(request: Request) {
       channelTitle: snippet?.channelTitle ?? null,
       defaultAudioLanguage: snippet?.defaultAudioLanguage ?? null,
     });
-    /** 新曲のみ基本1本（自由3本なし）。邦楽は公式チャンネル例外を除き生成しない */
-    const baseOnlyPack = isNewRelease;
+    /** 新曲のみ基本1本（自由3本なし）。開発フラグ時も同様。邦楽は公式チャンネル例外を除き生成しない */
+    const baseOnlyPack = isNewRelease || devMinimalSongAi;
 
     // songs / song_videos 登録＋ song_id
     let songId: string | null = null;
@@ -136,13 +139,22 @@ export async function POST(request: Request) {
       } else {
         const cached = await getStoredCommentPackByVideoId(reader, videoId);
         if (cached) {
+          const stripFreeForDev = devMinimalSongAi && !isNewRelease;
+          const tidbitIdsFull = cached.tidbitIds ?? [];
+          const tidbitIdsForClient = stripFreeForDev ? tidbitIdsFull.slice(0, 1) : [...tidbitIdsFull];
+          const freeCommentsForClient = stripFreeForDev ? [] : [...cached.freeComments];
+          const freeCommentTidbitIds =
+            !stripFreeForDev && tidbitIdsForClient.length > 1
+              ? tidbitIdsForClient.slice(1)
+              : [];
           return NextResponse.json({
             songId,
             videoId,
             baseComment: cached.baseComment,
-            freeComments: [...cached.freeComments],
+            freeComments: freeCommentsForClient,
             source: 'library',
-            ...(cached.tidbitIds?.length ? { tidbitIds: cached.tidbitIds } : {}),
+            ...(tidbitIdsForClient.length ? { tidbitIds: tidbitIdsForClient } : {}),
+            ...(freeCommentTidbitIds.length > 0 ? { freeCommentTidbitIds } : {}),
           });
         }
       }
@@ -191,7 +203,9 @@ ${colorsOfficialLock}${geniusOfficialLock}${appleMusicOfficialLock}
     const basePromptTail = isNewRelease
       ? `・この動画は公開から約1ヶ月以内の新曲扱いです。周辺情報が不十分な可能性があるため、断定を避け、分かる範囲の紹介にとどめてください（推測や詳細な背景説明は控えめに）。
 ・この後に自由コメントは出しません。ここ1本で完結する基本紹介にしてください。`
-      : `・この1本は「基本情報」専用です。あとから3本の自由コメント（解釈・サウンド・栄誉など）が続くため、ここでは深い解説や歌詞の細かい読み下しは書かないでください。`;
+      : devMinimalSongAi
+        ? `・開発中モードのため、自由コメントは生成しません。ここ1本で完結する基本紹介にしてください。`
+        : `・この1本は「基本情報」専用です。あとから3本の自由コメント（解釈・サウンド・栄誉など）が続くため、ここでは深い解説や歌詞の細かい読み下しは書かないでください。`;
 
     const basePrompt = `選曲アナウンスの直後に、最初にだけ表示する「曲の基本情報」を1本だけ書いてください。現在は${currentYear}年です。
 ${metaLockBlock}
