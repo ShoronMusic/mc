@@ -274,7 +274,7 @@ export default function MyPage({
   onUserStatusChange,
   songLimit5MinEnabled = true,
   onSongLimit5MinToggle,
-  aiFreeSpeechStopped = false,
+  aiFreeSpeechStopped = true,
   onAiFreeSpeechStopToggle,
   commentPackMode = 'base_only',
   onCommentPackModeChange,

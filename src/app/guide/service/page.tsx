@@ -38,8 +38,13 @@ export default function GuideServicePage() {
       <section className="space-y-3">
         <h2 className="text-base font-semibold text-white">お問い合わせ・フィードバック</h2>
         <p className="text-gray-400">
-          不具合やご意見は、アプリ内のフィードバックや運営が案内する連絡先があればそちらへお願いします（整備状況により記載を追加してください）。
+          不具合やご意見は、アプリ内のフィードバックまたは下記連絡先までお願いします。
         </p>
+      </section>
+      <section className="space-y-3 rounded-lg border border-gray-800 bg-gray-900/40 p-4">
+        <h2 className="text-base font-semibold text-white">運営者・連絡先</h2>
+        <p className="text-gray-300">洋楽AIチャット事務局</p>
+        <p className="text-gray-300">mail@musicai.jp</p>
       </section>
     </article>
   );

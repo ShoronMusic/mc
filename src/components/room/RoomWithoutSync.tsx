@@ -87,6 +87,19 @@ export default function RoomWithoutSync({ displayName: displayNameProp = 'ゲス
   useRoomChatLogPersistence(roomId, messages, { isGuest, myClientId: '' });
   const [myPageOpen, setMyPageOpen] = useState(false);
   const [playbackHistoryModalOpen, setPlaybackHistoryModalOpen] = useState(false);
+  const [chatSummaryModalOpen, setChatSummaryModalOpen] = useState(false);
+  const [chatSummaryLoading, setChatSummaryLoading] = useState(false);
+  const [chatSummaryError, setChatSummaryError] = useState<string | null>(null);
+  const [chatSummary, setChatSummary] = useState<{
+    summaryText: string;
+    sessionWindowLabel: string;
+    participants?: string[];
+    participantSongCounts?: { displayName: string; count: number }[];
+    eraDistribution?: { era: string; count: number }[];
+    styleDistribution?: { style: string; count: number }[];
+    popularArtists?: { artist: string; count: number }[];
+    popularTracks?: { artist: string; title: string; count: number }[];
+  } | null>(null);
   const isLg = useIsLgViewport();
   const [userTextColor, setUserTextColor] = useState(DEFAULT_CHAT_TEXT_COLOR);
   const lastActivityAtRef = useRef(Date.now());
@@ -197,6 +210,37 @@ export default function RoomWithoutSync({ displayName: displayNameProp = 'ゲス
     },
     [isGuest, fetchFavoritedIds, displayNameProp]
   );
+
+  const openChatSummaryModal = useCallback(() => {
+    if (!roomId) return;
+    setChatSummaryModalOpen(true);
+    setChatSummaryLoading(true);
+    setChatSummaryError(null);
+    fetch(`/api/room-session-summary?roomId=${encodeURIComponent(roomId)}`)
+      .then((r) => (r.ok ? r.json() : r.json().catch(() => ({}))))
+      .then((data) => {
+        if (!data || data.error) {
+          setChatSummaryError(data?.error ?? 'サマリー取得に失敗しました。');
+          setChatSummary(null);
+          return;
+        }
+        setChatSummary({
+          summaryText: data.summaryText ?? '',
+          sessionWindowLabel: data.sessionWindowLabel ?? '',
+          participants: Array.isArray(data.participants) ? data.participants : [],
+          participantSongCounts: Array.isArray(data.participantSongCounts) ? data.participantSongCounts : [],
+          eraDistribution: Array.isArray(data.eraDistribution) ? data.eraDistribution : [],
+          styleDistribution: Array.isArray(data.styleDistribution) ? data.styleDistribution : [],
+          popularArtists: Array.isArray(data.popularArtists) ? data.popularArtists : [],
+          popularTracks: Array.isArray(data.popularTracks) ? data.popularTracks : [],
+        });
+      })
+      .catch(() => {
+        setChatSummaryError('サマリー取得に失敗しました。');
+        setChatSummary(null);
+      })
+      .finally(() => setChatSummaryLoading(false));
+  }, [roomId]);
 
   const isShortConfirmation = (t: string) =>
     /^(はい|うん|ええ|お願い|そうです|お願いします|いいです|お願いね|はい!?|うん!?|ええ!?)$/i.test(t.trim());
@@ -383,7 +427,7 @@ export default function RoomWithoutSync({ displayName: displayNameProp = 'ゲス
       fetch('/api/ai/announce-song', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ videoId: vid, displayName: displayNameProp }),
+        body: JSON.stringify({ videoId: vid, displayName: displayNameProp, roomId }),
       })
         .then((r) => (r.ok ? r.json() : null))
         .then((data) => {
@@ -423,13 +467,18 @@ export default function RoomWithoutSync({ displayName: displayNameProp = 'ゲス
         fetch('/api/ai/comment-pack', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ videoId: vid }),
+          body: JSON.stringify({ videoId: vid, roomId }),
         })
           .then((r) => (r.ok ? r.json() : null))
           .then((pack) => {
             if (pack?.skipAiCommentary) {
               commentPackVideoIdRef.current = null;
-              addSystemMessage(SYSTEM_MESSAGE_JP_NO_COMMENTARY);
+              const isJpSilenceVideo =
+                jpDomesticSilenceVideoIdRef.current != null &&
+                jpDomesticSilenceVideoIdRef.current === vid;
+              if (!isJpSilenceVideo) {
+                addSystemMessage(SYSTEM_MESSAGE_JP_NO_COMMENTARY);
+              }
               return;
             }
             if (pack?.baseComment) {
@@ -457,7 +506,12 @@ export default function RoomWithoutSync({ displayName: displayNameProp = 'ゲス
         .then((r) => (r.ok ? r.json() : null))
         .then((data) => {
           if (data?.skipAiCommentary) {
-            addSystemMessage(SYSTEM_MESSAGE_JP_NO_COMMENTARY);
+            const isJpSilenceVideo =
+              jpDomesticSilenceVideoIdRef.current != null &&
+              jpDomesticSilenceVideoIdRef.current === vid;
+            if (!isJpSilenceVideo) {
+              addSystemMessage(SYSTEM_MESSAGE_JP_NO_COMMENTARY);
+            }
             return;
           }
           if (data?.text) {
@@ -698,6 +752,8 @@ export default function RoomWithoutSync({ displayName: displayNameProp = 'ゲス
             if (data?.text) {
               addAiMessage(data.text);
               touchActivity();
+            } else if (data?.skipped === true) {
+              // 雑談時はサーバー側で意図的に無応答（エラー表示しない）
             } else addSystemMessage(aiErrorMessage);
           })
           .catch(() => addSystemMessage(aiErrorMessage));
@@ -751,6 +807,7 @@ export default function RoomWithoutSync({ displayName: displayNameProp = 'ゲス
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           userMessage: text,
+          roomId: roomId ?? undefined,
           recentMessages: messages.slice(-6).map((m) => ({
             displayName: m.displayName,
             body: m.body,
@@ -864,6 +921,60 @@ export default function RoomWithoutSync({ displayName: displayNameProp = 'ゲス
         </div>
       )}
 
+      {chatSummaryModalOpen && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="チャットサマリー"
+          onClick={() => setChatSummaryModalOpen(false)}
+        >
+          <div
+            className="max-h-[85vh] w-full max-w-2xl overflow-auto rounded-lg border border-gray-700 bg-gray-900 p-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-base font-semibold text-white">チャットサマリー</h2>
+              <button
+                type="button"
+                onClick={() => setChatSummaryModalOpen(false)}
+                className="rounded border border-gray-600 bg-gray-800 px-3 py-1.5 text-sm text-gray-200 hover:bg-gray-700"
+              >
+                閉じる
+              </button>
+            </div>
+            {chatSummaryLoading ? (
+              <p className="text-sm text-gray-400">読み込み中…</p>
+            ) : chatSummaryError ? (
+              <p className="text-sm text-amber-300">{chatSummaryError}</p>
+            ) : chatSummary ? (
+              <div className="space-y-2 text-sm">
+                <p className="text-gray-300">対象枠: {chatSummary.sessionWindowLabel || '—'}</p>
+                <p className="text-gray-100">{chatSummary.summaryText}</p>
+                <p className="text-gray-300">参加者: {(chatSummary.participants ?? []).join('、') || '—'}</p>
+                <p className="text-gray-300">
+                  選曲数: {(chatSummary.participantSongCounts ?? []).map((v) => `${v.displayName}(${v.count})`).join(' / ') || '—'}
+                </p>
+                <p className="text-gray-300">
+                  時代分布: {(chatSummary.eraDistribution ?? []).map((v) => `${v.era}(${v.count})`).join(' / ') || '—'}
+                </p>
+                <p className="text-gray-300">
+                  スタイル分布: {(chatSummary.styleDistribution ?? []).map((v) => `${v.style}(${v.count})`).join(' / ') || '—'}
+                </p>
+                <p className="text-gray-300">
+                  人気アーティスト: {(chatSummary.popularArtists ?? []).map((v) => `${v.artist}(${v.count})`).join(' / ') || '—'}
+                </p>
+                <p className="text-gray-300">
+                  人気曲: {(chatSummary.popularTracks ?? []).map((v) => `${v.artist} - ${v.title} (${v.count})`).join(' / ') || '—'}
+                </p>
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500">データがありません。</p>
+            )}
+          </div>
+        </div>
+      )}
+
       <RoomMainLayout
         left={
           <Chat
@@ -871,6 +982,7 @@ export default function RoomWithoutSync({ displayName: displayNameProp = 'ゲス
             currentUserDisplayName={displayNameProp}
             userTextColor={userTextColor}
             currentVideoId={videoId}
+            onChatSummaryClick={roomId ? openChatSummaryModal : undefined}
           />
         }
         rightTop={

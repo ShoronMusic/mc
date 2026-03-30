@@ -14,6 +14,7 @@ import {
   ChevronDownIcon,
   XMarkIcon,
   HeartIcon,
+  DocumentTextIcon,
 } from '@heroicons/react/24/outline';
 import { useIsLgViewport } from '@/hooks/useLgViewport';
 
@@ -30,6 +31,8 @@ interface UserBarProps {
   onMyPageClick?: () => void;
   /** モバイル等: マイページの右隣に「視聴履歴」ボタンを出す */
   onPlaybackHistoryClick?: () => void;
+  /** 途中参加者向けの「ここまでの流れ」サマリー */
+  onChatSummaryClick?: () => void;
   /** いま再生中の videoId（モバイルの♡トグル用） */
   currentVideoId?: string | null;
   /** 自分がお気に入り登録した videoId 一覧（モバイルの♡点灯用） */
@@ -68,6 +71,7 @@ export default function UserBar({
   isGuest = false,
   onMyPageClick,
   onPlaybackHistoryClick,
+  onChatSummaryClick,
   currentVideoId = null,
   favoritedVideoIds = [],
   onFavoriteCurrentClick,
@@ -144,6 +148,22 @@ export default function UserBar({
         title="視聴履歴"
       >
         <ClockIcon className="h-5 w-5" aria-hidden />
+      </button>
+    ) : null;
+
+  const chatSummaryButton =
+    onChatSummaryClick != null ? (
+      <button
+        type="button"
+        onClick={() => {
+          setListOpen(false);
+          onChatSummaryClick();
+        }}
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-600 bg-gray-800 text-gray-200 hover:bg-gray-700"
+        aria-label="チャットサマリーを表示"
+        title="チャットサマリー"
+      >
+        <DocumentTextIcon className="h-5 w-5" aria-hidden />
       </button>
     ) : null;
 
@@ -324,7 +344,7 @@ export default function UserBar({
     );
 
   const desktopTrailing =
-    myPageButton || playbackHistoryButton ? (
+    myPageButton || playbackHistoryButton || chatSummaryButton ? (
       <div className="flex shrink-0 items-center gap-2">
         {onMyPageClick != null ? (
           <button
@@ -346,6 +366,17 @@ export default function UserBar({
             title="視聴履歴を表示"
           >
             視聴履歴
+          </button>
+        ) : null}
+        {onChatSummaryClick != null ? (
+          <button
+            type="button"
+            onClick={onChatSummaryClick}
+            className="shrink-0 rounded border border-gray-600 bg-gray-800 px-3 py-2 text-sm font-medium text-gray-200 hover:bg-gray-700 hover:text-white"
+            aria-label="チャットサマリーを表示"
+            title="途中参加者向けの流れ"
+          >
+            チャットサマリー
           </button>
         ) : null}
       </div>
@@ -445,11 +476,12 @@ export default function UserBar({
     );
 
   const mobileTrailing =
-    favoriteCurrentButton || myPageButton || playbackHistoryButton ? (
+    favoriteCurrentButton || myPageButton || playbackHistoryButton || chatSummaryButton ? (
       <div className="flex shrink-0 items-center gap-1">
         {favoriteCurrentButton}
         {myPageButton}
         {playbackHistoryButton}
+        {chatSummaryButton}
       </div>
     ) : null;
 

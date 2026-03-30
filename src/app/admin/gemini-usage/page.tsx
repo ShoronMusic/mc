@@ -16,6 +16,12 @@ type LogRow = {
   created_at: string;
 };
 
+type TokenSummary = {
+  calls: number;
+  promptTokens: number;
+  outputTokens: number;
+};
+
 /** Gemini Developer API の公式料金（モデル別の入力・出力単価） */
 const GEMINI_PRICING_URL = 'https://ai.google.dev/pricing';
 
@@ -24,6 +30,18 @@ const GOOGLE_AI_STUDIO_USAGE_URL = 'https://aistudio.google.com/usage?timeRange=
 
 /** Google AI Studio 左メニュー「利用額」に相当（日別の利用額・上限） */
 const GOOGLE_AI_STUDIO_SPEND_URL = 'https://aistudio.google.com/spend';
+
+const PRICING_PER_1M_USD: Record<string, { input: number; output: number }> = {
+  'gemini-2.5-flash': { input: 0.3, output: 2.5 },
+  'gemini-2.5-pro': { input: 1.25, output: 10 },
+  'gemini-3.1-pro-preview': { input: 2.0, output: 12 },
+};
+
+function calcCostUsd(promptTokens: number, outputTokens: number, model: string): number {
+  const p = PRICING_PER_1M_USD[model];
+  if (!p) return 0;
+  return (promptTokens / 1_000_000) * p.input + (outputTokens / 1_000_000) * p.output;
+}
 
 const CONTEXT_HELP: Record<string, string> = {
   chat_reply: 'チャットへの AI 返答',
@@ -50,8 +68,12 @@ export default function AdminGeminiUsagePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [totals, setTotals] = useState({ calls: 0, promptTokens: 0, outputTokens: 0 });
-  const [byContext, setByContext] = useState<Record<string, { calls: number; promptTokens: number; outputTokens: number }>>({});
+  const [byContext, setByContext] = useState<Record<string, TokenSummary>>({});
+  const [byModel, setByModel] = useState<Record<string, TokenSummary>>({});
   const [logs, setLogs] = useState<LogRow[]>([]);
+  const [planMonthlySongs, setPlanMonthlySongs] = useState(500);
+  const [planMonthlyUsers, setPlanMonthlyUsers] = useState(30);
+  const [planSafetyMultiplier, setPlanSafetyMultiplier] = useState(1.2);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -64,10 +86,12 @@ export default function AdminGeminiUsagePage() {
         setLogs([]);
         setTotals({ calls: 0, promptTokens: 0, outputTokens: 0 });
         setByContext({});
+        setByModel({});
         return;
       }
       setTotals(data.totals ?? { calls: 0, promptTokens: 0, outputTokens: 0 });
       setByContext(data.byContext ?? {});
+      setByModel(data.byModel ?? {});
       setLogs(Array.isArray(data.logs) ? data.logs : []);
     } catch {
       setError('読み込みに失敗しました。');
@@ -81,6 +105,31 @@ export default function AdminGeminiUsagePage() {
   }, [load]);
 
   const ctxEntries = Object.entries(byContext).sort((a, b) => b[1].calls - a[1].calls);
+  const modelEntries = Object.entries(byModel).sort((a, b) => b[1].calls - a[1].calls);
+  const totalCostUsd = modelEntries.reduce(
+    (sum, [model, v]) => sum + calcCostUsd(v.promptTokens, v.outputTokens, model),
+    0
+  );
+  const approxSongCount = byContext.comment_pack_base?.calls ?? 0;
+  const perSongUsd = approxSongCount > 0 ? totalCostUsd / approxSongCount : 0;
+  const usdToJpy = 160;
+  const estimatedSongsPerDay = days > 0 ? approxSongCount / days : 0;
+  const projectedMonthlySongsFromTrend = estimatedSongsPerDay * 30;
+  const projectedMonthlyUsdFromTrend = projectedMonthlySongsFromTrend * perSongUsd;
+  const plannedMonthlyUsd = planMonthlySongs * perSongUsd * planSafetyMultiplier;
+  const plannedMonthlyJpy = plannedMonthlyUsd * usdToJpy;
+  const plannedPerUserMonthlyJpy = planMonthlyUsers > 0 ? plannedMonthlyJpy / planMonthlyUsers : 0;
+
+  const blendedInputUsdPerM =
+    totals.promptTokens > 0
+      ? modelEntries.reduce((sum, [model, v]) => sum + calcCostUsd(v.promptTokens, 0, model), 0) *
+        (1_000_000 / totals.promptTokens)
+      : 0;
+  const blendedOutputUsdPerM =
+    totals.outputTokens > 0
+      ? modelEntries.reduce((sum, [model, v]) => sum + calcCostUsd(0, v.outputTokens, model), 0) *
+        (1_000_000 / totals.outputTokens)
+      : 0;
 
   return (
     <main className="min-h-screen bg-gray-950 p-4 text-gray-100">
@@ -218,6 +267,101 @@ export default function AdminGeminiUsagePage() {
               </div>
             </section>
 
+            <section className="mb-6 rounded-lg border border-gray-700 bg-gray-900/50 p-4">
+              <h2 className="mb-3 text-sm font-medium text-gray-200">テスト運用向け 試算ツール</h2>
+              <div className="mb-4 grid gap-3 sm:grid-cols-3">
+                <label className="text-xs text-gray-400">
+                  想定 月間曲数
+                  <input
+                    type="number"
+                    min={0}
+                    step={10}
+                    value={planMonthlySongs}
+                    onChange={(e) => setPlanMonthlySongs(Math.max(0, Number(e.target.value) || 0))}
+                    className="mt-1 w-full rounded border border-gray-600 bg-gray-800 px-2 py-1.5 text-sm text-gray-100"
+                  />
+                </label>
+                <label className="text-xs text-gray-400">
+                  想定 月間アクティブユーザー数
+                  <input
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={planMonthlyUsers}
+                    onChange={(e) => setPlanMonthlyUsers(Math.max(1, Number(e.target.value) || 1))}
+                    className="mt-1 w-full rounded border border-gray-600 bg-gray-800 px-2 py-1.5 text-sm text-gray-100"
+                  />
+                </label>
+                <label className="text-xs text-gray-400">
+                  安全係数（再生成・バースト吸収）
+                  <input
+                    type="number"
+                    min={1}
+                    step={0.05}
+                    value={planSafetyMultiplier}
+                    onChange={(e) => setPlanSafetyMultiplier(Math.max(1, Number(e.target.value) || 1))}
+                    className="mt-1 w-full rounded border border-gray-600 bg-gray-800 px-2 py-1.5 text-sm text-gray-100"
+                  />
+                </label>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-4">
+                <div className="rounded border border-gray-700 bg-gray-950/50 p-3">
+                  <div className="text-xs text-gray-500">現在トレンド（日次）</div>
+                  <div className="text-lg font-semibold text-sky-300">{estimatedSongsPerDay.toFixed(2)} 曲/日</div>
+                </div>
+                <div className="rounded border border-gray-700 bg-gray-950/50 p-3">
+                  <div className="text-xs text-gray-500">トレンド月間費用（30日）</div>
+                  <div className="text-lg font-semibold text-violet-300">${projectedMonthlyUsdFromTrend.toFixed(2)}</div>
+                  <div className="text-xs font-semibold text-violet-200">約 ¥{(projectedMonthlyUsdFromTrend * usdToJpy).toFixed(0)}</div>
+                </div>
+                <div className="rounded border border-gray-700 bg-gray-950/50 p-3">
+                  <div className="text-xs text-gray-500">計画月間費用（安全係数込み）</div>
+                  <div className="text-lg font-semibold text-amber-300">${plannedMonthlyUsd.toFixed(2)}</div>
+                  <div className="text-xs font-semibold text-amber-200">約 ¥{plannedMonthlyJpy.toFixed(0)}</div>
+                </div>
+                <div className="rounded border border-gray-700 bg-gray-950/50 p-3">
+                  <div className="text-xs text-gray-500">ユーザー1人あたり目安/月</div>
+                  <div className="text-lg font-semibold text-emerald-300">¥{plannedPerUserMonthlyJpy.toFixed(0)}</div>
+                  <div className="text-xs text-gray-500">
+                    ¥{planMonthlyUsers > 0 ? (plannedPerUserMonthlyJpy / 30).toFixed(1) : '0.0'} /日
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section className="mb-6 grid gap-4 sm:grid-cols-3">
+              <div className="rounded-lg border border-gray-700 bg-gray-900/50 p-4">
+                <div className="text-xs text-gray-500">概算料金（期間内）</div>
+                <div className="text-2xl font-semibold text-violet-300">${totalCostUsd.toFixed(4)}</div>
+                <div className="mt-1 text-sm font-semibold text-violet-200">
+                  約 ¥{(totalCostUsd * usdToJpy).toFixed(2)}
+                  <span className="ml-1 text-xs font-normal text-gray-400">（$1=¥{usdToJpy}）</span>
+                </div>
+              </div>
+              <div className="rounded-lg border border-gray-700 bg-gray-900/50 p-4">
+                <div className="text-xs text-gray-500">1曲あたり概算</div>
+                <div className="text-2xl font-semibold text-amber-300">
+                  {approxSongCount > 0 ? `$${perSongUsd.toFixed(4)}` : '—'}
+                </div>
+                <div className="mt-1 text-sm font-semibold text-amber-200">
+                  {approxSongCount > 0
+                    ? `約 ¥${(perSongUsd * usdToJpy).toFixed(2)}（comment_pack_base=${approxSongCount}曲換算）`
+                    : 'comment_pack_base の記録がないため算出不可'}
+                </div>
+              </div>
+              <div className="rounded-lg border border-gray-700 bg-gray-900/50 p-4">
+                <div className="text-xs text-gray-500">計算対象モデル</div>
+                <div className="text-sm text-gray-300">
+                  {modelEntries.length > 0
+                    ? modelEntries.map(([model, v]) => `${model} (${v.calls})`).join(', ')
+                    : '—'}
+                </div>
+                <div className="mt-1 text-xs text-gray-500">
+                  未対応モデルは概算に含まれません
+                </div>
+              </div>
+            </section>
+
             <section className="mb-6">
               <h2 className="mb-2 text-sm font-medium text-gray-300">種別ごとの内訳</h2>
               <div className="overflow-x-auto rounded-lg border border-gray-700">
@@ -229,25 +373,36 @@ export default function AdminGeminiUsagePage() {
                       <th className="px-3 py-2 text-right">回数</th>
                       <th className="px-3 py-2 text-right">入力</th>
                       <th className="px-3 py-2 text-right">出力</th>
+                      <th className="px-3 py-2 text-right">概算料金(USD)</th>
+                      <th className="px-3 py-2 text-right">概算料金(円)</th>
                     </tr>
                   </thead>
                   <tbody>
                     {ctxEntries.length === 0 ? (
                       <tr>
-                        <td colSpan={5} className="px-3 py-4 text-center text-gray-500">
+                        <td colSpan={7} className="px-3 py-4 text-center text-gray-500">
                           データがありません
                         </td>
                       </tr>
                     ) : (
-                      ctxEntries.map(([key, v]) => (
-                        <tr key={key} className="border-b border-gray-800">
-                          <td className="px-3 py-1.5 font-mono text-xs text-gray-300">{key}</td>
-                          <td className="px-3 py-1.5 text-gray-400">{CONTEXT_HELP[key] ?? '—'}</td>
-                          <td className="px-3 py-1.5 text-right">{v.calls}</td>
-                          <td className="px-3 py-1.5 text-right text-sky-200/90">{v.promptTokens.toLocaleString()}</td>
-                          <td className="px-3 py-1.5 text-right text-emerald-200/90">{v.outputTokens.toLocaleString()}</td>
-                        </tr>
-                      ))
+                      ctxEntries.map(([key, v]) => {
+                        const costUsd =
+                          (v.promptTokens / 1_000_000) * blendedInputUsdPerM +
+                          (v.outputTokens / 1_000_000) * blendedOutputUsdPerM;
+                        return (
+                          <tr key={key} className="border-b border-gray-800">
+                            <td className="px-3 py-1.5 font-mono text-xs text-gray-300">{key}</td>
+                            <td className="px-3 py-1.5 text-gray-400">{CONTEXT_HELP[key] ?? '—'}</td>
+                            <td className="px-3 py-1.5 text-right">{v.calls}</td>
+                            <td className="px-3 py-1.5 text-right text-sky-200/90">{v.promptTokens.toLocaleString()}</td>
+                            <td className="px-3 py-1.5 text-right text-emerald-200/90">{v.outputTokens.toLocaleString()}</td>
+                            <td className="px-3 py-1.5 text-right text-violet-200/90">${costUsd.toFixed(4)}</td>
+                            <td className="px-3 py-1.5 text-right font-semibold text-amber-200">
+                              ¥{(costUsd * usdToJpy).toFixed(2)}
+                            </td>
+                          </tr>
+                        );
+                      })
                     )}
                   </tbody>
                 </table>
@@ -257,11 +412,12 @@ export default function AdminGeminiUsagePage() {
             <section>
               <h2 className="mb-2 text-sm font-medium text-gray-300">直近の記録（最大400件）</h2>
               <div className="max-h-[480px] overflow-auto rounded-lg border border-gray-700">
-                <table className="w-full min-w-[640px] text-left text-xs">
+                <table className="w-full min-w-[820px] text-left text-xs">
                   <thead className="sticky top-0 border-b border-gray-700 bg-gray-800/95">
                     <tr>
                       <th className="px-2 py-1.5">日時</th>
                       <th className="px-2 py-1.5">種別</th>
+                      <th className="px-2 py-1.5">model</th>
                       <th className="px-2 py-1.5 text-right">入力</th>
                       <th className="px-2 py-1.5 text-right">出力</th>
                       <th className="px-2 py-1.5">room</th>
@@ -273,6 +429,9 @@ export default function AdminGeminiUsagePage() {
                       <tr key={r.id} className="border-b border-gray-800/80">
                         <td className="whitespace-nowrap px-2 py-1 text-gray-400">{formatTime(r.created_at)}</td>
                         <td className="px-2 py-1 font-mono text-gray-300">{r.context}</td>
+                        <td className="max-w-[200px] truncate px-2 py-1 font-mono text-gray-400" title={r.model}>
+                          {r.model || '—'}
+                        </td>
                         <td className="px-2 py-1 text-right">{r.prompt_token_count ?? '—'}</td>
                         <td className="px-2 py-1 text-right">{r.output_token_count ?? '—'}</td>
                         <td className="max-w-[80px] truncate px-2 py-1 text-gray-500" title={r.room_id ?? ''}>

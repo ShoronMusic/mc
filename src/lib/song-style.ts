@@ -65,7 +65,8 @@ export async function getOrAssignStyle(
   videoId: string,
   title: string,
   artistName?: string | null,
-  fullVideoTitleForMusic8?: string | null
+  fullVideoTitleForMusic8?: string | null,
+  usageMeta?: { roomId?: string | null; videoId?: string | null }
 ): Promise<SongStyle> {
   const music8Style = await trySongStyleFromMusic8(
     artistName,
@@ -79,7 +80,7 @@ export async function getOrAssignStyle(
   const cached = supabase ? await getStyleFromDb(supabase, videoId) : null;
   if (cached) return cached;
 
-  const style = await getSongStyle(title, artistName ?? undefined);
+  const style = await getSongStyle(title, artistName ?? undefined, usageMeta);
   if (supabase) await setStyleInDb(supabase, videoId, style);
   return style;
 }

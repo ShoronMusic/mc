@@ -2,6 +2,7 @@
  * YouTube Data API v3 で検索（サーバー専用）
  * 環境変数 YOUTUBE_API_KEY が必要です。
  */
+import { persistYouTubeApiUsageLog } from '@/lib/youtube-api-usage-log';
 
 export interface YouTubeSearchResult {
   videoId: string;
@@ -10,6 +11,11 @@ export interface YouTubeSearchResult {
   /** 検索結果サムネイル（中サイズを優先） */
   thumbnailUrl?: string;
 }
+
+type YouTubeApiLogMeta = {
+  roomId?: string | null;
+  source?: string | null;
+};
 
 function getApiKey(): string | null {
   const key = process.env.YOUTUBE_API_KEY;
@@ -23,7 +29,8 @@ export function isYouTubeConfigured(): boolean {
 
 export async function searchYouTube(
   query: string,
-  maxResults = 5
+  maxResults = 5,
+  meta?: YouTubeApiLogMeta
 ): Promise<YouTubeSearchResult | null> {
   const key = getApiKey();
   if (!key) {
@@ -32,12 +39,13 @@ export async function searchYouTube(
   }
   const q = query.trim();
   if (!q) return null;
+  const cappedMaxResults = Math.min(Math.max(maxResults, 1), 25);
 
   const params = new URLSearchParams({
     part: 'snippet',
     q,
     type: 'video',
-    maxResults: String(Math.min(Math.max(maxResults, 1), 25)),
+    maxResults: String(cappedMaxResults),
     key,
   });
   const url = `https://www.googleapis.com/youtube/v3/search?${params.toString()}`;
@@ -61,35 +69,92 @@ export async function searchYouTube(
     };
     if (!res.ok) {
       console.log('[youtube-search] HTTP', res.status, data?.error?.message ?? '');
+      await persistYouTubeApiUsageLog({
+        endpoint: 'search.list',
+        queryText: q,
+        maxResults: cappedMaxResults,
+        responseStatus: res.status,
+        ok: false,
+        errorCode: String(data?.error?.code ?? ''),
+        errorMessage: data?.error?.message ?? `HTTP ${res.status}`,
+        resultCount: 0,
+        roomId: meta?.roomId,
+        source: meta?.source ?? 'searchYouTube',
+      });
       return null;
     }
     if (data?.error) {
       console.log('[youtube-search] API error:', data.error.code, data.error.message);
+      await persistYouTubeApiUsageLog({
+        endpoint: 'search.list',
+        queryText: q,
+        maxResults: cappedMaxResults,
+        responseStatus: res.status,
+        ok: false,
+        errorCode: String(data.error.code ?? ''),
+        errorMessage: data.error.message ?? 'api_error',
+        resultCount: 0,
+        roomId: meta?.roomId,
+        source: meta?.source ?? 'searchYouTube',
+      });
       return null;
     }
     const item = data.items?.[0];
     if (!item?.id?.videoId || !item.snippet) {
       console.log('[youtube-search] no items for q=', q.slice(0, 40));
+      await persistYouTubeApiUsageLog({
+        endpoint: 'search.list',
+        queryText: q,
+        maxResults: cappedMaxResults,
+        responseStatus: res.status,
+        ok: true,
+        resultCount: 0,
+        roomId: meta?.roomId,
+        source: meta?.source ?? 'searchYouTube',
+      });
       return null;
     }
     const thumbs = item.snippet.thumbnails;
     const thumbUrl =
       thumbs?.medium?.url || thumbs?.high?.url || thumbs?.default?.url || undefined;
-    return {
+    const result = {
       videoId: item.id.videoId,
       title: item.snippet.title ?? '',
       channelTitle: item.snippet.channelTitle ?? '',
       thumbnailUrl: thumbUrl,
     };
+    await persistYouTubeApiUsageLog({
+      endpoint: 'search.list',
+      queryText: q,
+      maxResults: cappedMaxResults,
+      responseStatus: res.status,
+      ok: true,
+      resultCount: Array.isArray(data.items) ? data.items.length : 1,
+      roomId: meta?.roomId,
+      source: meta?.source ?? 'searchYouTube',
+    });
+    return result;
   } catch (e) {
     console.log('[youtube-search] error:', e instanceof Error ? e.message : String(e));
+    await persistYouTubeApiUsageLog({
+      endpoint: 'search.list',
+      queryText: q,
+      maxResults: cappedMaxResults,
+      ok: false,
+      errorCode: 'fetch_error',
+      errorMessage: e instanceof Error ? e.message : String(e),
+      resultCount: 0,
+      roomId: meta?.roomId,
+      source: meta?.source ?? 'searchYouTube',
+    });
     return null;
   }
 }
 
 export async function searchYouTubeMany(
   query: string,
-  maxResults = 5
+  maxResults = 5,
+  meta?: YouTubeApiLogMeta
 ): Promise<YouTubeSearchResult[]> {
   const key = getApiKey();
   if (!key) {
@@ -98,12 +163,13 @@ export async function searchYouTubeMany(
   }
   const q = query.trim();
   if (!q) return [];
+  const cappedMaxResults = Math.min(Math.max(maxResults, 1), 25);
 
   const params = new URLSearchParams({
     part: 'snippet',
     q,
     type: 'video',
-    maxResults: String(Math.min(Math.max(maxResults, 1), 25)),
+    maxResults: String(cappedMaxResults),
     key,
   });
   const url = `https://www.googleapis.com/youtube/v3/search?${params.toString()}`;
@@ -127,10 +193,34 @@ export async function searchYouTubeMany(
     };
     if (!res.ok) {
       console.log('[youtube-search] HTTP', res.status, data?.error?.message ?? '');
+      await persistYouTubeApiUsageLog({
+        endpoint: 'search.list',
+        queryText: q,
+        maxResults: cappedMaxResults,
+        responseStatus: res.status,
+        ok: false,
+        errorCode: String(data?.error?.code ?? ''),
+        errorMessage: data?.error?.message ?? `HTTP ${res.status}`,
+        resultCount: 0,
+        roomId: meta?.roomId,
+        source: meta?.source ?? 'searchYouTubeMany',
+      });
       return [];
     }
     if (data?.error) {
       console.log('[youtube-search] API error:', data.error.code, data.error.message);
+      await persistYouTubeApiUsageLog({
+        endpoint: 'search.list',
+        queryText: q,
+        maxResults: cappedMaxResults,
+        responseStatus: res.status,
+        ok: false,
+        errorCode: String(data.error.code ?? ''),
+        errorMessage: data.error.message ?? 'api_error',
+        resultCount: 0,
+        roomId: meta?.roomId,
+        source: meta?.source ?? 'searchYouTubeMany',
+      });
       return [];
     }
     const items = Array.isArray(data.items) ? data.items : [];
@@ -149,18 +239,42 @@ export async function searchYouTubeMany(
         thumbnailUrl: thumbUrl,
       });
     }
+    await persistYouTubeApiUsageLog({
+      endpoint: 'search.list',
+      queryText: q,
+      maxResults: cappedMaxResults,
+      responseStatus: res.status,
+      ok: true,
+      resultCount: results.length,
+      roomId: meta?.roomId,
+      source: meta?.source ?? 'searchYouTubeMany',
+    });
     return results;
   } catch (e) {
     console.log('[youtube-search] error:', e instanceof Error ? e.message : String(e));
+    await persistYouTubeApiUsageLog({
+      endpoint: 'search.list',
+      queryText: q,
+      maxResults: cappedMaxResults,
+      ok: false,
+      errorCode: 'fetch_error',
+      errorMessage: e instanceof Error ? e.message : String(e),
+      resultCount: 0,
+      roomId: meta?.roomId,
+      source: meta?.source ?? 'searchYouTubeMany',
+    });
     return [];
   }
 }
 
 /** 複数のクエリで試行し、最初にヒットした結果を返す */
-export async function searchYouTubeWithFallback(queries: string[]): Promise<YouTubeSearchResult | null> {
+export async function searchYouTubeWithFallback(
+  queries: string[],
+  meta?: YouTubeApiLogMeta
+): Promise<YouTubeSearchResult | null> {
   for (const q of queries) {
     if (!q.trim()) continue;
-    const hit = await searchYouTube(q.trim(), 5);
+    const hit = await searchYouTube(q.trim(), 5, { ...meta, source: meta?.source ?? 'searchYouTubeWithFallback' });
     if (hit) return hit;
   }
   return null;
@@ -195,13 +309,14 @@ export interface VideoSnippet {
   commentCount?: number | null;
 }
 
-export async function getVideoSnippet(videoId: string): Promise<VideoSnippet | null> {
+export async function getVideoSnippet(videoId: string, meta?: YouTubeApiLogMeta): Promise<VideoSnippet | null> {
   const key = getApiKey();
   if (!key || !videoId.trim()) return null;
+  const vid = videoId.trim();
 
   const params = new URLSearchParams({
     part: 'snippet,contentDetails,statistics',
-    id: videoId.trim(),
+    id: vid,
     key,
   });
   const url = `https://www.googleapis.com/youtube/v3/videos?${params.toString()}`;
@@ -232,7 +347,20 @@ export async function getVideoSnippet(videoId: string): Promise<VideoSnippet | n
         statistics?: { viewCount?: string; likeCount?: string; commentCount?: string };
       }>;
     };
-    if (!res.ok || data?.error || !data?.items?.length) return null;
+    if (!res.ok || data?.error || !data?.items?.length) {
+      await persistYouTubeApiUsageLog({
+        endpoint: 'videos.list',
+        videoId: vid,
+        responseStatus: res.status,
+        ok: false,
+        errorCode: String(data?.error?.code ?? ''),
+        errorMessage: data?.error?.message ?? (!res.ok ? `HTTP ${res.status}` : 'no_items'),
+        resultCount: Array.isArray(data?.items) ? data.items.length : 0,
+        roomId: meta?.roomId,
+        source: meta?.source ?? 'getVideoSnippet',
+      });
+      return null;
+    }
     const item = data.items[0];
     const sn = item?.snippet;
     if (!sn) return null;
@@ -259,7 +387,7 @@ export async function getVideoSnippet(videoId: string): Promise<VideoSnippet | n
         : typeof sn.defaultLanguage === 'string' && sn.defaultLanguage.trim()
           ? sn.defaultLanguage.trim()
           : undefined;
-    return {
+    const result = {
       title: sn.title ?? '',
       description: sn.description ?? '',
       channelTitle: sn.channelTitle ?? '',
@@ -274,7 +402,27 @@ export async function getVideoSnippet(videoId: string): Promise<VideoSnippet | n
       likeCount: toNum(item?.statistics?.likeCount),
       commentCount: toNum(item?.statistics?.commentCount),
     };
+    await persistYouTubeApiUsageLog({
+      endpoint: 'videos.list',
+      videoId: vid,
+      responseStatus: res.status,
+      ok: true,
+      resultCount: data.items.length,
+      roomId: meta?.roomId,
+      source: meta?.source ?? 'getVideoSnippet',
+    });
+    return result;
   } catch {
+    await persistYouTubeApiUsageLog({
+      endpoint: 'videos.list',
+      videoId: vid,
+      ok: false,
+      errorCode: 'fetch_error',
+      errorMessage: 'fetch_failed',
+      resultCount: 0,
+      roomId: meta?.roomId,
+      source: meta?.source ?? 'getVideoSnippet',
+    });
     return null;
   }
 }
@@ -283,13 +431,17 @@ export async function getVideoSnippet(videoId: string): Promise<VideoSnippet | n
  * YouTube Data API v3 で動画の長さ（秒）を取得（サーバー専用）
  * 環境変数 YOUTUBE_API_KEY が必要です。
  */
-export async function getVideoDurationSeconds(videoId: string): Promise<number | null> {
+export async function getVideoDurationSeconds(
+  videoId: string,
+  meta?: YouTubeApiLogMeta
+): Promise<number | null> {
   const key = getApiKey();
   if (!key || !videoId.trim()) return null;
+  const vid = videoId.trim();
 
   const params = new URLSearchParams({
     part: 'contentDetails',
-    id: videoId.trim(),
+    id: vid,
     key,
   });
   const url = `https://www.googleapis.com/youtube/v3/videos?${params.toString()}`;
@@ -300,11 +452,43 @@ export async function getVideoDurationSeconds(videoId: string): Promise<number |
       error?: { code?: number; message?: string };
       items?: Array<{ contentDetails?: { duration?: string } }>;
     };
-    if (!res.ok || data?.error || !data?.items?.length) return null;
+    if (!res.ok || data?.error || !data?.items?.length) {
+      await persistYouTubeApiUsageLog({
+        endpoint: 'videos.list',
+        videoId: vid,
+        responseStatus: res.status,
+        ok: false,
+        errorCode: String(data?.error?.code ?? ''),
+        errorMessage: data?.error?.message ?? (!res.ok ? `HTTP ${res.status}` : 'no_items'),
+        resultCount: Array.isArray(data?.items) ? data.items.length : 0,
+        roomId: meta?.roomId,
+        source: meta?.source ?? 'getVideoDurationSeconds',
+      });
+      return null;
+    }
     const duration = data.items[0]?.contentDetails?.duration;
-    if (typeof duration !== 'string') return null;
-    return parseIso8601Duration(duration);
+    const seconds = typeof duration === 'string' ? parseIso8601Duration(duration) : null;
+    await persistYouTubeApiUsageLog({
+      endpoint: 'videos.list',
+      videoId: vid,
+      responseStatus: res.status,
+      ok: true,
+      resultCount: data.items.length,
+      roomId: meta?.roomId,
+      source: meta?.source ?? 'getVideoDurationSeconds',
+    });
+    return seconds;
   } catch {
+    await persistYouTubeApiUsageLog({
+      endpoint: 'videos.list',
+      videoId: vid,
+      ok: false,
+      errorCode: 'fetch_error',
+      errorMessage: 'fetch_failed',
+      resultCount: 0,
+      roomId: meta?.roomId,
+      source: meta?.source ?? 'getVideoDurationSeconds',
+    });
     return null;
   }
 }

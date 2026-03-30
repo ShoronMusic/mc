@@ -8,6 +8,7 @@ export async function POST(request: Request) {
   try {
     const body = await request.json().catch(() => ({}));
     const query = typeof body?.query === 'string' ? body.query.trim() : '';
+    const roomId = typeof body?.roomId === 'string' ? body.roomId.trim() : '';
     const maxResultsRaw = typeof body?.maxResults === 'number' ? body.maxResults : 5;
     const maxResults = Math.min(Math.max(Math.trunc(maxResultsRaw || 5), 1), 10);
 
@@ -16,7 +17,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ results: [], reason: 'youtube_not_configured' }, { status: 200 });
     }
 
-    const results = await searchYouTubeMany(query, maxResults);
+    const results = await searchYouTubeMany(query, maxResults, {
+      roomId: roomId || undefined,
+      source: 'api/ai/search-youtube',
+    });
     const normalized = results.map((row) => ({
       videoId: row.videoId,
       title: row.title,

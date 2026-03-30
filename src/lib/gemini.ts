@@ -232,7 +232,8 @@ function parseArtistDashSongLine(text: string): SongSearchIntent | null {
 /** ユーザー発言（と会話履歴）から「曲を聴きたい・貼って」系の検索クエリを1つ抽出。該当しなければ null */
 export async function extractSongSearchQuery(
   userMessage: string,
-  recentMessages?: { displayName?: string; body: string; messageType?: string }[]
+  recentMessages?: { displayName?: string; body: string; messageType?: string }[],
+  usageMeta?: GeminiUsageLogMeta
 ): Promise<SongSearchIntent | null> {
   const text = userMessage.trim();
   if (!text) return null;
@@ -272,7 +273,7 @@ export async function extractSongSearchQuery(
   try {
     const result = await model.generateContent(prompt);
     logGeminiUsage('extract_song_search', result.response);
-    await persistGeminiUsageLog('extract_song_search', result.response.usageMetadata);
+    await persistGeminiUsageLog('extract_song_search', result.response.usageMetadata, usageMeta);
     const out = result.response.text()?.trim() ?? '';
     if (!out || out.toLowerCase() === 'null') return null;
     const lines = out.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
@@ -492,7 +493,8 @@ export type SongStyle = (typeof SONG_STYLES)[number];
  */
 export async function getSongStyle(
   title: string,
-  authorName?: string
+  authorName?: string,
+  usageMeta?: GeminiUsageLogMeta
 ): Promise<SongStyle> {
   const model = getGeminiModel();
   if (!model) return 'Other';
@@ -520,7 +522,7 @@ ${input}
   try {
     const result = await model.generateContent(prompt);
     logGeminiUsage('get_song_style', result.response);
-    await persistGeminiUsageLog('get_song_style', result.response.usageMetadata);
+    await persistGeminiUsageLog('get_song_style', result.response.usageMetadata, usageMeta);
     const text = result.response.text()?.trim() ?? '';
     // 全文がリストに含まれるか（Alternative rock など2語スタイル用）
     if (SONG_STYLES.includes(text as SongStyle)) return text as SongStyle;
@@ -540,7 +542,8 @@ ${input}
 export async function getSongEra(
   title: string,
   artistName?: string,
-  description?: string
+  description?: string,
+  usageMeta?: GeminiUsageLogMeta
 ): Promise<SongEraOption> {
   const model = getGeminiModel();
   if (!model) return 'Other';
@@ -565,7 +568,7 @@ ${input}
   try {
     const result = await model.generateContent(prompt);
     logGeminiUsage('get_song_era', result.response);
-    await persistGeminiUsageLog('get_song_era', result.response.usageMetadata);
+    await persistGeminiUsageLog('get_song_era', result.response.usageMetadata, usageMeta);
     const text = result.response.text()?.trim() ?? '';
     if (SONG_ERA_OPTIONS.includes(text as SongEraOption)) return text as SongEraOption;
     const firstToken = text.split(/\s+/)[0]?.trim() ?? '';

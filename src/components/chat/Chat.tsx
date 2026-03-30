@@ -42,6 +42,8 @@ interface ChatProps {
   /** song_tidbits をライブラリから外す NG（最高管理者のみ） */
   canRejectTidbit?: boolean;
   onTidbitLibraryReject?: (messageId: string, tidbitId: string) => void | Promise<void>;
+  /** 途中参加向けチャットサマリーを開く */
+  onChatSummaryClick?: () => void;
 }
 
 function formatTime(createdAt: string): string {
@@ -222,6 +224,7 @@ export default function Chat({
   currentVideoId,
   canRejectTidbit = false,
   onTidbitLibraryReject,
+  onChatSummaryClick,
 }: ChatProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const [feedbackState, setFeedbackState] = useState<Record<string, 'up' | 'down'>>({});
@@ -337,18 +340,31 @@ export default function Chat({
     <div className="flex flex-1 flex-col overflow-hidden rounded-lg border border-gray-700 bg-gray-900/50">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-700 px-3 py-2">
         <span className="text-sm font-medium text-gray-300">チャット</span>
-        <button
-          type="button"
-          onClick={() => setDisclaimerOpen(true)}
-          className="inline-flex items-center gap-1.5 text-xs text-amber-200/90 hover:text-amber-100"
-          aria-haspopup="dialog"
-          aria-expanded={disclaimerOpen}
-          aria-label="AIのコメントについて（注意事項を表示）"
-          title="AIのコメントについて"
-        >
-          <ChatBubbleLeftRightIcon className="h-4 w-4 shrink-0" aria-hidden />
-          <span className="underline decoration-dotted underline-offset-2">AIのコメント…</span>
-        </button>
+        <div className="inline-flex items-center gap-2">
+          {onChatSummaryClick ? (
+            <button
+              type="button"
+              onClick={onChatSummaryClick}
+              className="text-[11px] text-cyan-300/90 underline decoration-dotted underline-offset-2 hover:text-cyan-200"
+              aria-label="チャットサマリーを表示"
+              title="ここまでの流れ"
+            >
+              チャットサマリー
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => setDisclaimerOpen(true)}
+            className="inline-flex items-center gap-1 text-xs text-amber-200/90 hover:text-amber-100"
+            aria-haspopup="dialog"
+            aria-expanded={disclaimerOpen}
+            aria-label="AIのコメントについて（注意事項を表示）"
+            title="AIのコメントについて"
+          >
+            <ChatBubbleLeftRightIcon className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            <span className="underline decoration-dotted underline-offset-2">AIのコメント…</span>
+          </button>
+        </div>
       </div>
       <div className="flex-1 overflow-y-auto p-2">
         {messages.length === 0 ? (

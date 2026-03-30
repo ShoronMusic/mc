@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { createClient, isSupabaseConfigured } from '@/lib/supabase/client';
 import { GUEST_STORAGE_KEY, GUEST_NAME_STORAGE_KEY, GUEST_ROOM_KEY } from './JoinChoice';
 
@@ -17,6 +18,8 @@ function getDisplayName(user: { user_metadata?: { display_name?: string; name?: 
  * メール登録のままにしていると参加方法の選択（Google認証など）が出ないため、切り替え用。
  */
 export function TopPageAuthBar() {
+  const searchParams = useSearchParams();
+  const inPolicyModal = searchParams?.get('modal') === '1';
   const [displayName, setDisplayName] = useState<string | null>(null);
   const [isGuest, setIsGuest] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -60,12 +63,19 @@ export function TopPageAuthBar() {
     window.location.reload();
   };
 
-  if (loading || !displayName) return null;
+  if (inPolicyModal || loading || !displayName) return null;
 
   return (
     <div className="fixed left-0 right-0 top-0 z-50 border-b border-gray-700 bg-gray-900/95 px-4 py-2 shadow-md">
       <div className="mx-auto flex max-w-2xl flex-wrap items-center justify-center gap-2 text-sm text-gray-300">
         <span>{displayName} として{isGuest ? 'ゲスト参加中' : 'ログイン中'}</span>
+        <a
+          href="/terms"
+          className="text-xs text-gray-300 underline decoration-dotted underline-offset-2 hover:text-white"
+          title="利用規約"
+        >
+          利用規約
+        </a>
         <button
           type="button"
           onClick={handleLogout}

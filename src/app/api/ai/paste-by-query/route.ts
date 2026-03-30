@@ -8,6 +8,7 @@ export async function POST(request: Request) {
   try {
     const body = await request.json().catch(() => ({}));
     const query = typeof body?.query === 'string' ? body.query.trim() : '';
+    const roomId = typeof body?.roomId === 'string' ? body.roomId.trim() : '';
     if (!query) {
       return NextResponse.json({ ok: false }, { status: 200 });
     }
@@ -20,7 +21,10 @@ export async function POST(request: Request) {
     }
 
     const fallbackQueries = [query, `${query} official`, `${query} music`];
-    const hit = await searchYouTubeWithFallback(fallbackQueries);
+    const hit = await searchYouTubeWithFallback(fallbackQueries, {
+      roomId: roomId || undefined,
+      source: 'api/ai/paste-by-query',
+    });
     if (!hit) {
       console.log('[paste-by-query] no hit for queries:', fallbackQueries);
       return NextResponse.json({ ok: false, reason: 'no_hit' }, { status: 200 });

@@ -105,6 +105,7 @@ export async function GET(request: Request) {
   let outputTokens = 0;
   const byContext: Record<string, { calls: number; promptTokens: number; outputTokens: number }> =
     {};
+  const byModel: Record<string, { calls: number; promptTokens: number; outputTokens: number }> = {};
 
   for (const r of list) {
     const p = r.prompt_token_count ?? 0;
@@ -112,12 +113,19 @@ export async function GET(request: Request) {
     promptTokens += p;
     outputTokens += o;
     const c = r.context || 'unknown';
+    const m = (r.model || 'unknown').trim() || 'unknown';
     if (!byContext[c]) {
       byContext[c] = { calls: 0, promptTokens: 0, outputTokens: 0 };
+    }
+    if (!byModel[m]) {
+      byModel[m] = { calls: 0, promptTokens: 0, outputTokens: 0 };
     }
     byContext[c].calls += 1;
     byContext[c].promptTokens += p;
     byContext[c].outputTokens += o;
+    byModel[m].calls += 1;
+    byModel[m].promptTokens += p;
+    byModel[m].outputTokens += o;
   }
 
   return NextResponse.json({
@@ -128,6 +136,7 @@ export async function GET(request: Request) {
       outputTokens,
     },
     byContext,
+    byModel,
     logs: list.slice(0, 400),
   });
 }

@@ -197,6 +197,21 @@ export default function RoomWithSync({
   useRoomChatLogPersistence(roomId, messages, { isGuest, myClientId });
   const [myPageOpen, setMyPageOpen] = useState(false);
   const [playbackHistoryModalOpen, setPlaybackHistoryModalOpen] = useState(false);
+  const [chatSummaryModalOpen, setChatSummaryModalOpen] = useState(false);
+  const [chatSummaryLoading, setChatSummaryLoading] = useState(false);
+  const [chatSummaryError, setChatSummaryError] = useState<string | null>(null);
+  const [termsModalOpen, setTermsModalOpen] = useState(false);
+  const [policyTab, setPolicyTab] = useState<'terms' | 'privacy' | 'guide'>('terms');
+  const [chatSummary, setChatSummary] = useState<{
+    summaryText: string;
+    sessionWindowLabel: string;
+    participants?: string[];
+    participantSongCounts?: { displayName: string; count: number }[];
+    eraDistribution?: { era: string; count: number }[];
+    styleDistribution?: { style: string; count: number }[];
+    popularArtists?: { artist: string; count: number }[];
+    popularTracks?: { artist: string; title: string; count: number }[];
+  } | null>(null);
   const isLg = useIsLgViewport();
   const [userTextColor, setUserTextColor] = useState(() => {
     if (typeof window === 'undefined') return DEFAULT_CHAT_TEXT_COLOR;
@@ -253,7 +268,7 @@ export default function RoomWithSync({
   const jpDomesticSilenceVideoIdRef = useRef<string | null>(null);
   /** 自分が発言したか（ステータスありでも発言あれば在席とみなして豆知識を出す） */
   const hasCurrentUserSentMessageSinceLastTidbitRef = useRef(false);
-  const [aiFreeSpeechStopped, setAiFreeSpeechStopped] = useState(false);
+  const [aiFreeSpeechStopped, setAiFreeSpeechStopped] = useState(true);
   const [ownerState, setOwnerState] = useState<{ ownerClientId: string; ownerLeftAt: number | null }>(() =>
     roomId ? getOwnerStateFromStorage(roomId) ?? { ownerClientId: '', ownerLeftAt: null } : { ownerClientId: '', ownerLeftAt: null }
   );
@@ -555,6 +570,36 @@ export default function RoomWithSync({
     [isGuest, participants, currentSongPosterClientId, effectiveDisplayName, fetchFavoritedIds]
   );
 
+  const openChatSummaryModal = useCallback(() => {
+    setChatSummaryModalOpen(true);
+    setChatSummaryLoading(true);
+    setChatSummaryError(null);
+    fetch(`/api/room-session-summary?roomId=${encodeURIComponent(roomId)}`)
+      .then((r) => (r.ok ? r.json() : r.json().catch(() => ({}))))
+      .then((data) => {
+        if (!data || data.error) {
+          setChatSummaryError(data?.error ?? 'サマリー取得に失敗しました。');
+          setChatSummary(null);
+          return;
+        }
+        setChatSummary({
+          summaryText: data.summaryText ?? '',
+          sessionWindowLabel: data.sessionWindowLabel ?? '',
+          participants: Array.isArray(data.participants) ? data.participants : [],
+          participantSongCounts: Array.isArray(data.participantSongCounts) ? data.participantSongCounts : [],
+          eraDistribution: Array.isArray(data.eraDistribution) ? data.eraDistribution : [],
+          styleDistribution: Array.isArray(data.styleDistribution) ? data.styleDistribution : [],
+          popularArtists: Array.isArray(data.popularArtists) ? data.popularArtists : [],
+          popularTracks: Array.isArray(data.popularTracks) ? data.popularTracks : [],
+        });
+      })
+      .catch(() => {
+        setChatSummaryError('サマリー取得に失敗しました。');
+        setChatSummary(null);
+      })
+      .finally(() => setChatSummaryLoading(false));
+  }, [roomId]);
+
   const isShortConfirmation = (t: string) =>
     /^(はい|うん|ええ|お願い|そうです|お願いします|いいです|お願いね|はい!?|うん!?|ええ!?)$/i.test(t.trim());
 
@@ -846,7 +891,7 @@ export default function RoomWithSync({
         fetch('/api/ai/announce-song', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ videoId: targetVid, displayName: posterName }),
+          body: JSON.stringify({ videoId: targetVid, displayName: posterName, roomId }),
         })
           .then((r) => (r.ok ? r.json() : null))
           .then((data) => {
@@ -1712,7 +1757,7 @@ export default function RoomWithSync({
       fetch('/api/ai/announce-song', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ videoId: vid, displayName: announceDisplayName }),
+        body: JSON.stringify({ videoId: vid, displayName: announceDisplayName, roomId }),
       })
         .then((r) => (r.ok ? r.json() : null))
         .then((data) => {
@@ -1792,7 +1837,7 @@ export default function RoomWithSync({
       fetch('/api/ai/comment-pack', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ videoId: vid, mode }),
+        body: JSON.stringify({ videoId: vid, mode, roomId }),
       })
         .then((r) => (r.ok ? r.json() : null))
         .then((pack) => {
@@ -1802,7 +1847,12 @@ export default function RoomWithSync({
               freeCommentTimeoutsRef.current = [];
             }
             suppressTidbitRef.current = false;
-            addSystemMessage(SYSTEM_MESSAGE_JP_NO_COMMENTARY);
+            const isJpSilenceVideo =
+              jpDomesticSilenceVideoIdRef.current != null &&
+              jpDomesticSilenceVideoIdRef.current === vid;
+            if (!isJpSilenceVideo) {
+              addSystemMessage(SYSTEM_MESSAGE_JP_NO_COMMENTARY);
+            }
             return null;
           }
           if (pack?.baseComment) {
@@ -1873,7 +1923,12 @@ export default function RoomWithSync({
               .then((r) => (r.ok ? r.json() : null))
               .then((data) => {
                 if (data?.skipAiCommentary) {
-                  addSystemMessage(SYSTEM_MESSAGE_JP_NO_COMMENTARY);
+                  const isJpSilenceVideo =
+                    jpDomesticSilenceVideoIdRef.current != null &&
+                    jpDomesticSilenceVideoIdRef.current === vid;
+                  if (!isJpSilenceVideo) {
+                    addSystemMessage(SYSTEM_MESSAGE_JP_NO_COMMENTARY);
+                  }
                   return null;
                 }
                 if (data?.text) {
@@ -2296,6 +2351,8 @@ export default function RoomWithSync({
             if (data?.text) {
               addAiMessage(data.text);
               touchActivity();
+            } else if (data?.skipped === true) {
+              // 雑談時はサーバー側で意図的に無応答（エラー表示しない）
             } else addSystemMessage(aiErrorMessage);
           })
           .catch(() => addSystemMessage(aiErrorMessage));
@@ -2345,6 +2402,7 @@ export default function RoomWithSync({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           userMessage: text,
+          roomId: roomId ?? undefined,
           recentMessages: messages.slice(-6).map((m) => ({
             displayName: m.displayName,
             body: m.body,
@@ -2404,18 +2462,31 @@ export default function RoomWithSync({
         {onLeave && (
           <div className="flex shrink-0 flex-nowrap items-center justify-end gap-2">
             {!isGuest && (
-              <button
-                type="button"
-                onClick={async () => {
-                  const supabase = createClient();
-                  if (supabase) await supabase.auth.signOut();
-                  onLeave();
-                }}
-                className="rounded border border-amber-700 bg-amber-900/40 px-3 py-2 text-sm text-amber-200 hover:bg-amber-800/60"
-                aria-label="ログアウトして最初の画面に戻る"
-              >
-                ログアウト
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPolicyTab('terms');
+                    setTermsModalOpen(true);
+                  }}
+                  className="text-sm text-gray-300 underline decoration-dotted underline-offset-2 hover:text-white"
+                  title="利用規約"
+                >
+                  利用規約
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const supabase = createClient();
+                    if (supabase) await supabase.auth.signOut();
+                    onLeave();
+                  }}
+                  className="rounded border border-amber-700 bg-amber-900/40 px-3 py-2 text-sm text-amber-200 hover:bg-amber-800/60"
+                  aria-label="ログアウトして最初の画面に戻る"
+                >
+                  ログアウト
+                </button>
+              </>
             )}
             <button
               type="button"
@@ -2559,6 +2630,131 @@ export default function RoomWithSync({
         </div>
       )}
 
+      {chatSummaryModalOpen && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="チャットサマリー"
+          onClick={() => setChatSummaryModalOpen(false)}
+        >
+          <div
+            className="max-h-[85vh] w-full max-w-2xl overflow-auto rounded-lg border border-gray-700 bg-gray-900 p-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-base font-semibold text-white">チャットサマリー</h2>
+              <button
+                type="button"
+                onClick={() => setChatSummaryModalOpen(false)}
+                className="rounded border border-gray-600 bg-gray-800 px-3 py-1.5 text-sm text-gray-200 hover:bg-gray-700"
+              >
+                閉じる
+              </button>
+            </div>
+            {chatSummaryLoading ? (
+              <p className="text-sm text-gray-400">読み込み中…</p>
+            ) : chatSummaryError ? (
+              <p className="text-sm text-amber-300">{chatSummaryError}</p>
+            ) : chatSummary ? (
+              <div className="space-y-2 text-sm">
+                <p className="text-gray-300">対象枠: {chatSummary.sessionWindowLabel || '—'}</p>
+                <p className="text-gray-100">{chatSummary.summaryText}</p>
+                <p className="text-gray-300">参加者: {(chatSummary.participants ?? []).join('、') || '—'}</p>
+                <p className="text-gray-300">
+                  選曲数: {(chatSummary.participantSongCounts ?? []).map((v) => `${v.displayName}(${v.count})`).join(' / ') || '—'}
+                </p>
+                <p className="text-gray-300">
+                  時代分布: {(chatSummary.eraDistribution ?? []).map((v) => `${v.era}(${v.count})`).join(' / ') || '—'}
+                </p>
+                <p className="text-gray-300">
+                  スタイル分布: {(chatSummary.styleDistribution ?? []).map((v) => `${v.style}(${v.count})`).join(' / ') || '—'}
+                </p>
+                <p className="text-gray-300">
+                  人気アーティスト: {(chatSummary.popularArtists ?? []).map((v) => `${v.artist}(${v.count})`).join(' / ') || '—'}
+                </p>
+                <p className="text-gray-300">
+                  人気曲: {(chatSummary.popularTracks ?? []).map((v) => `${v.artist} - ${v.title} (${v.count})`).join(' / ') || '—'}
+                </p>
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500">データがありません。</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {termsModalOpen && (
+        <div
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="利用規約"
+          onClick={() => setTermsModalOpen(false)}
+        >
+          <div
+            className="h-[85vh] w-full max-w-5xl overflow-hidden rounded-lg border border-gray-700 bg-gray-900"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-gray-700 px-3 py-2">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPolicyTab('terms')}
+                  className={`rounded px-2.5 py-1 text-xs ${
+                    policyTab === 'terms'
+                      ? 'bg-gray-700 text-white'
+                      : 'text-gray-300 hover:bg-gray-800'
+                  }`}
+                >
+                  利用規約
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPolicyTab('privacy')}
+                  className={`rounded px-2.5 py-1 text-xs ${
+                    policyTab === 'privacy'
+                      ? 'bg-gray-700 text-white'
+                      : 'text-gray-300 hover:bg-gray-800'
+                  }`}
+                >
+                  プライバシー
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPolicyTab('guide')}
+                  className={`rounded px-2.5 py-1 text-xs ${
+                    policyTab === 'guide'
+                      ? 'bg-gray-700 text-white'
+                      : 'text-gray-300 hover:bg-gray-800'
+                  }`}
+                >
+                  ご利用上の注意
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={() => setTermsModalOpen(false)}
+                className="rounded border border-gray-600 bg-gray-800 px-3 py-1.5 text-sm text-gray-200 hover:bg-gray-700"
+              >
+                閉じる
+              </button>
+            </div>
+            <iframe
+              src={
+                policyTab === 'terms'
+                  ? '/terms?modal=1'
+                  : policyTab === 'privacy'
+                    ? '/privacy?modal=1'
+                    : '/guide?modal=1'
+              }
+              title="ポリシー"
+              className="h-[calc(85vh-46px)] w-full border-0 bg-gray-950"
+            />
+          </div>
+        </div>
+      )}
+
       <RoomMainLayout
         desktopSwapColumns
         left={
@@ -2575,6 +2771,7 @@ export default function RoomWithSync({
             currentVideoId={videoId}
             canRejectTidbit={canRejectTidbit && !isGuest}
             onTidbitLibraryReject={handleTidbitLibraryReject}
+            onChatSummaryClick={roomId ? openChatSummaryModal : undefined}
           />
         }
         rightTop={

@@ -7,6 +7,7 @@ export async function POST(request: Request) {
   try {
     const body = await request.json().catch(() => ({}));
     const userMessage = typeof body?.userMessage === 'string' ? body.userMessage.trim() : '';
+    const roomId = typeof body?.roomId === 'string' ? body.roomId.trim() : '';
     if (!userMessage) {
       return NextResponse.json({ ok: false }, { status: 200 });
     }
@@ -19,7 +20,9 @@ export async function POST(request: Request) {
         }))
       : undefined;
 
-    const intent = await extractSongSearchQuery(userMessage, recentMessages);
+    const intent = await extractSongSearchQuery(userMessage, recentMessages, {
+      roomId: roomId || undefined,
+    });
     if (!intent) {
       console.log('[resolve-song-request] no intent for:', userMessage.slice(0, 50));
       return NextResponse.json({ ok: false }, { status: 200 });

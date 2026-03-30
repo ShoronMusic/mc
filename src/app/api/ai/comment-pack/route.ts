@@ -97,6 +97,7 @@ export async function POST(request: Request) {
   try {
     const body = await request.json().catch(() => ({}));
     const videoId = typeof body?.videoId === 'string' ? body.videoId.trim() : '';
+    const roomId = typeof body?.roomId === 'string' ? body.roomId.trim() : '';
     const requestedMode =
       body?.mode === 'full' || body?.mode === 'base_only' || body?.mode === 'off'
         ? body.mode
@@ -107,7 +108,10 @@ export async function POST(request: Request) {
 
     const supabase = await createClient();
 
-    const [oembed, snippet] = await Promise.all([fetchOEmbed(videoId), getVideoSnippet(videoId)]);
+    const [oembed, snippet] = await Promise.all([
+      fetchOEmbed(videoId),
+      getVideoSnippet(videoId, { roomId: roomId || undefined, source: 'api/ai/comment-pack' }),
+    ]);
 
     const title = oembed?.title ?? snippet?.title ?? videoId;
     const authorName = oembed?.author_name;

@@ -61,13 +61,19 @@ export async function setEraInDb(
 export async function getOrAssignEra(
   supabase: SupabaseClient | null,
   videoId: string,
-  input: SongEraResolveInput
+  input: SongEraResolveInput,
+  usageMeta?: { roomId?: string | null; videoId?: string | null }
 ): Promise<SongEraOption> {
   const cached = await getEraFromDb(supabase, videoId);
   if (cached) return cached;
 
   const title = input.songTitle?.trim() || input.oembedTitle?.trim() || videoId.trim() || 'Unknown';
-  const era = await getSongEra(title, input.artistName ?? undefined, input.description ?? undefined);
+  const era = await getSongEra(
+    title,
+    input.artistName ?? undefined,
+    input.description ?? undefined,
+    usageMeta
+  );
   const normalized = normalizeEra(era) ?? 'Other';
   if (supabase) await setEraInDb(supabase, videoId, normalized);
   return normalized;

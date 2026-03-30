@@ -187,7 +187,10 @@ export async function POST(request: Request) {
   let authorName = oembed?.author_name ?? null;
 
   /** announce-song と同様に常に snippet を取り、概要欄の performing 行で順序を揃える */
-  const snippet = await getVideoSnippet(videoId);
+  const snippet = await getVideoSnippet(videoId, {
+    roomId,
+    source: 'api/room-playback-history',
+  });
   let snippetDescription =
     snippet?.description && snippet.description.trim() ? snippet.description : null;
 
@@ -221,7 +224,12 @@ export async function POST(request: Request) {
   }
 
   if (!artist) {
-    const snippetForArtist = snippet ?? (await getVideoSnippet(videoId));
+    const snippetForArtist =
+      snippet ??
+      (await getVideoSnippet(videoId, {
+        roomId,
+        source: 'api/room-playback-history',
+      }));
     if (snippetForArtist?.description) {
       if (!snippetDescription) snippetDescription = snippetForArtist.description;
       const fromDesc = parseArtistTitleFromDescription(snippetForArtist.description);
@@ -252,7 +260,8 @@ export async function POST(request: Request) {
       videoId,
       song ?? title ?? videoId,
       artist,
-      title
+      title,
+      { roomId, videoId }
     );
     if (style && songId) {
       await updateSongStyle(supabase, songId, style);
@@ -267,7 +276,7 @@ export async function POST(request: Request) {
       artistName: artist,
       oembedTitle: title,
       description: snippetDescription,
-    });
+    }, { roomId, videoId });
   } catch (e) {
     console.error('[room-playback-history] getOrAssignEra', e);
   }

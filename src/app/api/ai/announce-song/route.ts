@@ -15,6 +15,7 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const videoId = typeof body?.videoId === 'string' ? body.videoId.trim() : '';
+    const roomId = typeof body?.roomId === 'string' ? body.roomId.trim() : '';
     const displayName = typeof body?.displayName === 'string' ? body.displayName.trim() || 'ゲスト' : 'ゲスト';
     if (!videoId) {
       return NextResponse.json({ error: 'videoId is required' }, { status: 400 });
@@ -22,8 +23,8 @@ export async function POST(request: Request) {
 
     const [oembed, durationSeconds, snippet] = await Promise.all([
       fetchOEmbed(videoId),
-      getVideoDurationSeconds(videoId),
-      getVideoSnippet(videoId),
+      getVideoDurationSeconds(videoId, { roomId: roomId || undefined, source: 'api/ai/announce-song' }),
+      getVideoSnippet(videoId, { roomId: roomId || undefined, source: 'api/ai/announce-song' }),
     ]);
     const title = oembed?.title ?? videoId;
     const authorName = oembed?.author_name;

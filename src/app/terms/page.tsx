@@ -11,23 +11,58 @@ export const metadata: Metadata = {
   description: '洋楽AIチャットの利用条件（要約）です。利用料金・マナー・AI・楽曲の詳細はご利用上の注意もご覧ください。',
 };
 
+type TermsPageProps = {
+  searchParams?: {
+    returnTo?: string | string[];
+    modal?: string | string[];
+  };
+};
+
+function resolveReturnToPath(returnToRaw: string | string[] | undefined): string | null {
+  const value = Array.isArray(returnToRaw) ? returnToRaw[0] : returnToRaw;
+  if (!value || typeof value !== 'string') return null;
+  const decoded = value.trim();
+  // オープンリダイレクト防止: ローカルパスのみ許可（このアプリのルームは "/01" 形式）
+  if (!decoded.startsWith('/')) return null;
+  if (decoded.startsWith('//')) return null;
+  if (decoded.includes('://')) return null;
+  if (decoded === '/terms' || decoded === '/privacy' || decoded === '/guide') return null;
+  return decoded;
+}
+
 /**
  * チャットサービス「チャベリ」（chaberi.com）の利用規約 PDF・ご利用のお約束の枠組みを参考に、
  * 当サービス向けに簡潔化・独自化。詳細マナーは /guide に集約し冗長化を避けています。
  */
-export default function TermsPage() {
+export default function TermsPage({ searchParams }: TermsPageProps) {
+  const returnTo = resolveReturnToPath(searchParams?.returnTo);
+  const isModal = (Array.isArray(searchParams?.modal) ? searchParams?.modal[0] : searchParams?.modal) === '1';
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100">
-      <header className="border-b border-gray-800 bg-gray-900/50">
-        <div className="mx-auto flex max-w-3xl items-center justify-between gap-4 px-4 py-3">
-          <Link href="/" className="text-sm text-gray-400 transition hover:text-white">
-            ← トップへ
-          </Link>
-          <Link href="/guide" className="text-sm text-gray-400 transition hover:text-white">
-            ご利用上の注意 →
-          </Link>
-        </div>
-      </header>
+      {!isModal ? (
+        <header className="border-b border-gray-800 bg-gray-900/50">
+          <div className="mx-auto flex max-w-3xl items-center justify-between gap-4 px-4 py-3">
+            <div className="flex items-center gap-3">
+              {returnTo ? (
+                <Link href={returnTo} className="text-sm text-amber-300 transition hover:text-amber-200">
+                  ← チャットへ戻る
+                </Link>
+              ) : null}
+              <Link href="/" className="text-sm text-gray-400 transition hover:text-white">
+                ← トップへ
+              </Link>
+            </div>
+            <div className="flex items-center gap-3">
+              <Link href="/privacy" className="text-sm text-gray-400 transition hover:text-white">
+                プライバシー
+              </Link>
+              <Link href="/guide" className="text-sm text-gray-400 transition hover:text-white">
+                ご利用上の注意 →
+              </Link>
+            </div>
+          </div>
+        </header>
+      ) : null}
 
       <main className="mx-auto max-w-3xl px-4 py-8 text-sm leading-relaxed text-gray-300">
         <h1 className="text-2xl font-bold text-white">利用規約（要約）</h1>
@@ -35,6 +70,10 @@ export default function TermsPage() {
           最終更新目安：掲載日時点。詳しいマナー・AI・楽曲・安全については{' '}
           <Link href="/guide" className="text-amber-400 underline-offset-2 hover:underline">
             ご利用上の注意
+          </Link>
+          、個人情報の取扱いは{' '}
+          <Link href="/privacy" className="text-amber-400 underline-offset-2 hover:underline">
+            プライバシーポリシー
           </Link>
           をあわせてご確認ください。
         </p>
@@ -123,9 +162,12 @@ export default function TermsPage() {
           </li>
         </ol>
 
-        <p className="mt-10 border-t border-gray-800 pt-6 text-xs text-gray-600">
-          本ページの構成は、ブラウザチャット「チャベリ」（chaberi.com）に掲載の利用規約 PDF および「ご利用のお約束」の考え方を参考に、当サービス向けに要約・改稿したものです。法的効力の最終文言が必要な場合は専門家への確認をおすすめします。
-        </p>
+        <section className="mt-10 rounded-lg border border-gray-800 bg-gray-900/40 p-4">
+          <h2 className="text-sm font-semibold text-white">運営者</h2>
+          <p className="mt-2 text-sm text-gray-300">洋楽AIチャット事務局</p>
+          <p className="text-sm text-gray-300">mail@musicai.jp</p>
+        </section>
+
       </main>
     </div>
   );
