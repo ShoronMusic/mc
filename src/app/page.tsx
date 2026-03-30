@@ -30,6 +30,9 @@ export default function StartPage() {
           入室後、ゲスト・簡易登録・Google認証のいずれかで参加方法を選びます
         </p>
         <HomeRoomLinks />
+        <p className="mt-3 text-center text-xs text-amber-300/90">
+          既に参加者がいる部屋に入ると、再生中の音楽がすぐ流れる場合があります。
+        </p>
         <p className="mt-4 text-center text-xs text-gray-500">
           ほかのルームは URL で /04, /05 … のように指定できます
         </p>
