@@ -388,33 +388,54 @@ export default function Chat({
                       : 'bg-gray-800/80'
                 }`}
               >
-                <div className="mb-0.5 flex items-baseline justify-between gap-2">
-                  <span
-                    className={`font-medium ${m.messageType !== 'user' || !messageColor ? 'text-gray-300' : ''}`}
-                    style={
-                      m.messageType === 'user' && messageColor
-                        ? { color: messageColor }
-                        : undefined
-                    }
-                  >
-                    {m.displayName ?? 'ユーザー'}
-                  </span>
-                  <span className="text-xs text-gray-500">
-                    {formatTime(m.createdAt)}
-                  </span>
-                </div>
-                <p
-                  className={`whitespace-pre-wrap break-words ${messageColor ? '' : 'text-gray-200'} ${isSelectionAnnounce || isNextPromptMessage ? 'font-bold' : ''}`}
-                  style={
-                    m.messageType === 'user'
-                      ? { color: messageColor ?? DEFAULT_MESSAGE_COLOR }
-                      : isSelectionAnnounce && selectionAnnounceColor
-                        ? { color: selectionAnnounceColor }
-                        : undefined
-                  }
-                >
-                  {bodyContent}
-                </p>
+                {m.messageType === 'ai' ? (
+                  <div className="flex items-baseline justify-between gap-2">
+                    <p
+                      className={`min-w-0 flex-1 break-words text-gray-200 ${isSelectionAnnounce || isNextPromptMessage ? 'font-bold' : ''}`}
+                      style={
+                        isSelectionAnnounce && selectionAnnounceColor
+                          ? { color: selectionAnnounceColor }
+                          : undefined
+                      }
+                    >
+                      <span className="mr-2 font-medium text-gray-300">{m.displayName ?? 'ユーザー'}</span>
+                      <span className="whitespace-pre-wrap">{bodyContent}</span>
+                    </p>
+                    <span className="shrink-0 text-xs text-gray-500">
+                      {formatTime(m.createdAt)}
+                    </span>
+                  </div>
+                ) : (
+                  <>
+                    <div className="mb-0.5 flex items-baseline justify-between gap-2">
+                      <span
+                        className={`font-medium ${m.messageType !== 'user' || !messageColor ? 'text-gray-300' : ''}`}
+                        style={
+                          m.messageType === 'user' && messageColor
+                            ? { color: messageColor }
+                            : undefined
+                        }
+                      >
+                        {m.displayName ?? 'ユーザー'}
+                      </span>
+                      <span className="text-xs text-gray-500">
+                        {formatTime(m.createdAt)}
+                      </span>
+                    </div>
+                    <p
+                      className={`whitespace-pre-wrap break-words ${messageColor ? '' : 'text-gray-200'} ${isSelectionAnnounce || isNextPromptMessage ? 'font-bold' : ''}`}
+                      style={
+                        m.messageType === 'user'
+                          ? { color: messageColor ?? DEFAULT_MESSAGE_COLOR }
+                          : isSelectionAnnounce && selectionAnnounceColor
+                            ? { color: selectionAnnounceColor }
+                            : undefined
+                      }
+                    >
+                      {bodyContent}
+                    </p>
+                  </>
+                )}
                 {m.searchQuery && (
                   <a
                     href={`https://www.youtube.com/results?search_query=${encodeURIComponent(m.searchQuery)}`}

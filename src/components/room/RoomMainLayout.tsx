@@ -16,6 +16,8 @@ interface RoomMainLayoutProps {
   left: React.ReactNode;
   rightTop: React.ReactNode;
   rightBottom: React.ReactNode;
+  /** PCのみ左右カラムを入れ替える（左: rightTop/rightBottom, 右: left） */
+  desktopSwapColumns?: boolean;
   /** モバイル: 視聴履歴モーダル表示（UserBar のボタンから親が true にする） */
   playbackHistoryModalOpen?: boolean;
   onPlaybackHistoryModalClose?: () => void;
@@ -25,6 +27,7 @@ export default function RoomMainLayout({
   left,
   rightTop,
   rightBottom,
+  desktopSwapColumns = false,
   playbackHistoryModalOpen = false,
   onPlaybackHistoryModalClose,
 }: RoomMainLayoutProps) {
@@ -47,7 +50,12 @@ export default function RoomMainLayout({
     <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
       {isLg ? (
         <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
-          <ResizableSection left={left} rightTop={rightTop} rightBottom={rightBottom} />
+          <ResizableSection
+            left={left}
+            rightTop={rightTop}
+            rightBottom={rightBottom}
+            splitOnLeft={desktopSwapColumns}
+          />
         </div>
       ) : (
         <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-hidden">

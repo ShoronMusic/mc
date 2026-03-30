@@ -2252,6 +2252,7 @@ export default function RoomWithSync({
       )}
 
       <RoomMainLayout
+        desktopSwapColumns
         left={
           <Chat
             messages={messages}
