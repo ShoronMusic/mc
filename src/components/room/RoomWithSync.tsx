@@ -571,10 +571,17 @@ export default function RoomWithSync({
   );
 
   const openChatSummaryModal = useCallback(() => {
+    const rid = (roomId ?? '').trim();
     setChatSummaryModalOpen(true);
     setChatSummaryLoading(true);
     setChatSummaryError(null);
-    fetch(`/api/room-session-summary?roomId=${encodeURIComponent(roomId)}`)
+    if (!rid) {
+      setChatSummaryError('roomId が見つかりません。');
+      setChatSummary(null);
+      setChatSummaryLoading(false);
+      return;
+    }
+    fetch(`/api/room-session-summary?roomId=${encodeURIComponent(rid)}`)
       .then((r) => (r.ok ? r.json() : r.json().catch(() => ({}))))
       .then((data) => {
         if (!data || data.error) {
