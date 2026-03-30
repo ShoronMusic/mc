@@ -31,7 +31,7 @@ export default function StartPage() {
         </p>
         <HomeRoomLinks />
         <p className="mt-3 text-center text-xs text-amber-300/90">
-          既に参加者がいる部屋に入ると、再生中の音楽がすぐ流れる場合があります。
+          既に参加者がいる部屋に入ると、再生中の音楽がすぐ流れる場合があります。音量にご注意ください。
         </p>
         <p className="mt-4 text-center text-xs text-gray-500">
           ほかのルームは URL で /04, /05 … のように指定できます
