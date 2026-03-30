@@ -866,15 +866,22 @@ export default function RoomWithSync({
     }
 
     if (data.type === 'queueSong' && data.videoId) {
+      const queuedMsgClientId =
+        message && typeof message === 'object' && 'clientId' in message
+          ? (message as { clientId?: string | null }).clientId
+          : undefined;
+      const queuedPublisherClientId =
+        (typeof data.publisherClientId === 'string' && data.publisherClientId.trim()) ||
+        (typeof queuedMsgClientId === 'string' ? queuedMsgClientId : '');
       if (playbackQueueFallbackTimerRef.current) {
         clearTimeout(playbackQueueFallbackTimerRef.current);
         playbackQueueFallbackTimerRef.current = null;
       }
       pendingQueuedVideoIdRef.current = data.videoId;
-      pendingQueuedPublisherRef.current = data.publisherClientId ?? '';
-      setQueuedSongPublisherClientId(data.publisherClientId ?? '');
+      pendingQueuedPublisherRef.current = queuedPublisherClientId;
+      setQueuedSongPublisherClientId(queuedPublisherClientId);
       const publisherDisplayName =
-        participants.find((p) => p.clientId === data.publisherClientId)?.displayName?.trim() ||
+        participants.find((p) => p.clientId === queuedPublisherClientId)?.displayName?.trim() ||
         '参加者';
       addSystemMessage(
         `${publisherDisplayName}さんの選曲を受け付けました。現在の曲の再生が終わり次第、次の曲を再生します。`
@@ -1692,12 +1699,20 @@ export default function RoomWithSync({
   }, [videoId]);
 
   const fetchAnnounceAndPublish = useCallback(
-    (vid: string, options?: { silent?: boolean }) => {
+    (
+      vid: string,
+      options?: { silent?: boolean; displayNameOverride?: string }
+    ) => {
       const silent = options?.silent === true;
+      const announceDisplayName =
+        typeof options?.displayNameOverride === 'string' &&
+        options.displayNameOverride.trim()
+          ? options.displayNameOverride.trim()
+          : effectiveDisplayName;
       fetch('/api/ai/announce-song', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ videoId: vid, displayName: effectiveDisplayName }),
+        body: JSON.stringify({ videoId: vid, displayName: announceDisplayName }),
       })
         .then((r) => (r.ok ? r.json() : null))
         .then((data) => {
@@ -1995,6 +2010,9 @@ export default function RoomWithSync({
       currentTrackStartedAtMsRef.current = Date.now();
       lastChangeVideoPublisherRef.current = publisherClientId;
       setCurrentSongPosterClientId(publisherClientId);
+      const publisherDisplayName =
+        participants.find((p) => p.clientId === publisherClientId)?.displayName?.trim() ||
+        effectiveDisplayName;
       safePublish('changeVideo', {
         type: 'changeVideo',
         videoId: id,
@@ -2006,13 +2024,17 @@ export default function RoomWithSync({
       advanceTurnAfterPost(publisherClientId);
       fetchAnnounceAndPublish(
         id,
-        (sameVideoReplay || isDevMinimalSongAi()) ? { silent: true } : undefined,
+        (sameVideoReplay || isDevMinimalSongAi())
+          ? { silent: true, displayNameOverride: publisherDisplayName }
+          : { displayNameOverride: publisherDisplayName },
       );
       if (!sameVideoReplay) fetchCommentaryAndPublish(id);
       saveSongHistory(id);
       schedulePlaybackHistory(roomId ?? '', id);
     },
     [
+      participants,
+      effectiveDisplayName,
       safePublish,
       scheduleAutoPlayAfterChangeVideo,
       advanceTurnAfterPost,
