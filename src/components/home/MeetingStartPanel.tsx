@@ -86,7 +86,7 @@ export function MeetingStartPanel() {
   const createRoomOptions = DEFAULT_ROOM_IDS.filter((id) => !liveRoomIds.includes(id));
 
   const run = useCallback(
-    async (action: 'start' | 'end', payload: { roomId?: string; title?: string; autoAssign?: boolean }) => {
+    async (action: 'start' | 'end' | 'rename', payload: { roomId?: string; title?: string; autoAssign?: boolean }) => {
       setMessage(null);
       setBusy(true);
       try {
@@ -98,7 +98,7 @@ export function MeetingStartPanel() {
             action,
             roomId: payload.roomId,
             autoAssign: payload.autoAssign === true,
-            ...(action === 'start' ? { title: payload.title?.trim() || '未設定の会' } : {}),
+            ...((action === 'start' || action === 'rename') ? { title: payload.title?.trim() || '未設定の会' } : {}),
           }),
         });
         const data = (await res.json().catch(() => ({}))) as { error?: string; ok?: boolean };
@@ -110,7 +110,13 @@ export function MeetingStartPanel() {
           setMessage(data?.error ?? '処理に失敗しました。');
           return;
         }
-        setMessage(action === 'start' ? '会を開始しました。一覧が更新されるまで数秒お待ちください。' : '会を終了しました。');
+        setMessage(
+          action === 'start'
+            ? '会を開始しました。一覧が更新されるまで数秒お待ちください。'
+            : action === 'rename'
+              ? '会のタイトルを更新しました。'
+              : '会を終了しました。',
+        );
         window.setTimeout(() => window.location.reload(), 600);
       } catch {
         setMessage('通信に失敗しました。');
@@ -120,6 +126,37 @@ export function MeetingStartPanel() {
     },
     [],
   );
+
+  const enterRoom = useCallback(async () => {
+    const selected = myRooms.find((r) => r.roomId === joinRoomId);
+    const before = selected?.title?.trim() ?? '';
+    const after = joinTitle.trim();
+    if (after && before !== after) {
+      try {
+        setMessage(null);
+        setBusy(true);
+        const res = await fetch('/api/room-gatherings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            action: 'rename',
+            roomId: joinRoomId,
+            title: after,
+          }),
+        });
+        if (!res.ok) {
+          const data = (await res.json().catch(() => ({}))) as { error?: string };
+          setMessage(data?.error ?? 'タイトル更新に失敗しました。');
+        }
+      } catch {
+        setMessage('タイトル更新に失敗しました。');
+      } finally {
+        setBusy(false);
+      }
+    }
+    window.location.href = `/${encodeURIComponent(joinRoomId)}`;
+  }, [joinRoomId, joinTitle, myRooms]);
 
   if (!visible) return null;
 
@@ -168,12 +205,14 @@ export function MeetingStartPanel() {
           </label>
         </div>
         <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
-          <a
-            href={`/${encodeURIComponent(joinRoomId)}`}
+          <button
+            type="button"
+            onClick={() => void enterRoom()}
+            disabled={busy}
             className="block w-full rounded-md border border-sky-500/50 bg-sky-900/20 px-4 py-2 text-center text-sm font-medium text-sky-200 hover:bg-sky-900/35"
           >
             このルームへ入る
-          </a>
+          </button>
           <button
             type="button"
             onClick={() => void run('end', { roomId: joinRoomId })}
