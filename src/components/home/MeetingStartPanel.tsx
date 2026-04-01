@@ -63,6 +63,7 @@ export function MeetingStartPanel() {
 
   const roomOptions = myRooms.length > 0 ? myRooms.map((r) => r.roomId) : DEFAULT_ROOM_IDS;
   const selectedRoom = myRooms.find((r) => r.roomId === roomId);
+  const alreadyLive = !!selectedRoom?.isLive;
 
   const run = useCallback(
     async (action: 'start' | 'end') => {
@@ -177,10 +178,11 @@ export function MeetingStartPanel() {
         <button
           type="button"
           onClick={() => void run('start')}
-          disabled={busy}
+          disabled={busy || alreadyLive}
           className="rounded-md bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-600 disabled:opacity-50"
+          title={alreadyLive ? 'このルームはすでに主催中です' : 'このルームで新しく会を開始します'}
         >
-          会を開始
+          新しく会を開始
         </button>
         <button
           type="button"
@@ -191,6 +193,12 @@ export function MeetingStartPanel() {
           このルームの会を終了
         </button>
       </div>
+      <p className="mt-2 text-center text-[11px] text-slate-400">
+        「新しく会を開始」は未主催のときに使います。すでに主催中なら「このルームへ入る」を使ってください。
+      </p>
+      {alreadyLive && (
+        <p className="mt-1 text-center text-xs text-emerald-300">このルームは現在 主催中です。開始せずそのまま入室できます。</p>
+      )}
       <div className="mt-2">
         <a
           href={`/${encodeURIComponent(roomId)}`}
