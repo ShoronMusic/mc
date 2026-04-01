@@ -26,7 +26,6 @@ export function MeetingStartPanel() {
   const [visible, setVisible] = useState(false);
   const [joinRoomId, setJoinRoomId] = useState<string>(DEFAULT_ROOM_IDS[0]);
   const [joinTitle, setJoinTitle] = useState('本日の会');
-  const [newRoomId, setNewRoomId] = useState<string>(DEFAULT_ROOM_IDS[0]);
   const [newTitle, setNewTitle] = useState('本日の会');
   const [myRooms, setMyRooms] = useState<OrganizerRoom[]>([]);
   const [liveRoomIds, setLiveRoomIds] = useState<string[]>([]);
@@ -75,10 +74,6 @@ export function MeetingStartPanel() {
                 .filter((id): id is string => !!id)
             : [];
           setLiveRoomIds(ids);
-          const firstFree = DEFAULT_ROOM_IDS.find((id) => !ids.includes(id));
-          if (firstFree) {
-            setNewRoomId(firstFree);
-          }
         })
         .catch(() => {
           // 失敗時は既定値のまま
@@ -91,7 +86,7 @@ export function MeetingStartPanel() {
   const createRoomOptions = DEFAULT_ROOM_IDS.filter((id) => !liveRoomIds.includes(id));
 
   const run = useCallback(
-    async (action: 'start' | 'end', payload: { roomId: string; title?: string }) => {
+    async (action: 'start' | 'end', payload: { roomId?: string; title?: string; autoAssign?: boolean }) => {
       setMessage(null);
       setBusy(true);
       try {
@@ -102,6 +97,7 @@ export function MeetingStartPanel() {
           body: JSON.stringify({
             action,
             roomId: payload.roomId,
+            autoAssign: payload.autoAssign === true,
             ...(action === 'start' ? { title: payload.title?.trim() || '未設定の会' } : {}),
           }),
         });
@@ -193,24 +189,11 @@ export function MeetingStartPanel() {
       </div>
 
       <div className="rounded-xl border border-dashed border-emerald-600/80 bg-emerald-950/10 p-3 sm:p-4">
-        <p className="mb-3 text-center text-xs font-semibold tracking-wide text-emerald-200">新規作成（空きルームのみ）</p>
+        <p className="mb-3 text-center text-xs font-semibold tracking-wide text-emerald-200">新規作成（空きルーム自動割当）</p>
         <div className="grid grid-cols-1 gap-2.5">
-          <label className="flex min-w-0 flex-col gap-1 text-xs text-slate-300">
-            空きルーム番号
-            <select
-              value={newRoomId}
-              onChange={(e) => setNewRoomId(e.target.value)}
-              className="w-full rounded-md border border-emerald-700/70 bg-slate-800 px-2.5 py-2 text-sm text-white"
-              disabled={busy || createRoomOptions.length === 0}
-            >
-              {createRoomOptions.length === 0 && <option value="">空きルームなし</option>}
-              {createRoomOptions.map((id) => (
-                <option key={id} value={id}>
-                  {id}
-                </option>
-              ))}
-            </select>
-          </label>
+          <p className="rounded-md border border-emerald-700/50 bg-slate-900/40 px-3 py-2 text-center text-xs text-emerald-100">
+            割当予定ルーム: {createRoomOptions[0] ?? '空きルームなし'}
+          </p>
           <label className="flex min-w-0 flex-col gap-1 text-xs text-slate-300">
             会のタイトル
             <input
@@ -226,8 +209,8 @@ export function MeetingStartPanel() {
         </div>
         <button
           type="button"
-          onClick={() => void run('start', { roomId: newRoomId, title: newTitle })}
-          disabled={busy || !newRoomId || createRoomOptions.length === 0}
+          onClick={() => void run('start', { title: newTitle, autoAssign: true })}
+          disabled={busy || createRoomOptions.length === 0}
           className="mt-3 w-full rounded-md bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-600 disabled:opacity-50"
         >
           会を新規作成

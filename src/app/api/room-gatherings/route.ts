@@ -5,6 +5,10 @@ export const dynamic = 'force-dynamic';
 
 const TITLE_MAX = 120;
 const CREATED_ROOMS_LIMIT = 200;
+const DEFAULT_ROOM_COUNT = 90;
+const DEFAULT_ROOM_IDS = Array.from({ length: DEFAULT_ROOM_COUNT }, (_, i) =>
+  String(i + 1).padStart(2, '0'),
+);
 
 function safeRoomId(raw: string): string | null {
   const t = raw.trim();
@@ -31,7 +35,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'ログインしていません。' }, { status: 401 });
   }
 
-  let body: { action?: string; roomId?: string; title?: string };
+  let body: { action?: string; roomId?: string; title?: string; autoAssign?: boolean };
   try {
     body = await request.json();
   } catch {
@@ -39,18 +43,47 @@ export async function POST(request: Request) {
   }
 
   const action = typeof body?.action === 'string' ? body.action.trim().toLowerCase() : '';
-  const roomId = safeRoomId(typeof body?.roomId === 'string' ? body.roomId : '');
-  if (!roomId) {
-    return NextResponse.json({ error: 'roomId が不正です。' }, { status: 400 });
-  }
+  const requestedRoomId = safeRoomId(typeof body?.roomId === 'string' ? body.roomId : '');
+  const autoAssign = body?.autoAssign === true;
 
   if (action === 'start') {
+    let roomId = requestedRoomId;
     let title = typeof body?.title === 'string' ? body.title.trim() : '';
     if (title.length > TITLE_MAX) {
       title = title.slice(0, TITLE_MAX);
     }
     if (!title) {
       title = '未設定の会';
+    }
+
+    if (!roomId && autoAssign) {
+      const { data: liveRows, error: liveErr } = await supabase
+        .from('room_gatherings')
+        .select('room_id')
+        .eq('status', 'live')
+        .in('room_id', DEFAULT_ROOM_IDS);
+      if (liveErr) {
+        if (liveErr.code === '42P01') {
+          return NextResponse.json(
+            { error: '会テーブルがありません。docs/room-live-session-spec.md の SQL を実行してください。' },
+            { status: 503 },
+          );
+        }
+        console.error('[room-gatherings start] select live rooms', liveErr);
+        return NextResponse.json({ error: liveErr.message }, { status: 500 });
+      }
+      const liveSet = new Set(
+        (liveRows ?? [])
+          .map((r) => safeRoomId(String(r.room_id ?? '')))
+          .filter((id): id is string => !!id),
+      );
+      roomId = DEFAULT_ROOM_IDS.find((id) => !liveSet.has(id)) ?? null;
+      if (!roomId) {
+        return NextResponse.json({ error: '空きルームがありません。しばらくしてから再度お試しください。' }, { status: 409 });
+      }
+    }
+    if (!roomId) {
+      return NextResponse.json({ error: 'roomId が不正です。' }, { status: 400 });
     }
 
     const { data: existing, error: selErr } = await supabase
@@ -104,6 +137,10 @@ export async function POST(request: Request) {
   }
 
   if (action === 'end') {
+    const roomId = requestedRoomId;
+    if (!roomId) {
+      return NextResponse.json({ error: 'roomId が不正です。' }, { status: 400 });
+    }
     const { data: updated, error: updErr } = await supabase
       .from('room_gatherings')
       .update({
