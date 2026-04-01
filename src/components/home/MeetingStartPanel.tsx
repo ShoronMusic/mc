@@ -62,6 +62,7 @@ export function MeetingStartPanel() {
   }, []);
 
   const roomOptions = myRooms.length > 0 ? myRooms.map((r) => r.roomId) : DEFAULT_ROOM_IDS;
+  const selectedRoom = myRooms.find((r) => r.roomId === roomId);
 
   const run = useCallback(
     async (action: 'start' | 'end') => {
@@ -97,10 +98,10 @@ export function MeetingStartPanel() {
   if (!visible) return null;
 
   return (
-    <div className="mt-4 rounded-lg border border-dashed border-gray-600 bg-gray-900/60 px-3 py-3">
-      <p className="mb-2 text-center text-[11px] font-medium text-gray-400">主催者向け（ログイン中のみ表示）</p>
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-center">
-        <label className="flex flex-col gap-0.5 text-xs text-gray-400">
+    <div className="mt-4 rounded-xl border border-dashed border-slate-600/90 bg-slate-900/60 p-3 sm:p-4">
+      <p className="mb-3 text-center text-xs font-semibold tracking-wide text-slate-300">主催者向け（ログイン中のみ表示）</p>
+      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+        <label className="flex min-w-0 flex-col gap-1 text-xs text-slate-400">
           ルーム
           <select
             value={roomId}
@@ -112,14 +113,12 @@ export function MeetingStartPanel() {
                 setTitle(selected.title.trim());
               }
             }}
-            className="rounded border border-gray-600 bg-gray-800 px-2 py-1.5 text-sm text-white"
+            className="w-full rounded-md border border-slate-600 bg-slate-800 px-2.5 py-2 text-sm text-white"
             disabled={busy}
           >
             {roomOptions.map((id) => {
               const mine = myRooms.find((r) => r.roomId === id);
-              const label = mine
-                ? `${id} ${mine.isLive ? '（開催中）' : ''} ${mine.title ? `- ${mine.title}` : ''}`.trim()
-                : id;
+              const label = mine ? `${id}${mine.isLive ? '（開催中）' : ''}` : id;
               return (
                 <option key={id} value={id}>
                   {label}
@@ -128,7 +127,7 @@ export function MeetingStartPanel() {
             })}
           </select>
         </label>
-        <label className="flex flex-col gap-0.5 text-xs text-gray-400">
+        <label className="flex min-w-0 flex-col gap-1 text-xs text-slate-400">
           別のルームID（任意）
           <input
             type="text"
@@ -139,40 +138,43 @@ export function MeetingStartPanel() {
               if (next) setRoomId(next);
             }}
             maxLength={48}
-            className="rounded border border-gray-600 bg-gray-800 px-2 py-1.5 text-sm text-white"
+            className="w-full rounded-md border border-slate-600 bg-slate-800 px-2.5 py-2 text-sm text-white"
             disabled={busy}
             placeholder="例: 91 / my-room"
           />
         </label>
-        <label className="flex min-w-0 flex-1 flex-col gap-0.5 text-xs text-gray-400">
+        <label className="flex min-w-0 flex-col gap-1 text-xs text-slate-400 sm:col-span-2">
           会のタイトル
           <input
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             maxLength={120}
-            className="w-full rounded border border-gray-600 bg-gray-800 px-2 py-1.5 text-sm text-white"
+            className="w-full rounded-md border border-slate-600 bg-slate-800 px-2.5 py-2 text-sm text-white"
             disabled={busy}
             placeholder="例: 土曜洋楽会"
           />
         </label>
       </div>
+      {selectedRoom?.title && (
+        <p className="mt-2 text-center text-[11px] text-slate-400">選択中ルームの前回タイトル: {selectedRoom.title}</p>
+      )}
       {myRooms.length > 0 && (
-        <p className="mt-2 text-center text-[11px] text-gray-500">
+        <p className="mt-2 text-center text-[11px] text-slate-500">
           あなたが過去に主催したルームを優先表示しています。
         </p>
       )}
       {myRooms.length === 0 && (
-        <p className="mt-2 text-center text-[11px] text-gray-500">
+        <p className="mt-2 text-center text-[11px] text-slate-500">
           過去の主催履歴がないため、既定ルーム候補を表示しています。
         </p>
       )}
-      <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:justify-center">
+      <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
         <button
           type="button"
           onClick={() => void run('start')}
           disabled={busy}
-          className="rounded bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-600 disabled:opacity-50"
+          className="rounded-md bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-600 disabled:opacity-50"
         >
           会を開始
         </button>
@@ -180,7 +182,7 @@ export function MeetingStartPanel() {
           type="button"
           onClick={() => void run('end')}
           disabled={busy}
-          className="rounded border border-gray-500 bg-gray-800 px-4 py-2 text-sm text-gray-200 hover:bg-gray-700 disabled:opacity-50"
+          className="rounded-md border border-slate-500 bg-slate-800 px-4 py-2 text-sm text-slate-200 hover:bg-slate-700 disabled:opacity-50"
         >
           このルームの会を終了
         </button>
