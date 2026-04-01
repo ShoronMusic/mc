@@ -9,6 +9,7 @@ import { CalendarDaysIcon, ChartBarIcon } from '@heroicons/react/24/outline';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { RoomPlaybackHistoryRow } from '@/app/api/room-playback-history/route';
 import { getArtistAndSong, getMainArtist } from '@/lib/format-song-display';
+import { resolveFamousPvArtistSongPack } from '@/lib/youtube-famous-pv-override';
 import { getMusic8ArtistJsonUrl } from '@/lib/music8-artist-display';
 import { fetchMusic8SongDataForPlaybackRow } from '@/lib/music8-song-lookup';
 import { SONG_STYLE_OPTIONS } from '@/lib/song-styles';
@@ -186,22 +187,48 @@ function normalizeArtistNameForMusic8Lookup(mixedArtistName: string): string {
 }
 
 /**
+ * 一覧の「アーティスト - タイトル」と Music8 タブ用の共通解決。
+ * 有名PVは videoId で固定（POST 前に保存された誤 title が残っていても表示を直す）。
+ */
+function resolvedPlaybackArtistSong(row: RoomPlaybackHistoryRow): {
+  artistDisplay: string;
+  song: string;
+  tabArtist: string;
+} | null {
+  const famous = resolveFamousPvArtistSongPack(row.video_id);
+  if (famous) {
+    return {
+      artistDisplay: famous.artistDisplay,
+      song: famous.song,
+      tabArtist: normalizeArtistNameForMusic8Lookup(famous.artist),
+    };
+  }
+  const t = row.title?.trim();
+  if (!t) return null;
+  const r = getArtistAndSong(t, null);
+  if (!r.artistDisplay || !r.song) return null;
+  const artistRaw = (r.artist ?? r.artistDisplay).trim();
+  const looksLikeSongPhrase =
+    r.artistDisplay.includes(',') &&
+    /\band\b/i.test(artistRaw) &&
+    /\b(it|you|me|my|your|our|the|a|an)\b/i.test(artistRaw.toLowerCase());
+  const artistForView = looksLikeSongPhrase ? artistRaw : r.artistDisplay;
+  return {
+    artistDisplay: artistForView,
+    song: r.song,
+    tabArtist: normalizeArtistNameForMusic8Lookup(r.artist ?? r.artistDisplay),
+  };
+}
+
+/**
  * DB の title は過去に誤って「曲名 - アーティスト」で保存された行がある。
  * artist_name を formatArtistTitle に渡すと「チャンネル扱い」になり誤順が固定されるため、
- * 保存文字列だけを getArtistAndSong(..., null) で再解決する。
+ * 保存文字列だけを getArtistAndSong(..., null) で再解決する（＋有名PVは videoId 優先）。
  */
 function artistTitle(row: RoomPlaybackHistoryRow): string {
+  const x = resolvedPlaybackArtistSong(row);
+  if (x) return `${x.artistDisplay} - ${x.song}`;
   if (!row.title) return row.video_id;
-  const r = getArtistAndSong(row.title.trim(), null);
-  if (r.artistDisplay && r.song) {
-    const artistRaw = (r.artist ?? r.artistDisplay).trim();
-    const looksLikeSongPhrase =
-      r.artistDisplay.includes(',') &&
-      /\band\b/i.test(artistRaw) &&
-      /\b(it|you|me|my|your|our|the|a|an)\b/i.test(artistRaw.toLowerCase());
-    const artistForView = looksLikeSongPhrase ? artistRaw : r.artistDisplay;
-    return `${artistForView} - ${r.song}`;
-  }
   return row.title;
 }
 
@@ -247,9 +274,14 @@ export default function RoomPlaybackHistory({
 
   const currentRowForTabs = currentVideoId ? items.find((r) => r.video_id === currentVideoId) : undefined;
 
-  /** メインアーティスト／ソングデータタブ用。DB の artist_name が誤っていても title 文字列から再解決する */
+  /** メインアーティスト／ソングデータタブ用。DB の artist_name / title が誤っていても再解決する */
   const playbackTabsResolve = useMemo(() => {
-    const t = currentRowForTabs?.title?.trim();
+    if (!currentRowForTabs) return null;
+    const resolved = resolvedPlaybackArtistSong(currentRowForTabs);
+    if (resolved) {
+      return { tabArtist: resolved.tabArtist, tabSong: resolved.song };
+    }
+    const t = currentRowForTabs.title?.trim();
     if (!t) return null;
     const r = getArtistAndSong(t, null);
     if (r.artistDisplay && r.song) {
@@ -258,13 +290,13 @@ export default function RoomPlaybackHistory({
         tabSong: r.song,
       };
     }
-    const fallbackArtist = currentRowForTabs?.artist_name?.trim();
+    const fallbackArtist = currentRowForTabs.artist_name?.trim();
     if (!fallbackArtist) return null;
     return {
       tabArtist: normalizeArtistNameForMusic8Lookup(fallbackArtist),
       tabSong: t,
     };
-  }, [currentRowForTabs?.title, currentRowForTabs?.artist_name]);
+  }, [currentRowForTabs?.video_id, currentRowForTabs?.title, currentRowForTabs?.artist_name]);
 
   useEffect(() => {
     fetch('/api/style-admin-check', { credentials: 'include' })

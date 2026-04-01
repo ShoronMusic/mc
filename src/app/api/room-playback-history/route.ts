@@ -194,7 +194,7 @@ export async function POST(request: Request) {
   let snippetDescription =
     snippet?.description && snippet.description.trim() ? snippet.description : null;
 
-  const resolved = await resolveArtistSongForPackAsync(title ?? videoId, authorName, snippet);
+  const resolved = await resolveArtistSongForPackAsync(title ?? videoId, authorName, snippet, videoId);
   if (process.env.DEBUG_YT_ARTIST === '1') {
     console.info('[room-playback-history POST] resolved', {
       videoId,

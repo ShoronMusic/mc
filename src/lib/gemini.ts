@@ -70,6 +70,16 @@ export type GeminiUsageLogMeta = {
   groundedFactsBlock?: string | null;
 };
 
+/** チャット文脈の上限（長い会話・長文貼り付けでのトークン膨張を抑える） */
+const CHAT_CONTEXT_MAX_MESSAGES = 8;
+const CHAT_CONTEXT_MAX_BODY_CHARS = 480;
+
+function truncateChatContextBody(body: string): string {
+  const t = body.replace(/\r\n/g, '\n');
+  if (t.length <= CHAT_CONTEXT_MAX_BODY_CHARS) return t;
+  return `${t.slice(0, CHAT_CONTEXT_MAX_BODY_CHARS - 1)}…`;
+}
+
 /** 直近のチャット履歴から AI の返答を生成（相槌・感想、または曲の事実質問への回答） */
 export async function generateChatReply(
   recentMessages: { displayName?: string; body: string; messageType?: string }[],
@@ -81,10 +91,10 @@ export async function generateChatReply(
   if (!model) return null;
 
   const lines = recentMessages
-    .slice(-12)
+    .slice(-CHAT_CONTEXT_MAX_MESSAGES)
     .map((m) => {
       const who = m.messageType === 'ai' ? 'AI' : (m.displayName ?? 'ユーザー');
-      return `${who}: ${m.body}`;
+      return `${who}: ${truncateChatContextBody(typeof m.body === 'string' ? m.body : '')}`;
     })
     .join('\n');
 

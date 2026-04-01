@@ -44,6 +44,8 @@ interface ChatProps {
   onTidbitLibraryReject?: (messageId: string, tidbitId: string) => void | Promise<void>;
   /** 途中参加向けチャットサマリーを開く */
   onChatSummaryClick?: () => void;
+  /** オーナー設定: 邦楽AI解説を解禁中ならヘッダーに表示 */
+  jpAiUnlockEnabled?: boolean;
 }
 
 function formatTime(createdAt: string): string {
@@ -225,6 +227,7 @@ export default function Chat({
   canRejectTidbit = false,
   onTidbitLibraryReject,
   onChatSummaryClick,
+  jpAiUnlockEnabled = false,
 }: ChatProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const [feedbackState, setFeedbackState] = useState<Record<string, 'up' | 'down'>>({});
@@ -339,7 +342,14 @@ export default function Chat({
   return (
     <div className="flex flex-1 flex-col overflow-hidden rounded-lg border border-gray-700 bg-gray-900/50">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-700 px-3 py-2">
-        <span className="text-sm font-medium text-gray-300">チャット</span>
+        <span className="inline-flex items-center gap-2 text-sm font-medium text-gray-300">
+          チャット
+          {jpAiUnlockEnabled ? (
+            <span className="rounded border border-emerald-600/70 bg-emerald-900/40 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-200">
+              邦楽解禁
+            </span>
+          ) : null}
+        </span>
         <div className="inline-flex items-center gap-2">
           {onChatSummaryClick ? (
             <button
@@ -416,8 +426,11 @@ export default function Chat({
                     >
                       <span className="mr-2 font-medium text-gray-300">{m.displayName ?? 'ユーザー'}</span>
                       <span className="whitespace-pre-wrap">{bodyContent}</span>
+                      <span className="ml-1 inline text-[11px] text-gray-500 sm:hidden">
+                        {formatTime(m.createdAt)}
+                      </span>
                     </p>
-                    <span className="shrink-0 text-xs text-gray-500">
+                    <span className="hidden shrink-0 text-xs text-gray-500 sm:inline">
                       {formatTime(m.createdAt)}
                     </span>
                   </div>
@@ -434,7 +447,7 @@ export default function Chat({
                       >
                         {m.displayName ?? 'ユーザー'}
                       </span>
-                      <span className="text-xs text-gray-500">
+                      <span className="hidden text-xs text-gray-500 sm:inline">
                         {formatTime(m.createdAt)}
                       </span>
                     </div>
@@ -449,6 +462,9 @@ export default function Chat({
                       }
                     >
                       {bodyContent}
+                      <span className="ml-1 inline text-[11px] text-gray-500 sm:hidden">
+                        {formatTime(m.createdAt)}
+                      </span>
                     </p>
                   </>
                 )}

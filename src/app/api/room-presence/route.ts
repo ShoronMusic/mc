@@ -38,12 +38,29 @@ function displayNameFromPresenceData(data: unknown): string {
   return 'ゲスト';
 }
 
+function jpAiUnlockFromPresenceData(data: unknown): boolean {
+  if (data && typeof data === 'object' && data !== null && 'jpAiUnlockEnabled' in data) {
+    return (data as { jpAiUnlockEnabled?: unknown }).jpAiUnlockEnabled === true;
+  }
+  if (typeof data === 'string') {
+    try {
+      const o = JSON.parse(data) as { jpAiUnlockEnabled?: unknown };
+      return o?.jpAiUnlockEnabled === true;
+    } catch {
+      /* ignore */
+    }
+  }
+  return false;
+}
+
 export type RoomPresencePayload = {
   roomId: string;
   count: number;
   names: string[];
   /** オーナーが設定した入室前メッセージ（未設定・DB なし時は省略） */
   lobbyMessage?: string;
+  /** オーナー設定: 邦楽AI解説を解禁中（セッション設定） */
+  jpAiUnlockEnabled?: boolean;
   error?: boolean;
 };
 
@@ -76,8 +93,9 @@ export async function GET(request: Request) {
         const channel = rest.channels.get(channelName);
         const members = await allPresenceMembers(channel);
         const names = members.map((m) => displayNameFromPresenceData(m.data));
+        const jpAiUnlockEnabled = members.some((m) => jpAiUnlockFromPresenceData(m.data));
         names.sort((a, b) => a.localeCompare(b, 'ja'));
-        return { roomId, count: members.length, names };
+        return { roomId, count: members.length, names, jpAiUnlockEnabled };
       } catch (e) {
         console.error('[room-presence]', channelName, e);
         return { roomId, count: 0, names: [], error: true };

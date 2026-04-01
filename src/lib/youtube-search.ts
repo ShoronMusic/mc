@@ -8,6 +8,8 @@ export interface YouTubeSearchResult {
   videoId: string;
   title: string;
   channelTitle: string;
+  /** 公開日時（RFC3339） */
+  publishedAt?: string;
   /** 検索結果サムネイル（中サイズを優先） */
   thumbnailUrl?: string;
 }
@@ -59,6 +61,7 @@ export async function searchYouTube(
         snippet?: {
           title?: string;
           channelTitle?: string;
+          publishedAt?: string;
           thumbnails?: {
             default?: { url?: string };
             medium?: { url?: string };
@@ -121,6 +124,7 @@ export async function searchYouTube(
       videoId: item.id.videoId,
       title: item.snippet.title ?? '',
       channelTitle: item.snippet.channelTitle ?? '',
+      publishedAt: item.snippet.publishedAt,
       thumbnailUrl: thumbUrl,
     };
     await persistYouTubeApiUsageLog({
@@ -183,6 +187,7 @@ export async function searchYouTubeMany(
         snippet?: {
           title?: string;
           channelTitle?: string;
+          publishedAt?: string;
           thumbnails?: {
             default?: { url?: string };
             medium?: { url?: string };
@@ -236,6 +241,7 @@ export async function searchYouTubeMany(
         videoId: vid,
         title: sn.title ?? '',
         channelTitle: sn.channelTitle ?? '',
+        publishedAt: sn.publishedAt,
         thumbnailUrl: thumbUrl,
       });
     }

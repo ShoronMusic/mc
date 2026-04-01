@@ -6,6 +6,7 @@ import { fetchOEmbed } from '@/lib/youtube-oembed';
 import { getStyleFromDb } from '@/lib/song-style';
 import { upsertSongAndVideo } from '@/lib/song-entities';
 import { insertTidbit } from '../../../../lib/song-tidbits';
+import { checkChatAiRateLimit, getChatAiClientIp } from '@/lib/chat-ai-rate-limit';
 
 export const dynamic = 'force-dynamic';
 
@@ -231,9 +232,26 @@ export async function POST(request: Request) {
       messageType: typeof m.messageType === 'string' ? m.messageType : undefined,
     }));
     const newestUserText = latestUserText(list);
+    const isGuest = body?.isGuest === true;
     if (!shouldGenerateChatReply(newestUserText)) {
       return NextResponse.json({ text: null, skipped: true, reason: 'non_question_chat' });
     }
+
+    const rate = checkChatAiRateLimit(getChatAiClientIp(request), isGuest);
+    if (!rate.ok) {
+      return NextResponse.json(
+        {
+          error: 'rate_limit',
+          message: 'AI への質問が短時間に集中しています。しばらく待ってから再度お試しください。',
+          retryAfterSec: rate.retryAfterSec,
+        },
+        {
+          status: 429,
+          headers: { 'Retry-After': String(rate.retryAfterSec) },
+        },
+      );
+    }
+
     const roomId = typeof body?.roomId === 'string' ? body.roomId.trim() : '';
     if (roomId && isTrendQuestion(newestUserText)) {
       const hours = parseTrendHours(newestUserText);

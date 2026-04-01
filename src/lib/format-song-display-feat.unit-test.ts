@@ -74,6 +74,16 @@ assert.equal(cleanTitle('What Is Love • TopPop'), 'What Is Love');
   assert.equal(r.song, 'Take On Me');
 }
 
+// クォート曲名の後ろに Official MV / Choreography などが続いても抽出できる
+{
+  const r = getArtistAndSong(
+    "BTS (방탄소년단) 'Dynamite' Official MV (Choreography ver.)",
+    'HYBE LABELS',
+  );
+  assert.equal(r.artistDisplay, 'BTS (방탄소년단)');
+  assert.equal(r.song, 'Dynamite');
+}
+
 // 「A & B - 曲名」は MB 順序推定を掛けない（片側だけ & のデュオ名と誤判定を防ぐ）
 {
   const amb = getAmbiguousTitleSegmentsForMusicBrainz(

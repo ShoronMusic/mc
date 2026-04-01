@@ -488,6 +488,27 @@ export function parseArtistTitle(
     }
   }
 
+  // 公式MV系で多い: Artist 'Song Title' Official MV (Choreography ver.) など
+  const singleQuoteWithTail = raw.match(/^([^']+)\s+'([^']+)'\s*(.*)$/);
+  if (singleQuoteWithTail) {
+    const tail = (singleQuoteWithTail[3] ?? '').trim();
+    const tailOk = (() => {
+      if (!tail) return true;
+      if (tail.length > 120) return false;
+      if (tail.startsWith('(') || tail.startsWith('|')) return true;
+      const t = tail.toLowerCase();
+      return /^(official|mv\b|music video\b|live\b|performance\b|ver\.?\b|version\b|choreography\b|dance practice\b|lyric\b|audio\b|clip\b|teaser\b)/i.test(t);
+    })();
+    if (tailOk) {
+      const artist = singleQuoteWithTail[1].trim();
+      const song = cleanTitle(singleQuoteWithTail[2]);
+      if (artist && song) {
+        const out = { artist, song };
+        if (!isGarbageArtistSongParse(out)) return out;
+      }
+    }
+  }
+
   // 区切り（Unicode ダッシュ含む）で分割。最初の区切りだけ使い、残りは曲名として結合
   const parts = raw.split(ARTIST_TITLE_SEPARATOR).map((p) => p.trim()).filter(Boolean);
   if (parts.length >= 2) {
@@ -675,6 +696,9 @@ export function getArtistAndSong(
     allowColonQuotedSongWithTrailingParens: allowColonQuoted,
   });
   if (parsed) {
+    const explicitQuotedArtistSongPattern =
+      /^.+\s+["'][^"']+["'](?:\s|$)/.test(titleForParse.trim()) ||
+      /^.+:\s*["'][^"']+["'](?:\s|$)/.test(titleForParse.trim());
     // 逆パターン対策:
     // 日本のPVや一部チャンネルで「曲名 - アーティスト」になっていることがある。
     // 例: "Heal the World - Music Travel Love & Friends (Al Madam, UAE)"
@@ -907,6 +931,9 @@ export function getArtistAndSong(
     }
 
     if (colorsStudiosTrustsOembedArtistFirst(authorName, title)) {
+      shouldSwap = false;
+    }
+    if (explicitQuotedArtistSongPattern) {
       shouldSwap = false;
     }
 

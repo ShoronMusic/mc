@@ -43,3 +43,10 @@ export type OwnerCommentPackMode = 'full' | 'base_only' | 'off';
 export interface OwnerCommentPackModePayload {
   mode: OwnerCommentPackMode;
 }
+
+/** オーナーによる「邦楽AI解説の解禁」設定（そのルームのセッションのみ）。デフォルトOFF */
+export const OWNER_JP_AI_UNLOCK_EVENT = 'owner:jpAiUnlock';
+
+export interface OwnerJpAiUnlockPayload {
+  enabled: boolean;
+}

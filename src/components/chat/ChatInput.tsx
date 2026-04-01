@@ -21,6 +21,7 @@ type SearchResultRow = {
   title: string;
   channelTitle: string;
   artistTitle: string;
+  publishedAt?: string;
   thumbnailUrl?: string;
 };
 
@@ -32,6 +33,8 @@ export interface ChatInputHandle {
 interface ChatInputProps {
   onSendMessage: (text: string) => void;
   onVideoUrl?: (url: string) => void;
+  /** ゲスト時は検索APIの制限を低めにするために送る */
+  isGuest?: boolean;
   onSystemMessage?: (text: string) => void;
   /** 検索結果から「候補リスト」に追加するためのコールバック（任意） */
   onAddCandidate?: (row: SearchResultRow) => void;
@@ -44,12 +47,13 @@ interface ChatInputProps {
 }
 
 const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput(
-  { onSendMessage, onVideoUrl, onSystemMessage, onAddCandidate, onPreviewStart, onPreviewStop, trailingSlot },
+  { onSendMessage, onVideoUrl, isGuest = false, onSystemMessage, onAddCandidate, onPreviewStart, onPreviewStop, trailingSlot },
   ref
 ) {
   const [value, setValue] = useState('');
   const [searching, setSearching] = useState(false);
   const [searchResultsOpen, setSearchResultsOpen] = useState(false);
+  const [usageGuideOpen, setUsageGuideOpen] = useState(false);
   const [searchResults, setSearchResults] = useState<SearchResultRow[]>([]);
   const [previewVideoId, setPreviewVideoId] = useState<string | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -140,9 +144,21 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
       const res = await fetch('/api/ai/search-youtube', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: trimmed, maxResults: 5 }),
+        body: JSON.stringify({ query: trimmed, maxResults: 5, isGuest }),
       });
-      const data = res.ok ? await res.json() : null;
+      const data = res.ok || res.status === 429 ? await res.json().catch(() => null) : null;
+      if (res.status === 429 && data && typeof data === 'object' && data.error === 'rate_limit') {
+        onSystemMessage?.(
+          typeof data.message === 'string' && data.message.trim()
+            ? data.message
+            : 'YouTube検索の操作が短時間に集中しています。しばらく待ってから再度お試しください。',
+        );
+        return;
+      }
+      if (!res.ok) {
+        onSystemMessage?.('検索に失敗しました。しばらくしてから再度お試しください。');
+        return;
+      }
       if (data?.reason === 'youtube_not_configured') {
         onSystemMessage?.('曲名検索を使うには、サーバーに YOUTUBE_API_KEY の設定が必要です。管理者が設定後、開発サーバー再起動で有効になります。');
       } else {
@@ -154,6 +170,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                 title: r.title ?? '',
                 channelTitle: r.channelTitle ?? '',
                 artistTitle: r.artistTitle ?? '',
+                publishedAt: typeof r.publishedAt === 'string' ? r.publishedAt : undefined,
                 thumbnailUrl: typeof r.thumbnailUrl === 'string' ? r.thumbnailUrl : undefined,
               }))
           : [];
@@ -231,43 +248,51 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
               <ul className="space-y-2">
                 {searchResults.map((r) => (
                   <li key={r.videoId}>
-                    <div className="flex w-full items-stretch gap-3 rounded border border-gray-700 bg-gray-800/60 px-3 py-2">
-                      {r.thumbnailUrl && (
-                        <div className="h-12 w-20 flex-shrink-0 overflow-hidden rounded bg-black/40">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={r.thumbnailUrl}
-                            alt={r.title || r.artistTitle}
-                            className="h-full w-full object-cover"
-                            loading="lazy"
-                          />
-                        </div>
-                      )}
-                      <div className="min-w-0 flex-1">
-                        <div className="text-sm font-medium text-gray-100 line-clamp-1">
-                          {r.artistTitle}
-                        </div>
-                        <div className="mt-0.5 text-xs text-gray-400 line-clamp-2">
-                          {r.title} / {r.channelTitle}
+                    <div className="rounded border border-gray-700 bg-gray-800/60 px-3 py-2">
+                      <div className="flex items-start gap-3">
+                        {r.thumbnailUrl && (
+                          <div className="w-20 flex-shrink-0">
+                            <div className="h-12 w-20 overflow-hidden rounded bg-black/40">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={r.thumbnailUrl}
+                                alt={r.title || r.artistTitle}
+                                className="h-full w-full object-cover"
+                                loading="lazy"
+                              />
+                            </div>
+                            <div className="mt-1 whitespace-nowrap text-[11px] leading-none text-gray-400">
+                              {r.publishedAt ? r.publishedAt.slice(0, 10) : ''}
+                            </div>
+                          </div>
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <div className="text-sm font-medium text-gray-100 line-clamp-2 break-words">
+                            {r.title}
+                          </div>
+                          <div className="mt-0.5 text-xs text-gray-400 line-clamp-2 break-words">
+                            {r.artistTitle}
+                            {r.channelTitle ? ` / ${r.channelTitle}` : ''}
+                          </div>
                         </div>
                       </div>
-                      <div className="flex flex-col items-stretch gap-1">
+                      <div className="mt-2 grid grid-cols-3 gap-2">
                         <button
                           type="button"
-                          className="rounded border border-gray-600 bg-gray-800 px-2 py-1 text-[11px] text-gray-200 hover:bg-gray-700"
+                          className="min-h-[2.25rem] rounded border border-gray-600 bg-gray-800 px-2 py-1 text-[11px] text-gray-200 hover:bg-gray-700"
                           onClick={() => {
                             startPreview(r.videoId);
                           }}
                         >
                           プレビュー
                         </button>
-                        {onAddCandidate && (
+                        {onAddCandidate ? (
                           <button
                             type="button"
                             disabled={
                               !watchedVideoIds.includes(r.videoId) || addedCandidateVideoIds.includes(r.videoId)
                             }
-                            className="rounded border border-emerald-600 bg-emerald-900/40 px-2 py-1 text-xs font-semibold text-emerald-100 hover:bg-emerald-800/70 disabled:cursor-not-allowed disabled:opacity-50"
+                            className="min-h-[2.25rem] rounded border border-emerald-600 bg-emerald-900/40 px-2 py-1 text-[11px] font-semibold text-emerald-100 hover:bg-emerald-800/70 disabled:cursor-not-allowed disabled:opacity-50"
                             onClick={() => {
                               if (!watchedVideoIds.includes(r.videoId)) return;
                               if (addedCandidateVideoIds.includes(r.videoId)) return;
@@ -284,11 +309,13 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                                 ? '候補'
                                 : '候補（視聴後）'}
                           </button>
+                        ) : (
+                          <div aria-hidden="true" />
                         )}
-                        {onVideoUrl && (
+                        {onVideoUrl ? (
                           <button
                             type="button"
-                            className="rounded border border-blue-500/70 bg-blue-900/40 px-2 py-1 text-[11px] text-blue-100 hover:bg-blue-900/70"
+                            className="min-h-[2.25rem] rounded border border-blue-500/70 bg-blue-900/40 px-2 py-1 text-[11px] text-blue-100 hover:bg-blue-900/70"
                             onClick={() => {
                               onVideoUrl(
                                 `https://www.youtube.com/watch?v=${encodeURIComponent(r.videoId)}`,
@@ -299,6 +326,8 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                           >
                             今すぐ貼る
                           </button>
+                        ) : (
+                          <div aria-hidden="true" />
                         )}
                       </div>
                     </div>
@@ -347,11 +376,51 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
         </div>
       )}
 
+      {usageGuideOpen && (
+        <div
+          className="fixed inset-0 z-[90] flex items-center justify-center bg-black/70 p-4 lg:hidden"
+          role="dialog"
+          aria-modal="true"
+          aria-label="発言欄の使い方"
+          onClick={() => setUsageGuideOpen(false)}
+        >
+          <div
+            className="w-full max-w-md rounded border border-amber-900/40 bg-gray-900 p-4 text-sm text-gray-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <div className="text-sm font-semibold text-amber-200">発言欄の使い方（送信／検索の2通り）</div>
+              <button
+                type="button"
+                className="rounded border border-gray-700 bg-gray-800 px-3 py-1.5 text-xs text-gray-200 hover:bg-gray-700"
+                onClick={() => setUsageGuideOpen(false)}
+              >
+                閉じる
+              </button>
+            </div>
+            <ul className="list-disc space-y-2 pl-4 text-xs leading-relaxed text-gray-300">
+              <li>
+                <span className="font-medium text-gray-100">送信</span>
+                ：<span className="text-gray-100">YouTube のURL</span>
+                を入れて押すと、ルームのプレイヤーにその動画が表示されます。URL
+                <span className="text-gray-100">以外</span>（感想・会話など）はチャットに表示されます。
+              </li>
+              <li>
+                <span className="font-medium text-gray-100">検索</span>
+                ：アーティスト名・曲名などの
+                <span className="text-gray-100">キーワード</span>
+                を入れて押すと、候補動画の一覧が開きます（別タブではなくこの画面の上に表示されます）。
+              </li>
+            </ul>
+          </div>
+        </div>
+      )}
+
       <div className="rounded-lg border border-gray-700 bg-gray-900/50 p-2">
         {/* モバイル1段目 / PCでも上段フル幅: 使い方 */}
-        <details className="mb-2 rounded border border-gray-700/80 bg-gray-900/80 px-2 py-1.5 text-[11px] leading-snug text-gray-400 open:border-amber-900/40 open:bg-amber-950/20">
+        <details className="mb-2 hidden rounded border border-gray-700/80 bg-gray-900/80 px-2 py-1.5 text-[11px] leading-snug text-gray-400 open:border-amber-900/40 open:bg-amber-950/20 lg:block">
           <summary className="cursor-pointer select-none text-amber-200/90 marker:text-gray-500 hover:text-amber-100">
-            この欄の使い方（送信／検索の2通り）
+            発言欄の使い方（送信／検索の2通り）
           </summary>
           <ul className="mt-2 list-disc space-y-1.5 pl-4 text-gray-400">
             <li>
@@ -370,28 +439,39 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
         </details>
         {/* モバイル: 2段目=入力 / 3段目=送信・検索・trailing 横並び。PC: 入力とボタン1行 */}
         <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:gap-2">
-          <input
-            ref={inputRef}
-            type="text"
-            placeholder="URL・メッセージ・曲名のどれでも入力…"
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key !== 'Enter' || e.shiftKey) return;
-              if (e.nativeEvent.isComposing) return;
-              e.preventDefault();
-              handleSubmit();
-            }}
-            maxLength={MAX_MESSAGE_LENGTH}
-            className="w-full min-w-0 rounded border border-gray-600 bg-gray-800 px-3 py-2 text-sm text-white placeholder-gray-500 outline-none focus:border-blue-500 lg:flex-1"
-            aria-label="チャット入力"
-          />
+          <div className="flex min-w-0 items-center gap-2 lg:flex-1">
+            <input
+              ref={inputRef}
+              type="text"
+              placeholder="URL・メッセージ・曲名のどれでも入力…"
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key !== 'Enter' || e.shiftKey) return;
+                if (e.nativeEvent.isComposing) return;
+                e.preventDefault();
+                handleSubmit();
+              }}
+              maxLength={MAX_MESSAGE_LENGTH}
+              className="min-h-[3.75rem] w-full min-w-0 rounded border border-gray-300 bg-gray-100 px-3 py-2 text-sm text-gray-900 placeholder-gray-500 outline-none focus:border-blue-500"
+              aria-label="チャット入力"
+            />
+            <button
+              type="button"
+              onClick={() => setUsageGuideOpen(true)}
+              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded border border-gray-600 bg-gray-800 text-base text-amber-200 hover:bg-gray-700 lg:hidden"
+              aria-label="発言欄の使い方を開く"
+              title="発言欄の使い方"
+            >
+              ?
+            </button>
+          </div>
           <div className="flex w-full min-w-0 gap-2 lg:w-auto lg:shrink-0">
             <button
               type="button"
               onClick={handleSubmit}
               title="YouTubeのURLならプレイヤーに反映。それ以外はチャットに表示"
-              className="min-h-[2.5rem] flex-1 rounded bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50 lg:min-h-0 lg:flex-none lg:px-4"
+              className="min-h-[3.5rem] flex-1 rounded bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50 lg:min-h-0 lg:flex-none lg:px-4"
               disabled={!value.trim()}
             >
               送信
@@ -401,7 +481,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                 type="button"
                 onClick={handleSearchAndPlay}
                 title="キーワードでYouTube検索し、結果一覧を表示（URLを入れた場合は送信と同じくプレイヤーへ）"
-                className="min-h-[2.5rem] flex-1 rounded border border-blue-500/60 bg-blue-900/20 px-3 py-2 text-sm font-medium text-blue-200 hover:bg-blue-900/35 disabled:opacity-50 lg:min-h-0 lg:flex-none lg:px-4"
+                className="min-h-[3.5rem] flex-1 rounded border border-blue-500/60 bg-blue-900/20 px-3 py-2 text-sm font-medium text-blue-200 hover:bg-blue-900/35 disabled:opacity-50 lg:min-h-0 lg:flex-none lg:px-4"
                 disabled={!value.trim() || searching}
                 aria-label="曲名・キーワードで検索"
               >

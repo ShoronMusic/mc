@@ -13,6 +13,7 @@ import { resolveArtistSongForPackAsync } from '@/lib/youtube-artist-song-for-pac
 import { getVideoSnippet } from '@/lib/youtube-search';
 import { resolveJapaneseEconomyWithMusicBrainz } from '@/lib/resolve-japanese-economy';
 import { isJpDomesticOfficialChannelAiException } from '@/lib/jp-official-channel-exception';
+import { isRoomJpAiUnlockEnabled } from '@/lib/room-jp-ai-unlock-server';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,6 +21,7 @@ export async function POST(request: Request) {
   try {
     const body = await request.json().catch(() => ({}));
     const videoId = typeof body?.videoId === 'string' ? body.videoId.trim() : '';
+    const roomId = typeof body?.roomId === 'string' ? body.roomId.trim() : '';
     if (!videoId) {
       return NextResponse.json({ error: 'videoId is required' }, { status: 400 });
     }
@@ -33,7 +35,8 @@ export async function POST(request: Request) {
     const { artist, artistDisplay, song } = await resolveArtistSongForPackAsync(
       title,
       authorName,
-      snippet
+      snippet,
+      videoId,
     );
 
     const isJpEconomy = await resolveJapaneseEconomyWithMusicBrainz({
@@ -45,7 +48,9 @@ export async function POST(request: Request) {
       channelTitle: snippet?.channelTitle ?? null,
       defaultAudioLanguage: snippet?.defaultAudioLanguage ?? null,
     });
-    if (isJpEconomy && !isJpDomesticOfficialChannelAiException(snippet?.channelId)) {
+    const roomJpAiUnlock = roomId ? await isRoomJpAiUnlockEnabled(roomId) : false;
+    const jpAiUnlockEnabled = roomJpAiUnlock;
+    if (isJpEconomy && !isJpDomesticOfficialChannelAiException(snippet?.channelId) && !jpAiUnlockEnabled) {
       return NextResponse.json({ skipAiCommentary: true, videoId });
     }
     if (

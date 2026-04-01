@@ -10,6 +10,7 @@ import {
   swapIfCompoundArtistStuckInSongSlot,
 } from '@/lib/format-song-display';
 import { resolveTitleOrderWithMusicBrainz } from '@/lib/musicbrainz-title-order';
+import { resolveFamousPvArtistSongPack } from '@/lib/youtube-famous-pv-override';
 
 function enrichArtistSongFromSnippet(
   result: { artist: string | null; artistDisplay: string | null; song: string },
@@ -53,7 +54,19 @@ export function resolveArtistSongForPack(
   title: string,
   authorName: string | null | undefined,
   snippet: VideoSnippet | null,
+  videoId?: string | null,
 ): { artist: string | null; artistDisplay: string | null; song: string } {
+  const famous = resolveFamousPvArtistSongPack(videoId);
+  if (famous) {
+    return finalizePackArtistSong(
+      {
+        artist: famous.artist,
+        artistDisplay: famous.artistDisplay,
+        song: famous.song,
+      },
+      snippet?.description,
+    );
+  }
   const base = getArtistAndSong(title, authorName, {
     videoDescription: snippet?.description ?? null,
   });
@@ -90,7 +103,25 @@ export async function resolveArtistSongForPackAsync(
   title: string,
   authorName: string | null | undefined,
   snippet: VideoSnippet | null,
+  videoId?: string | null,
 ): Promise<ResolvedArtistSong> {
+  const famous = resolveFamousPvArtistSongPack(videoId);
+  if (famous) {
+    return logArtistPackResolution(
+      'famous-pv-override',
+      title,
+      authorName,
+      finalizePackArtistSong(
+        {
+          artist: famous.artist,
+          artistDisplay: famous.artistDisplay,
+          song: famous.song,
+        },
+        snippet?.description,
+      ),
+    );
+  }
+
   const desc = snippet?.description ?? null;
   const amb = getAmbiguousTitleSegmentsForMusicBrainz(title, authorName, desc);
   if (amb) {
@@ -118,6 +149,6 @@ export async function resolveArtistSongForPackAsync(
     'heuristic',
     title,
     authorName,
-    resolveArtistSongForPack(title, authorName, snippet),
+    resolveArtistSongForPack(title, authorName, snippet, videoId),
   );
 }

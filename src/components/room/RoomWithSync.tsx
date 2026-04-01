@@ -50,6 +50,7 @@ import {
   OWNER_FORCE_EXIT_EVENT,
   OWNER_AI_FREE_SPEECH_STOP_EVENT,
   OWNER_COMMENT_PACK_MODE_EVENT,
+  OWNER_JP_AI_UNLOCK_EVENT,
   OWNER_STATE_EVENT,
   TURN_STATE_EVENT,
   OWNER_5MIN_LIMIT_EVENT,
@@ -57,6 +58,7 @@ import {
   type OwnerAiFreeSpeechStopPayload,
   type OwnerCommentPackMode,
   type OwnerCommentPackModePayload,
+  type OwnerJpAiUnlockPayload,
   type OwnerStatePayload,
   type TurnStatePayload,
   type Owner5MinLimitPayload,
@@ -150,6 +152,8 @@ interface PresenceMemberData {
   textColor?: string;
   /** 自分のステータス（離席・ROM・食事中など）。参加者名横に表示 */
   status?: string;
+  /** オーナー設定: 邦楽AI解説解禁（セッション設定） */
+  jpAiUnlockEnabled?: boolean;
 }
 
 interface CandidateSong {
@@ -289,7 +293,11 @@ export default function RoomWithSync({
   /** オーナーによる曲紹介コメント本数設定。full=基本+自由3、base_only=基本のみ、off=なし */
   const [commentPackMode, setCommentPackMode] = useState<OwnerCommentPackMode>('base_only');
   const commentPackModeRef = useRef<OwnerCommentPackMode>('base_only');
+  /** オーナーによる「邦楽AI解説の解禁」設定（デフォルトOFF） */
+  const [jpAiUnlockEnabled, setJpAiUnlockEnabled] = useState(false);
+  const jpAiUnlockEnabledRef = useRef(false);
   commentPackModeRef.current = commentPackMode;
+  jpAiUnlockEnabledRef.current = jpAiUnlockEnabled;
   songLimit5MinEnabledRef.current = songLimit5MinEnabled;
   videoIdRef.current = videoId;
   playingRef.current = playing;
@@ -399,13 +407,14 @@ export default function RoomWithSync({
     participatesInSelection,
     textColor: userTextColor,
     status: userStatus || undefined,
+    jpAiUnlockEnabled: jpAiUnlockEnabledRef.current,
   };
   const { updateStatus } = usePresence(channelName, presencePayload);
   const { presenceData } = usePresenceListener<PresenceMemberData>(channelName);
 
   useEffect(() => {
     updateStatus(presencePayload);
-  }, [updateStatus, effectiveDisplayName, participatesInSelection, userTextColor, userStatus]);
+  }, [updateStatus, effectiveDisplayName, participatesInSelection, userTextColor, userStatus, jpAiUnlockEnabled]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -482,6 +491,7 @@ export default function RoomWithSync({
   const ownerClientId = ownerState.ownerClientId;
   const ownerLeftAt = ownerState.ownerLeftAt;
   const isOwner = Boolean(myClientId && ownerClientId && myClientId === ownerClientId && ownerLeftAt === null);
+  const canUseOwnerControls = isOwner && !isGuest;
 
   const publishRef = useRef<((name: string, data: unknown) => void) | null>(null);
 
@@ -672,6 +682,14 @@ export default function RoomWithSync({
       }
       return;
     }
+    if (message.name === OWNER_JP_AI_UNLOCK_EVENT) {
+      const d = message.data as OwnerJpAiUnlockPayload;
+      if (d && typeof d.enabled === 'boolean') {
+        jpAiUnlockEnabledRef.current = d.enabled;
+        setJpAiUnlockEnabled(d.enabled);
+      }
+      return;
+    }
     if (message.name === PLAYBACK_HISTORY_UPDATED_EVENT) {
       const d = message.data as PlaybackHistoryUpdatedPayload;
       const targetVid = typeof d?.videoId === 'string' ? d.videoId : null;
@@ -714,7 +732,6 @@ export default function RoomWithSync({
         playing: true,
         currentTurnClientId: currentTurnClientIdRef.current,
         trackStartedAtMs: currentTrackStartedAtMsRef.current || Date.now(),
-        commentPackMode: commentPackModeRef.current,
       } as PlaybackMessage);
       return;
     }
@@ -834,10 +851,7 @@ export default function RoomWithSync({
       } else {
         currentTrackStartedAtMsRef.current = Date.now();
       }
-      if (data.commentPackMode === 'full' || data.commentPackMode === 'base_only' || data.commentPackMode === 'off') {
-        commentPackModeRef.current = data.commentPackMode;
-        setCommentPackMode(data.commentPackMode);
-      }
+      // commentPackMode は owner:commentPackMode のみで同期（再生メッセージで上書きすると他クライアントの古い ref で点滅する）
 
       playerRef.current?.loadVideoById(targetVid);
 
@@ -898,7 +912,12 @@ export default function RoomWithSync({
         fetch('/api/ai/announce-song', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ videoId: targetVid, displayName: posterName, roomId }),
+          body: JSON.stringify({
+            videoId: targetVid,
+            displayName: posterName,
+            roomId,
+            jpAiUnlockEnabled: jpAiUnlockEnabledRef.current,
+          }),
         })
           .then((r) => (r.ok ? r.json() : null))
           .then((data) => {
@@ -1044,10 +1063,7 @@ export default function RoomWithSync({
         setQueuedSongPublisherClientId('');
         jpDomesticSilenceVideoIdRef.current = null;
         setVideoId(data.videoId);
-        if (data.commentPackMode === 'full' || data.commentPackMode === 'base_only' || data.commentPackMode === 'off') {
-          commentPackModeRef.current = data.commentPackMode;
-          setCommentPackMode(data.commentPackMode);
-        }
+        /* commentPackMode は owner:commentPackMode のみで同期 */
         /* 5分待機判定用。useEffect([videoId]) では上書きしない（スナップショットの trackStartedAtMs を壊さない） */
         currentTrackStartedAtMsRef.current = Date.now();
         const pubId = data.publisherClientId ?? '';
@@ -1115,37 +1131,55 @@ export default function RoomWithSync({
 
   // 遅れて入室した参加者にも現在のコメント本数モードを共有する
   useEffect(() => {
-    if (!isOwner) return;
+    if (!canUseOwnerControls) return;
     publishRef.current?.(OWNER_COMMENT_PACK_MODE_EVENT, {
       mode: commentPackMode,
     } as OwnerCommentPackModePayload);
-  }, [isOwner, commentPackMode, participants.length]);
+  }, [canUseOwnerControls, commentPackMode, participants.length]);
 
   // mode イベントの取りこぼし対策（オーナーが定期的に再配信）
   useEffect(() => {
-    if (!isOwner) return;
+    if (!canUseOwnerControls) return;
     const t = window.setInterval(() => {
       publishRef.current?.(OWNER_COMMENT_PACK_MODE_EVENT, {
         mode: commentPackModeRef.current,
       } as OwnerCommentPackModePayload);
     }, 5000);
     return () => window.clearInterval(t);
-  }, [isOwner]);
+  }, [canUseOwnerControls]);
+
+  // 遅れて入室した参加者にも現在の邦楽解禁状態を共有する
+  useEffect(() => {
+    if (!canUseOwnerControls) return;
+    publishRef.current?.(OWNER_JP_AI_UNLOCK_EVENT, {
+      enabled: jpAiUnlockEnabled,
+    } as OwnerJpAiUnlockPayload);
+  }, [canUseOwnerControls, jpAiUnlockEnabled, participants.length]);
+
+  // 取りこぼし対策（オーナーが定期的に再配信）
+  useEffect(() => {
+    if (!canUseOwnerControls) return;
+    const t = window.setInterval(() => {
+      publishRef.current?.(OWNER_JP_AI_UNLOCK_EVENT, {
+        enabled: jpAiUnlockEnabledRef.current,
+      } as OwnerJpAiUnlockPayload);
+    }, 5000);
+    return () => window.clearInterval(t);
+  }, [canUseOwnerControls]);
 
   const handleSkipCurrentTrack = useCallback(() => {
     const vid = videoIdRef.current;
     const poster = lastChangeVideoPublisherRef.current;
     if (!vid || !myClientId) return;
     const isPoster = Boolean(poster && myClientId === poster);
-    const isOwnerSkip =
-      ownerLeftAt === null && Boolean(ownerClientId) && myClientId === ownerClientId;
+    const isOwnerSkip = canUseOwnerControls;
     if (!isPoster && !isOwnerSkip) return;
     setSkipUsedForVideoId(vid);
     safePublish('skipToEnd', {
       type: 'skipToEnd',
       videoId: vid,
     } as PlaybackMessage);
-  }, [myClientId, safePublish, ownerLeftAt, ownerClientId]);
+  }, [myClientId, safePublish, canUseOwnerControls]);
 
   /** 曲投入後に自動再生し、全員に play(currentTime: 0) を配信する（準備完了を短い間隔で待ち、操作コンテキストに近いタイミングで play） */
   const scheduleAutoPlayAfterChangeVideo = useCallback(() => {
@@ -1449,15 +1483,23 @@ export default function RoomWithSync({
   ]);
 
   const addSystemMessage = useCallback((body: string, searchQuery?: string) => {
+    const createdAt = new Date().toISOString();
     const msg: ChatMessage = {
       id: createMessageId(),
       body,
       displayName: 'システム',
       messageType: 'system',
-      createdAt: new Date().toISOString(),
+      createdAt,
       ...(searchQuery && { searchQuery }),
     };
-    setMessages((prev) => [...prev, msg]);
+    setMessages((prev) => {
+      const last = prev[prev.length - 1];
+      if (last?.messageType === 'system' && last.body === body) {
+        const dt = Date.now() - new Date(last.createdAt).getTime();
+        if (Number.isFinite(dt) && dt >= 0 && dt < 5000) return prev;
+      }
+      return [...prev, msg];
+    });
   }, []);
 
   const previousParticipantsRef = useRef<Map<string, string> | null>(null);
@@ -1764,7 +1806,12 @@ export default function RoomWithSync({
       fetch('/api/ai/announce-song', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ videoId: vid, displayName: announceDisplayName, roomId }),
+        body: JSON.stringify({
+          videoId: vid,
+          displayName: announceDisplayName,
+          roomId,
+          jpAiUnlockEnabled: jpAiUnlockEnabledRef.current,
+        }),
       })
         .then((r) => (r.ok ? r.json() : null))
         .then((data) => {
@@ -1844,7 +1891,12 @@ export default function RoomWithSync({
       fetch('/api/ai/comment-pack', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ videoId: vid, mode, roomId }),
+        body: JSON.stringify({
+          videoId: vid,
+          mode,
+          roomId,
+          jpAiUnlockEnabled: jpAiUnlockEnabledRef.current,
+        }),
       })
         .then((r) => (r.ok ? r.json() : null))
         .then((pack) => {
@@ -1925,7 +1977,11 @@ export default function RoomWithSync({
             return fetch('/api/ai/commentary', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ videoId: vid }),
+              body: JSON.stringify({
+                videoId: vid,
+                roomId,
+                jpAiUnlockEnabled: jpAiUnlockEnabledRef.current,
+              }),
             })
               .then((r) => (r.ok ? r.json() : null))
               .then((data) => {
@@ -2079,7 +2135,6 @@ export default function RoomWithSync({
         type: 'changeVideo',
         videoId: id,
         publisherClientId,
-        commentPackMode: commentPackModeRef.current,
       } as PlaybackMessage);
       playerRef.current?.loadVideoById(id);
       scheduleAutoPlayAfterChangeVideo();
@@ -2351,16 +2406,36 @@ export default function RoomWithSync({
             messages: listForAi,
             videoId: videoId ?? undefined,
             roomId: roomId ?? undefined,
+            isGuest,
           }),
         })
-          .then((r) => (r.ok ? r.json() : null))
-          .then((data) => {
+          .then(async (r) => {
+            const data = (await r.json().catch(() => null)) as {
+              text?: string;
+              skipped?: boolean;
+              error?: string;
+              message?: string;
+            } | null;
+            if (r.status === 429 && data?.error === 'rate_limit') {
+              addSystemMessage(
+                typeof data.message === 'string' && data.message.trim()
+                  ? data.message
+                  : 'AI への質問が短時間に集中しています。しばらく待ってから再度お試しください。',
+              );
+              return;
+            }
+            if (!r.ok) {
+              addSystemMessage(aiErrorMessage);
+              return;
+            }
             if (data?.text) {
               addAiMessage(data.text);
               touchActivity();
             } else if (data?.skipped === true) {
               // 雑談時はサーバー側で意図的に無応答（エラー表示しない）
-            } else addSystemMessage(aiErrorMessage);
+            } else {
+              addSystemMessage(aiErrorMessage);
+            }
           })
           .catch(() => addSystemMessage(aiErrorMessage));
       };
@@ -2373,10 +2448,24 @@ export default function RoomWithSync({
         fetch('/api/ai/paste-by-query', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ query }),
+          body: JSON.stringify({ query, isGuest }),
         })
-          .then((r2) => (r2.ok ? r2.json() : null))
-          .then((data2) => {
+          .then(async (r2) => {
+            const data2 = (await r2.json().catch(() => null)) as {
+              ok?: boolean;
+              videoId?: string;
+              artistTitle?: string;
+              error?: string;
+              message?: string;
+            } | null;
+            if (r2.status === 429 && data2?.error === 'rate_limit') {
+              addSystemMessage(
+                typeof data2.message === 'string' && data2.message.trim()
+                  ? data2.message
+                  : 'YouTube検索の操作が短時間に集中しています。しばらく待ってから再度お試しください。',
+              );
+              return;
+            }
             if (data2?.ok && data2?.videoId && data2?.artistTitle) {
               if (shouldDeferMultiSongPost()) {
                 safePublish('queueSong', {
@@ -2462,7 +2551,7 @@ export default function RoomWithSync({
             className="h-9 w-auto max-h-9 shrink-0 object-contain object-left"
             priority
           />
-          <h1 className="min-w-0 flex-1 truncate text-lg font-semibold text-white">
+          <h1 className="hidden min-w-0 flex-1 truncate text-lg font-semibold text-white sm:block">
             洋楽AIチャット{roomId ? ` - ${roomId}` : ''}
           </h1>
         </div>
@@ -2528,13 +2617,13 @@ export default function RoomWithSync({
               myClientId &&
               skipUsedForVideoId !== videoId &&
               (myClientId === currentSongPosterClientId ||
-                (ownerLeftAt === null && ownerClientId && myClientId === ownerClientId)),
+                canUseOwnerControls),
           )}
           skipCurrentTrackDisabled={Boolean(
             videoId && currentSongPosterClientId && myClientId &&
               !(
                 myClientId === currentSongPosterClientId ||
-                (ownerLeftAt === null && ownerClientId && myClientId === ownerClientId)
+                canUseOwnerControls
               ),
           )}
           onSkipCurrentTrack={handleSkipCurrentTrack}
@@ -2560,12 +2649,12 @@ export default function RoomWithSync({
                   localStorage.setItem(CHAT_TEXT_COLOR_STORAGE_KEY, color);
                 } catch {}
               }}
-              chatOwnerTransferParticipants={isOwner ? participants.filter((p) => p.clientId !== myClientId) : undefined}
+              chatOwnerTransferParticipants={canUseOwnerControls ? participants.filter((p) => p.clientId !== myClientId) : undefined}
               currentOwnerClientId={ownerClientId}
               myClientId={myClientId}
-              isChatOwner={isOwner}
+              isChatOwner={canUseOwnerControls}
               onTransferOwner={
-                isOwner
+                canUseOwnerControls
                   ? (newOwnerClientId) => {
                       const newOwnerDisplayName =
                         participants.find((p) => p.clientId === newOwnerClientId)?.displayName?.trim() || 'ゲスト';
@@ -2589,7 +2678,7 @@ export default function RoomWithSync({
               onUserStatusChange={setUserStatus}
               songLimit5MinEnabled={songLimit5MinEnabled}
               onSongLimit5MinToggle={
-                isOwner
+                canUseOwnerControls
                   ? () => {
                       const next = !songLimit5MinEnabled;
                       setSongLimit5MinEnabled(next);
@@ -2599,7 +2688,7 @@ export default function RoomWithSync({
               }
               aiFreeSpeechStopped={aiFreeSpeechStopped}
               onAiFreeSpeechStopToggle={
-                isOwner
+                canUseOwnerControls
                   ? () => {
                       const next = !aiFreeSpeechStopped;
                       setAiFreeSpeechStopped(next);
@@ -2610,7 +2699,7 @@ export default function RoomWithSync({
                   : undefined
               }
               onForceExit={
-                isOwner
+                canUseOwnerControls
                   ? (targetClientId, targetDisplayName) => {
                       safePublish(OWNER_FORCE_EXIT_EVENT, {
                         targetClientId,
@@ -2622,13 +2711,26 @@ export default function RoomWithSync({
               roomId={roomId}
               commentPackMode={commentPackMode}
               onCommentPackModeChange={
-                isOwner
+                canUseOwnerControls
                   ? (mode) => {
                       commentPackModeRef.current = mode;
                       setCommentPackMode(mode);
                       safePublish(OWNER_COMMENT_PACK_MODE_EVENT, {
                         mode,
                       } as OwnerCommentPackModePayload);
+                    }
+                  : undefined
+              }
+              jpAiUnlockEnabled={jpAiUnlockEnabled}
+              onJpAiUnlockToggle={
+                canUseOwnerControls
+                  ? () => {
+                      const next = !jpAiUnlockEnabledRef.current;
+                      jpAiUnlockEnabledRef.current = next;
+                      setJpAiUnlockEnabled(next);
+                      safePublish(OWNER_JP_AI_UNLOCK_EVENT, {
+                        enabled: next,
+                      } as OwnerJpAiUnlockPayload);
                     }
                   : undefined
               }
@@ -2779,6 +2881,7 @@ export default function RoomWithSync({
             canRejectTidbit={canRejectTidbit && !isGuest}
             onTidbitLibraryReject={handleTidbitLibraryReject}
             onChatSummaryClick={roomId ? openChatSummaryModal : undefined}
+            jpAiUnlockEnabled={jpAiUnlockEnabled}
           />
         }
         rightTop={
@@ -2807,6 +2910,7 @@ export default function RoomWithSync({
           ref={chatInputRef}
           onSendMessage={handleSendMessage}
           onVideoUrl={handleVideoUrlFromChat}
+          isGuest={isGuest}
           onSystemMessage={addSystemMessage}
           onAddCandidate={handleAddCandidateFromSearch}
           onPreviewStart={handlePreviewStart}
@@ -2814,7 +2918,7 @@ export default function RoomWithSync({
           trailingSlot={
             <button
               type="button"
-              className={`flex h-[2.5rem] w-full shrink-0 items-center justify-center gap-0.5 rounded border border-emerald-600 bg-emerald-900/40 px-2 text-xs font-semibold text-emerald-100 hover:bg-emerald-800/70 lg:h-[38px] lg:w-auto lg:px-3 ${
+              className={`flex h-[3.5rem] w-full shrink-0 items-center justify-center gap-0.5 rounded border border-emerald-600 bg-emerald-900/40 px-2 text-xs font-semibold text-emerald-100 hover:bg-emerald-800/70 lg:h-[38px] lg:w-auto lg:px-3 ${
                 candidateButtonFlash ? 'animate-pulse ring-2 ring-emerald-300' : ''
               }`}
               onClick={() => setCandidateOpen(true)}

@@ -4,6 +4,9 @@ cd e:\mc
 npm run dev
 http://localhost:3002
 
+
+cd e:\m8
+npm run dev
 ----------------------------------------------------------------------------
 API キー・トークンはすべて .env.local にのみ記載すること。
 公開リポジトリにコミットしない（.gitignore で .env / .env*.local を除外済み）。

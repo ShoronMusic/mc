@@ -25,6 +25,7 @@ import {
   getStoredNewReleaseCommentPack,
   insertTidbit,
 } from '../../../../lib/song-tidbits';
+import { isRoomJpAiUnlockEnabled } from '@/lib/room-jp-ai-unlock-server';
 
 export const dynamic = 'force-dynamic';
 
@@ -150,6 +151,7 @@ export async function POST(request: Request) {
       title,
       authorName,
       snippet,
+      videoId,
     );
 
     const isNewRelease = isPublishedWithinLastDays(snippet?.publishedAt, NEW_RELEASE_DAYS);
@@ -163,6 +165,8 @@ export async function POST(request: Request) {
       channelTitle: snippet?.channelTitle ?? null,
       defaultAudioLanguage: snippet?.defaultAudioLanguage ?? null,
     });
+    const roomJpAiUnlock = roomId ? await isRoomJpAiUnlockEnabled(roomId) : false;
+    const jpAiUnlockEnabled = roomJpAiUnlock;
     /** 新曲のみ基本1本（自由3本なし）。開発フラグ時も同様。邦楽は公式チャンネル例外を除き生成しない */
     const baseOnlyPack = requestedMode === 'base_only' || isNewRelease || devMinimalSongAi;
 
@@ -184,7 +188,7 @@ export async function POST(request: Request) {
       console.error('[api/ai/comment-pack] upsertSongAndVideo', e);
     }
 
-    if (isJpEconomy && !isJpDomesticOfficialChannelAiException(snippet?.channelId)) {
+    if (isJpEconomy && !isJpDomesticOfficialChannelAiException(snippet?.channelId) && !jpAiUnlockEnabled) {
       return NextResponse.json({ skipAiCommentary: true, songId, videoId });
     }
 

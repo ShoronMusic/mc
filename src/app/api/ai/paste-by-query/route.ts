@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+import { getChatAiClientIp } from '@/lib/chat-ai-rate-limit';
+import { checkYouTubeSearchRateLimit } from '@/lib/youtube-search-rate-limit';
 import { formatArtistTitle } from '@/lib/format-song-display';
 import { isYouTubeConfigured, searchYouTubeWithFallback } from '@/lib/youtube-search';
 
@@ -9,6 +11,7 @@ export async function POST(request: Request) {
     const body = await request.json().catch(() => ({}));
     const query = typeof body?.query === 'string' ? body.query.trim() : '';
     const roomId = typeof body?.roomId === 'string' ? body.roomId.trim() : '';
+    const isGuest = body?.isGuest === true;
     if (!query) {
       return NextResponse.json({ ok: false }, { status: 200 });
     }
@@ -17,6 +20,20 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { ok: false, reason: 'youtube_not_configured' },
         { status: 200 }
+      );
+    }
+
+    const rl = checkYouTubeSearchRateLimit(getChatAiClientIp(request), isGuest);
+    if (!rl.ok) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'rate_limit',
+          message:
+            'YouTube検索の操作が短時間に集中しています。しばらく待ってから再度お試しください。',
+          retryAfterSec: rl.retryAfterSec,
+        },
+        { status: 429, headers: { 'Retry-After': String(rl.retryAfterSec) } },
       );
     }
 

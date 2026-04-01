@@ -24,8 +24,6 @@ export interface PlaybackMessage {
   /** sync スナップショット用 */
   currentTurnClientId?: string;
   trackStartedAtMs?: number;
-  /** オーナー設定: 曲紹介コメント本数モード */
-  commentPackMode?: 'full' | 'base_only' | 'off';
 }
 
 /** 後から入室したクライアントが再生状態を問い合わせ */

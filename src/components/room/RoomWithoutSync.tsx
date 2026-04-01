@@ -298,15 +298,23 @@ export default function RoomWithoutSync({ displayName: displayNameProp = 'ゲス
   );
 
   const addSystemMessage = useCallback((body: string, searchQuery?: string) => {
+    const createdAt = new Date().toISOString();
     const msg: ChatMessage = {
       id: createMessageId(),
       body,
       displayName: 'システム',
       messageType: 'system',
-      createdAt: new Date().toISOString(),
+      createdAt,
       ...(searchQuery && { searchQuery }),
     };
-    setMessages((prev) => [...prev, msg]);
+    setMessages((prev) => {
+      const last = prev[prev.length - 1];
+      if (last?.messageType === 'system' && last.body === body) {
+        const dt = Date.now() - new Date(last.createdAt).getTime();
+        if (Number.isFinite(dt) && dt >= 0 && dt < 5000) return prev;
+      }
+      return [...prev, msg];
+    });
   }, []);
 
   useEffect(() => {
@@ -745,16 +753,36 @@ export default function RoomWithoutSync({ displayName: displayNameProp = 'ゲス
             messages: listForAi,
             videoId: videoId ?? undefined,
             roomId: roomId ?? undefined,
+            isGuest,
           }),
         })
-          .then((r) => (r.ok ? r.json() : null))
-          .then((data) => {
+          .then(async (r) => {
+            const data = (await r.json().catch(() => null)) as {
+              text?: string;
+              skipped?: boolean;
+              error?: string;
+              message?: string;
+            } | null;
+            if (r.status === 429 && data?.error === 'rate_limit') {
+              addSystemMessage(
+                typeof data.message === 'string' && data.message.trim()
+                  ? data.message
+                  : 'AI への質問が短時間に集中しています。しばらく待ってから再度お試しください。',
+              );
+              return;
+            }
+            if (!r.ok) {
+              addSystemMessage(aiErrorMessage);
+              return;
+            }
             if (data?.text) {
               addAiMessage(data.text);
               touchActivity();
             } else if (data?.skipped === true) {
               // 雑談時はサーバー側で意図的に無応答（エラー表示しない）
-            } else addSystemMessage(aiErrorMessage);
+            } else {
+              addSystemMessage(aiErrorMessage);
+            }
           })
           .catch(() => addSystemMessage(aiErrorMessage));
       };
@@ -767,10 +795,24 @@ export default function RoomWithoutSync({ displayName: displayNameProp = 'ゲス
         fetch('/api/ai/paste-by-query', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ query }),
+          body: JSON.stringify({ query, isGuest }),
         })
-          .then((r2) => (r2.ok ? r2.json() : null))
-          .then((data2) => {
+          .then(async (r2) => {
+            const data2 = (await r2.json().catch(() => null)) as {
+              ok?: boolean;
+              videoId?: string;
+              artistTitle?: string;
+              error?: string;
+              message?: string;
+            } | null;
+            if (r2.status === 429 && data2?.error === 'rate_limit') {
+              addSystemMessage(
+                typeof data2.message === 'string' && data2.message.trim()
+                  ? data2.message
+                  : 'YouTube検索の操作が短時間に集中しています。しばらく待ってから再度お試しください。',
+              );
+              return;
+            }
             if (data2?.ok && data2?.videoId && data2?.artistTitle) {
               const vid = data2.videoId;
               const prevId = videoIdRef.current;
@@ -865,7 +907,7 @@ export default function RoomWithoutSync({ displayName: displayNameProp = 'ゲス
             className="h-9 w-auto max-h-9 shrink-0 object-contain object-left"
             priority
           />
-          <h1 className="min-w-0 flex-1 truncate text-lg font-semibold text-white">
+          <h1 className="hidden min-w-0 flex-1 truncate text-lg font-semibold text-white sm:block">
             洋楽AIチャット{roomId ? ` - ${roomId}` : ''}
           </h1>
         </div>
@@ -1013,6 +1055,7 @@ export default function RoomWithoutSync({ displayName: displayNameProp = 'ゲス
         <ChatInput
           onSendMessage={handleSendMessage}
           onVideoUrl={handleVideoUrlFromChat}
+          isGuest={isGuest}
           onSystemMessage={addSystemMessage}
           onPreviewStart={handlePreviewStart}
           onPreviewStop={handlePreviewStop}

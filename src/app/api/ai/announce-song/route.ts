@@ -8,6 +8,7 @@ import { resolveJapaneseEconomyWithMusicBrainz } from '@/lib/resolve-japanese-ec
 import { fetchOEmbed } from '@/lib/youtube-oembed';
 import { getVideoDurationSeconds, getVideoSnippet } from '@/lib/youtube-search';
 import { resolveArtistSongForPackAsync } from '@/lib/youtube-artist-song-for-pack';
+import { isRoomJpAiUnlockEnabled } from '@/lib/room-jp-ai-unlock-server';
 
 export const dynamic = 'force-dynamic';
 
@@ -67,6 +68,7 @@ export async function POST(request: Request) {
       title,
       authorName,
       snippet,
+      videoId,
     );
     const artistTitleBase =
       artistDisplay && song
@@ -82,8 +84,10 @@ export async function POST(request: Request) {
       defaultAudioLanguage: snippet?.defaultAudioLanguage ?? null,
     });
     const jpOfficialChannelException = isJpDomesticOfficialChannelAiException(snippet?.channelId);
+    const roomJpAiUnlock = roomId ? await isRoomJpAiUnlockEnabled(roomId) : false;
+    const jpAiUnlockEnabled = roomJpAiUnlock;
     /** （邦楽）表記は維持しつつ、公式チャンネル例外時は AI サイレンスだけ解除 */
-    const jpDomesticSilence = isJapaneseDomestic && !jpOfficialChannelException;
+    const jpDomesticSilence = isJapaneseDomestic && !jpOfficialChannelException && !jpAiUnlockEnabled;
     const showJpDomesticTag =
       isJapaneseDomestic && !suppressJpDomesticAnnounceTagForArtist({ artist, artistDisplay });
     const artistTitle = showJpDomesticTag ? `${artistTitleBase}（邦楽）` : artistTitleBase;

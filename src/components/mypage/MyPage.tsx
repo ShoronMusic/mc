@@ -239,6 +239,9 @@ interface MyPageProps {
   /** オーナー時のみ。曲紹介コメントの本数モード */
   commentPackMode?: OwnerCommentPackMode;
   onCommentPackModeChange?: (mode: OwnerCommentPackMode) => void;
+  /** オーナー時のみ。邦楽AI解説の解禁（デフォルトOFF） */
+  jpAiUnlockEnabled?: boolean;
+  onJpAiUnlockToggle?: () => void;
   /** オーナー時のみ。参加者を強制退出 */
   onForceExit?: (targetClientId: string, targetDisplayName: string) => void;
   /** 入室前メッセージ用。同期ルームの roomId（例: 01） */
@@ -278,6 +281,8 @@ export default function MyPage({
   onAiFreeSpeechStopToggle,
   commentPackMode = 'base_only',
   onCommentPackModeChange,
+  jpAiUnlockEnabled = false,
+  onJpAiUnlockToggle,
   onForceExit,
   roomId = '',
 }: MyPageProps) {
@@ -300,6 +305,7 @@ export default function MyPage({
       onTransferOwner ||
       onAiFreeSpeechStopToggle ||
       onCommentPackModeChange ||
+      onJpAiUnlockToggle ||
       onForceExit ||
       onSongLimit5MinToggle);
 
@@ -533,6 +539,22 @@ export default function MyPage({
           </button>
         </div>
         <p className="mb-4 text-sm text-gray-500">表示名・テキスト色・選曲参加の設定ができます。</p>
+        <div className="mb-4 rounded border border-blue-700/40 bg-blue-900/20 p-3">
+          <h3 className="mb-1 text-sm font-medium text-blue-200">無料登録で使える機能</h3>
+          <p className="text-xs text-gray-300">
+            お気に入り保存・貼った曲履歴の永続化・設定の引き継ぎが使えます。ゲストのままでも参加できますが、
+            よく使う方は登録すると便利です。
+          </p>
+          <div className="mt-2">
+            <a
+              href="/"
+              className="inline-flex items-center rounded border border-blue-600 bg-blue-800/40 px-3 py-1.5 text-xs text-blue-100 hover:bg-blue-700/50"
+              title="トップページで参加方法を選ぶ"
+            >
+              参加方法を選ぶ（ログイン/登録）
+            </a>
+          </div>
+        </div>
 
         {showLobbyEditor ? (
           <div className="mb-4 rounded border border-amber-700/50 bg-amber-900/20 p-3">
@@ -749,6 +771,27 @@ export default function MyPage({
                   全てなし
                 </button>
               </div>
+            </div>
+          )}
+
+          {onJpAiUnlockToggle && (
+            <div className="mb-4 border-b border-amber-800/30 pb-4">
+              <h4 className="mb-2 text-xs font-medium text-gray-300">邦楽AI解説</h4>
+              <p className="mb-2 text-xs text-gray-400">
+                デフォルトは洋楽推奨（邦楽AI解説なし）です。必要なときだけ邦楽のAI解説を解禁できます。
+              </p>
+              <button
+                type="button"
+                onClick={onJpAiUnlockToggle}
+                className={`rounded border px-2 py-1.5 text-xs ${
+                  jpAiUnlockEnabled
+                    ? 'border-emerald-600 bg-emerald-900/40 text-emerald-200'
+                    : 'border-gray-600 bg-gray-800 text-gray-300 hover:bg-gray-700'
+                }`}
+                title={jpAiUnlockEnabled ? '邦楽AI解説を無効化' : '邦楽AI解説を解禁'}
+              >
+                邦楽AI解説 {jpAiUnlockEnabled ? '解禁中' : '無効（デフォルト）'}
+              </button>
             </div>
           )}
 
