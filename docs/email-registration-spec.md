@@ -71,8 +71,8 @@
 ## 6. パスワードリセット（オプション）
 
 - 「パスワードを忘れた」リンク → メール入力 → Supabase の `resetPasswordForEmail` でリセットメール送信
-- メール内リンクで新パスワード設定ページ（Supabase がホストするか、自前で `/auth/reset-password` を実装）に誘導
-- 実装優先度: 後回しでも可。必要になったら追加
+- メール内リンクは `redirectTo` を **`{オリジン}/auth/recover-callback`** とし、コード交換後に **`/auth/update-password`** へ送る（`?next=` だけの `/auth/callback` だと Supabase 側でクエリが落ちてトップに戻ることがあるため）
+- Supabase の **Authentication → URL Configuration → Redirect URLs** に `https://www.musicai.jp/auth/recover-callback` および開発用 `http://localhost:3002/auth/recover-callback` を追加する
 
 ---
 

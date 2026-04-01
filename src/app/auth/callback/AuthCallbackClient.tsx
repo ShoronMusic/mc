@@ -10,7 +10,15 @@ function safeNext(raw: string | null): string {
   return n;
 }
 
-export function AuthCallbackClient() {
+export interface AuthCallbackClientProps {
+  /**
+   * パスワード再設定メール用。Supabase が redirectTo のクエリ（next）を落とすことがあるため、
+   * この URL では常にここへ遷移する（OAuth 等の汎用 /auth/callback とは分ける）。
+   */
+  forcedNext?: string | null;
+}
+
+export function AuthCallbackClient({ forcedNext }: AuthCallbackClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -18,7 +26,8 @@ export function AuthCallbackClient() {
     const run = async () => {
       const oauthError = searchParams.get('error');
       const errorDescription = searchParams.get('error_description') ?? '';
-      const next = safeNext(searchParams.get('next'));
+      const queryNext = safeNext(searchParams.get('next'));
+      const next = forcedNext != null && forcedNext !== '' ? safeNext(forcedNext) : queryNext;
 
       try {
         document.cookie = 'mc_oauth_next=; Path=/; Max-Age=0';
@@ -62,7 +71,7 @@ export function AuthCallbackClient() {
     };
 
     void run();
-  }, [router, searchParams]);
+  }, [router, searchParams, forcedNext]);
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-gray-950 p-4 text-gray-300">

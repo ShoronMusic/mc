@@ -47,8 +47,8 @@ export function SimpleAuthForm({
     }
     setLoading(true);
     try {
-      const next = '/auth/update-password';
-      const redirectTo = `${origin}/auth/callback?next=${encodeURIComponent(next)}`;
+      /** next クエリがメール経由で欠落するとトップへ飛び入力画面に届かないため、専用コールバックにする */
+      const redirectTo = `${origin}/auth/recover-callback`;
       const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo });
       if (error) throw error;
       onResetEmailSent?.(email.trim());
