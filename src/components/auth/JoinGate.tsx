@@ -71,7 +71,12 @@ export function JoinGate({ roomId }: JoinGateProps) {
         const data = (await res.json()) as {
           configured?: boolean;
           message?: string;
-          room?: { isLive?: boolean; title?: string | null; displayTitle?: string | null };
+          room?: {
+            isLive?: boolean;
+            title?: string | null;
+            displayTitle?: string | null;
+            isOrganizer?: boolean;
+          };
         };
         if (data?.configured !== true) {
           setClosedMessage(data?.message?.trim() || '現在このルームは開催管理の準備中です。');
@@ -91,6 +96,28 @@ export function JoinGate({ roomId }: JoinGateProps) {
         setRoomDisplayTitle(
           typeof data?.room?.displayTitle === 'string' ? data.room.displayTitle.trim() : '',
         );
+
+        // 参加者0人のときは、開催中の会の主催者だけ先に入室できる。
+        // （未参加ユーザーが最初に入ってしまうのを防ぐ）
+        try {
+          const p = await fetch(`/api/room-presence?rooms=${encodeURIComponent(roomId)}`);
+          const pd = (await p.json()) as {
+            configured?: boolean;
+            rooms?: Array<{ roomId: string; count: number }>;
+          };
+          if (pd?.configured === true) {
+            const row = Array.isArray(pd.rooms) ? pd.rooms.find((r) => r.roomId === roomId) : null;
+            const count = row?.count ?? 0;
+            const isOrganizer = data?.room?.isOrganizer === true;
+            if (count === 0 && !isOrganizer) {
+              setClosedMessage('主催者の入室待ちです。主催者が先に入室すると参加できます。');
+              setStatus('closed');
+              return false;
+            }
+          }
+        } catch {
+          // 参加者数取得に失敗した場合は live 判定のみで通す
+        }
         return true;
       } catch {
         setClosedMessage('開催状況を確認できませんでした。時間をおいて再度お試しください。');
