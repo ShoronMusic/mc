@@ -50,3 +50,15 @@ export const OWNER_JP_AI_UNLOCK_EVENT = 'owner:jpAiUnlock';
 export interface OwnerJpAiUnlockPayload {
   enabled: boolean;
 }
+
+/** @ 付きAI質問のガード警告・カード同期 */
+export const OWNER_AI_QUESTION_GUARD_EVENT = 'owner:aiQuestionGuard';
+
+export interface OwnerAiQuestionGuardPayload {
+  targetClientId: string;
+  targetDisplayName: string;
+  warningCount: number;
+  yellowCards: number;
+  action: 'warn' | 'yellow' | 'ban';
+  message: string;
+}

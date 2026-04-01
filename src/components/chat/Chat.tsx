@@ -6,6 +6,9 @@
 
 import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import { getSafeInternalReturnPath } from '@/lib/safe-return-path';
 import {
   HandThumbUpIcon,
   HandThumbDownIcon,
@@ -229,6 +232,14 @@ export default function Chat({
   onChatSummaryClick,
   jpAiUnlockEnabled = false,
 }: ChatProps) {
+  const pathname = usePathname();
+  const pathSegs = pathname?.split('/').filter(Boolean) ?? [];
+  const roomPathSegment = pathSegs.length === 1 ? pathSegs[0] : null;
+  const guideAiHref =
+    roomPathSegment && getSafeInternalReturnPath(roomPathSegment)
+      ? `/guide/ai?returnTo=${encodeURIComponent(roomPathSegment)}`
+      : '/guide/ai';
+
   const bottomRef = useRef<HTMLDivElement>(null);
   const [feedbackState, setFeedbackState] = useState<Record<string, 'up' | 'down'>>({});
   const [feedbackModal, setFeedbackModal] = useState<FeedbackModalState>({ open: false });
@@ -375,6 +386,18 @@ export default function Chat({
             <span className="underline decoration-dotted underline-offset-2">AIのコメント…</span>
           </button>
         </div>
+      </div>
+      <div className="border-b border-gray-800/80 px-3 py-1.5">
+        <p className="text-[11px] leading-snug text-gray-400">
+          AIへの質問は <span className="text-gray-300">@ 質問内容</span>（音楽関連）で送信してください。詳細は
+          <Link
+            href={guideAiHref}
+            className="text-amber-200/90 underline underline-offset-2 hover:text-amber-100"
+          >
+            ご利用上の注意（AIについて）
+          </Link>
+          。
+        </p>
       </div>
       <div className="flex-1 overflow-y-auto p-2">
         {messages.length === 0 ? (

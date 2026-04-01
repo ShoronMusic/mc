@@ -23,6 +23,7 @@ export interface ParticipantItem {
   displayName: string;
   textColor?: string;
   status?: string;
+  yellowCards?: number;
 }
 
 interface UserBarProps {
@@ -268,6 +269,11 @@ export default function UserBar({
                 {isRoomOwner && (
                   <span className="shrink-0 text-amber-400" title="チャットオーナー" aria-label="チャットオーナー">
                     👑
+                  </span>
+                )}
+                {(p.yellowCards ?? 0) > 0 && (
+                  <span className="shrink-0 text-yellow-300" title={`イエローカード ${p.yellowCards}枚`} aria-label={`イエローカード ${p.yellowCards}枚`}>
+                    {'🟨'.repeat(Math.min(2, p.yellowCards ?? 0))}
                   </span>
                 )}
                 {p.clientId !== myClientId && onParticipantClick ? (
@@ -589,6 +595,11 @@ export default function UserBar({
                       {isRoomOwner && (
                         <span className="text-amber-400" title="チャットオーナー" aria-label="チャットオーナー">
                           👑
+                        </span>
+                      )}
+                      {(p.yellowCards ?? 0) > 0 && (
+                        <span className="text-yellow-300" title={`イエローカード ${p.yellowCards}枚`} aria-label={`イエローカード ${p.yellowCards}枚`}>
+                          {'🟨'.repeat(Math.min(2, p.yellowCards ?? 0))}
                         </span>
                       )}
                       {p.clientId !== myClientId && onParticipantClick ? (

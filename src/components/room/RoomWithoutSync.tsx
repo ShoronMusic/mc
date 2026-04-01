@@ -33,6 +33,7 @@ import { extractVideoId, isStandaloneNonYouTubeUrl } from '@/lib/youtube';
 import type { ChatMessage } from '@/types/chat';
 import { useIsLgViewport } from '@/hooks/useLgViewport';
 import { useRoomChatLogPersistence } from '@/hooks/useRoomChatLogPersistence';
+import { incrementAiQuestionWarnCount, setKicked, setKickedSitewide } from '@/lib/room-owner';
 
 const AI_DISPLAY_NAME = 'AI';
 const SILENCE_TIDBIT_SEC = 30;
@@ -67,6 +68,14 @@ function isLeaveOrRomPhrase(body: string): boolean {
   if (/無言(する|ね)?\.?$/.test(normalized) || /^黙る(ね)?\.?$/.test(normalized)) return true;
   if (/いってくる(ね)?\.?$/.test(normalized) && t.length <= 20) return true;
   return false;
+}
+
+function isMusicRelatedAiQuestion(text: string): boolean {
+  const t = text.trim().toLowerCase();
+  if (!t) return false;
+  return /(音楽|洋楽|邦楽|曲|歌|アーティスト|バンド|アルバム|ライブ|mv|メロディ|歌詞|ジャンル|billboard|spotify|youtube|playlist|song|music|artist|band|album|track|lyrics)/i.test(
+    t,
+  );
 }
 
 /**
@@ -129,6 +138,7 @@ export default function RoomWithoutSync({
   const autoPlayPollRef = useRef<number | null>(null);
   const [playbackHistoryRefreshKey, setPlaybackHistoryRefreshKey] = useState(0);
   const [skipUsedForVideoId, setSkipUsedForVideoId] = useState<string | null>(null);
+  const [yellowCards, setYellowCards] = useState(0);
   const [favoritedVideoIds, setFavoritedVideoIds] = useState<string[]>([]);
   const recentlyUsedTidbitIdsRef = useRef<string[]>([]);
   const tidbitCountSinceUserMessageRef = useRef(0);
@@ -567,7 +577,9 @@ export default function RoomWithoutSync({
           }),
         })
           .then((r) => r.json())
-          .then((data) => { if (data?.ok && data?.skipped !== 'duplicate') setPlaybackHistoryRefreshKey((k) => k + 1); })
+          .then((data) => {
+            if (data?.ok && !data?.skipped) setPlaybackHistoryRefreshKey((k) => k + 1);
+          })
           .catch(() => {});
       }, 10000);
     },
@@ -745,6 +757,30 @@ export default function RoomWithoutSync({
         touchActivity();
         return;
       }
+      const trimmed = text.trim();
+      const aiMentioned = trimmed.startsWith('@');
+      const aiPromptText = aiMentioned ? trimmed.replace(/^@\s*/, '').trim() : '';
+      if (aiMentioned && aiPromptText && !isMusicRelatedAiQuestion(aiPromptText)) {
+        const warningCount = incrementAiQuestionWarnCount(roomId || 'local', 'local-client');
+        const nextCards = warningCount <= 1 ? 0 : Math.min(3, warningCount - 1);
+        setYellowCards(nextCards);
+        const message =
+          warningCount === 1
+            ? `システム警告: ${displayNameProp}さんの質問は音楽に関係ない内容と判断しました。次回からお気をつけください。`
+            : warningCount === 2
+              ? `システム警告: ${displayNameProp}さんにイエローカード1枚を付与しました（AI質問は音楽関連のみ）。`
+              : warningCount === 3
+                ? `システム警告: ${displayNameProp}さんにイエローカード2枚目を付与しました。次のカードで退場となります。`
+                : `システム警告: ${displayNameProp}さんに3枚目のカードを付与したため、強制退場と一定期間の入室禁止を実行しました。`;
+        addSystemMessage(message);
+        if (warningCount >= 4 && onLeave) {
+          setKicked(roomId || 'local', 'local-client');
+          setKickedSitewide();
+          onLeave();
+        }
+        touchActivity();
+        return;
+      }
 
       const doChatReply = () => {
         const jpS = jpDomesticSilenceVideoIdRef.current;
@@ -752,7 +788,7 @@ export default function RoomWithoutSync({
         if (jpS != null && vCur != null && jpS === vCur) {
           return;
         }
-        const listForAi = [...messages, userMsg].map((m) => ({
+        const listForAi = [...messages, { ...userMsg, body: aiPromptText || userMsg.body }].map((m) => ({
           displayName: m.displayName,
           body: m.body,
           messageType: m.messageType,
@@ -767,6 +803,7 @@ export default function RoomWithoutSync({
             videoId: videoId ?? undefined,
             roomId: roomId ?? undefined,
             isGuest,
+            forceReply: aiMentioned,
           }),
         })
           .then(async (r) => {
@@ -857,11 +894,21 @@ export default function RoomWithoutSync({
         return;
       }
 
+      if (!aiMentioned) {
+        touchActivity();
+        return;
+      }
+      if (!aiPromptText) {
+        addSystemMessage('AIへの質問は「@ 質問内容」の形で入力してください。');
+        touchActivity();
+        return;
+      }
+
       fetch('/api/ai/resolve-song-request', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userMessage: text,
+          userMessage: aiPromptText,
           roomId: roomId ?? undefined,
           recentMessages: messages.slice(-6).map((m) => ({
             displayName: m.displayName,
@@ -950,6 +997,8 @@ export default function RoomWithoutSync({
           skipCurrentTrackActive={Boolean(videoId && skipUsedForVideoId !== videoId)}
           skipCurrentTrackDisabled={false}
           onSkipCurrentTrack={handleSkipCurrentTrack}
+          participants={[{ clientId: 'local-client', displayName: displayNameProp, textColor: userTextColor, yellowCards }]}
+          myClientId="local-client"
         />
       </section>
 

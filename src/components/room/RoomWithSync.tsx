@@ -51,6 +51,7 @@ import {
   OWNER_AI_FREE_SPEECH_STOP_EVENT,
   OWNER_COMMENT_PACK_MODE_EVENT,
   OWNER_JP_AI_UNLOCK_EVENT,
+  OWNER_AI_QUESTION_GUARD_EVENT,
   OWNER_STATE_EVENT,
   TURN_STATE_EVENT,
   OWNER_5MIN_LIMIT_EVENT,
@@ -59,12 +60,15 @@ import {
   type OwnerCommentPackMode,
   type OwnerCommentPackModePayload,
   type OwnerJpAiUnlockPayload,
+  type OwnerAiQuestionGuardPayload,
   type OwnerStatePayload,
   type TurnStatePayload,
   type Owner5MinLimitPayload,
 } from '@/types/room-owner';
 import {
   setKicked,
+  incrementAiQuestionWarnCount,
+  setKickedSitewide,
   OWNER_ABSENCE_MS,
   getOwnerStateFromStorage,
   setOwnerStateToStorage,
@@ -112,6 +116,14 @@ function isLeaveOrRomPhrase(body: string): boolean {
   if (/無言(する|ね)?\.?$/.test(normalized) || /^黙る(ね)?\.?$/.test(normalized)) return true;
   if (/いってくる(ね)?\.?$/.test(normalized) && t.length <= 20) return true;
   return false;
+}
+
+function isMusicRelatedAiQuestion(text: string): boolean {
+  const t = text.trim().toLowerCase();
+  if (!t) return false;
+  return /(音楽|洋楽|邦楽|曲|歌|アーティスト|バンド|アルバム|ライブ|mv|メロディ|歌詞|ジャンル|billboard|spotify|youtube|playlist|song|music|artist|band|album|track|lyrics)/i.test(
+    t,
+  );
 }
 
 /** 時間帯に応じた挨拶（参加者入室時） */
@@ -281,6 +293,7 @@ export default function RoomWithSync({
   /** 自分が発言したか（ステータスありでも発言あれば在席とみなして豆知識を出す） */
   const hasCurrentUserSentMessageSinceLastTidbitRef = useRef(false);
   const [aiFreeSpeechStopped, setAiFreeSpeechStopped] = useState(true);
+  const [yellowCardByClientId, setYellowCardByClientId] = useState<Record<string, number>>({});
   const [ownerState, setOwnerState] = useState<{ ownerClientId: string; ownerLeftAt: number | null }>(() =>
     roomId ? getOwnerStateFromStorage(roomId) ?? { ownerClientId: '', ownerLeftAt: null } : { ownerClientId: '', ownerLeftAt: null }
   );
@@ -449,6 +462,10 @@ export default function RoomWithSync({
     joinOrderByClientIdRef.current.forEach((_v, id) => {
       if (!idsInPresence.has(id)) joinOrderByClientIdRef.current.delete(id);
     });
+    setYellowCardByClientId((prev) => {
+      const next = Object.fromEntries(Object.entries(prev).filter(([id]) => idsInPresence.has(id)));
+      return Object.keys(next).length === Object.keys(prev).length ? prev : next;
+    });
   }, [presenceData]);
 
   const participants = useMemo(() => {
@@ -470,8 +487,9 @@ export default function RoomWithSync({
             ? p.data.textColor
             : undefined,
         status: typeof p.data?.status === 'string' && p.data.status.trim() ? p.data.status.trim() : undefined,
+        yellowCards: yellowCardByClientId[p.clientId] ?? 0,
       }));
-  }, [presenceData]);
+  }, [presenceData, yellowCardByClientId]);
   /** 選曲に参加する人のみ・入室順（左から1,2,3...の番号に対応） */
   const participatingOrder = useMemo(
     () => participants.filter((p) => p.participatesInSelection),
@@ -632,6 +650,32 @@ export default function RoomWithSync({
     lastActivityAtRef.current = Date.now();
   }, []);
 
+  const applyAiQuestionGuardEvent = useCallback(
+    (payload: OwnerAiQuestionGuardPayload) => {
+      if (!payload?.targetClientId) return;
+      setYellowCardByClientId((prev) => ({
+        ...prev,
+        [payload.targetClientId]: Math.max(0, payload.yellowCards || 0),
+      }));
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: createMessageId(),
+          body: payload.message,
+          displayName: 'システム',
+          messageType: 'system',
+          createdAt: new Date().toISOString(),
+        },
+      ]);
+      if (payload.action === 'ban' && payload.targetClientId === myClientId && roomId) {
+        setKicked(roomId, myClientId);
+        setKickedSitewide();
+        onLeave?.();
+      }
+    },
+    [myClientId, onLeave, roomId],
+  );
+
   const { publish } = useChannel(channelName, (message) => {
     if (message.name === OWNER_STATE_EVENT) {
       const d = message.data as OwnerStatePayload;
@@ -696,6 +740,12 @@ export default function RoomWithSync({
         jpAiUnlockEnabledRef.current = d.enabled;
         setJpAiUnlockEnabled(d.enabled);
       }
+      return;
+    }
+    if (message.name === OWNER_AI_QUESTION_GUARD_EVENT) {
+      const d = message.data as OwnerAiQuestionGuardPayload;
+      if (!d?.targetClientId || typeof d.message !== 'string') return;
+      applyAiQuestionGuardEvent(d);
       return;
     }
     if (message.name === PLAYBACK_HISTORY_UPDATED_EVENT) {
@@ -2071,7 +2121,7 @@ export default function RoomWithSync({
         })
           .then((r) => r.json())
           .then((data) => {
-            if (!data?.ok) return;
+            if (!data?.ok || data?.skipped) return;
             // 自分のUI更新
             setPlaybackHistoryRefreshKey((k) => k + 1);
             // 同室メンバーへ再取得通知
@@ -2393,6 +2443,35 @@ export default function RoomWithSync({
         touchActivity();
         return;
       }
+      const trimmed = text.trim();
+      const aiMentioned = trimmed.startsWith('@');
+      const aiPromptText = aiMentioned ? trimmed.replace(/^@\s*/, '').trim() : '';
+      if (aiMentioned && aiPromptText && !isMusicRelatedAiQuestion(aiPromptText)) {
+        const warningCount = incrementAiQuestionWarnCount(roomId || 'unknown-room', myClientId || 'unknown-client');
+        const yellowCards = warningCount <= 1 ? 0 : Math.min(3, warningCount - 1);
+        const action: OwnerAiQuestionGuardPayload['action'] =
+          warningCount >= 4 ? 'ban' : warningCount === 1 ? 'warn' : 'yellow';
+        const message =
+          warningCount === 1
+            ? `システム警告: ${effectiveDisplayName}さんの質問は音楽に関係ない内容と判断しました。次回からお気をつけください。`
+            : warningCount === 2
+              ? `システム警告: ${effectiveDisplayName}さんにイエローカード1枚を付与しました（AI質問は音楽関連のみ）。`
+              : warningCount === 3
+                ? `システム警告: ${effectiveDisplayName}さんにイエローカード2枚目を付与しました。次のカードで退場となります。`
+                : `システム警告: ${effectiveDisplayName}さんに3枚目のカードを付与したため、強制退場と一定期間の入室禁止を実行しました。`;
+        const guardPayload: OwnerAiQuestionGuardPayload = {
+          targetClientId: myClientId,
+          targetDisplayName: effectiveDisplayName,
+          warningCount,
+          yellowCards,
+          action,
+          message,
+        };
+        applyAiQuestionGuardEvent(guardPayload);
+        safePublish(OWNER_AI_QUESTION_GUARD_EVENT, guardPayload);
+        touchActivity();
+        return;
+      }
 
       const doChatReply = () => {
         const jpS = jpDomesticSilenceVideoIdRef.current;
@@ -2400,7 +2479,7 @@ export default function RoomWithSync({
         if (jpS != null && vCur != null && jpS === vCur) {
           return;
         }
-        const listForAi = [...messages, newUserMsg].map((m) => ({
+        const listForAi = [...messages, { ...newUserMsg, body: aiPromptText || newUserMsg.body }].map((m) => ({
           displayName: m.displayName,
           body: m.body,
           messageType: m.messageType,
@@ -2415,6 +2494,7 @@ export default function RoomWithSync({
             videoId: videoId ?? undefined,
             roomId: roomId ?? undefined,
             isGuest,
+            forceReply: aiMentioned,
           }),
         })
           .then(async (r) => {
@@ -2437,7 +2517,8 @@ export default function RoomWithSync({
               return;
             }
             if (data?.text) {
-              addAiMessage(data.text);
+              // @で明示的に呼び出した応答は、AI自由発言停止中でも返す
+              addAiMessage(data.text, { allowWhenAiStopped: true });
               touchActivity();
             } else if (data?.skipped === true) {
               // 雑談時はサーバー側で意図的に無応答（エラー表示しない）
@@ -2501,11 +2582,21 @@ export default function RoomWithSync({
         return;
       }
 
+      if (!aiMentioned) {
+        touchActivity();
+        return;
+      }
+      if (!aiPromptText) {
+        addSystemMessage('AIへの質問は「@ 質問内容」の形で入力してください。');
+        touchActivity();
+        return;
+      }
+
       fetch('/api/ai/resolve-song-request', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userMessage: text,
+          userMessage: aiPromptText,
           roomId: roomId ?? undefined,
           recentMessages: messages.slice(-6).map((m) => ({
             displayName: m.displayName,
@@ -2544,6 +2635,8 @@ export default function RoomWithSync({
       roomId,
       myClientId,
       applyImmediateChangeVideo,
+      applyAiQuestionGuardEvent,
+      effectiveDisplayName,
     ]
   );
 
@@ -2635,7 +2728,7 @@ export default function RoomWithSync({
               ),
           )}
           onSkipCurrentTrack={handleSkipCurrentTrack}
-          onParticipantClick={(displayName) => chatInputRef.current?.insertText(`${displayName}さん < `)}
+          onParticipantClick={(displayName) => chatInputRef.current?.insertText(` ${displayName}さん `)}
         />
       </section>
 

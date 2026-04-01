@@ -14,6 +14,9 @@ import {
 } from '@/lib/format-song-display';
 import { resolveArtistSongForPackAsync } from '@/lib/youtube-artist-song-for-pack';
 import { getVideoSnippet } from '@/lib/youtube-search';
+import { resolveJapaneseEconomyWithMusicBrainz } from '@/lib/resolve-japanese-economy';
+import { isJpDomesticOfficialChannelAiException } from '@/lib/jp-official-channel-exception';
+import { isRoomJpAiUnlockEnabled } from '@/lib/room-jp-ai-unlock-server';
 import { getOrAssignEra } from '@/lib/song-era';
 import { getOrAssignStyle, setStyleInDb } from '@/lib/song-style';
 import { upsertSongAndVideo, updateSongStyle, incrementSongPlayCount } from '@/lib/song-entities';
@@ -134,6 +137,7 @@ export async function GET(request: Request) {
  * Body: { roomId, videoId, displayName, isGuest }
  * - 同じ人・同じ曲が2分以内なら同一扱いで挿入しない
  * - ゲストは display_name を "ニックネーム (G)" 形式で保存
+ * - 邦楽と判定され、かつルームで「邦楽解禁」が有効でない場合（公式チャ例外もなし）は挿入せず skipped: jp_domestic
  */
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -220,6 +224,24 @@ export async function POST(request: Request) {
     });
   }
   let { artist, artistDisplay, song } = resolved;
+
+  /** announce-song の邦楽判定と同じ。邦楽かつ未解禁（公式チャ例外なし）なら視聴履歴に載せない */
+  const isJapaneseDomestic = await resolveJapaneseEconomyWithMusicBrainz({
+    title: title ?? videoId,
+    artistDisplay,
+    artist,
+    song,
+    description: snippetDescription,
+    channelTitle: snippet?.channelTitle ?? null,
+    defaultAudioLanguage: snippet?.defaultAudioLanguage ?? null,
+  });
+  const jpOfficialChannelException = isJpDomesticOfficialChannelAiException(snippet?.channelId);
+  const jpAiUnlockEnabled = await isRoomJpAiUnlockEnabled(roomId);
+  const skipHistoryForJpDomestic =
+    isJapaneseDomestic && !jpOfficialChannelException && !jpAiUnlockEnabled;
+  if (skipHistoryForJpDomestic) {
+    return NextResponse.json({ ok: true, skipped: 'jp_domestic' });
+  }
 
   const effectiveAuthor =
     authorName && cleanAuthor(authorName) && !isLikelyPersonalChannelName(cleanAuthor(authorName))

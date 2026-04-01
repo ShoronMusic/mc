@@ -526,6 +526,13 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                 <span className="text-gray-100">以外</span>（感想・会話など）はチャットに表示されます。
               </li>
               <li>
+                <span className="font-medium text-gray-100">AIに質問</span>
+                ：文頭に
+                <span className="text-gray-100">@</span>
+                を付けるとAIが返答します（例:
+                <span className="text-gray-100">@ おすすめの洋楽を1つ教えて</span>）。質問は音楽関連にしてください。音楽以外と判断された場合は警告・イエローカード・退場まで段階的に制限されることがあります（詳細はご利用上の注意「AI について」）。
+              </li>
+              <li>
                 <span className="font-medium text-gray-100">検索</span>
                 ：アーティスト名・曲名などの
                 <span className="text-gray-100">キーワード</span>
@@ -548,6 +555,13 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
               ：<span className="text-gray-300">YouTube のURL</span>
               を入れて押すと、ルームのプレイヤーにその動画が表示されます。URL
               <span className="text-gray-300">以外</span>（感想・会話など）はチャットに表示されます。
+            </li>
+            <li>
+              <span className="font-medium text-gray-300">AIに質問</span>
+              ：文頭に
+              <span className="text-gray-300">@</span>
+              を付けるとAIが返答します（例:
+              <span className="text-gray-300">@ おすすめの洋楽を1つ教えて</span>）。質問は音楽関連にしてください。違反時は警告から退場まで段階的に制限されます（詳細はご利用上の注意「AI について」）。
             </li>
             <li>
               <span className="font-medium text-gray-300">検索</span>

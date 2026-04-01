@@ -233,12 +233,25 @@ export async function POST(request: Request) {
     }));
     const newestUserText = latestUserText(list);
     const isGuest = body?.isGuest === true;
-    if (!shouldGenerateChatReply(newestUserText)) {
+    const forceReply = body?.forceReply === true;
+    console.log('[ai/chat] incoming', {
+      roomId: typeof body?.roomId === 'string' ? body.roomId : '',
+      isGuest,
+      forceReply,
+      newestUserText,
+      messagesCount: list.length,
+    });
+    if (!forceReply && !shouldGenerateChatReply(newestUserText)) {
+      console.log('[ai/chat] skipped_by_filter', { newestUserText });
       return NextResponse.json({ text: null, skipped: true, reason: 'non_question_chat' });
     }
 
     const rate = checkChatAiRateLimit(getChatAiClientIp(request), isGuest);
     if (!rate.ok) {
+      console.log('[ai/chat] rate_limited', {
+        retryAfterSec: rate.retryAfterSec,
+        isGuest,
+      });
       return NextResponse.json(
         {
           error: 'rate_limit',
@@ -254,9 +267,11 @@ export async function POST(request: Request) {
 
     const roomId = typeof body?.roomId === 'string' ? body.roomId.trim() : '';
     if (roomId && isTrendQuestion(newestUserText)) {
+      console.log('[ai/chat] trend_detected', { roomId, newestUserText });
       const hours = parseTrendHours(newestUserText);
       const trendText = await buildRoomTrendSummary(roomId, hours);
       if (trendText) {
+        console.log('[ai/chat] trend_reply', { roomId, hours });
         return NextResponse.json({ text: trendText, source: 'room_trend' });
       }
     }
@@ -294,6 +309,11 @@ export async function POST(request: Request) {
     const text = await generateChatReply(list, currentSong, currentSongStyle, {
       roomId: roomId || undefined,
       videoId: videoId || undefined,
+    });
+    console.log('[ai/chat] gemini_result', {
+      hasText: text != null && String(text).trim().length > 0,
+      roomId,
+      forceReply,
     });
     if (text == null) {
       return NextResponse.json(

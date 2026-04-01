@@ -60,6 +60,31 @@ export function GuideFullNotice() {
           <p className="text-gray-400">
             AI の返答は参考用です。事実誤認・古い情報・文脈の取り違えが含まれることがあります。重要な判断は必ずご自身で確認してください。
           </p>
+          <p className="text-gray-400">
+            AI に質問したい場合は、発言の先頭に <code className="rounded bg-gray-800 px-1 py-0.5 text-gray-200">@</code> を付けてください
+            （例: <code className="rounded bg-gray-800 px-1 py-0.5 text-gray-200">@ おすすめの洋楽を1つ教えて</code>）。
+          </p>
+          <p className="text-gray-400">
+            AI への質問は音楽（洋楽）関連を前提にしています。音楽以外の質問や会話は控えてください。
+          </p>
+        </section>
+        <section className="space-y-2">
+          <h3 className="font-semibold text-white">AI への質問（@）と違反時の対応</h3>
+          <p className="text-gray-400">
+            次の自動チェックは、<strong className="text-gray-300">発言の先頭が「@」で始まるAI宛ての質問のみ</strong>が対象です。通常のチャット（@なし）の不適切な発言については、チャットオーナーによる強制退出などで対応します。
+          </p>
+          <p className="text-gray-400">
+            音楽（洋楽）に関係ない内容とシステムが判断した場合、次の段階で警告・制限がかかることがあります。
+          </p>
+          <ul className="list-disc space-y-1 pl-5 text-gray-400">
+            <li>1回目: システムから注意メッセージが表示されます。</li>
+            <li>2回目: イエローカード1枚が付与され、参加者一覧の当該ユーザー名の前に表示されます。</li>
+            <li>3回目: イエローカード2枚目が付与され、次の違反で退場となる旨の警告が表示されます。</li>
+            <li>4回目相当: ルームから強制退場となり、一定期間（現在は約3時間）ルームおよびサイトへの入室が制限される場合があります。</li>
+          </ul>
+          <p className="text-gray-400">
+            判定は自動のため、意図と異なる結果になることがあります。繰り返し問題になる場合は、チャットオーナーや運営の案内に従ってください。
+          </p>
         </section>
         <section className="space-y-2">
           <h3 className="font-semibold text-white">楽曲・著作権まわり</h3>

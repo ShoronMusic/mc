@@ -1,10 +1,17 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { Suspense } from 'react';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { GUIDE_SECTIONS } from '@/lib/guide-nav';
+import { getSafeInternalReturnPath } from '@/lib/safe-return-path';
 
-export function GuideSidebar() {
+function guideLinkHref(href: string, returnSegment: string | null): string {
+  if (!returnSegment || !href.startsWith('/guide')) return href;
+  return `${href}?returnTo=${encodeURIComponent(returnSegment)}`;
+}
+
+function GuideSidebarInner({ returnSegment }: { returnSegment: string | null }) {
   const pathname = usePathname();
 
   return (
@@ -18,10 +25,14 @@ export function GuideSidebar() {
       <ul className="space-y-1 text-sm">
         {GUIDE_SECTIONS.map((item) => {
           const active = pathname === item.href;
+          const href =
+            item.href.startsWith('/guide') && returnSegment
+              ? guideLinkHref(item.href, returnSegment)
+              : item.href;
           return (
             <li key={item.href}>
               <Link
-                href={item.href}
+                href={href}
                 className={`block rounded-lg px-3 py-2 transition ${
                   active
                     ? 'bg-gray-700 text-white'
@@ -40,5 +51,20 @@ export function GuideSidebar() {
         })}
       </ul>
     </nav>
+  );
+}
+
+function GuideSidebarWithSearchParams() {
+  const searchParams = useSearchParams();
+  const back = getSafeInternalReturnPath(searchParams.get('returnTo'));
+  const returnSegment = back ? back.slice(1) : null;
+  return <GuideSidebarInner returnSegment={returnSegment} />;
+}
+
+export function GuideSidebar() {
+  return (
+    <Suspense fallback={<GuideSidebarInner returnSegment={null} />}>
+      <GuideSidebarWithSearchParams />
+    </Suspense>
   );
 }

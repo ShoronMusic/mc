@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import { JoinChoice, GUEST_STORAGE_KEY, GUEST_NAME_STORAGE_KEY, GUEST_ROOM_KEY } from './JoinChoice';
 import { FROM_START_KEY } from './FromStartMarker';
 import { AblyProviderWrapper } from '@/components/providers/AblyProviderWrapper';
-import { getOrCreateRoomClientId, isKickedForRoom } from '@/lib/room-owner';
+import { getOrCreateRoomClientId, isKickedForRoom, isKickedSitewide } from '@/lib/room-owner';
 import { readTermsAccepted } from '@/lib/terms-consent';
 import { isTrialRoomId } from '@/lib/trial-rooms';
 
@@ -61,7 +61,7 @@ export function JoinGate({ roomId }: JoinGateProps) {
   useEffect(() => {
     if (consentOk !== true) return;
 
-    if (clientId && isKickedForRoom(roomId, clientId)) {
+    if (clientId && (isKickedForRoom(roomId, clientId) || isKickedSitewide())) {
       setStatus('kicked');
       return;
     }
@@ -195,7 +195,7 @@ export function JoinGate({ roomId }: JoinGateProps) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-gray-950 p-4">
         <p className="text-center text-lg text-amber-200">
-          オーナーにより退出させられました。3時間はこのルームに入室できません。
+          利用制限中です。しばらくの間、このルームまたはサイトに入室できません。
         </p>
         <a
           href="/"
