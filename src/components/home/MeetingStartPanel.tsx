@@ -9,6 +9,12 @@ const DEFAULT_ROOM_IDS = Array.from({ length: DEFAULT_ROOM_COUNT }, (_, i) =>
   String(i + 1).padStart(2, '0'),
 );
 
+type OrganizerRoom = {
+  roomId: string;
+  title: string;
+  isLive: boolean;
+};
+
 /**
  * ログイン済みユーザー向け: 会の開始・終了（運用・検証用の最小UI）
  */
@@ -16,8 +22,10 @@ export function MeetingStartPanel() {
   const [visible, setVisible] = useState(false);
   const [roomId, setRoomId] = useState<string>(DEFAULT_ROOM_IDS[0]);
   const [title, setTitle] = useState('本日の会');
+  const [myRooms, setMyRooms] = useState<OrganizerRoom[]>([]);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [customRoomId, setCustomRoomId] = useState('');
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -31,9 +39,29 @@ export function MeetingStartPanel() {
       return;
     }
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setVisible(!!session?.user);
+      const loggedIn = !!session?.user;
+      setVisible(loggedIn);
+      if (!loggedIn) return;
+      fetch('/api/room-gatherings', { credentials: 'include' })
+        .then(async (res) => {
+          if (!res.ok) return;
+          const data = (await res.json().catch(() => ({}))) as { rooms?: OrganizerRoom[] };
+          const rooms = Array.isArray(data.rooms) ? data.rooms.filter((r) => !!r?.roomId) : [];
+          setMyRooms(rooms);
+          if (rooms.length > 0) {
+            setRoomId(rooms[0].roomId);
+            if (rooms[0].title?.trim()) {
+              setTitle(rooms[0].title.trim());
+            }
+          }
+        })
+        .catch(() => {
+          // 選択肢取得失敗時は固定候補をそのまま使う
+        });
     });
   }, []);
+
+  const roomOptions = myRooms.length > 0 ? myRooms.map((r) => r.roomId) : DEFAULT_ROOM_IDS;
 
   const run = useCallback(
     async (action: 'start' | 'end') => {
@@ -76,16 +104,45 @@ export function MeetingStartPanel() {
           ルーム
           <select
             value={roomId}
-            onChange={(e) => setRoomId(e.target.value)}
+            onChange={(e) => {
+              const nextRoomId = e.target.value;
+              setRoomId(nextRoomId);
+              const selected = myRooms.find((r) => r.roomId === nextRoomId);
+              if (selected?.title?.trim()) {
+                setTitle(selected.title.trim());
+              }
+            }}
             className="rounded border border-gray-600 bg-gray-800 px-2 py-1.5 text-sm text-white"
             disabled={busy}
           >
-            {DEFAULT_ROOM_IDS.map((id) => (
-              <option key={id} value={id}>
-                {id}
-              </option>
-            ))}
+            {roomOptions.map((id) => {
+              const mine = myRooms.find((r) => r.roomId === id);
+              const label = mine
+                ? `${id} ${mine.isLive ? '（開催中）' : ''} ${mine.title ? `- ${mine.title}` : ''}`.trim()
+                : id;
+              return (
+                <option key={id} value={id}>
+                  {label}
+                </option>
+              );
+            })}
           </select>
+        </label>
+        <label className="flex flex-col gap-0.5 text-xs text-gray-400">
+          別のルームID（任意）
+          <input
+            type="text"
+            value={customRoomId}
+            onChange={(e) => setCustomRoomId(e.target.value)}
+            onBlur={() => {
+              const next = customRoomId.trim();
+              if (next) setRoomId(next);
+            }}
+            maxLength={48}
+            className="rounded border border-gray-600 bg-gray-800 px-2 py-1.5 text-sm text-white"
+            disabled={busy}
+            placeholder="例: 91 / my-room"
+          />
         </label>
         <label className="flex min-w-0 flex-1 flex-col gap-0.5 text-xs text-gray-400">
           会のタイトル
@@ -100,6 +157,16 @@ export function MeetingStartPanel() {
           />
         </label>
       </div>
+      {myRooms.length > 0 && (
+        <p className="mt-2 text-center text-[11px] text-gray-500">
+          あなたが過去に主催したルームを優先表示しています。
+        </p>
+      )}
+      {myRooms.length === 0 && (
+        <p className="mt-2 text-center text-[11px] text-gray-500">
+          過去の主催履歴がないため、既定ルーム候補を表示しています。
+        </p>
+      )}
       <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:justify-center">
         <button
           type="button"

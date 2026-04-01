@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 export const dynamic = 'force-dynamic';
 
 const TITLE_MAX = 120;
+const CREATED_ROOMS_LIMIT = 200;
 
 function safeRoomId(raw: string): string | null {
   const t = raw.trim();
@@ -132,4 +133,61 @@ export async function POST(request: Request) {
   }
 
   return NextResponse.json({ error: 'action は start または end を指定してください。' }, { status: 400 });
+}
+
+/**
+ * GET /api/room-gatherings
+ * ログインユーザーが過去に主催したルーム候補を返す
+ */
+export async function GET() {
+  const supabase = await createClient();
+  if (!supabase) {
+    return NextResponse.json({ error: 'DBが利用できません。' }, { status: 503 });
+  }
+
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: 'ログインしていません。' }, { status: 401 });
+  }
+
+  const { data, error } = await supabase
+    .from('room_gatherings')
+    .select('room_id, title, status, started_at')
+    .eq('created_by', session.user.id)
+    .order('started_at', { ascending: false })
+    .limit(CREATED_ROOMS_LIMIT);
+
+  if (error) {
+    if (error.code === '42P01') {
+      return NextResponse.json(
+        { error: '会テーブルがありません。docs/room-live-session-spec.md の SQL を実行してください。' },
+        { status: 503 },
+      );
+    }
+    console.error('[room-gatherings get] select', error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  const map = new Map<string, { roomId: string; title: string; isLive: boolean; lastStartedAt: string | null }>();
+  for (const row of data ?? []) {
+    const roomId = safeRoomId(String(row.room_id ?? ''));
+    if (!roomId) continue;
+    const title = typeof row.title === 'string' && row.title.trim() ? row.title.trim() : '未設定の会';
+    const startedAt = typeof row.started_at === 'string' ? row.started_at : null;
+    const isLive = String(row.status ?? '') === 'live';
+    const prev = map.get(roomId);
+    if (!prev) {
+      map.set(roomId, { roomId, title, isLive, lastStartedAt: startedAt });
+      continue;
+    }
+    map.set(roomId, {
+      roomId,
+      title: prev.title || title,
+      isLive: prev.isLive || isLive,
+      lastStartedAt: prev.lastStartedAt ?? startedAt,
+    });
+  }
+
+  const rooms = Array.from(map.values());
+  return NextResponse.json({ ok: true, rooms });
 }
