@@ -27,3 +27,27 @@ body {
 .animate-now-playing-wave span:nth-child(3) { animation-delay: 0.2s; }
 .animate-now-playing-wave span:nth-child(4) { animation-delay: 0.3s; }
 .animate-now-playing-wave span:nth-child(5) { animation-delay: 0.4s; }
+
+/* 検索結果モーダル等：オーバーレイ／高 DPI で細くなりがちなスクロールバーに最低幅を確保 */
+.mc-scrollbar-stable {
+  scrollbar-gutter: stable;
+  scrollbar-width: auto; /* Firefox: thin より扱いやすい幅 */
+}
+
+.mc-scrollbar-stable::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+.mc-scrollbar-stable::-webkit-scrollbar-thumb {
+  border-radius: 6px;
+  background-color: rgba(255, 255, 255, 0.35);
+}
+
+.mc-scrollbar-stable::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255, 255, 255, 0.5);
+}
+
+.mc-scrollbar-stable::-webkit-scrollbar-track {
+  background-color: rgba(0, 0, 0, 0.25);
+}

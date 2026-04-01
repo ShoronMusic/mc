@@ -59,6 +59,8 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
   const [previewOpen, setPreviewOpen] = useState(false);
   const [watchedVideoIds, setWatchedVideoIds] = useState<string[]>([]);
   const [addedCandidateVideoIds, setAddedCandidateVideoIds] = useState<string[]>([]);
+  /** モーダル表示中の「YouTube で全件を見る」用（入力欄を編集してもずれないよう検索実行時に保存） */
+  const [youtubeSearchQueryForModal, setYoutubeSearchQueryForModal] = useState('');
   const previewWatchedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -181,6 +183,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
         setSearchResults(list);
         setWatchedVideoIds([]);
         setAddedCandidateVideoIds([]);
+        setYoutubeSearchQueryForModal(trimmed);
         setSearchResultsOpen(true);
       }
     } catch {
@@ -220,6 +223,11 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
     }, 3000);
   };
 
+  const previewResultRow =
+    searchResultsOpen && previewOpen && previewVideoId
+      ? searchResults.find((r) => r.videoId === previewVideoId) ?? null
+      : null;
+
   return (
     <>
       {searchResultsOpen && (
@@ -244,7 +252,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                 閉じる
               </button>
             </div>
-            <div className="max-h-[60vh] overflow-auto">
+            <div className="mc-scrollbar-stable max-h-[60vh] overflow-y-auto overflow-x-hidden">
               <ul className="space-y-2">
                 {searchResults.map((r) => (
                   <li key={r.videoId}>
@@ -335,6 +343,20 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                 ))}
               </ul>
             </div>
+            {youtubeSearchQueryForModal.trim() !== '' && (
+              <div className="mt-3 border-t border-gray-700 pt-3">
+                <a
+                  href={`https://www.youtube.com/results?search_query=${encodeURIComponent(
+                    youtubeSearchQueryForModal,
+                  )}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex min-h-[2.5rem] w-full items-center justify-center rounded border border-gray-600 bg-gray-800/80 px-3 py-2 text-center text-xs font-medium text-blue-200 underline-offset-2 hover:border-gray-500 hover:bg-gray-800 hover:text-blue-100"
+                >
+                  全ての検索結果（別タブで表示）
+                </a>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -372,6 +394,104 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                 allowFullScreen
               />
             </div>
+            {searchResultsOpen && (
+              <>
+                {previewResultRow && (
+                  <div className="mt-2 rounded border border-gray-700 bg-gray-800/60 px-3 py-2">
+                    <div className="flex items-start gap-3">
+                      {previewResultRow.thumbnailUrl && (
+                        <div className="w-20 flex-shrink-0">
+                          <div className="h-12 w-20 overflow-hidden rounded bg-black/40">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={previewResultRow.thumbnailUrl}
+                              alt={previewResultRow.title || previewResultRow.artistTitle}
+                              className="h-full w-full object-cover"
+                              loading="lazy"
+                            />
+                          </div>
+                          <div className="mt-1 whitespace-nowrap text-[11px] leading-none text-gray-400">
+                            {previewResultRow.publishedAt
+                              ? previewResultRow.publishedAt.slice(0, 10)
+                              : ''}
+                          </div>
+                        </div>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-medium text-gray-100 line-clamp-2 break-words">
+                          {previewResultRow.title}
+                        </div>
+                        <div className="mt-0.5 text-xs text-gray-400 line-clamp-2 break-words">
+                          {previewResultRow.artistTitle}
+                          {previewResultRow.channelTitle
+                            ? ` / ${previewResultRow.channelTitle}`
+                            : ''}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                <div className="mt-2 grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    className="min-h-[2.75rem] rounded border border-gray-600 bg-gray-800 px-1 py-1.5 text-center text-[11px] font-medium leading-tight text-gray-200 hover:bg-gray-700 sm:px-2"
+                    onClick={() => stopPreview()}
+                  >
+                    <span className="flex flex-col items-center gap-0">
+                      <span>キャンセル</span>
+                      <span>（検索結果に戻る）</span>
+                    </span>
+                  </button>
+                  {onAddCandidate ? (
+                    <button
+                      type="button"
+                      disabled={
+                        !watchedVideoIds.includes(previewVideoId) ||
+                        addedCandidateVideoIds.includes(previewVideoId)
+                      }
+                      className="min-h-[2.25rem] rounded border border-emerald-600 bg-emerald-900/40 px-2 py-1 text-[11px] font-semibold text-emerald-100 hover:bg-emerald-800/70 disabled:cursor-not-allowed disabled:opacity-50"
+                      onClick={() => {
+                        if (!watchedVideoIds.includes(previewVideoId)) return;
+                        if (addedCandidateVideoIds.includes(previewVideoId)) return;
+                        const row = previewResultRow ?? searchResults.find((r) => r.videoId === previewVideoId);
+                        if (!row) return;
+                        playCandidateAddedSe();
+                        onAddCandidate(row);
+                        setAddedCandidateVideoIds((prev) =>
+                          prev.includes(previewVideoId) ? prev : [...prev, previewVideoId],
+                        );
+                      }}
+                    >
+                      {addedCandidateVideoIds.includes(previewVideoId)
+                        ? '追加済み'
+                        : watchedVideoIds.includes(previewVideoId)
+                          ? '候補'
+                          : '候補（視聴後）'}
+                    </button>
+                  ) : (
+                    <div aria-hidden="true" />
+                  )}
+                  {onVideoUrl ? (
+                    <button
+                      type="button"
+                      className="min-h-[2.25rem] rounded border border-blue-500/70 bg-blue-900/40 px-2 py-1 text-[11px] text-blue-100 hover:bg-blue-900/70"
+                      onClick={() => {
+                        onVideoUrl(
+                          `https://www.youtube.com/watch?v=${encodeURIComponent(previewVideoId)}`,
+                        );
+                        setSearchResultsOpen(false);
+                        setValue('');
+                        stopPreview();
+                      }}
+                    >
+                      今すぐ貼る
+                    </button>
+                  ) : (
+                    <div aria-hidden="true" />
+                  )}
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
