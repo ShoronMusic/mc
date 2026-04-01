@@ -563,7 +563,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
             <input
               ref={inputRef}
               type="text"
-              placeholder="URL・メッセージ・曲名のどれでも入力…"
+              placeholder="会話・URL・アーティスト・曲名のどれでも入力…"
               value={value}
               onChange={(e) => setValue(e.target.value)}
               onKeyDown={(e) => {

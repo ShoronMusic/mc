@@ -134,7 +134,7 @@ export function SimpleAuthForm({
         msg = 'パスワードは6文字以上にしてください。';
       } else if (msg.includes('Invalid login credentials') || msg.includes('invalid_credentials')) {
         msg =
-          'ログインできませんでした。パスワードを確認するか、まだ登録していない場合は下の「アカウントを作成する」から登録してください（未登録のメールでも同じ表示になることがあります）。メール確認を有効にしている場合は、確認メールのリンクを開いてからログインしてください。';
+          'ログインできませんでした。パスワードを確認するか、まだ登録していない場合は下の「アカウントを持っていない方は新規登録」から登録してください（未登録のメールでも同じ表示になることがあります）。メール確認を有効にしている場合は、確認メールのリンクを開いてからログインしてください。';
       } else if (msg.toLowerCase().includes('email not confirmed')) {
         msg =
           'メールアドレスの確認が済んでいません。受信トレイ（迷惑メールフォルダも）の確認リンクを開いてから、もう一度ログインしてください。';
@@ -147,8 +147,15 @@ export function SimpleAuthForm({
     }
   };
 
+  const heading = forgotPassword
+    ? 'パスワードの再設定'
+    : isLogin
+      ? 'メールアドレスでログイン'
+      : 'メールアドレスで新規登録';
+
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+      <h2 className="text-lg font-semibold text-white">{heading}</h2>
       {forgotPassword && (
         <p className="text-sm text-gray-400">
           登録したメールアドレスに、パスワード再設定用のリンクを送ります（届かない場合は迷惑メールフォルダもご確認ください）。
@@ -242,13 +249,19 @@ export function SimpleAuthForm({
         </button>
       )}
       {!forgotPassword && (
-        <button
-          type="button"
-          onClick={() => setIsLogin((v) => !v)}
-          className="text-center text-sm text-gray-400 underline hover:text-gray-300"
-        >
-          {isLogin ? 'アカウントを作成する' : 'すでに登録済みの方はログイン'}
-        </button>
+        <>
+          <div className="border-t border-gray-600 pt-3" role="separator" />
+          <button
+            type="button"
+            onClick={() => {
+              onError('');
+              setIsLogin((v) => !v);
+            }}
+            className="text-center text-sm text-blue-400 underline underline-offset-2 hover:text-blue-300"
+          >
+            {isLogin ? 'アカウントを持っていない方は新規登録' : 'すでに登録済みの方はログイン'}
+          </button>
+        </>
       )}
     </form>
   );
