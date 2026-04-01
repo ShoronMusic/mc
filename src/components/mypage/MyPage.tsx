@@ -100,14 +100,18 @@ function LobbyMessageOwnerBlock({
     setLoading(true);
     void (async () => {
       try {
-        const r = await fetch(`/api/room-lobby-message?roomId=${encodeURIComponent(roomId)}`);
+        const [lobbyRes, liveRes] = await Promise.all([
+          fetch(`/api/room-lobby-message?roomId=${encodeURIComponent(roomId)}`),
+          fetch(`/api/room-live-status?roomId=${encodeURIComponent(roomId)}`),
+        ]);
         if (!cancelled) setLoading(false);
-        if (!r.ok || cancelled) return;
+        if (cancelled) return;
         let message = '';
         let displayTitle = '';
+        let liveTitle = '';
         try {
           const text = await Promise.race([
-            r.text(),
+            lobbyRes.text(),
             new Promise<string>((_, reject) =>
               setTimeout(() => reject(new Error('timeout')), LOBBY_RESPONSE_BODY_MS)
             ),
@@ -120,9 +124,17 @@ function LobbyMessageOwnerBlock({
         } catch {
           /* 表示は空のまま */
         }
+        try {
+          if (liveRes.ok) {
+            const data = (await liveRes.json()) as { room?: { title?: string | null } };
+            liveTitle = typeof data?.room?.title === 'string' ? data.room.title.trim() : '';
+          }
+        } catch {
+          /* 表示は空のまま */
+        }
         if (!cancelled) {
           setValue(message);
-          setTitleValue(displayTitle);
+          setTitleValue(displayTitle || liveTitle);
         }
       } catch {
         if (!cancelled) setLoading(false);
