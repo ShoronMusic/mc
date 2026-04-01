@@ -12,6 +12,12 @@ import { upsertSongAndVideo } from '@/lib/song-entities';
 import { insertTidbit } from '../../../../lib/song-tidbits';
 
 export const dynamic = 'force-dynamic';
+/**
+ * テスト運用中のトークン節約用。
+ * - NEXT_PUBLIC_DISABLE_TIDBIT_AI=1（デフォルト）で豆知識APIを停止
+ * - 再開したい場合は NEXT_PUBLIC_DISABLE_TIDBIT_AI=0
+ */
+const DISABLE_TIDBIT_AI = process.env.NEXT_PUBLIC_DISABLE_TIDBIT_AI !== '0';
 
 /**
  * POST: 豆知識を 1 件返す。
@@ -21,6 +27,10 @@ export const dynamic = 'force-dynamic';
  */
 export async function POST(request: Request) {
   try {
+    if (DISABLE_TIDBIT_AI) {
+      return NextResponse.json({ disabled: true, reason: 'tidbit_disabled_for_testing' });
+    }
+
     const body = await request.json().catch(() => ({}));
     const videoId = typeof body?.videoId === 'string' ? body.videoId.trim() : '';
     const currentVideoIdForStyle =

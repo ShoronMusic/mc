@@ -3,10 +3,11 @@
 import { AblyProvider as AblyProviderBase, ChannelProvider } from 'ably/react';
 import Ably from 'ably';
 import { useRouter } from 'next/navigation';
-import { useMemo, useCallback } from 'react';
+import { useMemo, useCallback, useEffect } from 'react';
 import { GUEST_STORAGE_KEY, GUEST_NAME_STORAGE_KEY, GUEST_ROOM_KEY } from '@/components/auth/JoinChoice';
 import RoomWithSync from '@/components/room/RoomWithSync';
 import RoomWithoutSync from '@/components/room/RoomWithoutSync';
+import { createClient } from '@/lib/supabase/client';
 
 const DEFAULT_DISPLAY_NAME = 'ゲスト';
 
@@ -54,7 +55,48 @@ export function AblyProviderWrapper({
   }, [key, clientIdProp]);
   const channelName = getChannelName(roomId);
 
+  const postParticipation = useCallback(
+    async (action: 'join' | 'leave', keepalive = false) => {
+      if (isGuest) return;
+      try {
+        await fetch('/api/user-room-participation', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          keepalive,
+          body: JSON.stringify({ action, roomId }),
+        });
+      } catch {
+        // 参加履歴は失敗してもUIを止めない
+      }
+    },
+    [isGuest, roomId],
+  );
+
+  useEffect(() => {
+    if (isGuest) return;
+    const supabase = createClient();
+    if (!supabase) return;
+    let mounted = true;
+    void supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!mounted) return;
+      if (!session?.user?.id) return;
+      void postParticipation('join');
+    });
+
+    const onBeforeUnload = () => {
+      void postParticipation('leave', true);
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => {
+      mounted = false;
+      window.removeEventListener('beforeunload', onBeforeUnload);
+      void postParticipation('leave', true);
+    };
+  }, [isGuest, postParticipation]);
+
   const handleLeave = useCallback(() => {
+    void postParticipation('leave', true);
     try {
       sessionStorage.setItem(
         getLastExitStorageKey(roomId),
@@ -65,7 +107,7 @@ export function AblyProviderWrapper({
       sessionStorage.removeItem(GUEST_ROOM_KEY);
     } catch {}
     router.push('/');
-  }, [router, roomId, displayName]);
+  }, [router, roomId, displayName, postParticipation]);
 
   if (!client) {
     return (

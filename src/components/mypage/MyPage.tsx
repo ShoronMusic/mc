@@ -61,6 +61,14 @@ interface SongHistoryRow {
   artist: string | null;
   posted_at: string;
 }
+interface ParticipationHistoryRow {
+  id: string;
+  room_id: string;
+  gathering_id: string | null;
+  gathering_title: string | null;
+  joined_at: string;
+  left_at: string | null;
+}
 
 export interface ParticipantForTransfer {
   clientId: string;
@@ -399,9 +407,11 @@ export default function MyPage({
   const [deleteInProgress, setDeleteInProgress] = useState(false);
   const [songHistory, setSongHistory] = useState<SongHistoryRow[]>([]);
   const [songHistoryLoading, setSongHistoryLoading] = useState(false);
-  const [historyTab, setHistoryTab] = useState<'songs' | 'favorites'>('songs');
+  const [historyTab, setHistoryTab] = useState<'songs' | 'favorites' | 'participation'>('songs');
   const [favorites, setFavorites] = useState<{ id: string; video_id: string; display_name: string; played_at: string; title: string | null; artist_name: string | null }[]>([]);
   const [favoritesLoading, setFavoritesLoading] = useState(false);
+  const [participationHistory, setParticipationHistory] = useState<ParticipationHistoryRow[]>([]);
+  const [participationLoading, setParticipationLoading] = useState(false);
   const [textColorModalOpen, setTextColorModalOpen] = useState(false);
 
   const supabase = createClient();
@@ -459,6 +469,21 @@ export default function MyPage({
       .then((data) => setFavorites(Array.isArray(data?.items) ? data.items : []))
       .catch(() => setFavorites([]))
       .finally(() => setFavoritesLoading(false));
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    setParticipationLoading(true);
+    fetch('/api/user-room-participation', { credentials: 'include' })
+      .then(async (r) => {
+        if (!r.ok) return null;
+        return r.json();
+      })
+      .then((data) =>
+        setParticipationHistory(Array.isArray(data?.items) ? (data.items as ParticipationHistoryRow[]) : []),
+      )
+      .catch(() => setParticipationHistory([]))
+      .finally(() => setParticipationLoading(false));
   }, [user]);
 
   const removeFavorite = async (videoId: string) => {
@@ -1172,18 +1197,29 @@ export default function MyPage({
               >
                 お気に入りリスト
               </button>
+              <button
+                type="button"
+                onClick={() => setHistoryTab('participation')}
+                className={`rounded px-3 py-1.5 text-sm font-medium ${historyTab === 'participation' ? 'bg-gray-700 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'}`}
+              >
+                参加履歴
+              </button>
             </div>
             <button
               type="button"
               onClick={historyTab === 'songs' ? exportSongHistoryAsText : exportFavoritesAsText}
               disabled={
-                historyTab === 'songs'
+                historyTab === 'participation'
+                  ? true
+                  : historyTab === 'songs'
                   ? songHistoryLoading || songHistory.length === 0
                   : favoritesLoading || favorites.length === 0
               }
               className="shrink-0 rounded border border-emerald-700/60 bg-emerald-900/30 px-3 py-1.5 text-sm font-medium text-emerald-200 hover:bg-emerald-900/50 disabled:cursor-not-allowed disabled:opacity-40"
               title={
-                historyTab === 'songs'
+                historyTab === 'participation'
+                  ? '参加履歴のTEXT保存は後続対応です'
+                  : historyTab === 'songs'
                   ? '貼った曲リストをUTF-8テキストで保存'
                   : 'お気に入りをUTF-8テキストで保存'
               }
@@ -1301,6 +1337,36 @@ export default function MyPage({
                             解除
                           </button>
                         </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </>
+          )}
+          {historyTab === 'participation' && (
+            <>
+              <p className="mb-3 text-xs text-gray-500">
+                ログイン状態で入室した会の参加履歴です。入室時刻と退出時刻（取得できた場合）を表示します。
+              </p>
+              {participationLoading ? (
+                <p className="text-sm text-gray-500">読み込み中…</p>
+              ) : participationHistory.length === 0 ? (
+                <p className="text-sm text-gray-500">参加履歴はまだありません。</p>
+              ) : (
+                <div className="max-h-64 space-y-3 overflow-y-auto">
+                  {participationHistory.map((row) => {
+                    const joined = new Date(row.joined_at);
+                    const left = row.left_at ? new Date(row.left_at) : null;
+                    const joinedStr = joined.toLocaleString('ja-JP');
+                    const leftStr = left ? left.toLocaleString('ja-JP') : '在室中 / 未取得';
+                    return (
+                      <div key={row.id} className="rounded border border-gray-700 bg-gray-800/50 p-2">
+                        <p className="text-xs text-gray-500">
+                          ルーム {row.room_id || '—'} · {row.gathering_title || '会タイトル未設定'}
+                        </p>
+                        <p className="text-sm text-gray-200">入室: {joinedStr}</p>
+                        <p className="text-xs text-gray-400">退出: {leftStr}</p>
                       </div>
                     );
                   })}

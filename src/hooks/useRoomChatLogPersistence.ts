@@ -17,11 +17,32 @@ export function useRoomChatLogPersistence(
 ): void {
   const { isGuest, myClientId } = options;
   const loggedIdsRef = useRef<Set<string>>(new Set());
+  const gatheringIdRef = useRef<string | null>(null);
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
 
   useEffect(() => {
     loggedIdsRef.current.clear();
+  }, [roomId]);
+
+  useEffect(() => {
+    const rid = roomId?.trim();
+    gatheringIdRef.current = null;
+    if (!rid) return;
+    let cancelled = false;
+    void fetch(`/api/room-live-status?roomId=${encodeURIComponent(rid)}`, { credentials: 'include' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (cancelled) return;
+        const raw = data?.room?.gatheringId;
+        gatheringIdRef.current = typeof raw === 'string' && raw.trim() ? raw.trim() : null;
+      })
+      .catch(() => {
+        if (!cancelled) gatheringIdRef.current = null;
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [roomId]);
 
   const flushRoomChatLog = useCallback(
@@ -75,7 +96,7 @@ export function useRoomChatLogPersistence(
         const res = await fetch('/api/room-chat-log', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ roomId: rid, entries }),
+          body: JSON.stringify({ roomId: rid, gatheringId: gatheringIdRef.current, entries }),
           keepalive: opts.keepalive === true,
         });
         if (res.ok) {

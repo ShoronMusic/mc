@@ -72,12 +72,28 @@ export async function GET(request: Request) {
     .limit(2000);
   if (playErr) return NextResponse.json({ error: playErr.message }, { status: 500 });
 
-  const { data: chatData, error: chatErr } = await supabase
+  const { data: liveGathering, error: liveErr } = await supabase
+    .from('room_gatherings')
+    .select('id')
+    .eq('room_id', roomId)
+    .eq('status', 'live')
+    .order('started_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (liveErr && liveErr.code !== '42P01') {
+    return NextResponse.json({ error: liveErr.message }, { status: 500 });
+  }
+
+  let chatQuery = supabase
     .from('room_chat_log')
     .select('created_at, message_type, display_name')
     .eq('room_id', roomId)
     .gte('created_at', session.startIso)
-    .lt('created_at', endIso)
+    .lt('created_at', endIso);
+  if (liveGathering?.id) {
+    chatQuery = chatQuery.eq('gathering_id', liveGathering.id);
+  }
+  const { data: chatData, error: chatErr } = await chatQuery
     .order('created_at', { ascending: true })
     .limit(5000);
   if (chatErr && chatErr.code !== '42P01') return NextResponse.json({ error: chatErr.message }, { status: 500 });

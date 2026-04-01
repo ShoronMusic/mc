@@ -160,3 +160,45 @@ create policy "room_lobby_message_select_anon"
 （`insert` / `update` / `delete` は anon には付けず、サーバー API のサービスロールのみが RLS をバイパスして書き込みます。）
 
 トップページが参加人数を取得するたび（約 20 秒ごと）、**在室 0 人のルームの入室前メッセージ行は自動で削除**されます。本番でも `SUPABASE_SERVICE_ROLE_KEY` をデプロイ環境に設定してください（未設定だと削除はスキップされますが、API 側では在室 0 のときメッセージを返さないため一覧には出ません）。
+
+---
+
+## 10. マイページ「参加履歴」を使う場合
+
+ログインユーザーのチャット参加履歴（ルーム・会タイトル・入室/退出時刻）を記録するには、次の SQL を **SQL Editor** で実行してください。
+
+```sql
+create table if not exists public.user_room_participation_history (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  room_id text not null,
+  gathering_id uuid null references public.room_gatherings (id) on delete set null,
+  gathering_title text null,
+  joined_at timestamptz not null default now(),
+  left_at timestamptz null
+);
+
+create index if not exists user_room_participation_user_joined_idx
+  on public.user_room_participation_history (user_id, joined_at desc);
+
+alter table public.user_room_participation_history enable row level security;
+
+drop policy if exists "participation_select_own" on public.user_room_participation_history;
+create policy "participation_select_own"
+  on public.user_room_participation_history for select
+  using (auth.uid() = user_id);
+
+drop policy if exists "participation_insert_own" on public.user_room_participation_history;
+create policy "participation_insert_own"
+  on public.user_room_participation_history for insert
+  with check (auth.uid() = user_id);
+
+drop policy if exists "participation_update_own" on public.user_room_participation_history;
+create policy "participation_update_own"
+  on public.user_room_participation_history for update
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+```
+
+記録は `POST /api/user-room-participation` が担当します。  
+`Join` は入室時、`Leave` は退室ボタン押下時とページ離脱時に送信します。ネットワーク切断等で `Leave` が取れない場合は `left_at` が null のまま残ることがあります。

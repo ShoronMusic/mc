@@ -23,6 +23,7 @@
 create table if not exists public.room_chat_log (
   id uuid primary key default gen_random_uuid(),
   room_id text not null,
+  gathering_id uuid null references public.room_gatherings(id) on delete set null,
   client_message_id text unique not null,
   created_at timestamptz not null,
   message_type text not null check (message_type in ('user', 'ai', 'system')),
@@ -33,6 +34,8 @@ create table if not exists public.room_chat_log (
 
 create index if not exists idx_room_chat_log_room_created
   on public.room_chat_log (room_id, created_at asc);
+create index if not exists idx_room_chat_log_room_gathering_created
+  on public.room_chat_log (room_id, gathering_id, created_at asc);
 
 alter table public.room_chat_log enable row level security;
 
@@ -51,6 +54,7 @@ create policy "Anyone can select room chat log"
 |--------|-----|------|
 | id | uuid | 主キー（DB側で採番） |
 | room_id | text | ルームID |
+| gathering_id | uuid \| null | 開催中の会ID。会単位で分離して閲覧するためのキー |
 | client_message_id | text | クライアント発行のメッセージID。重複挿入防止に使用（unique） |
 | created_at | timestamptz | 発言日時（クライアントから送るISO文字列をそのまま保存） |
 | message_type | text | 'user' \| 'ai' \| 'system' |
@@ -73,6 +77,16 @@ create policy "Anyone can select room chat log"
 1日あたり最大 **8000 件**まで（超える場合は先頭 8000 件のみでヘッダに注記）。
 
 Supabase の **SQL Editor** で同様の範囲を絞る場合は、`created_at` を UTC で比較するか、上記 API と同じく JST の日付境界を計算してください。
+
+### 既存テーブルに `gathering_id` を後付けする場合
+
+```sql
+alter table public.room_chat_log
+  add column if not exists gathering_id uuid null references public.room_gatherings(id) on delete set null;
+
+create index if not exists idx_room_chat_log_room_gathering_created
+  on public.room_chat_log (room_id, gathering_id, created_at asc);
+```
 
 ## 管理画面（日付・ルーム別一覧）
 

@@ -49,6 +49,15 @@ type LogEntryIn = {
   from_current_session_user?: boolean;
 };
 
+function safeGatheringId(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  const t = raw.trim();
+  // UUID想定（将来差し替えを考慮して英数字/ハイフンのみ許可）
+  if (!t || t.length > 80) return null;
+  if (!/^[a-zA-Z0-9-]+$/.test(t)) return null;
+  return t;
+}
+
 type LogRow = {
   created_at: string;
   message_type: string;
@@ -58,7 +67,7 @@ type LogRow = {
 
 /**
  * GET: 指定ルーム・指定日（JST 1日）の会話ログをプレーンテキストで返す。
- * Query: roomId（必須）, date=YYYY-MM-DD（省略時は今日 JST）, download=1（ファイルダウンロード）
+ * Query: roomId（必須）, date=YYYY-MM-DD（省略時は今日 JST）, gatheringId（任意）, download=1（ファイルダウンロード）
  */
 export async function GET(request: Request) {
   const supabase = await createClient();
@@ -73,20 +82,23 @@ export async function GET(request: Request) {
   }
 
   const dateParam = searchParams.get('date')?.trim();
+  const gatheringId = safeGatheringId(searchParams.get('gatheringId'));
   const ymd = dateParam && dateParam.length > 0 ? dateParam : todayJstYmd();
   const range = jstDayRangeUtc(ymd);
   if (!range) {
     return NextResponse.json({ error: 'date は YYYY-MM-DD 形式で指定してください' }, { status: 400 });
   }
 
-  const { data, error } = await supabase
+  let query = supabase
     .from('room_chat_log')
     .select('created_at, message_type, display_name, body')
     .eq('room_id', roomId)
     .gte('created_at', range.startIso)
-    .lt('created_at', range.endIso)
-    .order('created_at', { ascending: true })
-    .limit(MAX_EXPORT_ROWS + 1);
+    .lt('created_at', range.endIso);
+  if (gatheringId) {
+    query = query.eq('gathering_id', gatheringId);
+  }
+  const { data, error } = await query.order('created_at', { ascending: true }).limit(MAX_EXPORT_ROWS + 1);
 
   if (error) {
     if (error.code === '42P01') {
@@ -108,11 +120,12 @@ export async function GET(request: Request) {
 
   const header = [
     `ルームID: ${roomId}`,
+    gatheringId ? `会ID: ${gatheringId}` : null,
     `日付（JST）: ${ymd}`,
     `件数: ${list.length}${truncated ? `（上限 ${MAX_EXPORT_ROWS} 件で打ち切り）` : ''}`,
     '---',
     '',
-  ].join('\n');
+  ].filter(Boolean).join('\n');
 
   const lines = list.map((r) => {
     const t = formatLineTime(r.created_at);
@@ -145,7 +158,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'DBが利用できません。' }, { status: 503 });
   }
 
-  let body: { roomId?: string; entries?: unknown };
+  let body: { roomId?: string; gatheringId?: string | null; entries?: unknown };
   try {
     body = await request.json();
   } catch {
@@ -153,6 +166,7 @@ export async function POST(request: Request) {
   }
 
   const roomId = typeof body.roomId === 'string' ? body.roomId.trim() : '';
+  const gatheringId = safeGatheringId(body.gatheringId);
   if (!roomId || roomId.length > 128) {
     return NextResponse.json({ error: 'roomId is required' }, { status: 400 });
   }
@@ -172,6 +186,7 @@ export async function POST(request: Request) {
 
   const rows: Array<{
     room_id: string;
+    gathering_id: string | null;
     client_message_id: string;
     created_at: string;
     message_type: 'user' | 'ai' | 'system';
@@ -208,6 +223,7 @@ export async function POST(request: Request) {
 
     rows.push({
       room_id: roomId,
+      gathering_id: gatheringId,
       client_message_id,
       created_at,
       message_type: mt,
@@ -234,6 +250,15 @@ export async function POST(request: Request) {
           hint: 'docs/supabase-room-chat-log-table.md の SQL を実行してください。',
         },
         { status: 503 }
+      );
+    }
+    if (error.code === '42703' || error.message?.includes('gathering_id')) {
+      return NextResponse.json(
+        {
+          error: 'room_chat_log に gathering_id カラムがありません。',
+          hint: 'docs/supabase-room-chat-log-table.md の追記 SQL（gathering_id）を実行してください。',
+        },
+        { status: 503 },
       );
     }
     console.error('[room-chat-log POST]', error);

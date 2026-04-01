@@ -5,6 +5,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 export const dynamic = 'force-dynamic';
 
 type LiveRoom = {
+  gatheringId: string;
   roomId: string;
   title: string;
   startedAt: string | null;
@@ -65,7 +66,7 @@ export async function GET(request: Request) {
 
   let query = supabase
     .from('room_gatherings')
-    .select('room_id, title, started_at')
+    .select('id, room_id, title, started_at')
     .eq('status', 'live')
     .order('started_at', { ascending: true });
 
@@ -107,6 +108,7 @@ export async function GET(request: Request) {
   }
 
   const baseRooms: LiveRoom[] = (data ?? []).map((r) => ({
+    gatheringId: typeof r.id === 'string' ? r.id : '',
     roomId: String(r.room_id ?? ''),
     title: typeof r.title === 'string' && r.title.trim() ? r.title.trim() : 'タイトル未設定の会',
     startedAt: typeof r.started_at === 'string' ? r.started_at : null,
@@ -147,6 +149,7 @@ export async function GET(request: Request) {
         room: first
           ? {
               roomId: first.roomId,
+              gatheringId: first.gatheringId,
               title: first.title,
               startedAt: first.startedAt,
               isLive: true,
@@ -155,6 +158,7 @@ export async function GET(request: Request) {
             }
           : {
               roomId,
+              gatheringId: '',
               title: null,
               startedAt: null,
               isLive: false,
