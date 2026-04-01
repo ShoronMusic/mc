@@ -35,6 +35,7 @@
 
 - **会を開始する最小 UI**（トップページ・ログイン中のみ表示）  
   - `POST /api/room-gatherings` … `action: 'start' | 'end'`, `roomId`, `title`（開始時）
+- **マイページ**: 主催者（`room_gatherings.created_by` が開催中の会）またはチャットオーナーが、`room_lobby_message` に **部屋タイトル**（`display_title`）と **PR文**（`message`）を保存。詳細は `docs/supabase-setup.md` 9 章。
 - 「全員退出で終了」の確定ロジック（presence タイムアウト、強制退出との整合）はこれから。
 
 #### RLS メモ（Supabase）

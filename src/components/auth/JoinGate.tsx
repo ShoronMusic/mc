@@ -31,6 +31,7 @@ export function JoinGate({ roomId }: JoinGateProps) {
   const [isGuest, setIsGuest] = useState(false);
   const [closedMessage, setClosedMessage] = useState<string>('');
   const [liveTitle, setLiveTitle] = useState<string>('');
+  const [roomDisplayTitle, setRoomDisplayTitle] = useState<string>('');
 
   const clientId = useMemo(
     () => (typeof window !== 'undefined' ? getOrCreateRoomClientId(roomId) : ''),
@@ -70,25 +71,31 @@ export function JoinGate({ roomId }: JoinGateProps) {
         const data = (await res.json()) as {
           configured?: boolean;
           message?: string;
-          room?: { isLive?: boolean; title?: string | null };
+          room?: { isLive?: boolean; title?: string | null; displayTitle?: string | null };
         };
         if (data?.configured !== true) {
           setClosedMessage(data?.message?.trim() || '現在このルームは開催管理の準備中です。');
           setLiveTitle('');
+          setRoomDisplayTitle('');
           setStatus('closed');
           return false;
         }
         if (data?.room?.isLive !== true) {
           setClosedMessage('現在このルームで開催中の会はありません。');
           setLiveTitle('');
+          setRoomDisplayTitle('');
           setStatus('closed');
           return false;
         }
         setLiveTitle(typeof data?.room?.title === 'string' ? data.room.title.trim() : '');
+        setRoomDisplayTitle(
+          typeof data?.room?.displayTitle === 'string' ? data.room.displayTitle.trim() : '',
+        );
         return true;
       } catch {
         setClosedMessage('開催状況を確認できませんでした。時間をおいて再度お試しください。');
         setLiveTitle('');
+        setRoomDisplayTitle('');
         setStatus('closed');
         return false;
       }
@@ -191,6 +198,8 @@ export function JoinGate({ roomId }: JoinGateProps) {
     <AblyProviderWrapper
       displayName={displayName}
       roomId={roomId}
+      roomTitle={liveTitle}
+      roomDisplayTitle={roomDisplayTitle}
       isGuest={isGuest}
       clientId={clientId}
     />

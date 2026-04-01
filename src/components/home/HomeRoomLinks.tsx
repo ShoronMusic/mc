@@ -10,6 +10,7 @@ type LiveRoom = {
   roomId: string;
   title: string;
   startedAt: string | null;
+  displayTitle?: string;
 };
 
 type RoomPayload = {
@@ -49,7 +50,8 @@ function RoomRow({
   loading: boolean;
   payload: RoomPayload | undefined;
 }) {
-  const label = `${room.title} に入る`;
+  const headline = (room.displayTitle?.trim() || room.title).trim();
+  const label = `${headline} に入る`;
 
   let sub: ReactNode = null;
   if (configured) {

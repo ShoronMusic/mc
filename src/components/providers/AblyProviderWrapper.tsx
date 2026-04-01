@@ -29,6 +29,9 @@ export interface AblyProviderWrapperProps {
   displayName?: string;
   roomId: string;
   isGuest?: boolean;
+  roomTitle?: string;
+  /** room_lobby_message.display_title（部屋の表示用タイトル） */
+  roomDisplayTitle?: string;
   /** 同一ルームで安定した clientId（presence・強制退出の対象識別用） */
   clientId?: string;
 }
@@ -37,6 +40,8 @@ export function AblyProviderWrapper({
   displayName = DEFAULT_DISPLAY_NAME,
   roomId,
   isGuest = false,
+  roomTitle = '',
+  roomDisplayTitle = '',
   clientId: clientIdProp = '',
 }: AblyProviderWrapperProps) {
   const router = useRouter();
@@ -67,6 +72,8 @@ export function AblyProviderWrapper({
       <RoomWithoutSync
         displayName={displayName}
         roomId={roomId}
+        roomTitle={roomTitle}
+        roomDisplayTitle={roomDisplayTitle}
         isGuest={isGuest}
         onLeave={handleLeave}
       />
@@ -80,6 +87,8 @@ export function AblyProviderWrapper({
           displayName={displayName}
           channelName={channelName}
           roomId={roomId}
+          roomTitle={roomTitle}
+          roomDisplayTitle={roomDisplayTitle}
           isGuest={isGuest}
           onLeave={handleLeave}
           clientId={clientIdProp}

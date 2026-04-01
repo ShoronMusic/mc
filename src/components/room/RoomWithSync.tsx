@@ -171,6 +171,8 @@ interface RoomWithSyncProps {
   displayName?: string;
   channelName: string;
   roomId?: string;
+  roomTitle?: string;
+  roomDisplayTitle?: string;
   isGuest?: boolean;
   onLeave?: () => void;
   clientId?: string;
@@ -180,6 +182,8 @@ export default function RoomWithSync({
   displayName: displayNameProp = 'ゲスト',
   channelName,
   roomId,
+  roomTitle = '',
+  roomDisplayTitle = '',
   isGuest = false,
   onLeave,
   clientId: myClientId = '',
@@ -2552,7 +2556,7 @@ export default function RoomWithSync({
             priority
           />
           <h1 className="hidden min-w-0 flex-1 truncate text-lg font-semibold text-white sm:block">
-            洋楽AIチャット{roomId ? ` - ${roomId}` : ''}
+            {`部屋 ${roomId || '--'}${(roomDisplayTitle || roomTitle) ? ` - ${roomDisplayTitle || roomTitle}` : ''}`}
           </h1>
         </div>
         {onLeave && (

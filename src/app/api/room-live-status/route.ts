@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 
 export const dynamic = 'force-dynamic';
 
@@ -7,6 +8,7 @@ type LiveRoom = {
   roomId: string;
   title: string;
   startedAt: string | null;
+  displayTitle: string;
 };
 
 function safeRoomId(raw: string): string | null {
@@ -14,6 +16,33 @@ function safeRoomId(raw: string): string | null {
   if (!t || t.length > 48) return null;
   if (!/^[a-zA-Z0-9_-]+$/.test(t)) return null;
   return t;
+}
+
+async function lobbyDisplayTitleByRoomIds(
+  supabase: NonNullable<Awaited<ReturnType<typeof createClient>>>,
+  roomIds: string[],
+): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  if (roomIds.length === 0) return map;
+  const { data, error } = await supabase
+    .from('room_lobby_message')
+    .select('room_id, display_title')
+    .in('room_id', roomIds);
+  if (error) {
+    if (error.code === '42P01') return map;
+    if (error.message?.includes('display_title') || error.code === '42703') return map;
+    console.error('[room-live-status] room_lobby_message', error);
+    return map;
+  }
+  for (const row of data ?? []) {
+    const rid = typeof (row as { room_id?: string }).room_id === 'string' ? (row as { room_id: string }).room_id : '';
+    const dt =
+      row && typeof (row as { display_title?: unknown }).display_title === 'string'
+        ? String((row as { display_title: string }).display_title).trim()
+        : '';
+    if (rid) map.set(rid, dt);
+  }
+  return map;
 }
 
 /**
@@ -77,20 +106,61 @@ export async function GET(request: Request) {
     );
   }
 
-  const rooms: LiveRoom[] = (data ?? []).map((r) => ({
+  const baseRooms: LiveRoom[] = (data ?? []).map((r) => ({
     roomId: String(r.room_id ?? ''),
     title: typeof r.title === 'string' && r.title.trim() ? r.title.trim() : 'タイトル未設定の会',
     startedAt: typeof r.started_at === 'string' ? r.started_at : null,
+    displayTitle: '',
   }));
+
+  const lobbyMap = await lobbyDisplayTitleByRoomIds(
+    supabase,
+    baseRooms.map((r) => r.roomId).filter(Boolean),
+  );
+  const rooms: LiveRoom[] = baseRooms.map((r) => ({
+    ...r,
+    displayTitle: lobbyMap.get(r.roomId) ?? '',
+  }));
+
+  const { data: sessionData } = await supabase.auth.getSession();
+  const sessionUserId = sessionData?.session?.user?.id ?? '';
 
   if (roomId) {
     const first = rooms[0];
+    let isOrganizer = false;
+    if (sessionUserId && first) {
+      const admin = createAdminClient();
+      if (admin) {
+        const { data: orgRow } = await admin
+          .from('room_gatherings')
+          .select('id')
+          .eq('room_id', roomId)
+          .eq('status', 'live')
+          .eq('created_by', sessionUserId)
+          .maybeSingle();
+        isOrganizer = !!orgRow;
+      }
+    }
     return NextResponse.json(
       {
         configured: true,
         room: first
-          ? { roomId: first.roomId, title: first.title, startedAt: first.startedAt, isLive: true }
-          : { roomId, title: null, startedAt: null, isLive: false },
+          ? {
+              roomId: first.roomId,
+              title: first.title,
+              startedAt: first.startedAt,
+              isLive: true,
+              displayTitle: first.displayTitle,
+              isOrganizer,
+            }
+          : {
+              roomId,
+              title: null,
+              startedAt: null,
+              isLive: false,
+              displayTitle: '',
+              isOrganizer: false,
+            },
         rooms: [],
       },
       { headers: { 'Cache-Control': 'no-store' } },

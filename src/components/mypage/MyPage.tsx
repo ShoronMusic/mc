@@ -10,6 +10,7 @@ import {
   DEFAULT_CHAT_TEXT_COLOR,
 } from '@/lib/chat-text-color';
 import {
+  ROOM_DISPLAY_TITLE_MAX_CHARS,
   ROOM_LOBBY_MESSAGE_MAX_CHARS,
   countLobbyMessageChars,
 } from '@/lib/room-lobby-message';
@@ -71,6 +72,7 @@ const LOBBY_SAVE_FETCH_MS = 25_000;
 const LOBBY_RESPONSE_BODY_MS = 8_000;
 
 function LobbyMessageOwnerBlock({ roomId, clientId }: { roomId: string; clientId: string }) {
+  const [titleValue, setTitleValue] = useState('');
   const [value, setValue] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -86,6 +88,7 @@ function LobbyMessageOwnerBlock({ roomId, clientId }: { roomId: string; clientId
         if (!cancelled) setLoading(false);
         if (!r.ok || cancelled) return;
         let message = '';
+        let displayTitle = '';
         try {
           const text = await Promise.race([
             r.text(),
@@ -94,13 +97,17 @@ function LobbyMessageOwnerBlock({ roomId, clientId }: { roomId: string; clientId
             ),
           ]);
           if (text.trim()) {
-            const data = JSON.parse(text) as { message?: unknown };
+            const data = JSON.parse(text) as { message?: unknown; displayTitle?: unknown };
             if (typeof data.message === 'string') message = data.message;
+            if (typeof data.displayTitle === 'string') displayTitle = data.displayTitle;
           }
         } catch {
           /* 表示は空のまま */
         }
-        if (!cancelled) setValue(message);
+        if (!cancelled) {
+          setValue(message);
+          setTitleValue(displayTitle);
+        }
       } catch {
         if (!cancelled) setLoading(false);
       }
@@ -112,12 +119,18 @@ function LobbyMessageOwnerBlock({ roomId, clientId }: { roomId: string; clientId
 
   const n = countLobbyMessageChars(value);
   const over = n > ROOM_LOBBY_MESSAGE_MAX_CHARS;
+  const titleN = countLobbyMessageChars(titleValue);
+  const titleOver = titleN > ROOM_DISPLAY_TITLE_MAX_CHARS;
 
   const save = async () => {
     setErr(null);
     setSavedOk(false);
+    if (titleOver) {
+      setErr(`部屋タイトルは${ROOM_DISPLAY_TITLE_MAX_CHARS}文字以内にしてください。`);
+      return;
+    }
     if (over) {
-      setErr(`メッセージは${ROOM_LOBBY_MESSAGE_MAX_CHARS}文字以内にしてください。`);
+      setErr(`PR文は${ROOM_LOBBY_MESSAGE_MAX_CHARS}文字以内にしてください。`);
       return;
     }
     const ac = new AbortController();
@@ -127,7 +140,8 @@ function LobbyMessageOwnerBlock({ roomId, clientId }: { roomId: string; clientId
       const res = await fetch('/api/room-lobby-message', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ roomId, clientId, message: value }),
+        credentials: 'include',
+        body: JSON.stringify({ roomId, clientId, message: value, displayTitle: titleValue }),
         signal: ac.signal,
       });
       // サーバー処理は完了しているのに body 読み取りだけ固まるブラウザがあるため、先に UI を戻す
@@ -167,14 +181,35 @@ function LobbyMessageOwnerBlock({ roomId, clientId }: { roomId: string; clientId
 
   return (
     <div className="mb-4 border-b border-amber-800/30 pb-4">
-      <h4 className="mb-2 text-xs font-medium text-gray-300">入室前のルーム一覧に表示するメッセージ</h4>
-      <p className="mb-2 text-xs text-gray-400">
-        トップページのルーム選択に表示されます（{ROOM_LOBBY_MESSAGE_MAX_CHARS} 文字以内）。空にして保存すると消えます。
+      <h4 className="mb-1 text-xs font-medium text-gray-300">主催者向け（部屋タイトル・PR文）</h4>
+      <p className="mb-3 text-[11px] leading-relaxed text-gray-500">
+        開催中の会の主催者、またはチャットオーナーが編集できます。トップの開催中一覧・ルーム上部の見出しに部屋タイトルが使われます（未入力時は会のタイトルが表示されます）。PR文はトップのカード内の紹介文です。
       </p>
       {loading ? (
         <p className="text-xs text-gray-500">読み込み中…</p>
       ) : (
         <>
+          <label className="mb-2 block">
+            <span className="mb-1 block text-xs text-gray-400">部屋のタイトル</span>
+            <input
+              type="text"
+              value={titleValue}
+              onChange={(e) => {
+                const t = e.target.value;
+                if (countLobbyMessageChars(t) <= ROOM_DISPLAY_TITLE_MAX_CHARS) setTitleValue(t);
+              }}
+              maxLength={ROOM_DISPLAY_TITLE_MAX_CHARS}
+              className="w-full rounded border border-gray-600 bg-gray-800 px-3 py-2 text-sm text-white placeholder:text-gray-500"
+              placeholder="例: ようつべ洋楽会"
+              aria-label="部屋のタイトル"
+            />
+            <span className={`mt-0.5 block text-[11px] ${titleOver ? 'text-red-400' : 'text-gray-500'}`}>
+              {titleN} / {ROOM_DISPLAY_TITLE_MAX_CHARS}
+            </span>
+          </label>
+          <label className="mb-1 block">
+            <span className="mb-1 block text-xs text-gray-400">PR文（紹介・告知）</span>
+          </label>
           <textarea
             value={value}
             onChange={(e) => {
@@ -184,16 +219,16 @@ function LobbyMessageOwnerBlock({ roomId, clientId }: { roomId: string; clientId
             rows={3}
             className="mb-1 w-full resize-y rounded border border-gray-600 bg-gray-800 px-3 py-2 text-sm text-white placeholder:text-gray-500"
             placeholder="例: 今夜は 80 年代中心でゆるくやってます"
-            aria-label="入室前メッセージ"
+            aria-label="PR文"
           />
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-gray-500">
             <span className={over ? 'text-red-400' : undefined}>
-              {n} / {ROOM_LOBBY_MESSAGE_MAX_CHARS}
+              PR {n} / {ROOM_LOBBY_MESSAGE_MAX_CHARS}
             </span>
             <button
               type="button"
               onClick={() => void save()}
-              disabled={saving || over}
+              disabled={saving || over || titleOver}
               className="rounded bg-amber-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-600 disabled:opacity-50 enabled:cursor-pointer"
               style={{ cursor: saving ? 'wait' : undefined }}
             >
@@ -298,16 +333,45 @@ export default function MyPage({
     (myClientId && myClientId.trim()) ||
     (effectiveRoomId ? getOrCreateRoomClientId(effectiveRoomId) : '');
 
-  const showLobbyEditor = isChatOwner && Boolean(effectiveRoomId && effectiveClientId);
-  const showOwnerAmberSection =
+  const [isLiveOrganizer, setIsLiveOrganizer] = useState(false);
+
+  useEffect(() => {
+    if (!effectiveRoomId || isGuest) {
+      setIsLiveOrganizer(false);
+      return;
+    }
+    let cancelled = false;
+    void fetch(`/api/room-live-status?roomId=${encodeURIComponent(effectiveRoomId)}`, {
+      credentials: 'include',
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (cancelled) return;
+        setIsLiveOrganizer(Boolean(data?.room?.isOrganizer));
+      })
+      .catch(() => {
+        if (!cancelled) setIsLiveOrganizer(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [effectiveRoomId, isGuest]);
+
+  /** 開催中の会の主催者、またはチャットオーナー */
+  const showOrganizerRoomEditor =
+    !isGuest && Boolean(effectiveRoomId && effectiveClientId) && (isChatOwner || isLiveOrganizer);
+  /** チャットオーナー専用の各種トグル（主催者のみのときは非表示） */
+  const showOwnerOnlyControls =
     isChatOwner &&
-    (showLobbyEditor ||
+    Boolean(
       onTransferOwner ||
-      onAiFreeSpeechStopToggle ||
-      onCommentPackModeChange ||
-      onJpAiUnlockToggle ||
-      onForceExit ||
-      onSongLimit5MinToggle);
+        onAiFreeSpeechStopToggle ||
+        onCommentPackModeChange ||
+        onJpAiUnlockToggle ||
+        onForceExit ||
+        onSongLimit5MinToggle,
+    );
+  const showRoomManagementPanel = showOrganizerRoomEditor || showOwnerOnlyControls;
 
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(!isGuest);
@@ -556,11 +620,11 @@ export default function MyPage({
           </div>
         </div>
 
-        {showLobbyEditor ? (
+        {showOrganizerRoomEditor ? (
           <div className="mb-4 rounded border border-amber-700/50 bg-amber-900/20 p-3">
             <h3 className="mb-2 flex items-center gap-1.5 text-sm font-medium text-amber-200">
               <span aria-hidden>👑</span>
-              ルーム管理（オーナー）
+              ルーム管理（主催者・オーナー）
             </h3>
             <LobbyMessageOwnerBlock roomId={effectiveRoomId} clientId={effectiveClientId} />
           </div>
@@ -699,14 +763,14 @@ export default function MyPage({
         </div>
       )}
 
-      {showOwnerAmberSection && (
+      {showRoomManagementPanel && (
         <div className="mb-4 rounded border border-amber-700/50 bg-amber-900/20 p-3">
           <h3 className="mb-3 flex items-center gap-1.5 text-sm font-medium text-amber-200">
             <span aria-hidden>👑</span>
-            ルーム管理（オーナー）
+            ルーム管理（主催者・オーナー）
           </h3>
 
-          {showLobbyEditor ? (
+          {showOrganizerRoomEditor ? (
             <LobbyMessageOwnerBlock roomId={effectiveRoomId} clientId={effectiveClientId} />
           ) : null}
 

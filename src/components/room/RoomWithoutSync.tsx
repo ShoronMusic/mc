@@ -75,11 +75,20 @@ function isLeaveOrRomPhrase(body: string): boolean {
 interface RoomWithoutSyncProps {
   displayName?: string;
   roomId?: string;
+  roomTitle?: string;
+  roomDisplayTitle?: string;
   isGuest?: boolean;
   onLeave?: () => void;
 }
 
-export default function RoomWithoutSync({ displayName: displayNameProp = 'ゲスト', roomId, isGuest = false, onLeave }: RoomWithoutSyncProps) {
+export default function RoomWithoutSync({
+  displayName: displayNameProp = 'ゲスト',
+  roomId,
+  roomTitle = '',
+  roomDisplayTitle = '',
+  isGuest = false,
+  onLeave,
+}: RoomWithoutSyncProps) {
   const playerRef = useRef<YouTubePlayerHandle>(null);
   const [videoId, setVideoId] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
@@ -908,7 +917,7 @@ export default function RoomWithoutSync({ displayName: displayNameProp = 'ゲス
             priority
           />
           <h1 className="hidden min-w-0 flex-1 truncate text-lg font-semibold text-white sm:block">
-            洋楽AIチャット{roomId ? ` - ${roomId}` : ''}
+            {`部屋 ${roomId || '--'}${(roomDisplayTitle || roomTitle) ? ` - ${roomDisplayTitle || roomTitle}` : ''}`}
           </h1>
         </div>
         {onLeave && (

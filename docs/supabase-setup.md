@@ -133,9 +133,9 @@ Google認証で参加できるようにするには、Supabase 側で Google を
 
 ---
 
-## 9. トップページ「ルーム入室前メッセージ」を使う場合
+## 9. トップページ「ルーム入室前メッセージ」・部屋タイトルを使う場合
 
-チャットオーナーがマイページから設定する、入室前一覧に表示する短いメッセージ（100 文字以内）を保存するには、次の SQL を **SQL Editor** で実行してください。**書き込みは API がサービスロールで行う**ため、`SUPABASE_SERVICE_ROLE_KEY` を `.env.local` に設定している必要があります（7 章と同じキー）。
+主催者／チャットオーナーがマイページから設定する **PR文**（入室前一覧に表示・100 文字以内）と **部屋タイトル**（トップの見出し・ルーム上部・40 文字以内）を保存するには、次の SQL を **SQL Editor** で実行してください。**書き込みは API がサービスロールで行う**ため、`SUPABASE_SERVICE_ROLE_KEY` を `.env.local` に設定している必要があります（7 章と同じキー）。
 
 ```sql
 create table if not exists public.room_lobby_message (
@@ -144,6 +144,11 @@ create table if not exists public.room_lobby_message (
   updated_at timestamptz not null default now(),
   constraint room_lobby_message_len check (char_length(message) <= 100)
 );
+
+-- 既存テーブル向け: トップ・ルームヘッダー用の「部屋タイトル」（任意）
+alter table public.room_lobby_message add column if not exists display_title text not null default '';
+alter table public.room_lobby_message drop constraint if exists room_lobby_display_title_len;
+alter table public.room_lobby_message add constraint room_lobby_display_title_len check (char_length(display_title) <= 40);
 
 alter table public.room_lobby_message enable row level security;
 
