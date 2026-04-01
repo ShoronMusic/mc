@@ -26,19 +26,18 @@ export default function StartPage() {
       <div className="w-full max-w-md rounded-xl border border-gray-700 bg-gray-900 p-8 shadow-lg">
         <h1 className="mb-2 text-center text-xl font-bold text-white">洋楽AIチャット</h1>
         <p className="mb-6 text-center text-sm text-gray-400">
-          ルームを選んで入室してください
+          参加方法を選んで入室してください
         </p>
         <p className="mb-4 text-center text-xs text-gray-500">
-          入室後、ゲスト・簡易登録・Google認証のいずれかで参加方法を選びます
+          Google認証・メールアドレス認証・ゲストのいずれかで参加方法を選びます
         </p>
         <TopPageLoginEntry />
         <HomeRoomLinks />
         <MeetingStartPanel />
         <p className="mt-3 text-center text-xs text-amber-300/90">
-          既に参加者がいる部屋に入ると、再生中の音楽がすぐ流れる場合があります。音量にご注意ください。
-        </p>
-        <p className="mt-4 text-center text-xs text-gray-500">
-          ほかのルームは URL で /04, /05 … のように指定できます
+          既に参加者がいる部屋に入ると、再生中の音楽がすぐ流れる場合があります。
+          <br />
+          音量にご注意ください。
         </p>
         <p className="mt-6 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-center text-xs text-gray-500">
           <Link href="/guide" className="underline-offset-2 hover:text-gray-300 hover:underline">

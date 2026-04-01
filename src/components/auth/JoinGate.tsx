@@ -8,6 +8,7 @@ import { FROM_START_KEY } from './FromStartMarker';
 import { AblyProviderWrapper } from '@/components/providers/AblyProviderWrapper';
 import { getOrCreateRoomClientId, isKickedForRoom } from '@/lib/room-owner';
 import { readTermsAccepted } from '@/lib/terms-consent';
+import { isTrialRoomId } from '@/lib/trial-rooms';
 
 type GateStatus = 'loading' | 'choice' | 'room' | 'kicked' | 'closed';
 
@@ -85,17 +86,23 @@ export function JoinGate({ roomId }: JoinGateProps) {
           setStatus('closed');
           return false;
         }
-        if (data?.room?.isLive !== true) {
+        const trialRoom = isTrialRoomId(roomId);
+        if (data?.room?.isLive !== true && !trialRoom) {
           setClosedMessage('現在このルームで開催中の会はありません。');
           setLiveTitle('');
           setRoomDisplayTitle('');
           setStatus('closed');
           return false;
         }
-        setLiveTitle(typeof data?.room?.title === 'string' ? data.room.title.trim() : '');
-        setRoomDisplayTitle(
-          typeof data?.room?.displayTitle === 'string' ? data.room.displayTitle.trim() : '',
-        );
+        if (data?.room?.isLive === true) {
+          setLiveTitle(typeof data?.room?.title === 'string' ? data.room.title.trim() : '');
+          setRoomDisplayTitle(
+            typeof data?.room?.displayTitle === 'string' ? data.room.displayTitle.trim() : '',
+          );
+        } else {
+          setLiveTitle(trialRoom ? '体験ルーム' : '');
+          setRoomDisplayTitle('');
+        }
 
         // 参加者0人のときは、開催中の会の主催者だけ先に入室できる。
         // （未参加ユーザーが最初に入ってしまうのを防ぐ）
@@ -109,7 +116,7 @@ export function JoinGate({ roomId }: JoinGateProps) {
             const row = Array.isArray(pd.rooms) ? pd.rooms.find((r) => r.roomId === roomId) : null;
             const count = row?.count ?? 0;
             const isOrganizer = data?.room?.isOrganizer === true;
-            if (count === 0 && !isOrganizer) {
+            if (count === 0 && !isOrganizer && !isTrialRoomId(roomId)) {
               setClosedMessage('主催者の入室待ちです。主催者が先に入室すると参加できます。');
               setStatus('closed');
               return false;

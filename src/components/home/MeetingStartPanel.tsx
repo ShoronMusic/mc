@@ -4,7 +4,10 @@ import { useCallback, useEffect, useState } from 'react';
 import { createClient, isSupabaseConfigured } from '@/lib/supabase/client';
 import { GUEST_STORAGE_KEY } from '@/components/auth/JoinChoice';
 
-const DEFAULT_ROOM_IDS = ['01', '02', '03'] as const;
+const DEFAULT_ROOM_COUNT = 90;
+const DEFAULT_ROOM_IDS = Array.from({ length: DEFAULT_ROOM_COUNT }, (_, i) =>
+  String(i + 1).padStart(2, '0'),
+);
 
 /**
  * ログイン済みユーザー向け: 会の開始・終了（運用・検証用の最小UI）

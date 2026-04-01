@@ -150,6 +150,14 @@ export function HomeRoomLinks() {
     return () => clearInterval(t);
   }, [load]);
 
+  const activeRooms =
+    configured === true
+      ? liveRooms.filter((room) => {
+          const payload = byId[room.roomId];
+          return !!payload && !payload.error && payload.count > 0;
+        })
+      : [];
+
   return (
     <div className="flex flex-col gap-3">
       {configured === false && (
@@ -157,15 +165,20 @@ export function HomeRoomLinks() {
           {message || '会の開催管理が未設定です。'}
         </p>
       )}
-      {configured === true && liveRooms.length === 0 && (
-        <p className="rounded-md border border-gray-700 bg-gray-800/70 px-3 py-2 text-center text-sm text-gray-300">
-          現在開催中の会はありません
+      {configured === true && message && (
+        <p className="rounded-md border border-amber-700/60 bg-amber-950/30 px-3 py-2 text-center text-xs leading-relaxed text-amber-200">
+          {message}
         </p>
       )}
-      {liveRooms.map((room) => (
+      {configured === true && !loading && activeRooms.length === 0 && (
+        <p className="rounded-md border border-gray-700 bg-gray-800/70 px-3 py-2 text-center text-sm text-gray-300">
+          現在、稼働中の部屋はありません。
+        </p>
+      )}
+      {activeRooms.map((room) => (
         <RoomRow key={room.roomId} room={room} configured={configured === true} loading={loading} payload={byId[room.roomId]} />
       ))}
-      {configured === true && liveRooms.length > 0 && (
+      {configured === true && activeRooms.length > 0 && (
         <p className="text-center text-[11px] text-gray-600">参加状況は約{POLL_MS / 1000}秒ごとに更新されます</p>
       )}
     </div>

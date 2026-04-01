@@ -5,6 +5,9 @@ import { useState } from 'react';
 import { createClient, isSupabaseConfigured } from '@/lib/supabase/client';
 import { getBrowserAppOrigin } from '@/lib/app-origin';
 import { setOAuthReturnPathCookie } from '@/lib/oauth-return-path';
+import { TRIAL_ROOM_IDS, pickTrialRoomId } from '@/lib/trial-rooms';
+import { FROM_START_KEY } from './FromStartMarker';
+import { GUEST_NAME_STORAGE_KEY, GUEST_ROOM_KEY, GUEST_STORAGE_KEY } from './JoinChoice';
 import { SimpleAuthForm } from './SimpleAuthForm';
 
 function GoogleBrandIcon({ className }: { className?: string }) {
@@ -39,6 +42,7 @@ export function TopPageLoginEntry() {
   const [showSimpleForm, setShowSimpleForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [authNotice, setAuthNotice] = useState<string | null>(null);
+  const [guestJoining, setGuestJoining] = useState(false);
 
   const handleGoogle = async () => {
     if (!hasSupabase || !supabase) {
@@ -56,6 +60,46 @@ export function TopPageLoginEntry() {
     });
     if (err) {
       setError(err.message || 'Google認証に失敗しました。');
+    }
+  };
+
+  const handleGuestJoin = async () => {
+    setError(null);
+    setGuestJoining(true);
+    try {
+      const ids = TRIAL_ROOM_IDS.join(',');
+      const res = await fetch(`/api/room-presence?rooms=${encodeURIComponent(ids)}`);
+      const data = (await res.json().catch(() => ({}))) as {
+        rooms?: Array<{ roomId: string; count: number; error?: boolean }>;
+      };
+      const candidates = (data.rooms ?? [])
+        .filter((r) => TRIAL_ROOM_IDS.includes(r.roomId) && !r.error)
+        .sort((a, b) => {
+          if (a.count !== b.count) return a.count - b.count;
+          return a.roomId.localeCompare(b.roomId);
+        });
+      const selected = candidates[0]?.roomId || pickTrialRoomId();
+      try {
+        sessionStorage.setItem(GUEST_STORAGE_KEY, '1');
+        sessionStorage.setItem(GUEST_NAME_STORAGE_KEY, 'ゲスト');
+        sessionStorage.setItem(GUEST_ROOM_KEY, selected);
+        sessionStorage.removeItem(FROM_START_KEY);
+      } catch {}
+      window.location.href = `/${encodeURIComponent(selected)}`;
+      return;
+    } catch {
+      // 通信に失敗した場合だけランダムにフォールバック
+      const fallback = pickTrialRoomId();
+      try {
+        sessionStorage.setItem(GUEST_STORAGE_KEY, '1');
+        sessionStorage.setItem(GUEST_NAME_STORAGE_KEY, 'ゲスト');
+        sessionStorage.setItem(GUEST_ROOM_KEY, fallback);
+        sessionStorage.removeItem(FROM_START_KEY);
+      } catch {}
+      window.location.href = `/${encodeURIComponent(fallback)}`;
+      return;
+    } finally {
+      setGuestJoining(false);
     }
   };
 
@@ -88,6 +132,14 @@ export function TopPageLoginEntry() {
               メールアドレスでログイン
             </button>
           )}
+          <button
+            type="button"
+            onClick={handleGuestJoin}
+            disabled={guestJoining}
+            className="flex items-center justify-center gap-2 rounded border border-gray-600 bg-gray-800 px-3 py-2 text-sm text-white hover:bg-gray-700"
+          >
+            {guestJoining ? 'ゲスト向けルームを準備中…' : 'ゲストで参加'}
+          </button>
           {!hasSupabase && (
             <p className="text-center text-xs text-amber-400">
               Supabase 未設定のためログイン機能を表示できません。
