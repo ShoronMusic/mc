@@ -9,7 +9,7 @@ import { AblyProviderWrapper } from '@/components/providers/AblyProviderWrapper'
 import { getOrCreateRoomClientId, isKickedForRoom } from '@/lib/room-owner';
 import { readTermsAccepted } from '@/lib/terms-consent';
 
-type GateStatus = 'loading' | 'choice' | 'room' | 'kicked';
+type GateStatus = 'loading' | 'choice' | 'room' | 'kicked' | 'closed';
 
 function getDisplayNameFromUser(user: { user_metadata?: { display_name?: string; name?: string }; email?: string }): string {
   const meta = user?.user_metadata;
@@ -29,6 +29,8 @@ export function JoinGate({ roomId }: JoinGateProps) {
   const [status, setStatus] = useState<GateStatus>('loading');
   const [displayName, setDisplayName] = useState<string>('ゲスト');
   const [isGuest, setIsGuest] = useState(false);
+  const [closedMessage, setClosedMessage] = useState<string>('');
+  const [liveTitle, setLiveTitle] = useState<string>('');
 
   const clientId = useMemo(
     () => (typeof window !== 'undefined' ? getOrCreateRoomClientId(roomId) : ''),
@@ -62,34 +64,68 @@ export function JoinGate({ roomId }: JoinGateProps) {
       return;
     }
 
+    const checkRoomLive = async (): Promise<boolean> => {
+      try {
+        const res = await fetch(`/api/room-live-status?roomId=${encodeURIComponent(roomId)}`);
+        const data = (await res.json()) as {
+          configured?: boolean;
+          message?: string;
+          room?: { isLive?: boolean; title?: string | null };
+        };
+        if (data?.configured !== true) {
+          setClosedMessage(data?.message?.trim() || '現在このルームは開催管理の準備中です。');
+          setLiveTitle('');
+          setStatus('closed');
+          return false;
+        }
+        if (data?.room?.isLive !== true) {
+          setClosedMessage('現在このルームで開催中の会はありません。');
+          setLiveTitle('');
+          setStatus('closed');
+          return false;
+        }
+        setLiveTitle(typeof data?.room?.title === 'string' ? data.room.title.trim() : '');
+        return true;
+      } catch {
+        setClosedMessage('開催状況を確認できませんでした。時間をおいて再度お試しください。');
+        setLiveTitle('');
+        setStatus('closed');
+        return false;
+      }
+    };
+
     const supabase = createClient();
     const fromStart = typeof window !== 'undefined' && sessionStorage.getItem(FROM_START_KEY);
 
-    if (typeof window !== 'undefined' && !fromStart && sessionStorage.getItem(GUEST_STORAGE_KEY)) {
-      const savedRoom = sessionStorage.getItem(GUEST_ROOM_KEY);
-      if (savedRoom === roomId) {
-        const savedName = sessionStorage.getItem(GUEST_NAME_STORAGE_KEY);
-        setDisplayName(savedName && savedName.trim() ? savedName.trim() : 'ゲスト');
-        setIsGuest(true);
-        setStatus('room');
+    void checkRoomLive().then((isLive) => {
+      if (!isLive) return;
+
+      if (typeof window !== 'undefined' && !fromStart && sessionStorage.getItem(GUEST_STORAGE_KEY)) {
+        const savedRoom = sessionStorage.getItem(GUEST_ROOM_KEY);
+        if (savedRoom === roomId) {
+          const savedName = sessionStorage.getItem(GUEST_NAME_STORAGE_KEY);
+          setDisplayName(savedName && savedName.trim() ? savedName.trim() : 'ゲスト');
+          setIsGuest(true);
+          setStatus('room');
+          return;
+        }
+      }
+
+      if (!supabase) {
+        setStatus('choice');
         return;
       }
-    }
 
-    if (!supabase) {
-      setStatus('choice');
-      return;
-    }
-
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        setDisplayName(getDisplayNameFromUser(session.user));
-        setIsGuest(false);
-        clearFromStart();
-        setStatus('room');
-      } else {
-        setStatus('choice');
-      }
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session?.user) {
+          setDisplayName(getDisplayNameFromUser(session.user));
+          setIsGuest(false);
+          clearFromStart();
+          setStatus('room');
+        } else {
+          setStatus('choice');
+        }
+      });
     });
   }, [roomId, clientId, consentOk]);
 
@@ -120,6 +156,27 @@ export function JoinGate({ roomId }: JoinGateProps) {
         <p className="text-center text-lg text-amber-200">
           オーナーにより退出させられました。3時間はこのルームに入室できません。
         </p>
+        <a
+          href="/"
+          className="rounded border border-gray-600 bg-gray-800 px-4 py-2 text-sm text-gray-200 hover:bg-gray-700"
+        >
+          トップに戻る
+        </a>
+      </div>
+    );
+  }
+
+  if (status === 'closed') {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-gray-950 p-4">
+        <p className="max-w-lg text-center text-lg text-gray-100">
+          {closedMessage || '現在このルームは開催中ではないため入室できません。'}
+        </p>
+        {liveTitle && (
+          <p className="text-center text-sm text-gray-300">
+            開催中: {liveTitle}
+          </p>
+        )}
         <a
           href="/"
           className="rounded border border-gray-600 bg-gray-800 px-4 py-2 text-sm text-gray-200 hover:bg-gray-700"

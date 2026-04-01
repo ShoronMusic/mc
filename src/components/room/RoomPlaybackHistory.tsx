@@ -38,6 +38,27 @@ const COL_WIDTH_ERA = 48;
 const COL_WIDTH_LINK = 56;
 const COL_WIDTH_FAV = 36;
 
+/**
+ * タブ単位で「このルームに滞在し始めた時刻」を保持する。
+ * 別日・別グループの再生が同じ room_id に残っていても、後から入った人には見せない。
+ */
+const PLAYBACK_SESSION_SINCE_STORAGE_PREFIX = 'mc_room_playback_since:v1:';
+
+function getOrCreatePlaybackSessionSinceIso(roomId: string): string {
+  if (typeof window === 'undefined') {
+    return new Date(0).toISOString();
+  }
+  const key = `${PLAYBACK_SESSION_SINCE_STORAGE_PREFIX}${roomId}`;
+  const existing = sessionStorage.getItem(key);
+  if (existing) {
+    const t = new Date(existing).getTime();
+    if (!Number.isNaN(t)) return new Date(t).toISOString();
+  }
+  const now = new Date().toISOString();
+  sessionStorage.setItem(key, now);
+  return now;
+}
+
 /** スタイル値ごとの文字色（背景は従来どおり） */
 const STYLE_TEXT_COLORS: Record<string, string> = {
   Rock: '#6246ea',
@@ -387,7 +408,12 @@ export default function RoomPlaybackHistory({
     }
     setLoading(true);
     try {
-      const res = await fetch(`/api/room-playback-history?roomId=${encodeURIComponent(roomId)}`);
+      const sinceIso = getOrCreatePlaybackSessionSinceIso(roomId);
+      const qs = new URLSearchParams({
+        roomId,
+        since: sinceIso,
+      });
+      const res = await fetch(`/api/room-playback-history?${qs.toString()}`);
       const data = await res.json().catch(() => ({}));
       const raw = Array.isArray(data?.items) ? data.items : [];
       setItems(

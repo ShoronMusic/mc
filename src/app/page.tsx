@@ -6,6 +6,7 @@ import { TopPageAuthBar } from '@/components/auth/TopPageAuthBar';
 import { AuthErrorBanner } from '@/components/auth/AuthErrorBanner';
 import { AdminLoginHint } from '@/components/auth/AdminLoginHint';
 import { HomeRoomLinks } from '@/components/home/HomeRoomLinks';
+import { MeetingStartPanel } from '@/components/home/MeetingStartPanel';
 
 export default function StartPage() {
   return (
@@ -30,6 +31,7 @@ export default function StartPage() {
           入室後、ゲスト・簡易登録・Google認証のいずれかで参加方法を選びます
         </p>
         <HomeRoomLinks />
+        <MeetingStartPanel />
         <p className="mt-3 text-center text-xs text-amber-300/90">
           既に参加者がいる部屋に入ると、再生中の音楽がすぐ流れる場合があります。音量にご注意ください。
         </p>

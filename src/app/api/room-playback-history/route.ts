@@ -50,9 +50,12 @@ export type RoomPlaybackHistoryRow = {
   era: string | null;
 };
 
+/** クライアント時計が未来にずれているとき since を無視する秒数 */
+const SINCE_MAX_FUTURE_SKEW_MS = 120_000;
+
 /**
- * GET: ルームの視聴履歴一覧（全件、played_at 降順）
- * Query: roomId
+ * GET: ルームの視聴履歴一覧（played_at 降順）
+ * Query: roomId, since（任意・ISO8601）— 指定時は played_at >= since の行のみ
  */
 export async function GET(request: Request) {
   const supabase = await createClient();
@@ -66,11 +69,23 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'roomId is required' }, { status: 400 });
   }
 
-  const { data, error } = await supabase
+  const sinceRaw = searchParams.get('since')?.trim() ?? '';
+  let sinceIso: string | null = null;
+  if (sinceRaw) {
+    const sinceMs = new Date(sinceRaw).getTime();
+    if (!Number.isNaN(sinceMs) && sinceMs <= Date.now() + SINCE_MAX_FUTURE_SKEW_MS) {
+      sinceIso = new Date(sinceMs).toISOString();
+    }
+  }
+
+  let historyQuery = supabase
     .from('room_playback_history')
     .select('id, room_id, video_id, display_name, is_guest, played_at, title, artist_name, style')
-    .eq('room_id', roomId)
-    .order('played_at', { ascending: false });
+    .eq('room_id', roomId);
+  if (sinceIso) {
+    historyQuery = historyQuery.gte('played_at', sinceIso);
+  }
+  const { data, error } = await historyQuery.order('played_at', { ascending: false });
 
   if (error) {
     if (error.code === '42P01') {

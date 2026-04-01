@@ -3,9 +3,14 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 
-const DEFAULT_ROOM_IDS = ['01', '02', '03'] as const;
 const POLL_MS = 20_000;
 const NAME_PREVIEW_MAX = 8;
+
+type LiveRoom = {
+  roomId: string;
+  title: string;
+  startedAt: string | null;
+};
 
 type RoomPayload = {
   roomId: string;
@@ -21,6 +26,12 @@ type ApiResponse = {
   rooms: RoomPayload[];
 };
 
+type LiveApiResponse = {
+  configured: boolean;
+  rooms: LiveRoom[];
+  message?: string;
+};
+
 function formatNameLine(names: string[]): string {
   if (names.length === 0) return '';
   if (names.length <= NAME_PREVIEW_MAX) return names.join('、');
@@ -28,17 +39,17 @@ function formatNameLine(names: string[]): string {
 }
 
 function RoomRow({
-  roomId,
+  room,
   configured,
   loading,
   payload,
 }: {
-  roomId: string;
+  room: LiveRoom;
   configured: boolean;
   loading: boolean;
   payload: RoomPayload | undefined;
 }) {
-  const label = `${roomId} ルームに入る`;
+  const label = `${room.title} に入る`;
 
   let sub: ReactNode = null;
   if (configured) {
@@ -70,10 +81,11 @@ function RoomRow({
 
   return (
     <Link
-      href={`/${roomId}`}
+      href={`/${room.roomId}`}
       className="flex flex-col gap-1.5 rounded-lg border border-gray-600 bg-gray-800 px-4 py-3 text-white transition hover:bg-gray-700"
     >
       <span className="text-center font-medium">{label}</span>
+      <span className="text-center text-[11px] text-gray-500">ルームID: {room.roomId}</span>
       {payload?.jpAiUnlockEnabled && (
         <span className="text-center text-[11px] font-medium text-emerald-300">邦楽解禁</span>
       )}
@@ -86,21 +98,37 @@ function RoomRow({
 }
 
 export function HomeRoomLinks() {
-  const [configured, setConfigured] = useState(false);
+  const [configured, setConfigured] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
+  const [liveRooms, setLiveRooms] = useState<LiveRoom[]>([]);
   const [byId, setById] = useState<Record<string, RoomPayload>>({});
+  const [message, setMessage] = useState<string>('');
 
   const load = useCallback(async () => {
-    const ids = DEFAULT_ROOM_IDS.join(',');
     try {
-      const res = await fetch(`/api/room-presence?rooms=${encodeURIComponent(ids)}`);
-      const data = (await res.json()) as ApiResponse;
-      if (!data.configured) {
+      const liveRes = await fetch('/api/room-live-status');
+      const liveData = (await liveRes.json()) as LiveApiResponse;
+      if (!liveData.configured) {
         setConfigured(false);
+        setLiveRooms([]);
+        setById({});
+        setMessage(liveData.message?.trim() || '現在、会の開催管理が未設定です。');
+        return;
+      }
+
+      setConfigured(true);
+      setMessage('');
+      const lives = Array.isArray(liveData.rooms) ? liveData.rooms : [];
+      setLiveRooms(lives);
+
+      if (lives.length === 0) {
         setById({});
         return;
       }
-      setConfigured(true);
+
+      const ids = lives.map((r) => r.roomId).join(',');
+      const presenceRes = await fetch(`/api/room-presence?rooms=${encodeURIComponent(ids)}`);
+      const data = (await presenceRes.json()) as ApiResponse;
       const next: Record<string, RoomPayload> = {};
       for (const r of data.rooms ?? []) {
         next[r.roomId] = r;
@@ -108,11 +136,7 @@ export function HomeRoomLinks() {
       setById(next);
     } catch {
       setConfigured(true);
-      const err: Record<string, RoomPayload> = {};
-      for (const id of DEFAULT_ROOM_IDS) {
-        err[id] = { roomId: id, count: 0, names: [], error: true };
-      }
-      setById(err);
+      setMessage('開催中の会を取得できませんでした。時間をおいて再度お試しください。');
     } finally {
       setLoading(false);
     }
@@ -126,10 +150,20 @@ export function HomeRoomLinks() {
 
   return (
     <div className="flex flex-col gap-3">
-      {DEFAULT_ROOM_IDS.map((id) => (
-        <RoomRow key={id} roomId={id} configured={configured} loading={loading} payload={byId[id]} />
+      {configured === false && (
+        <p className="rounded-md border border-amber-700/60 bg-amber-950/40 px-3 py-2 text-center text-xs leading-relaxed text-amber-200">
+          {message || '会の開催管理が未設定です。'}
+        </p>
+      )}
+      {configured === true && liveRooms.length === 0 && (
+        <p className="rounded-md border border-gray-700 bg-gray-800/70 px-3 py-2 text-center text-sm text-gray-300">
+          現在開催中の会はありません
+        </p>
+      )}
+      {liveRooms.map((room) => (
+        <RoomRow key={room.roomId} room={room} configured={configured === true} loading={loading} payload={byId[room.roomId]} />
       ))}
-      {configured && (
+      {configured === true && liveRooms.length > 0 && (
         <p className="text-center text-[11px] text-gray-600">参加状況は約{POLL_MS / 1000}秒ごとに更新されます</p>
       )}
     </div>
