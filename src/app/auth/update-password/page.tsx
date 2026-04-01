@@ -7,6 +7,24 @@ import { createClient } from '@/lib/supabase/client';
 
 const PASSWORD_MIN_LENGTH = 6;
 
+function mapUpdatePasswordError(raw: string): string {
+  const t = raw.trim();
+  const lower = t.toLowerCase();
+  if (lower.includes('different from the old password') || lower.includes('same as the old')) {
+    return '新しいパスワードは、現在のパスワードと別のものにしてください。';
+  }
+  if (lower.includes('at least') && lower.includes('character')) {
+    return `パスワードは${PASSWORD_MIN_LENGTH}文字以上にしてください。`;
+  }
+  if (lower.includes('password') && lower.includes('weak')) {
+    return 'パスワードが簡単すぎます。文字の種類や長さを増やしてください。';
+  }
+  if (lower.includes('session') && (lower.includes('expired') || lower.includes('invalid'))) {
+    return 'セッションの有効期限が切れています。パスワード再設定メールからやり直してください。';
+  }
+  return t;
+}
+
 export default function UpdatePasswordPage() {
   const router = useRouter();
   const supabase = createClient();
@@ -59,8 +77,8 @@ export default function UpdatePasswordPage() {
       if (err) throw err;
       router.push('/');
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'パスワードの更新に失敗しました。';
-      setError(msg);
+      const raw = err instanceof Error ? err.message : 'パスワードの更新に失敗しました。';
+      setError(mapUpdatePasswordError(raw));
     } finally {
       setLoading(false);
     }
