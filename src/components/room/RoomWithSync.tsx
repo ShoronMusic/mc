@@ -202,6 +202,7 @@ export default function RoomWithSync({
   const [playing, setPlaying] = useState(false);
   const playingRef = useRef(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [roomDisplayTitleCurrent, setRoomDisplayTitleCurrent] = useState(roomDisplayTitle);
   useRoomChatLogPersistence(roomId, messages, { isGuest, myClientId });
   const [myPageOpen, setMyPageOpen] = useState(false);
   const [playbackHistoryModalOpen, setPlaybackHistoryModalOpen] = useState(false);
@@ -210,6 +211,9 @@ export default function RoomWithSync({
   const [chatSummaryError, setChatSummaryError] = useState<string | null>(null);
   const [termsModalOpen, setTermsModalOpen] = useState(false);
   const [policyTab, setPolicyTab] = useState<'terms' | 'privacy' | 'guide'>('terms');
+  useEffect(() => {
+    setRoomDisplayTitleCurrent(roomDisplayTitle);
+  }, [roomDisplayTitle]);
   const [chatSummary, setChatSummary] = useState<{
     summaryText: string;
     sessionWindowLabel: string;
@@ -2556,7 +2560,7 @@ export default function RoomWithSync({
             priority
           />
           <h1 className="hidden min-w-0 flex-1 truncate text-lg font-semibold text-white sm:block">
-            {`部屋 ${roomId || '--'}${(roomDisplayTitle || roomTitle) ? ` - ${roomDisplayTitle || roomTitle}` : ''}`}
+            {`部屋 ${roomId || '--'}${(roomDisplayTitleCurrent || roomTitle) ? ` - ${roomDisplayTitleCurrent || roomTitle}` : ''}`}
           </h1>
         </div>
         {onLeave && (
@@ -2713,6 +2717,7 @@ export default function RoomWithSync({
                   : undefined
               }
               roomId={roomId}
+              onRoomProfileSaved={({ displayTitle }) => setRoomDisplayTitleCurrent(displayTitle)}
               commentPackMode={commentPackMode}
               onCommentPackModeChange={
                 canUseOwnerControls

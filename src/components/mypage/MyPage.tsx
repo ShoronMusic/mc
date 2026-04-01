@@ -71,7 +71,15 @@ const LOBBY_SAVE_FETCH_MS = 25_000;
 /** 一部環境で res.json() / body 読み取りだけが終わらない事例への上限 */
 const LOBBY_RESPONSE_BODY_MS = 8_000;
 
-function LobbyMessageOwnerBlock({ roomId, clientId }: { roomId: string; clientId: string }) {
+function LobbyMessageOwnerBlock({
+  roomId,
+  clientId,
+  onSaved,
+}: {
+  roomId: string;
+  clientId: string;
+  onSaved?: (payload: { displayTitle: string; message: string }) => void;
+}) {
   const [titleValue, setTitleValue] = useState('');
   const [value, setValue] = useState('');
   const [loading, setLoading] = useState(true);
@@ -165,6 +173,7 @@ function LobbyMessageOwnerBlock({ roomId, clientId }: { roomId: string; clientId
       if (!res.ok) {
         throw new Error(data?.error ?? '保存に失敗しました。');
       }
+      onSaved?.({ displayTitle: titleValue.trim(), message: value.trim() });
       setSavedOk(true);
       window.setTimeout(() => setSavedOk(false), 4000);
     } catch (e) {
@@ -281,6 +290,8 @@ interface MyPageProps {
   onForceExit?: (targetClientId: string, targetDisplayName: string) => void;
   /** 入室前メッセージ用。同期ルームの roomId（例: 01） */
   roomId?: string;
+  /** 部屋タイトル・PR保存後の即時反映用 */
+  onRoomProfileSaved?: (payload: { displayTitle: string; message: string }) => void;
 }
 
 /** マイページで選べるステータス（参加者名横に表示） */
@@ -320,6 +331,7 @@ export default function MyPage({
   onJpAiUnlockToggle,
   onForceExit,
   roomId = '',
+  onRoomProfileSaved,
 }: MyPageProps) {
   const routeParams = useParams();
   const roomIdFromRoute = useMemo(() => {
@@ -626,7 +638,11 @@ export default function MyPage({
               <span aria-hidden>👑</span>
               ルーム管理（主催者・オーナー）
             </h3>
-            <LobbyMessageOwnerBlock roomId={effectiveRoomId} clientId={effectiveClientId} />
+            <LobbyMessageOwnerBlock
+              roomId={effectiveRoomId}
+              clientId={effectiveClientId}
+              onSaved={onRoomProfileSaved}
+            />
           </div>
         ) : null}
 
@@ -771,7 +787,11 @@ export default function MyPage({
           </h3>
 
           {showOrganizerRoomEditor ? (
-            <LobbyMessageOwnerBlock roomId={effectiveRoomId} clientId={effectiveClientId} />
+            <LobbyMessageOwnerBlock
+              roomId={effectiveRoomId}
+              clientId={effectiveClientId}
+              onSaved={onRoomProfileSaved}
+            />
           ) : null}
 
           {onAiFreeSpeechStopToggle && (

@@ -90,6 +90,7 @@ export default function RoomWithoutSync({
   onLeave,
 }: RoomWithoutSyncProps) {
   const playerRef = useRef<YouTubePlayerHandle>(null);
+  const [roomDisplayTitleCurrent, setRoomDisplayTitleCurrent] = useState(roomDisplayTitle);
   const [videoId, setVideoId] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -99,6 +100,9 @@ export default function RoomWithoutSync({
   const [chatSummaryModalOpen, setChatSummaryModalOpen] = useState(false);
   const [chatSummaryLoading, setChatSummaryLoading] = useState(false);
   const [chatSummaryError, setChatSummaryError] = useState<string | null>(null);
+  useEffect(() => {
+    setRoomDisplayTitleCurrent(roomDisplayTitle);
+  }, [roomDisplayTitle]);
   const [chatSummary, setChatSummary] = useState<{
     summaryText: string;
     sessionWindowLabel: string;
@@ -917,7 +921,7 @@ export default function RoomWithoutSync({
             priority
           />
           <h1 className="hidden min-w-0 flex-1 truncate text-lg font-semibold text-white sm:block">
-            {`部屋 ${roomId || '--'}${(roomDisplayTitle || roomTitle) ? ` - ${roomDisplayTitle || roomTitle}` : ''}`}
+            {`部屋 ${roomId || '--'}${(roomDisplayTitleCurrent || roomTitle) ? ` - ${roomDisplayTitleCurrent || roomTitle}` : ''}`}
           </h1>
         </div>
         {onLeave && (
@@ -967,6 +971,7 @@ export default function RoomWithoutSync({
                   localStorage.setItem(CHAT_TEXT_COLOR_STORAGE_KEY, color);
                 } catch {}
               }}
+              onRoomProfileSaved={({ displayTitle }) => setRoomDisplayTitleCurrent(displayTitle)}
             />
           </div>
         </div>
