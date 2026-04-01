@@ -1,7 +1,7 @@
 'use client';
 
 import { EnvelopeIcon } from '@heroicons/react/24/outline';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { createClient, isSupabaseConfigured } from '@/lib/supabase/client';
 import { getBrowserAppOrigin } from '@/lib/app-origin';
 import { setOAuthReturnPathCookie } from '@/lib/oauth-return-path';
@@ -43,6 +43,27 @@ export function TopPageLoginEntry() {
   const [error, setError] = useState<string | null>(null);
   const [authNotice, setAuthNotice] = useState<string | null>(null);
   const [guestJoining, setGuestJoining] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (!hasSupabase || !supabase) {
+      setIsLoggedIn(false);
+      return;
+    }
+    let active = true;
+    supabase.auth.getSession().then(({ data }) => {
+      if (!active) return;
+      setIsLoggedIn(!!data.session?.user);
+    });
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!active) return;
+      setIsLoggedIn(!!session?.user);
+    });
+    return () => {
+      active = false;
+      sub.subscription.unsubscribe();
+    };
+  }, [hasSupabase, supabase]);
 
   const handleGoogle = async () => {
     if (!hasSupabase || !supabase) {
@@ -102,6 +123,10 @@ export function TopPageLoginEntry() {
       setGuestJoining(false);
     }
   };
+
+  if (isLoggedIn === true) {
+    return null;
+  }
 
   return (
     <>

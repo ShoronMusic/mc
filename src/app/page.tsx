@@ -26,10 +26,10 @@ export default function StartPage() {
       <div className="w-full max-w-md rounded-xl border border-gray-700 bg-gray-900 p-8 shadow-lg">
         <h1 className="mb-2 text-center text-xl font-bold text-white">洋楽AIチャット</h1>
         <p className="mb-6 text-center text-sm text-gray-400">
-          参加方法を選んで入室してください
+          ルームを選んで入室してください
         </p>
         <p className="mb-4 text-center text-xs text-gray-500">
-          Google認証・メールアドレス認証・ゲストのいずれかで参加方法を選びます
+          ログイン済みの方は主催者機能、未ログインの方は参加方法を選べます
         </p>
         <TopPageLoginEntry />
         <HomeRoomLinks />

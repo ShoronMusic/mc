@@ -81,6 +81,10 @@ export function MeetingStartPanel() {
         });
         const data = (await res.json().catch(() => ({}))) as { error?: string; ok?: boolean };
         if (!res.ok) {
+          if (action === 'start' && res.status === 409) {
+            setMessage('このルームはすでに主催中です。下の「このルームへ入る」から入室してください。');
+            return;
+          }
           setMessage(data?.error ?? '処理に失敗しました。');
           return;
         }
@@ -118,7 +122,7 @@ export function MeetingStartPanel() {
           >
             {roomOptions.map((id) => {
               const mine = myRooms.find((r) => r.roomId === id);
-              const label = mine ? `${id}${mine.isLive ? '（開催中）' : ''}` : id;
+              const label = mine ? `${id}${mine.isLive ? '（主催中）' : ''}` : id;
               return (
                 <option key={id} value={id}>
                   {label}
@@ -186,6 +190,14 @@ export function MeetingStartPanel() {
         >
           このルームの会を終了
         </button>
+      </div>
+      <div className="mt-2">
+        <a
+          href={`/${encodeURIComponent(roomId)}`}
+          className="block w-full rounded-md border border-sky-500/50 bg-sky-900/20 px-4 py-2 text-center text-sm font-medium text-sky-200 hover:bg-sky-900/35"
+        >
+          このルームへ入る
+        </a>
       </div>
       {message && <p className="mt-2 text-center text-xs text-gray-300">{message}</p>}
     </div>
