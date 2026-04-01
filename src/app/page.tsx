@@ -3,6 +3,7 @@ import { Suspense } from 'react';
 import { ConsentEntryGate } from '@/components/auth/ConsentEntryGate';
 import { FromStartMarker } from '@/components/auth/FromStartMarker';
 import { TopPageAuthBar } from '@/components/auth/TopPageAuthBar';
+import { TopPageLoginEntry } from '@/components/auth/TopPageLoginEntry';
 import { AuthErrorBanner } from '@/components/auth/AuthErrorBanner';
 import { AdminLoginHint } from '@/components/auth/AdminLoginHint';
 import { HomeRoomLinks } from '@/components/home/HomeRoomLinks';
@@ -30,6 +31,7 @@ export default function StartPage() {
         <p className="mb-4 text-center text-xs text-gray-500">
           入室後、ゲスト・簡易登録・Google認証のいずれかで参加方法を選びます
         </p>
+        <TopPageLoginEntry />
         <HomeRoomLinks />
         <MeetingStartPanel />
         <p className="mt-3 text-center text-xs text-amber-300/90">
