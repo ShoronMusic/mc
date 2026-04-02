@@ -148,6 +148,25 @@ assert.equal(cleanTitle('Foo © 1999 Some Label LLC'), 'Foo');
   assert.equal(r.song, 'Maneater');
 }
 
+// 公式MVで多い「曲名 - Linkin Park X Steve Aoki」（X コラボは & / and と同様に逆順の手がかり）
+{
+  const r = getArtistAndSong(
+    'A Light That Never Comes [Official Music Video] - Linkin Park X Steve Aoki',
+    null,
+  );
+  assert.equal(r.artistDisplay, 'Linkin Park X Steve Aoki');
+  assert.ok(r.song.includes('A Light That Never Comes'));
+}
+// YouTube タイトルが全角ハイフン（U+FF0D）のときも分割して同様にスワップ
+{
+  const r = getArtistAndSong(
+    'A Light That Never Comes [Official Music Video] － Linkin Park X Steve Aoki',
+    null,
+  );
+  assert.equal(r.artistDisplay, 'Linkin Park X Steve Aoki');
+  assert.ok(r.song.includes('A Light That Never Comes'));
+}
+
 console.log('format-song-display feat separator unit tests: OK');
 
 // 「Paramore - Paramore: Hard Times」のような二重アーティスト表記を落とす

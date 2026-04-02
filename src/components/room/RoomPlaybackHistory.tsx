@@ -226,7 +226,8 @@ function resolvedPlaybackArtistSong(row: RoomPlaybackHistoryRow): {
   }
   const t = row.title?.trim();
   if (!t) return null;
-  const r = getArtistAndSong(t, null);
+  /** DB の artist_name は POST 時に概要欄等で取れたアーティスト。無いと逆順タイトルのスワップ判定が弱い */
+  const r = getArtistAndSong(t, row.artist_name ?? null);
   if (!r.artistDisplay || !r.song) return null;
   const artistRaw = (r.artist ?? r.artistDisplay).trim();
   const looksLikeSongPhrase =

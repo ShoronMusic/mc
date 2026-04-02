@@ -36,8 +36,8 @@ export function swapIfCompoundArtistStuckInSongSlot(
   };
 }
 
-/** アーティスト - 曲名 の区切り（ハイフン・enダッシュ・emダッシュ・水平線） */
-const ARTIST_TITLE_SEPARATOR = /\s*[-\u2013\u2014\u2015]\s*/;
+/** アーティスト - 曲名 の区切り（ASCII/全角ハイフン・en/emダッシュ・水平線） */
+const ARTIST_TITLE_SEPARATOR = /\s*[-\u2013\u2014\u2015\uFF0D]\s*/;
 
 function readHyphenArtistPrefixes(): readonly string[] {
   const raw = artistHyphenNamePrefixes as unknown;
@@ -815,8 +815,9 @@ export function getArtistAndSong(
       return parts.every((w) => /^[A-Za-z]/.test(w) && /^[A-Z]/.test(w[0] ?? ''));
     })();
 
-    const multiArtistOnRight = /\s&\s|\sand\s/i.test(right);
-    const multiArtistOnLeft = /\s&\s|\sand\s/i.test(left);
+    /** 公式MVで「Linkin Park X Steve Aoki」のように X / × で共演表記されることが多い（曲名 - アーティスト逆順の手がかり） */
+    const multiArtistOnRight = /\s&\s|\sand\s|\s+[x×]\s+/i.test(right);
+    const multiArtistOnLeft = /\s&\s|\sand\s|\s+[x×]\s+/i.test(left);
     /** 右が「HOTEL LOBBY」のように語ごと全大文字の曲タイトル（looksLikeArtistName に空白が入るため誤アーティスト化しやすい） */
     const rightIsAllCapsWordsTrackStyle = (() => {
       const w = right
