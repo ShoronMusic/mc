@@ -9,6 +9,7 @@ import {
   getArtistAndSong,
   getArtistDisplayString,
   getMainArtist,
+  parsePerformingFromDescription,
 } from './format-song-display';
 import { reapplyCommentaryLibraryBodyPrefix } from './commentary-library';
 import { compoundArtistCanonicalIfKnown } from './artist-compound-names';
@@ -106,6 +107,15 @@ assert.equal(cleanTitle('What Is Love • TopPop'), 'What Is Love');
   const r = getArtistAndSong('Maneater - Daryl Hall & John Oates', 'Totally Unrelated Upload Channel');
   assert.equal(r.artistDisplay, 'Daryl Hall & John Oates');
   assert.equal(r.song, 'Maneater');
+}
+
+// 「Mr.」等の省略形のピリオドで曲名が切れない（概要の performing 行）
+{
+  const desc = 'Music video by Styx performing Mr. Roboto.\n\nMore';
+  assert.deepEqual(parsePerformingFromDescription(desc), { artist: 'Styx', song: 'Mr. Roboto' });
+  const r = getArtistAndSong('Styx - Mr. Roboto (Official Video)', 'StyxVEVO', { videoDescription: desc });
+  assert.equal(r.artistDisplay, 'Styx');
+  assert.equal(r.song, 'Mr. Roboto');
 }
 
 // 概要の performing が逆でも、合体アーティスト名が曲列に来ていれば補正

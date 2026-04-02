@@ -30,6 +30,7 @@ import {
   SYSTEM_MESSAGE_JP_NO_COMMENTARY,
   SYSTEM_MESSAGE_QUEUE_SONG_DEFERRED,
 } from '@/lib/chat-system-copy';
+import { isMusicRelatedAiQuestion } from '@/lib/is-music-related-ai-question';
 import { isDevMinimalSongAi } from '@/lib/dev-minimal-song-ai';
 import { COMMENT_PACK_MAX_FREE_COMMENTS } from '@/lib/song-tidbits';
 import { playbackLog } from '@/lib/playback-debug';
@@ -116,14 +117,6 @@ function isLeaveOrRomPhrase(body: string): boolean {
   if (/無言(する|ね)?\.?$/.test(normalized) || /^黙る(ね)?\.?$/.test(normalized)) return true;
   if (/いってくる(ね)?\.?$/.test(normalized) && t.length <= 20) return true;
   return false;
-}
-
-function isMusicRelatedAiQuestion(text: string): boolean {
-  const t = text.trim().toLowerCase();
-  if (!t) return false;
-  return /(音楽|洋楽|邦楽|曲|歌|アーティスト|バンド|アルバム|ライブ|mv|メロディ|歌詞|ジャンル|billboard|spotify|youtube|playlist|song|music|artist|band|album|track|lyrics)/i.test(
-    t,
-  );
 }
 
 /** 時間帯に応じた挨拶（参加者入室時） */
@@ -745,6 +738,8 @@ export default function RoomWithSync({
     if (message.name === OWNER_AI_QUESTION_GUARD_EVENT) {
       const d = message.data as OwnerAiQuestionGuardPayload;
       if (!d?.targetClientId || typeof d.message !== 'string') return;
+      // 送信者は送信直後に既に apply 済み。Ably のエコーで同じ警告が二重に出ないようにする。
+      if (d.targetClientId === myClientId) return;
       applyAiQuestionGuardEvent(d);
       return;
     }

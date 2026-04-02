@@ -621,15 +621,17 @@ export type GetArtistAndSongOptions = {
 
 /**
  * YouTube 公式MVの説明に多い定型: "Music video by Kendrick Lamar, SZA performing luther."
+ * 曲名は「Mr. Roboto」「U.S.A.」のようにピリオドを含み得るため、旧実装の `[^.\n]` は
+ * 「Mr.」で誤って切れていた。改行・©・行末で終端し、末尾の文句点だけ落とす。
  */
 export function parsePerformingFromDescription(description: string): { artist: string; song: string } | null {
   if (!description?.trim()) return null;
   const m = description.match(
-    /(?:music\s+)?video\s+by\s+(.+?)\s+performing\s+([^\n.©]+?)(?:\s*[.©]|\s*$)/i,
+    /(?:music\s+)?video\s+by\s+(.+?)\s+performing\s+([^\r\n©]+?)(?:\s*[©]|\r?\n|\s*$)/i,
   );
   if (!m?.[1] || !m?.[2]) return null;
   const artist = m[1].replace(/\s+/g, ' ').trim();
-  const song = m[2].replace(/\s+/g, ' ').trim();
+  const song = m[2].replace(/\s+/g, ' ').trim().replace(/\.\s*$/, '');
   if (!artist || !song || artist.length > 120 || song.length > 120) return null;
   return { artist, song };
 }

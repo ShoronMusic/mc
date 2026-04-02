@@ -27,6 +27,7 @@ import {
   SYSTEM_MESSAGE_COMMENTARY_FETCH_FAILED,
   SYSTEM_MESSAGE_JP_NO_COMMENTARY,
 } from '@/lib/chat-system-copy';
+import { isMusicRelatedAiQuestion } from '@/lib/is-music-related-ai-question';
 import { isDevMinimalSongAi } from '@/lib/dev-minimal-song-ai';
 import { playbackLog } from '@/lib/playback-debug';
 import { extractVideoId, isStandaloneNonYouTubeUrl } from '@/lib/youtube';
@@ -68,14 +69,6 @@ function isLeaveOrRomPhrase(body: string): boolean {
   if (/無言(する|ね)?\.?$/.test(normalized) || /^黙る(ね)?\.?$/.test(normalized)) return true;
   if (/いってくる(ね)?\.?$/.test(normalized) && t.length <= 20) return true;
   return false;
-}
-
-function isMusicRelatedAiQuestion(text: string): boolean {
-  const t = text.trim().toLowerCase();
-  if (!t) return false;
-  return /(音楽|洋楽|邦楽|曲|歌|アーティスト|バンド|アルバム|ライブ|mv|メロディ|歌詞|ジャンル|billboard|spotify|youtube|playlist|song|music|artist|band|album|track|lyrics)/i.test(
-    t,
-  );
 }
 
 /**
