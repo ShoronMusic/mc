@@ -14,7 +14,13 @@ import {
   ROOM_LOBBY_MESSAGE_MAX_CHARS,
   countLobbyMessageChars,
 } from '@/lib/room-lobby-message';
-import type { OwnerCommentPackMode } from '@/types/room-owner';
+import {
+  type CommentPackSlotSelection,
+  COMMENT_PACK_SLOTS_FULL,
+  COMMENT_PACK_SLOTS_NONE,
+  DEFAULT_COMMENT_PACK_SLOTS,
+  toggleCommentPackSlot,
+} from '@/lib/comment-pack-slots';
 
 function getDisplayName(user: User | null): string {
   if (!user) return '';
@@ -300,9 +306,9 @@ interface MyPageProps {
   /** オーナー時のみ。AI 自由発言が停止中か */
   aiFreeSpeechStopped?: boolean;
   onAiFreeSpeechStopToggle?: () => void;
-  /** オーナー時のみ。曲紹介コメントの本数モード */
-  commentPackMode?: OwnerCommentPackMode;
-  onCommentPackModeChange?: (mode: OwnerCommentPackMode) => void;
+  /** オーナー時のみ。[基本, ヒット/受賞, 歌詞, サウンド] */
+  commentPackSlots?: CommentPackSlotSelection;
+  onCommentPackSlotsChange?: (slots: CommentPackSlotSelection) => void;
   /** オーナー時のみ。邦楽AI解説の解禁（デフォルトOFF） */
   jpAiUnlockEnabled?: boolean;
   onJpAiUnlockToggle?: () => void;
@@ -345,8 +351,8 @@ export default function MyPage({
   onSongLimit5MinToggle,
   aiFreeSpeechStopped = true,
   onAiFreeSpeechStopToggle,
-  commentPackMode = 'base_only',
-  onCommentPackModeChange,
+  commentPackSlots = DEFAULT_COMMENT_PACK_SLOTS,
+  onCommentPackSlotsChange,
   jpAiUnlockEnabled = false,
   onJpAiUnlockToggle,
   onForceExit,
@@ -398,7 +404,7 @@ export default function MyPage({
     Boolean(
       onTransferOwner ||
         onAiFreeSpeechStopToggle ||
-        onCommentPackModeChange ||
+        onCommentPackSlotsChange ||
         onJpAiUnlockToggle ||
         onForceExit ||
         onSongLimit5MinToggle,
@@ -851,47 +857,59 @@ export default function MyPage({
             </div>
           )}
 
-          {onCommentPackModeChange && (
+          {onCommentPackSlotsChange && (
             <div className="mb-4 border-b border-amber-800/30 pb-4">
-              <h4 className="mb-2 text-xs font-medium text-gray-300">曲紹介コメント本数</h4>
+              <h4 className="mb-2 text-xs font-medium text-gray-300">曲紹介コメント</h4>
               <p className="mb-2 text-xs text-gray-400">
-                デフォルトは基本1本です。必要に応じて4本（基本+自由3）または全てなしにできます。
+                選曲後に出す AI 解説の種類です。すべてオフにすると解説は出ません。好きな組み合わせ（例: 1 と 4
+                だけ）が選べます。
               </p>
-              <div className="flex flex-wrap gap-2">
+              <div className="mb-3 flex flex-wrap gap-2">
                 <button
                   type="button"
-                  onClick={() => onCommentPackModeChange('base_only')}
-                  className={`rounded px-3 py-1.5 text-sm ${
-                    commentPackMode === 'base_only'
-                      ? 'bg-amber-600 text-white'
-                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                  }`}
+                  onClick={() => onCommentPackSlotsChange(COMMENT_PACK_SLOTS_NONE)}
+                  className="rounded bg-gray-700 px-2.5 py-1 text-xs text-gray-200 hover:bg-gray-600"
                 >
-                  1本（デフォルト）
+                  まとめてオフ
                 </button>
                 <button
                   type="button"
-                  onClick={() => onCommentPackModeChange('full')}
-                  className={`rounded px-3 py-1.5 text-sm ${
-                    commentPackMode === 'full'
-                      ? 'bg-amber-600 text-white'
-                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                  }`}
+                  onClick={() => onCommentPackSlotsChange(DEFAULT_COMMENT_PACK_SLOTS)}
+                  className="rounded bg-gray-700 px-2.5 py-1 text-xs text-gray-200 hover:bg-gray-600"
                 >
-                  4本（基本+自由3）
+                  基本のみ（従来デフォルト）
                 </button>
                 <button
                   type="button"
-                  onClick={() => onCommentPackModeChange('off')}
-                  className={`rounded px-3 py-1.5 text-sm ${
-                    commentPackMode === 'off'
-                      ? 'bg-amber-600 text-white'
-                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                  }`}
+                  onClick={() => onCommentPackSlotsChange(COMMENT_PACK_SLOTS_FULL)}
+                  className="rounded bg-gray-700 px-2.5 py-1 text-xs text-gray-200 hover:bg-gray-600"
                 >
-                  全てなし
+                  4 本すべて
                 </button>
               </div>
+              <ul className="space-y-2 text-xs text-gray-200">
+                {(
+                  [
+                    { i: 0 as const, label: '1. 曲の基本情報・概要' },
+                    { i: 1 as const, label: '2. ヒット・受賞・話題（チャート等）' },
+                    { i: 2 as const, label: '3. 歌詞のテーマ・メッセージ' },
+                    { i: 3 as const, label: '4. サウンドの特徴' },
+                  ] as const
+                ).map(({ i, label }) => (
+                  <li key={i} className="flex items-start gap-2">
+                    <input
+                      id={`comment-pack-slot-${i}`}
+                      type="checkbox"
+                      checked={commentPackSlots[i]}
+                      onChange={() => onCommentPackSlotsChange(toggleCommentPackSlot(commentPackSlots, i))}
+                      className="mt-0.5 h-4 w-4 shrink-0 rounded border-gray-500 bg-gray-800 text-amber-600 focus:ring-amber-500"
+                    />
+                    <label htmlFor={`comment-pack-slot-${i}`} className="cursor-pointer select-none leading-snug">
+                      {label}
+                    </label>
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
 

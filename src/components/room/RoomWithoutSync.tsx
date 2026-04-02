@@ -31,7 +31,7 @@ import { isMusicRelatedAiQuestion } from '@/lib/is-music-related-ai-question';
 import { isDevMinimalSongAi } from '@/lib/dev-minimal-song-ai';
 import { playbackLog } from '@/lib/playback-debug';
 import { extractVideoId, isStandaloneNonYouTubeUrl } from '@/lib/youtube';
-import type { ChatMessage } from '@/types/chat';
+import type { ChatMessage, SystemMessageOptions } from '@/types/chat';
 import { useIsLgViewport } from '@/hooks/useLgViewport';
 import { useRoomChatLogPersistence } from '@/hooks/useRoomChatLogPersistence';
 import { incrementAiQuestionWarnCount, setKicked, setKickedSitewide } from '@/lib/room-owner';
@@ -313,7 +313,11 @@ export default function RoomWithoutSync({
     []
   );
 
-  const addSystemMessage = useCallback((body: string, searchQuery?: string) => {
+  const addSystemMessage = useCallback((body: string, searchQueryOrOpts?: SystemMessageOptions) => {
+    const opts =
+      typeof searchQueryOrOpts === 'string'
+        ? { searchQuery: searchQueryOrOpts }
+        : searchQueryOrOpts ?? {};
     const createdAt = new Date().toISOString();
     const msg: ChatMessage = {
       id: createMessageId(),
@@ -321,7 +325,9 @@ export default function RoomWithoutSync({
       displayName: 'システム',
       messageType: 'system',
       createdAt,
-      ...(searchQuery && { searchQuery }),
+      ...(opts.searchQuery && { searchQuery: opts.searchQuery }),
+      ...(opts.systemKind && { systemKind: opts.systemKind }),
+      ...(opts.aiGuardMeta && { aiGuardMeta: opts.aiGuardMeta }),
     };
     setMessages((prev) => {
       const last = prev[prev.length - 1];
@@ -765,7 +771,17 @@ export default function RoomWithoutSync({
               : warningCount === 3
                 ? `システム警告: ${displayNameProp}さんにイエローカード2枚目を付与しました。次のカードで退場となります。`
                 : `システム警告: ${displayNameProp}さんに3枚目のカードを付与したため、強制退場と一定期間の入室禁止を実行しました。`;
-        addSystemMessage(message);
+        const action: 'warn' | 'yellow' | 'ban' =
+          warningCount >= 4 ? 'ban' : warningCount === 1 ? 'warn' : 'yellow';
+        addSystemMessage(message, {
+          systemKind: 'ai_question_guard',
+          aiGuardMeta: {
+            targetClientId: 'local-client',
+            warningCount,
+            yellowCards: nextCards,
+            action,
+          },
+        });
         if (warningCount >= 4 && onLeave) {
           setKicked(roomId || 'local', 'local-client');
           setKickedSitewide();
@@ -1081,6 +1097,8 @@ export default function RoomWithoutSync({
             userTextColor={userTextColor}
             currentVideoId={videoId}
             onChatSummaryClick={roomId ? openChatSummaryModal : undefined}
+            roomId={roomId ?? 'local'}
+            myClientId="local-client"
           />
         }
         rightTop={

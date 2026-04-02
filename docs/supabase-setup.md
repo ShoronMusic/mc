@@ -202,3 +202,76 @@ create policy "participation_update_own"
 
 記録は `POST /api/user-room-participation` が担当します。  
 `Join` は入室時、`Leave` は退室ボタン押下時とページ離脱時に送信します。ネットワーク切断等で `Leave` が取れない場合は `left_at` が null のまま残ることがあります。
+
+---
+
+## 11. AI 質問ガード（イエローカード）警告への異議申立てを使う場合
+
+チャットで「@」付き質問が音楽に関係ないと自動判定されたときの**異議申立て**を保存するには、次の SQL を **SQL Editor** で実行してください。**ゲスト**は `user_id` が NULL で保存されます。**ログイン時**は `user_id` が付きます（`POST /api/ai-question-guard-objection`）。管理画面の閲覧は **STYLE_ADMIN** ＋ **サービスロール**（既存の他管理 API と同様）です。
+
+```sql
+create table if not exists public.ai_question_guard_objections (
+  id uuid primary key default gen_random_uuid(),
+  created_at timestamptz not null default now(),
+  user_id uuid null references auth.users (id) on delete cascade,
+  room_id text not null,
+  chat_message_id text not null,
+  system_message_body text not null,
+  warning_count int not null,
+  guard_action text not null,
+  reason_keys text[] not null default '{}',
+  free_comment text,
+  conversation_snapshot jsonb not null,
+  reviewed_at timestamptz,
+  reviewed_by uuid references auth.users (id) on delete set null,
+  admin_note text
+);
+
+-- ログイン済み: (user_id, chat_message_id) で重複禁止
+drop index if exists ai_question_guard_objections_user_msg_uidx;
+create unique index if not exists ai_question_guard_objections_user_msg_uidx
+  on public.ai_question_guard_objections (user_id, chat_message_id)
+  where user_id is not null;
+
+-- ゲスト: 同一タブ内の同一警告メッセージ ID での二重送信のみ禁止
+create unique index if not exists ai_question_guard_objections_guest_msg_uidx
+  on public.ai_question_guard_objections (chat_message_id)
+  where user_id is null;
+
+create index if not exists ai_question_guard_objections_created_idx
+  on public.ai_question_guard_objections (created_at desc);
+
+alter table public.ai_question_guard_objections enable row level security;
+
+drop policy if exists "ai_question_guard_objections_insert_own" on public.ai_question_guard_objections;
+create policy "ai_question_guard_objections_insert_own"
+  on public.ai_question_guard_objections for insert
+  with check (user_id is null or auth.uid() = user_id);
+
+drop policy if exists "ai_question_guard_objections_select_own" on public.ai_question_guard_objections;
+create policy "ai_question_guard_objections_select_own"
+  on public.ai_question_guard_objections for select
+  using (auth.uid() = user_id);
+```
+
+**既に旧版（`user_id not null` のみ）でテーブルを作っている場合**は、次を追加で実行してください。
+
+```sql
+alter table public.ai_question_guard_objections alter column user_id drop not null;
+
+drop index if exists ai_question_guard_objections_user_msg_uidx;
+create unique index if not exists ai_question_guard_objections_user_msg_uidx
+  on public.ai_question_guard_objections (user_id, chat_message_id)
+  where user_id is not null;
+
+create unique index if not exists ai_question_guard_objections_guest_msg_uidx
+  on public.ai_question_guard_objections (chat_message_id)
+  where user_id is null;
+
+drop policy if exists "ai_question_guard_objections_insert_own" on public.ai_question_guard_objections;
+create policy "ai_question_guard_objections_insert_own"
+  on public.ai_question_guard_objections for insert
+  with check (user_id is null or auth.uid() = user_id);
+```
+
+テーブルが無い場合、API は 503 とヒントを返します。

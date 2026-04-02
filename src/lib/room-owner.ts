@@ -5,6 +5,12 @@
  * - オーナー不在時は5分経過で「残っているメンバーのうち、現在の在室セッションで最も早く入室した人」に自動付与
  */
 
+import {
+  type CommentPackSlotSelection,
+  parseCommentPackSlotsFromStorageRaw,
+  serializeCommentPackSlots,
+} from '@/lib/comment-pack-slots';
+
 const ABLY_CID_PREFIX = 'mc:ably_cid:';
 const KICKED_PREFIX = 'mc:kicked:';
 const KICKED_DURATION_MS = 3 * 60 * 60 * 1000;
@@ -47,6 +53,40 @@ export function setOwnerStateToStorage(roomId: string, state: OwnerState): void 
   try {
     localStorage.setItem(getOwnerStateStorageKey(roomId), JSON.stringify(state));
   } catch {}
+}
+
+const COMMENT_PACK_MODE_PREFIX = 'mc:room_comment_pack:';
+
+export function getCommentPackModeStorageKey(roomId: string): string {
+  return `${COMMENT_PACK_MODE_PREFIX}${roomId}`;
+}
+
+/** 曲紹介コメントのスロット選択。退室後も同一ブラウザ・同一ルームで復元する */
+export function getCommentPackSlotsFromStorage(roomId: string): CommentPackSlotSelection | null {
+  if (typeof window === 'undefined' || !roomId) return null;
+  try {
+    const raw = localStorage.getItem(getCommentPackModeStorageKey(roomId));
+    if (!raw) return null;
+    return parseCommentPackSlotsFromStorageRaw(raw);
+  } catch {
+    return null;
+  }
+}
+
+export function setCommentPackSlotsToStorage(roomId: string, slots: CommentPackSlotSelection): void {
+  if (typeof window === 'undefined' || !roomId) return;
+  try {
+    localStorage.setItem(getCommentPackModeStorageKey(roomId), serializeCommentPackSlots(slots));
+  } catch {}
+}
+
+/** @deprecated 互換用エイリアス */
+export function getCommentPackModeFromStorage(roomId: string): CommentPackSlotSelection | null {
+  return getCommentPackSlotsFromStorage(roomId);
+}
+
+export function setCommentPackModeToStorage(roomId: string, slots: CommentPackSlotSelection): void {
+  setCommentPackSlotsToStorage(roomId, slots);
 }
 
 export function getRoomClientIdStorageKey(roomId: string): string {

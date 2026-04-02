@@ -15,6 +15,7 @@ import {
 import { MAX_MESSAGE_LENGTH } from '@/lib/chat-limits';
 import { NON_YOUTUBE_URL_SYSTEM_MESSAGE } from '@/lib/chat-non-youtube-url';
 import { extractVideoId, isStandaloneNonYouTubeUrl } from '@/lib/youtube';
+import type { SystemMessageOptions } from '@/types/chat';
 
 type SearchResultRow = {
   videoId: string;
@@ -35,7 +36,7 @@ interface ChatInputProps {
   onVideoUrl?: (url: string) => void;
   /** ゲスト時は検索APIの制限を低めにするために送る */
   isGuest?: boolean;
-  onSystemMessage?: (text: string) => void;
+  onSystemMessage?: (text: string, opts?: SystemMessageOptions) => void;
   /** 検索結果から「候補リスト」に追加するためのコールバック（任意） */
   onAddCandidate?: (row: SearchResultRow) => void;
   /** プレビュー開始（メイン再生の音を下げる用途など） */

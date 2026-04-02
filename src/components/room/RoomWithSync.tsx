@@ -46,6 +46,7 @@ import {
   CHAT_MESSAGE_EVENT,
   type ChatMessage,
   type ChatMessagePayload,
+  type SystemMessageOptions,
 } from '@/types/chat';
 import {
   OWNER_FORCE_EXIT_EVENT,
@@ -58,7 +59,6 @@ import {
   OWNER_5MIN_LIMIT_EVENT,
   type OwnerForceExitPayload,
   type OwnerAiFreeSpeechStopPayload,
-  type OwnerCommentPackMode,
   type OwnerCommentPackModePayload,
   type OwnerJpAiUnlockPayload,
   type OwnerAiQuestionGuardPayload,
@@ -67,12 +67,23 @@ import {
   type Owner5MinLimitPayload,
 } from '@/types/room-owner';
 import {
+  canonicalCommentPackSlots,
+  commentPackSlotsEqual,
+  DEFAULT_COMMENT_PACK_SLOTS,
+  type CommentPackSlotSelection,
+  equivalentBaseOnlySlots,
+  isCommentPackFullyOff,
+  normalizeCommentPackSlotsFromRequestBody,
+} from '@/lib/comment-pack-slots';
+import {
   setKicked,
   incrementAiQuestionWarnCount,
   setKickedSitewide,
   OWNER_ABSENCE_MS,
   getOwnerStateFromStorage,
   setOwnerStateToStorage,
+  getCommentPackModeFromStorage,
+  setCommentPackModeToStorage,
 } from '@/lib/room-owner';
 import { createClient } from '@/lib/supabase/client';
 import { useIsLgViewport } from '@/hooks/useLgViewport';
@@ -304,13 +315,20 @@ export default function RoomWithSync({
   const [currentSongPosterClientId, setCurrentSongPosterClientId] = useState('');
   /** オーナーによる5分制限。デフォルトON。そのセッションのみ */
   const [songLimit5MinEnabled, setSongLimit5MinEnabled] = useState(true);
-  /** オーナーによる曲紹介コメント本数設定。full=基本+自由3、base_only=基本のみ、off=なし */
-  const [commentPackMode, setCommentPackMode] = useState<OwnerCommentPackMode>('base_only');
-  const commentPackModeRef = useRef<OwnerCommentPackMode>('base_only');
+  /** オーナーによる曲紹介スロット [基本, ヒット/受賞, 歌詞, サウンド]（ルームID単位で localStorage に保持） */
+  const [commentPackSlots, setCommentPackSlots] = useState<CommentPackSlotSelection>(() => {
+    if (typeof window === 'undefined') return DEFAULT_COMMENT_PACK_SLOTS;
+    const rid = roomId?.trim();
+    if (!rid) return DEFAULT_COMMENT_PACK_SLOTS;
+    return canonicalCommentPackSlots(getCommentPackModeFromStorage(rid) ?? DEFAULT_COMMENT_PACK_SLOTS);
+  });
+  const commentPackSlotsRef = useRef<CommentPackSlotSelection>(DEFAULT_COMMENT_PACK_SLOTS);
+  /** 曲紹介スロットの最終適用時刻（Ably の遅延・順不同で古い設定が戻るのを防ぐ） */
+  const commentPackSlotsSentAtRef = useRef(0);
   /** オーナーによる「邦楽AI解説の解禁」設定（デフォルトOFF） */
   const [jpAiUnlockEnabled, setJpAiUnlockEnabled] = useState(false);
   const jpAiUnlockEnabledRef = useRef(false);
-  commentPackModeRef.current = commentPackMode;
+  commentPackSlotsRef.current = commentPackSlots;
   jpAiUnlockEnabledRef.current = jpAiUnlockEnabled;
   songLimit5MinEnabledRef.current = songLimit5MinEnabled;
   videoIdRef.current = videoId;
@@ -342,6 +360,16 @@ export default function RoomWithSync({
   useEffect(() => {
     candidateSongsRef.current = candidateSongs;
   }, [candidateSongs]);
+
+  /** ルーム切替・再入室時に曲紹介スロットを localStorage から復元 */
+  useEffect(() => {
+    const rid = roomId?.trim();
+    if (!rid) return;
+    commentPackSlotsSentAtRef.current = 0;
+    const s = canonicalCommentPackSlots(getCommentPackModeFromStorage(rid) ?? DEFAULT_COMMENT_PACK_SLOTS);
+    commentPackSlotsRef.current = s;
+    setCommentPackSlots(s);
+  }, [roomId]);
 
   useEffect(() => {
     if (isGuest) {
@@ -658,6 +686,13 @@ export default function RoomWithSync({
           displayName: 'システム',
           messageType: 'system',
           createdAt: new Date().toISOString(),
+          systemKind: 'ai_question_guard',
+          aiGuardMeta: {
+            targetClientId: payload.targetClientId,
+            warningCount: payload.warningCount,
+            yellowCards: payload.yellowCards,
+            action: payload.action,
+          },
         },
       ]);
       if (payload.action === 'ban' && payload.targetClientId === myClientId && roomId) {
@@ -720,10 +755,30 @@ export default function RoomWithSync({
       return;
     }
     if (message.name === OWNER_COMMENT_PACK_MODE_EVENT) {
-      const d = message.data as OwnerCommentPackModePayload;
-      if (d && (d.mode === 'full' || d.mode === 'base_only' || d.mode === 'off')) {
-        commentPackModeRef.current = d.mode;
-        setCommentPackMode(d.mode);
+      const d = message.data as Record<string, unknown> | null;
+      if (d && typeof d === 'object') {
+        const sentAtRaw = d.sentAt;
+        const sentAt =
+          typeof sentAtRaw === 'number' && Number.isFinite(sentAtRaw) ? sentAtRaw : 0;
+        // sentAt 付きの古いメッセージは無視（例: 先に「まとめてオフ」し、遅れて「4本すべて」のエコーが来る）
+        if (sentAt > 0 && sentAt < commentPackSlotsSentAtRef.current) {
+          return;
+        }
+        const slots = canonicalCommentPackSlots(normalizeCommentPackSlotsFromRequestBody(d));
+        // 自分の publish のエコーなどで毎回新配列が届くと setState→useEffect→再 publish が回りチェックが点滅する。値が同じなら無視。
+        if (commentPackSlotsEqual(slots, commentPackSlotsRef.current)) {
+          if (sentAt > 0) {
+            commentPackSlotsSentAtRef.current = Math.max(commentPackSlotsSentAtRef.current, sentAt);
+          }
+          return;
+        }
+        if (sentAt > 0) {
+          commentPackSlotsSentAtRef.current = Math.max(commentPackSlotsSentAtRef.current, sentAt);
+        }
+        commentPackSlotsRef.current = slots;
+        setCommentPackSlots(slots);
+        const rid = roomId?.trim();
+        if (rid) setCommentPackModeToStorage(rid, slots);
       }
       return;
     }
@@ -1182,20 +1237,24 @@ export default function RoomWithSync({
     return () => window.clearTimeout(timer);
   }, [myClientId, participants, videoId]);
 
-  // 遅れて入室した参加者にも現在のコメント本数モードを共有する
+  // 遅れて入室した参加者にも現在の曲紹介スロットを共有する
   useEffect(() => {
     if (!canUseOwnerControls) return;
+    const sentAt = Date.now();
     publishRef.current?.(OWNER_COMMENT_PACK_MODE_EVENT, {
-      mode: commentPackMode,
+      slots: commentPackSlots,
+      sentAt,
     } as OwnerCommentPackModePayload);
-  }, [canUseOwnerControls, commentPackMode, participants.length]);
+  }, [canUseOwnerControls, commentPackSlots, participants.length]);
 
-  // mode イベントの取りこぼし対策（オーナーが定期的に再配信）
+  // イベントの取りこぼし対策（オーナーが定期的に再配信）
   useEffect(() => {
     if (!canUseOwnerControls) return;
     const t = window.setInterval(() => {
+      const sentAt = Date.now();
       publishRef.current?.(OWNER_COMMENT_PACK_MODE_EVENT, {
-        mode: commentPackModeRef.current,
+        slots: commentPackSlotsRef.current,
+        sentAt,
       } as OwnerCommentPackModePayload);
     }, 5000);
     return () => window.clearInterval(t);
@@ -1535,7 +1594,11 @@ export default function RoomWithSync({
     myClientId,
   ]);
 
-  const addSystemMessage = useCallback((body: string, searchQuery?: string) => {
+  const addSystemMessage = useCallback((body: string, searchQueryOrOpts?: SystemMessageOptions) => {
+    const opts =
+      typeof searchQueryOrOpts === 'string'
+        ? { searchQuery: searchQueryOrOpts }
+        : searchQueryOrOpts ?? {};
     const createdAt = new Date().toISOString();
     const msg: ChatMessage = {
       id: createMessageId(),
@@ -1543,7 +1606,9 @@ export default function RoomWithSync({
       displayName: 'システム',
       messageType: 'system',
       createdAt,
-      ...(searchQuery && { searchQuery }),
+      ...(opts.searchQuery && { searchQuery: opts.searchQuery }),
+      ...(opts.systemKind && { systemKind: opts.systemKind }),
+      ...(opts.aiGuardMeta && { aiGuardMeta: opts.aiGuardMeta }),
     };
     setMessages((prev) => {
       const last = prev[prev.length - 1];
@@ -1929,13 +1994,13 @@ export default function RoomWithSync({
 
   const fetchCommentaryAndPublish = useCallback(
     (vid: string) => {
-      const mode = commentPackModeRef.current;
-      if (mode === 'off') {
+      const slots = commentPackSlotsRef.current;
+      if (isCommentPackFullyOff(slots)) {
         if (freeCommentTimeoutsRef.current.length > 0) {
           freeCommentTimeoutsRef.current.forEach((t) => clearTimeout(t));
           freeCommentTimeoutsRef.current = [];
         }
-        // 「全てなし」では同一曲中の補助解説(tidbit)も出さない
+        // スロット全オフでは同一曲中の補助解説(tidbit)も出さない
         suppressTidbitRef.current = true;
         commentPackVideoIdRef.current = null;
         return;
@@ -1946,7 +2011,7 @@ export default function RoomWithSync({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           videoId: vid,
-          mode,
+          slots,
           roomId,
           jpAiUnlockEnabled: jpAiUnlockEnabledRef.current,
         }),
@@ -1967,7 +2032,15 @@ export default function RoomWithSync({
             }
             return null;
           }
-          if (pack?.baseComment) {
+          const baseStr = typeof pack?.baseComment === 'string' ? pack.baseComment.trim() : '';
+          const freeArr: string[] = Array.isArray(pack.freeComments)
+            ? pack.freeComments.map((c: unknown) => (typeof c === 'string' ? c : ''))
+            : [];
+          while (freeArr.length < COMMENT_PACK_MAX_FREE_COMMENTS) freeArr.push('');
+          const hasBase = baseStr.length > 0;
+          const hasAnyFree = freeArr.slice(0, COMMENT_PACK_MAX_FREE_COMMENTS).some((c) => c.trim());
+
+          if (hasBase || hasAnyFree) {
             commentPackVideoIdRef.current = vid;
             const packPrefix = pack?.source === 'library' ? '[DB] ' : '[NEW] ';
             const ids: (string | null | undefined)[] = Array.isArray(pack.tidbitIds) ? pack.tidbitIds : [];
@@ -1975,40 +2048,41 @@ export default function RoomWithSync({
               ? pack.freeCommentTidbitIds
               : [];
             const tid0 = parseTidbitIdFromPack(ids[0]);
-            // 基本コメントをすぐ表示（2回目以降は蓄積DBから＝[DB]）
-            addAiMessage(packPrefix + pack.baseComment, {
-              allowWhenAiStopped: true,
-              tidbitId: tid0,
-              songId: pack.songId ?? null,
-              videoId: vid,
-              aiSource: 'tidbit',
-            });
-            touchActivity();
+            if (hasBase) {
+              addAiMessage(packPrefix + baseStr, {
+                allowWhenAiStopped: true,
+                tidbitId: tid0,
+                songId: pack.songId ?? null,
+                videoId: vid,
+                aiSource: 'tidbit',
+              });
+              touchActivity();
+            }
             tidbitPreferMainArtistLeftRef.current = 2;
 
-            // 既存の自由コメントタイマーをクリア
             if (freeCommentTimeoutsRef.current.length > 0) {
               freeCommentTimeoutsRef.current.forEach((t) => clearTimeout(t));
               freeCommentTimeoutsRef.current = [];
             }
 
-            // 自由コメントを1分おきに小出し
-            const comments: string[] = (
-              Array.isArray(pack.freeComments)
-                ? pack.freeComments.filter((c: unknown) => typeof c === 'string' && c.trim())
-                : []
-            ).slice(0, COMMENT_PACK_MAX_FREE_COMMENTS);
-            // mode=base_only では同一曲中の補助解説(tidbit)も抑止し、実質1本だけにする。
-            // mode=full では自由コメントが残っている間のみ抑止（4本目の割り込み防止）。
-            suppressTidbitRef.current = mode === 'base_only' || comments.length > 0;
-            comments.forEach((c, index) => {
-              const delayMs = (index + 1) * 60 * 1000; // 1分ごと
+            const pendingFreeBodies = freeArr
+              .slice(0, COMMENT_PACK_MAX_FREE_COMMENTS)
+              .map((c) => c.trim())
+              .filter(Boolean);
+            suppressTidbitRef.current =
+              equivalentBaseOnlySlots(commentPackSlotsRef.current) || pendingFreeBodies.length > 0;
+
+            let shownIdx = 0;
+            for (let i = 0; i < COMMENT_PACK_MAX_FREE_COMMENTS; i++) {
+              const c = freeArr[i]?.trim() ?? '';
+              if (!c) continue;
+              const delayMs = (shownIdx + 1) * 60 * 1000;
+              shownIdx += 1;
               const tidN =
-                parseTidbitIdFromPack(freeTidbitIdsRaw[index]) ??
-                parseTidbitIdFromPack(ids[index + 1]);
+                parseTidbitIdFromPack(freeTidbitIdsRaw[i]) ??
+                parseTidbitIdFromPack(ids[i + 1]);
               const timer = setTimeout(() => {
                 if (videoIdRef.current !== vid) return;
-                // 「次の曲」案内済みならこの曲の自由コメントは出さない
                 if (nextPromptShownForVideoIdRef.current === vid) return;
                 addAiMessage(packPrefix + c, {
                   allowWhenAiStopped: true,
@@ -2020,7 +2094,7 @@ export default function RoomWithSync({
                 touchActivity();
               }, delayMs);
               freeCommentTimeoutsRef.current.push(timer);
-            });
+            }
           } else {
             if (isDevMinimalSongAi()) {
               addSystemMessage(SYSTEM_MESSAGE_COMMENTARY_FETCH_FAILED);
@@ -2806,14 +2880,20 @@ export default function RoomWithSync({
               }
               roomId={roomId}
               onRoomProfileSaved={({ displayTitle }) => setRoomDisplayTitleCurrent(displayTitle)}
-              commentPackMode={commentPackMode}
-              onCommentPackModeChange={
+              commentPackSlots={commentPackSlots}
+              onCommentPackSlotsChange={
                 canUseOwnerControls
-                  ? (mode) => {
-                      commentPackModeRef.current = mode;
-                      setCommentPackMode(mode);
+                  ? (nextSlots) => {
+                      const slots = canonicalCommentPackSlots(nextSlots);
+                      const sentAt = Date.now();
+                      commentPackSlotsSentAtRef.current = sentAt;
+                      commentPackSlotsRef.current = slots;
+                      setCommentPackSlots(slots);
+                      const rid = roomId?.trim();
+                      if (rid) setCommentPackModeToStorage(rid, slots);
                       safePublish(OWNER_COMMENT_PACK_MODE_EVENT, {
-                        mode,
+                        slots,
+                        sentAt,
                       } as OwnerCommentPackModePayload);
                     }
                   : undefined
@@ -2979,6 +3059,8 @@ export default function RoomWithSync({
             onTidbitLibraryReject={handleTidbitLibraryReject}
             onChatSummaryClick={roomId ? openChatSummaryModal : undefined}
             jpAiUnlockEnabled={jpAiUnlockEnabled}
+            roomId={roomId ?? undefined}
+            myClientId={myClientId || undefined}
           />
         }
         rightTop={

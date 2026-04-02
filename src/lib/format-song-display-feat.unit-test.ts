@@ -58,6 +58,14 @@ assert.equal(cleanTitle('Big Apple (2004 Remaster)').includes('Remaster'), false
 
 assert.equal(cleanTitle('What Is Love • TopPop'), 'What Is Love');
 
+assert.equal(cleanTitle('Mr. Roboto. (C) 1983 A&M Records'), 'Mr. Roboto.');
+assert.equal(cleanTitle('Foo © 1999 Some Label LLC'), 'Foo');
+{
+  const r = getArtistAndSong('Styx - Mr. Roboto. (C) 1983 A&M Records', 'StyxVEVO');
+  assert.equal(r.artistDisplay, 'Styx');
+  assert.equal(r.song, 'Mr. Roboto.');
+}
+
 {
   const r = getArtistAndSong('Howard Jones - What Is Love • TopPop', null);
   assert.equal(r.artistDisplay, 'Howard Jones');

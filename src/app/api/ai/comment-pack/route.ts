@@ -26,8 +26,31 @@ import {
   insertTidbit,
 } from '../../../../lib/song-tidbits';
 import { isRoomJpAiUnlockEnabled } from '@/lib/room-jp-ai-unlock-server';
+import {
+  type CommentPackSlotSelection,
+  equivalentBaseOnlySlots,
+  isCommentPackFullyOff,
+  normalizeCommentPackSlotsFromRequestBody,
+} from '@/lib/comment-pack-slots';
 
 export const dynamic = 'force-dynamic';
+
+/** クライアント表示用にスロットで本文を絞る（tidbitIds はそのまま渡し、空本文のメッセージは出さない） */
+function applySlotsToPackBodies(
+  baseComment: string,
+  freeComments: string[],
+  slots: CommentPackSlotSelection,
+): { baseComment: string; freeComments: string[] } {
+  const f = [
+    typeof freeComments[0] === 'string' ? freeComments[0] : '',
+    typeof freeComments[1] === 'string' ? freeComments[1] : '',
+    typeof freeComments[2] === 'string' ? freeComments[2] : '',
+  ];
+  return {
+    baseComment: slots[0] ? baseComment : '',
+    freeComments: [slots[1] ? f[0] : '', slots[2] ? f[1] : '', slots[3] ? f[2] : ''],
+  };
+}
 
 /** YouTube 動画の公開日がこの日数以内なら「新曲」とみなし、基本コメントのみ出す */
 const NEW_RELEASE_DAYS = 30;
@@ -130,10 +153,7 @@ export async function POST(request: Request) {
     const body = await request.json().catch(() => ({}));
     const videoId = typeof body?.videoId === 'string' ? body.videoId.trim() : '';
     const roomId = typeof body?.roomId === 'string' ? body.roomId.trim() : '';
-    const requestedMode =
-      body?.mode === 'full' || body?.mode === 'base_only' || body?.mode === 'off'
-        ? body.mode
-        : 'base_only';
+    const slots = normalizeCommentPackSlotsFromRequestBody(body);
     if (!videoId) {
       return NextResponse.json({ error: 'videoId is required' }, { status: 400 });
     }
@@ -168,9 +188,9 @@ export async function POST(request: Request) {
     const roomJpAiUnlock = roomId ? await isRoomJpAiUnlockEnabled(roomId) : false;
     const jpAiUnlockEnabled = roomJpAiUnlock;
     /** 新曲のみ基本1本（自由3本なし）。開発フラグ時も同様。邦楽は公式チャンネル例外を除き生成しない */
-    const baseOnlyPack = requestedMode === 'base_only' || isNewRelease || devMinimalSongAi;
+    const baseOnlyPack = equivalentBaseOnlySlots(slots) || isNewRelease || devMinimalSongAi;
 
-    if (requestedMode === 'off') {
+    if (isCommentPackFullyOff(slots)) {
       return NextResponse.json({ videoId, disabledByOwner: true, baseComment: '', freeComments: [] });
     }
 
@@ -228,21 +248,16 @@ export async function POST(request: Request) {
       } else {
         const cached = await getStoredCommentPackByVideoId(reader, videoId);
         if (cached) {
-          const stripFreeForMode = baseOnlyPack && !isNewRelease;
+          const filtered = applySlotsToPackBodies(cached.baseComment, [...cached.freeComments], slots);
           const tidbitIdsFull = cached.tidbitIds ?? [];
-          const tidbitIdsForClient = stripFreeForMode ? tidbitIdsFull.slice(0, 1) : [...tidbitIdsFull];
-          const freeCommentsForClient = stripFreeForMode ? [] : [...cached.freeComments];
-          const freeCommentTidbitIds =
-            !stripFreeForMode && tidbitIdsForClient.length > 1
-              ? tidbitIdsForClient.slice(1)
-              : [];
+          const freeCommentTidbitIds = tidbitIdsFull.length > 1 ? tidbitIdsFull.slice(1) : [];
           return NextResponse.json({
             songId,
             videoId,
-            baseComment: cached.baseComment,
-            freeComments: freeCommentsForClient,
+            baseComment: filtered.baseComment,
+            freeComments: filtered.freeComments,
             source: 'library',
-            ...(tidbitIdsForClient.length ? { tidbitIds: tidbitIdsForClient } : {}),
+            ...(tidbitIdsFull.length ? { tidbitIds: tidbitIdsFull } : {}),
             ...(freeCommentTidbitIds.length > 0 ? { freeCommentTidbitIds } : {}),
           });
         }
@@ -294,7 +309,7 @@ ${colorsOfficialLock}${geniusOfficialLock}${appleMusicOfficialLock}
     const basePromptTail = isNewRelease
       ? `・この動画は公開から約1ヶ月以内の新曲扱いです。周辺情報が不十分な可能性があるため、断定を避け、分かる範囲の紹介にとどめてください（推測や詳細な背景説明は控えめに）。
 ・この後に自由コメントは出しません。ここ1本で完結する基本紹介にしてください。`
-      : devMinimalSongAi || requestedMode === 'base_only'
+      : devMinimalSongAi || equivalentBaseOnlySlots(slots)
         ? `・開発中モードのため、自由コメントは生成しません。ここ1本で完結する基本紹介にしてください。`
         : `・この1本は「基本情報」専用です。あとから3本の自由コメント（解釈・サウンド・栄誉など）が続くため、ここでは深い解説や歌詞の細かい読み下しは書かないでください。`;
 
@@ -502,11 +517,13 @@ ${isHonorsTopic ? banBlockHonors : banBlockStandard}
     const freeCommentTidbitIds =
       !baseOnlyPack && tidbitIds.length > 1 ? tidbitIds.slice(1) : [];
 
+    const filteredOut = applySlotsToPackBodies(baseText, freeBodiesForPack, slots);
+
     return NextResponse.json({
       songId,
       videoId,
-      baseComment: baseText,
-      freeComments: freeBodiesForPack,
+      baseComment: filteredOut.baseComment,
+      freeComments: filteredOut.freeComments,
       ...(isNewRelease ? { newReleaseOnly: true } : {}),
       ...(tidbitIds.length > 0 ? { tidbitIds } : {}),
       ...(freeCommentTidbitIds.length > 0 ? { freeCommentTidbitIds } : {}),

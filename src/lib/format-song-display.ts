@@ -99,6 +99,26 @@ function stripStreamingEditionMarkers(title: string): string {
   return t.replace(/\s+/g, ' ').trim();
 }
 
+/**
+ * YouTube 等に付く行末の (C)/©/℗/(P) + 年 + レーベル名を落とす。
+ * 例: "Mr. Roboto. (C) 1983 A&M Records" → "Mr. Roboto."
+ */
+function stripTrailingRightsMetadata(title: string): string {
+  let t = title.trim();
+  const patterns: RegExp[] = [
+    /\s*\(\s*[C©c]\s*\)\s*\d{4}\s+.+$/gi,
+    /\s*\(\s*[C©c]\s*\)\s*\d{4}\s*$/gi,
+    /\s*©\s*\d{4}\s+.+$/gi,
+    /\s*©\s*\d{4}\s*$/gi,
+    /\s*℗\s*\d{4}\s+.+$/gi,
+    /\s*℗\s*\d{4}\s*$/gi,
+    /\s*\(\s*P\s*\)\s*\d{4}\s+.+$/gi,
+    /\s*\(\s*P\s*\)\s*\d{4}\s*$/gi,
+  ];
+  for (const re of patterns) t = t.replace(re, '');
+  return t.replace(/\s+/g, ' ').trim();
+}
+
 export function cleanTitle(title: string): string {
   let t = title
     .replace(/\s*\(Official Video\)\s*/gi, ' ')
@@ -132,6 +152,7 @@ export function cleanTitle(title: string): string {
     .replace(/\s+/g, ' ')
     .trim();
   t = stripStreamingEditionMarkers(t);
+  t = stripTrailingRightsMetadata(t);
   return t;
 }
 

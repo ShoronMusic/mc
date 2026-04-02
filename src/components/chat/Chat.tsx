@@ -16,6 +16,7 @@ import {
 } from '@heroicons/react/24/outline';
 import type { ChatMessage as ChatMessageType } from '@/types/chat';
 import { AI_CHAT_DISCLAIMER } from '@/lib/chat-system-copy';
+import { AI_GUARD_OBJECTION_REASON_OPTIONS } from '@/lib/ai-guard-objection';
 
 /** 詳細フィードバック用モーダルの状態 */
 type FeedbackModalState =
@@ -29,6 +30,39 @@ type FeedbackModalState =
       emailSent?: boolean;
       emailFailCode?: 'missing_api_key' | 'send_failed';
     };
+
+type ObjectionModalState =
+  | { open: false }
+  | {
+      open: true;
+      message: ChatMessageType;
+      sending?: boolean;
+      done?: boolean;
+      errorText?: string;
+    };
+
+const OBJECTION_SNAPSHOT_BEFORE = 18;
+const OBJECTION_SNAPSHOT_AFTER = 4;
+
+function buildAiGuardObjectionSnapshot(
+  allMessages: ChatMessageType[],
+  systemMessageId: string,
+): { displayName?: string; messageType: string; body: string; createdAt: string }[] {
+  const idx = allMessages.findIndex((m) => m.id === systemMessageId);
+  if (idx < 0) return [];
+  const start = Math.max(0, idx - OBJECTION_SNAPSHOT_BEFORE);
+  const end = Math.min(allMessages.length, idx + OBJECTION_SNAPSHOT_AFTER + 1);
+  let slice = allMessages.slice(start, end);
+  if (slice.length > 40) {
+    slice = slice.slice(-40);
+  }
+  return slice.map((m) => ({
+    displayName: m.displayName,
+    messageType: m.messageType,
+    body: m.body,
+    createdAt: m.createdAt,
+  }));
+}
 
 interface ChatProps {
   messages: ChatMessageType[];
@@ -49,6 +83,10 @@ interface ChatProps {
   onChatSummaryClick?: () => void;
   /** オーナー設定: 邦楽AI解説を解禁中ならヘッダーに表示 */
   jpAiUnlockEnabled?: boolean;
+  /** ルームID（異議申立てAPI用） */
+  roomId?: string;
+  /** 自分の Ably clientId（ガード警告の対象者のみ異議ボタンを出す） */
+  myClientId?: string;
 }
 
 function formatTime(createdAt: string): string {
@@ -231,6 +269,8 @@ export default function Chat({
   onTidbitLibraryReject,
   onChatSummaryClick,
   jpAiUnlockEnabled = false,
+  roomId,
+  myClientId,
 }: ChatProps) {
   const pathname = usePathname();
   const pathSegs = pathname?.split('/').filter(Boolean) ?? [];
@@ -243,6 +283,11 @@ export default function Chat({
   const bottomRef = useRef<HTMLDivElement>(null);
   const [feedbackState, setFeedbackState] = useState<Record<string, 'up' | 'down'>>({});
   const [feedbackModal, setFeedbackModal] = useState<FeedbackModalState>({ open: false });
+  const [objectionModal, setObjectionModal] = useState<ObjectionModalState>({ open: false });
+  const [objectionReasons, setObjectionReasons] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(AI_GUARD_OBJECTION_REASON_OPTIONS.map((o) => [o.id, false])),
+  );
+  const [objectionComment, setObjectionComment] = useState('');
   const [detailChecks, setDetailChecks] = useState({ duplicate: false, dubious: false, ambiguous: false });
   const [detailComment, setDetailComment] = useState('');
   const [tidbitRejectingId, setTidbitRejectingId] = useState<string | null>(null);
@@ -346,6 +391,113 @@ export default function Chat({
 
   function closeFeedbackModal() {
     setFeedbackModal({ open: false });
+  }
+
+  function openObjectionModal(message: ChatMessageType) {
+    setObjectionReasons(Object.fromEntries(AI_GUARD_OBJECTION_REASON_OPTIONS.map((o) => [o.id, false])));
+    setObjectionComment('');
+    setObjectionModal({ open: true, message });
+  }
+
+  function closeObjectionModal() {
+    setObjectionModal({ open: false });
+  }
+
+  function objectionAlreadySent(messageId: string): boolean {
+    if (typeof window === 'undefined') return false;
+    try {
+      return sessionStorage.getItem(`ai-guard-objection-sent:${messageId}`) === '1';
+    } catch {
+      return false;
+    }
+  }
+
+  async function sendObjection() {
+    if (!objectionModal.open || objectionModal.done || objectionModal.sending) return;
+    const message = objectionModal.message;
+    const meta = message.aiGuardMeta;
+    if (!meta || !roomId?.trim()) {
+      setObjectionModal((prev) =>
+        prev.open ? { ...prev, errorText: 'ルーム情報が取得できません。ページを再読み込みしてください。' } : prev,
+      );
+      return;
+    }
+    const keys = AI_GUARD_OBJECTION_REASON_OPTIONS.filter((o) => objectionReasons[o.id]).map((o) => o.id);
+    if (keys.length === 0) {
+      setObjectionModal((prev) =>
+        prev.open ? { ...prev, errorText: '異議理由を1つ以上選んでください。' } : prev,
+      );
+      return;
+    }
+    const snapshot = buildAiGuardObjectionSnapshot(messages, message.id);
+    if (snapshot.length === 0) {
+      setObjectionModal((prev) =>
+        prev.open ? { ...prev, errorText: '会話の取得に失敗しました。' } : prev,
+      );
+      return;
+    }
+    setObjectionModal((prev) => (prev.open ? { ...prev, sending: true, errorText: undefined } : prev));
+    try {
+      const res = await fetch('/api/ai-question-guard-objection', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          roomId: roomId.trim(),
+          chatMessageId: message.id,
+          systemMessageBody: message.body,
+          warningCount: meta.warningCount,
+          guardAction: meta.action,
+          reasonKeys: keys,
+          freeComment: objectionComment.trim(),
+          conversationSnapshot: snapshot,
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (res.status === 409) {
+        try {
+          sessionStorage.setItem(`ai-guard-objection-sent:${message.id}`, '1');
+        } catch {
+          /* noop */
+        }
+        setObjectionModal((prev) =>
+          prev.open
+            ? {
+                ...prev,
+                sending: false,
+                done: true,
+                errorText: undefined,
+              }
+            : prev,
+        );
+        return;
+      }
+      if (!res.ok) {
+        setObjectionModal((prev) =>
+          prev.open
+            ? {
+                ...prev,
+                sending: false,
+                errorText: typeof data.error === 'string' ? data.error : '送信に失敗しました。',
+              }
+            : prev,
+        );
+        return;
+      }
+      try {
+        sessionStorage.setItem(`ai-guard-objection-sent:${message.id}`, '1');
+      } catch {
+        /* noop */
+      }
+      setObjectionModal((prev) =>
+        prev.open ? { ...prev, sending: false, done: true, errorText: undefined } : prev,
+      );
+    } catch {
+      setObjectionModal((prev) =>
+        prev.open
+          ? { ...prev, sending: false, errorText: '送信に失敗しました。ネットワークを確認してください。' }
+          : prev,
+      );
+    }
   }
 
   const [disclaimerOpen, setDisclaimerOpen] = useState(false);
@@ -489,6 +641,26 @@ export default function Chat({
                         {formatTime(m.createdAt)}
                       </span>
                     </p>
+                    {m.messageType === 'system' &&
+                      m.systemKind === 'ai_question_guard' &&
+                      m.aiGuardMeta &&
+                      myClientId &&
+                      m.aiGuardMeta.targetClientId === myClientId &&
+                      roomId?.trim() && (
+                        <div className="mt-1.5">
+                          {objectionAlreadySent(m.id) ? (
+                            <span className="text-[11px] text-gray-500">異議申立て済み</span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => openObjectionModal(m)}
+                              className="text-[11px] text-amber-200/45 underline decoration-dotted underline-offset-2 hover:text-amber-100/75"
+                            >
+                              異議
+                            </button>
+                          )}
+                        </div>
+                      )}
                   </>
                 )}
                 {m.searchQuery && (
@@ -668,6 +840,97 @@ export default function Chat({
                     disabled={feedbackModal.sending}
                   >
                     {feedbackModal.sending ? '送信中…' : '送信'}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* AI 質問ガード警告への異議申立て */}
+      {objectionModal.open && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onClick={(e) => e.target === e.currentTarget && !objectionModal.done && closeObjectionModal()}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="objection-modal-title"
+        >
+          <div
+            className="max-h-[min(88vh,32rem)] w-full max-w-md overflow-y-auto rounded-lg border border-gray-600 bg-gray-800 p-4 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {objectionModal.done ? (
+              <>
+                <p id="objection-modal-title" className="mb-3 text-sm text-gray-200">
+                  異議申立てを受け付けました。運営で内容を確認し、AI の判定改善に活用します。
+                </p>
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    className="rounded border border-gray-500 bg-gray-700 px-4 py-2 text-sm text-gray-200 hover:bg-gray-600"
+                    onClick={closeObjectionModal}
+                  >
+                    閉じる
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <h3 id="objection-modal-title" className="mb-2 text-sm font-medium text-gray-200">
+                  システム警告への異議申立て
+                </h3>
+                <p className="mb-3 text-xs leading-relaxed text-gray-400">
+                  「@」付きの質問が音楽に関係ないと判断されたことへの異議です。よくある理由にチェックを入れ、必要ならコメントを書いて送信してください。送信内容は前後の会話とあわせてデータベースに保存され、運営が確認して
+                  AI の改善に役立てます。
+                </p>
+                {objectionModal.errorText ? (
+                  <p className="mb-2 text-xs text-rose-300">{objectionModal.errorText}</p>
+                ) : null}
+                <div className="mb-3 space-y-2">
+                  {AI_GUARD_OBJECTION_REASON_OPTIONS.map((o) => (
+                    <label key={o.id} className="flex items-start gap-2 text-sm text-gray-300">
+                      <input
+                        type="checkbox"
+                        checked={objectionReasons[o.id] ?? false}
+                        onChange={(e) =>
+                          setObjectionReasons((c) => ({ ...c, [o.id]: e.target.checked }))
+                        }
+                        className="mt-0.5 rounded border-gray-500"
+                      />
+                      <span>{o.label}</span>
+                    </label>
+                  ))}
+                </div>
+                <div className="mb-3">
+                  <label htmlFor="objection-comment" className="mb-1 block text-xs text-gray-400">
+                    コメント（任意）
+                  </label>
+                  <textarea
+                    id="objection-comment"
+                    value={objectionComment}
+                    onChange={(e) => setObjectionComment(e.target.value)}
+                    placeholder="補足があればご記入ください"
+                    rows={3}
+                    className="w-full rounded border border-gray-600 bg-gray-700 px-2 py-1.5 text-sm text-gray-200 placeholder-gray-500"
+                  />
+                </div>
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    className="rounded border border-gray-500 px-3 py-1.5 text-sm text-gray-300 hover:bg-gray-700"
+                    onClick={closeObjectionModal}
+                  >
+                    キャンセル
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded bg-amber-700/90 px-3 py-1.5 text-sm text-white hover:bg-amber-600 disabled:opacity-50"
+                    onClick={sendObjection}
+                    disabled={objectionModal.sending}
+                  >
+                    {objectionModal.sending ? '送信中…' : '送信'}
                   </button>
                 </div>
               </>

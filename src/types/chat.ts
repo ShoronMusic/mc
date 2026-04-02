@@ -4,6 +4,23 @@
 
 export type MessageType = 'user' | 'ai' | 'system';
 
+/** システム警告「@ 質問の音楽関連チェック」用メタ（異議申立て・表示制御用） */
+export interface AiQuestionGuardMeta {
+  targetClientId: string;
+  warningCount: number;
+  yellowCards: number;
+  action: 'warn' | 'yellow' | 'ban';
+}
+
+/** addSystemMessage の第2引数（文字列は searchQuery、オブジェクトは拡張メタ） */
+export type SystemMessageOptions =
+  | string
+  | {
+      searchQuery?: string;
+      systemKind?: 'ai_question_guard';
+      aiGuardMeta?: AiQuestionGuardMeta;
+    };
+
 export interface ChatMessage {
   id: string;
   sessionId?: string;
@@ -29,6 +46,10 @@ export interface ChatMessage {
   tidbitLibraryRejected?: boolean;
   /** 邦楽アナウンス同期用（表示には使わない） */
   jpDomesticSilenceForVideoId?: string;
+  /** システムメッセージの種別（異議ボタン表示など） */
+  systemKind?: 'ai_question_guard';
+  /** AI 質問ガード警告の詳細（systemKind が ai_question_guard のとき） */
+  aiGuardMeta?: AiQuestionGuardMeta;
 }
 
 /** Ably で送るチャットイベントのペイロード */

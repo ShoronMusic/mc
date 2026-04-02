@@ -2,6 +2,8 @@
  * オーナー権限で送るチャネルメッセージ
  */
 
+import type { CommentPackSlotSelection } from '@/lib/comment-pack-slots';
+
 export const OWNER_FORCE_EXIT_EVENT = 'owner:forceExit';
 export const OWNER_AI_FREE_SPEECH_STOP_EVENT = 'owner:aiFreeSpeechStop';
 export const OWNER_STATE_EVENT = 'owner:state';
@@ -38,10 +40,13 @@ export interface Owner5MinLimitPayload {
 /** オーナーによる曲紹介コメント本数設定（そのルームのセッションのみ） */
 export const OWNER_COMMENT_PACK_MODE_EVENT = 'owner:commentPackMode';
 
-export type OwnerCommentPackMode = 'full' | 'base_only' | 'off';
+export type { CommentPackSlotSelection };
 
+/** Ably ペイロード: slots[0..3] = 基本・ヒット/受賞・歌詞・サウンド */
 export interface OwnerCommentPackModePayload {
-  mode: OwnerCommentPackMode;
+  slots: CommentPackSlotSelection;
+  /** Date.now()。古いメッセージの後着で上書きされチェックが点滅するのを防ぐ */
+  sentAt?: number;
 }
 
 /** オーナーによる「邦楽AI解説の解禁」設定（そのルームのセッションのみ）。デフォルトOFF */
