@@ -23,10 +23,10 @@ export default function GuideSafetyPage() {
         </ul>
       </section>
       <section className="space-y-3">
-        <h2 className="text-base font-semibold text-white">ルームの指定</h2>
+        <h2 className="text-base font-semibold text-white">部屋の指定</h2>
         <p className="text-gray-400">
           トップから 01〜03 に入るほか、URL で <code className="rounded bg-gray-800 px-1.5 py-0.5 text-gray-200">/04</code>、
-          <code className="rounded bg-gray-800 px-1.5 py-0.5 text-gray-200">/05</code> のようにルーム番号を指定できます。知らないリンクからの入室には注意してください。
+          <code className="rounded bg-gray-800 px-1.5 py-0.5 text-gray-200">/05</code> のように部屋番号を指定できます。知らないリンクからの入室には注意してください。
         </p>
       </section>
       <section className="space-y-3">

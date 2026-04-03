@@ -113,7 +113,7 @@ export default function AdminRoomMusicSummaryPage() {
       <div className="mx-auto max-w-6xl">
         <AdminMenuBar />
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-          <h1 className="text-xl font-semibold">ルーム音楽サマリー</h1>
+          <h1 className="text-xl font-semibold">部屋音楽サマリー</h1>
           <div className="flex flex-wrap items-center gap-2">
             <label className="text-sm">
               roomId

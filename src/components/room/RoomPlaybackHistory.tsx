@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * ルーム視聴履歴（プレイヤー下）。参加者名・時間・年代・スタイル・アーティスト-タイトル・YouTubeリンク。
+ * 部屋の視聴履歴（プレイヤー下）。参加者名・時間・年代・スタイル・アーティスト-タイトル・YouTubeリンク。
  * 固定列幅・はみ出しは...、ソート（時間デフォルト／参加者名）、アクティブ行表示。
  */
 
@@ -39,7 +39,7 @@ const COL_WIDTH_LINK = 56;
 const COL_WIDTH_FAV = 36;
 
 /**
- * タブ単位で「このルームに滞在し始めた時刻」を保持する。
+ * タブ単位で「この部屋に滞在し始めた時刻」を保持する。
  * 別日・別グループの再生が同じ room_id に残っていても、後から入った人には見せない。
  */
 const PLAYBACK_SESSION_SINCE_STORAGE_PREFIX = 'mc_room_playback_since:v1:';
@@ -257,7 +257,7 @@ function artistTitle(row: RoomPlaybackHistoryRow): string {
 interface RoomPlaybackHistoryProps {
   roomId: string | undefined;
   currentVideoId: string | null;
-  /** 変更されると再取得する（ルーム側で10秒後にPOSTしたあと更新用） */
+  /** 変更されると再取得する（部屋側で10秒後にPOSTしたあと更新用） */
   refreshKey?: number;
   /** ゲストでないときのみお気に入り利用可 */
   isGuest?: boolean;

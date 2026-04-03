@@ -83,7 +83,7 @@ interface ChatProps {
   onChatSummaryClick?: () => void;
   /** オーナー設定: 邦楽AI解説を解禁中ならヘッダーに表示 */
   jpAiUnlockEnabled?: boolean;
-  /** ルームID（異議申立てAPI用） */
+  /** 部屋ID（異議申立てAPI用） */
   roomId?: string;
   /** 自分の Ably clientId（ガード警告の対象者のみ異議ボタンを出す） */
   myClientId?: string;
@@ -418,7 +418,7 @@ export default function Chat({
     const meta = message.aiGuardMeta;
     if (!meta || !roomId?.trim()) {
       setObjectionModal((prev) =>
-        prev.open ? { ...prev, errorText: 'ルーム情報が取得できません。ページを再読み込みしてください。' } : prev,
+        prev.open ? { ...prev, errorText: '部屋情報が取得できません。ページを再読み込みしてください。' } : prev,
       );
       return;
     }

@@ -138,8 +138,8 @@ export default function StyleDistributionModal({ roomId, open, onClose }: StyleD
 
         <p className="mb-2 text-xs text-gray-500">
           {subTab === '24h'
-            ? 'このルームで直近24時間に再生された履歴のスタイル内訳です。'
-            : 'このルームの視聴履歴を新しい順に最大100件まで集計したスタイル内訳です。'}
+            ? 'この部屋で直近24時間に再生された履歴のスタイル内訳です。'
+            : 'この部屋の視聴履歴を新しい順に最大100件まで集計したスタイル内訳です。'}
         </p>
 
         {loading ? (

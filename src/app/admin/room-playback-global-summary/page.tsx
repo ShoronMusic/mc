@@ -70,7 +70,7 @@ export default function AdminRoomPlaybackGlobalSummaryPage() {
       <div className="mx-auto max-w-6xl">
         <AdminMenuBar />
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-          <h1 className="text-xl font-semibold">ルーム横断 選曲全集計</h1>
+          <h1 className="text-xl font-semibold">部屋横断 選曲全集計</h1>
           <div className="flex flex-wrap items-center gap-2">
             <label className="text-sm">
               集計単位
@@ -137,7 +137,7 @@ export default function AdminRoomPlaybackGlobalSummaryPage() {
                 <div className="text-xl font-semibold">{(data.totals?.tracks ?? 0).toLocaleString()}</div>
               </div>
               <div className="rounded-lg border border-gray-700 bg-gray-900/50 p-3">
-                <div className="text-xs text-gray-500">対象ルーム数</div>
+                <div className="text-xs text-gray-500">対象部屋数</div>
                 <div className="text-xl font-semibold">{(data.totals?.rooms ?? 0).toLocaleString()}</div>
               </div>
             </section>

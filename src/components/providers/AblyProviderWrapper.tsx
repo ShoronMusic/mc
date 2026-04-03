@@ -11,7 +11,7 @@ import { createClient } from '@/lib/supabase/client';
 
 const DEFAULT_DISPLAY_NAME = 'ゲスト';
 
-/** 退室時刻・表示名を記録するキー（ルームごと）。同一ルームに戻ったとき「おかえりなさい」に使う */
+/** 退室時刻・表示名を記録するキー（部屋ごと）。同一部屋に戻ったとき「おかえりなさい」に使う */
 export function getLastExitStorageKey(roomId: string): string {
   return `mc:last_exit:${roomId}`;
 }
@@ -33,7 +33,7 @@ export interface AblyProviderWrapperProps {
   roomTitle?: string;
   /** room_lobby_message.display_title（部屋の表示用タイトル） */
   roomDisplayTitle?: string;
-  /** 同一ルームで安定した clientId（presence・強制退出の対象識別用） */
+  /** 同一部屋で安定した clientId（presence・強制退出の対象識別用） */
   clientId?: string;
 }
 

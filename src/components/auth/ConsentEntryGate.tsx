@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { readTermsAccepted } from '@/lib/terms-consent';
 
 /**
- * 未同意のときは /consent へ送り、同意済みのときだけ子を表示（トップ・ルーム入室前のゲート）
+ * 未同意のときは /consent へ送り、同意済みのときだけ子を表示（トップ・部屋入室前のゲート）
  */
 export function ConsentEntryGate({ children }: { children: ReactNode }) {
   const router = useRouter();

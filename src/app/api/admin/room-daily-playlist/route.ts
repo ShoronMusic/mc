@@ -68,7 +68,7 @@ async function requireAdmin() {
 
 function toText(roomId: string, dateJst: string, items: PlaylistRow[]): string {
   const lines: string[] = [];
-  lines.push(`ルームID: ${roomId}`);
+  lines.push(`部屋ID: ${roomId}`);
   lines.push(`日付（JST）: ${dateJst}`);
   lines.push(`件数: ${items.length}`);
   lines.push('---');

@@ -18,7 +18,7 @@ export default function GuideMusicPage() {
       <section className="space-y-3">
         <h2 className="text-base font-semibold text-white">画面のアーティスト・楽曲情報について</h2>
         <p className="text-gray-400">
-          ルーム内のタブ等に表示されるアーティストや楽曲の説明・経歴・リリース情報などは、
+          部屋内のタブ等に表示されるアーティストや楽曲の説明・経歴・リリース情報などは、
           <strong className="text-gray-300">外部の参照データを自動で照合して表示している場合</strong>
           があります。取得の成否、内容の
           <strong className="text-gray-300">正確性・真偽・網羅性・最新性</strong>、ならびに

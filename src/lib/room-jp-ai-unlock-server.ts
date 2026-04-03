@@ -27,7 +27,7 @@ function jpAiUnlockFromPresenceData(data: unknown): boolean {
   return false;
 }
 
-/** ルーム内の誰かが「邦楽解禁=ON」を同期していれば true（セッション設定） */
+/** 部屋内の誰かが「邦楽解禁=ON」を同期していれば true（セッション設定） */
 export async function isRoomJpAiUnlockEnabled(roomId: string | null | undefined): Promise<boolean> {
   const rid = safeRoomId(roomId);
   if (!rid) return false;

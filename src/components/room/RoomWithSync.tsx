@@ -10,6 +10,7 @@ import YouTubePlayer, {
   YT_PLAYER_STATE_BUFFERING,
   YT_PLAYER_STATE_PLAYING,
 } from '@/components/player/YouTubePlayer';
+import { GuestRegisterPromptModal } from '@/components/auth/GuestRegisterPromptModal';
 import MyPage from '@/components/mypage/MyPage';
 import RoomMainLayout from '@/components/room/RoomMainLayout';
 import RoomPlaybackHistory from '@/components/room/RoomPlaybackHistory';
@@ -138,9 +139,9 @@ function getTimeBasedGreeting(): string {
   return 'こんばんは';
 }
 
-/** AIの第一声（参加者へのルーム説明） */
+/** AIの第一声（参加者への部屋の説明） */
 const AI_FIRST_VOICE =
-  '洋楽好きで一緒に楽しむチャットルームです。参加者が順番にYouTubeから曲を貼って一緒に鑑賞します。投稿する動画は洋楽の曲・MV・ライブ映像など音楽コンテンツに限ってください（洋楽以外の動画は控えてください）。洋楽ならジャンルや時代は自由です。よろしくお願いします！';
+  '洋楽好きで一緒に楽しむチャットの部屋です。参加者が順番にYouTubeから曲を貼って一緒に鑑賞します。投稿する動画は洋楽の曲・MV・ライブ映像など音楽コンテンツに限ってください（洋楽以外の動画は控えてください）。洋楽ならジャンルや時代は自由です。よろしくお願いします！';
 /** 選曲順の説明 */
 const TURN_ORDER_VOICE = '入室した順（参加者欄の左から）で曲を貼っていきます。';
 const TIDBIT_COOLDOWN_SEC = 60;
@@ -221,6 +222,7 @@ export default function RoomWithSync({
   const [roomDisplayTitleCurrent, setRoomDisplayTitleCurrent] = useState(roomDisplayTitle);
   useRoomChatLogPersistence(roomId, messages, { isGuest, myClientId });
   const [myPageOpen, setMyPageOpen] = useState(false);
+  const [guestRegisterModalOpen, setGuestRegisterModalOpen] = useState(false);
   const [playbackHistoryModalOpen, setPlaybackHistoryModalOpen] = useState(false);
   const [chatSummaryModalOpen, setChatSummaryModalOpen] = useState(false);
   const [chatSummaryLoading, setChatSummaryLoading] = useState(false);
@@ -315,7 +317,7 @@ export default function RoomWithSync({
   const [currentSongPosterClientId, setCurrentSongPosterClientId] = useState('');
   /** オーナーによる5分制限。デフォルトON。そのセッションのみ */
   const [songLimit5MinEnabled, setSongLimit5MinEnabled] = useState(true);
-  /** オーナーによる曲紹介スロット [基本, ヒット/受賞, 歌詞, サウンド]（ルームID単位で localStorage に保持） */
+  /** オーナーによる曲紹介スロット [基本, ヒット/受賞, 歌詞, サウンド]（部屋ID単位で localStorage に保持） */
   const [commentPackSlots, setCommentPackSlots] = useState<CommentPackSlotSelection>(() => {
     if (typeof window === 'undefined') return DEFAULT_COMMENT_PACK_SLOTS;
     const rid = roomId?.trim();
@@ -361,7 +363,7 @@ export default function RoomWithSync({
     candidateSongsRef.current = candidateSongs;
   }, [candidateSongs]);
 
-  /** ルーム切替・再入室時に曲紹介スロットを localStorage から復元 */
+  /** 部屋切替・再入室時に曲紹介スロットを localStorage から復元 */
   useEffect(() => {
     const rid = roomId?.trim();
     if (!rid) return;
@@ -1697,7 +1699,7 @@ export default function RoomWithSync({
     let greeting: string;
     let isWelcomeBack = false;
     try {
-      // 同一ルームの退室記録だけ参照（他ルームでは「おかえりなさい」にしない）
+      // 同一部屋の退室記録だけ参照（他部屋では「おかえりなさい」にしない）
       const key = roomId ? getLastExitStorageKey(roomId) : null;
       const raw = key && typeof window !== 'undefined' ? sessionStorage.getItem(key) : null;
       if (raw) {
@@ -1936,7 +1938,7 @@ export default function RoomWithSync({
           // 音楽以外のコンテンツと判定された場合は、注意メッセージのみ出して曲としては扱わない
           if (data?.nonMusic) {
             addSystemMessage(
-              'このルームでは洋楽の曲・MV・ライブ映像など音楽コンテンツのみ投稿をお願いしています。アニメ本編やゲーム実況、切り抜き配信などは控えていただけると助かります。',
+              'この部屋では洋楽の曲・MV・ライブ映像など音楽コンテンツのみ投稿をお願いしています。アニメ本編やゲーム実況、切り抜き配信などは控えていただけると助かります。',
             );
             touchActivity();
             return;
@@ -1978,7 +1980,7 @@ export default function RoomWithSync({
               /* 曲終了で既に促し済みの場合は「5分経過」は出さない（今流れている曲が5分以上のときだけ使う） */
               if (nextPromptShownForVideoIdRef.current === vid) return;
               const orderLen = participatingOrderRef.current.length;
-              // 1人ルームでは promptNextTurn が無言 return する。先に案内済みフラグを立てると
+              // 1人の部屋では promptNextTurn が無言 return する。先に案内済みフラグを立てると
               // 動画終了時の「次の曲をどうぞ」まで潰れるため、複数人のときだけフラグを立てる。
               if (orderLen > 1) {
                 nextPromptShownForVideoIdRef.current = vid;
@@ -2758,7 +2760,7 @@ export default function RoomWithSync({
               type="button"
               onClick={onLeave}
               className="rounded border border-gray-600 bg-gray-800 px-4 py-2 text-sm font-medium text-gray-200 hover:bg-gray-700 hover:text-white"
-              aria-label="ルームを退室して最初の画面に戻る"
+              aria-label="部屋を退室して最初の画面に戻る"
             >
               退室する
             </button>
@@ -2770,6 +2772,7 @@ export default function RoomWithSync({
         <UserBar
           displayName={effectiveDisplayName}
           isGuest={isGuest}
+          onGuestRegisterClick={isGuest ? () => setGuestRegisterModalOpen(true) : undefined}
           onMyPageClick={() => setMyPageOpen(true)}
           onPlaybackHistoryClick={isLg ? undefined : () => setPlaybackHistoryModalOpen(true)}
           currentVideoId={videoId}
@@ -2800,6 +2803,12 @@ export default function RoomWithSync({
           onParticipantClick={(displayName) => chatInputRef.current?.insertText(` ${displayName}さん `)}
         />
       </section>
+
+      <GuestRegisterPromptModal
+        open={guestRegisterModalOpen}
+        onClose={() => setGuestRegisterModalOpen(false)}
+        roomId={roomId}
+      />
 
       {myPageOpen && (
         <div

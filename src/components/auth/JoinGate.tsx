@@ -80,7 +80,7 @@ export function JoinGate({ roomId }: JoinGateProps) {
           };
         };
         if (data?.configured !== true) {
-          setClosedMessage(data?.message?.trim() || '現在このルームは開催管理の準備中です。');
+          setClosedMessage(data?.message?.trim() || '現在この部屋は開催管理の準備中です。');
           setLiveTitle('');
           setRoomDisplayTitle('');
           setStatus('closed');
@@ -88,7 +88,7 @@ export function JoinGate({ roomId }: JoinGateProps) {
         }
         const trialRoom = isTrialRoomId(roomId);
         if (data?.room?.isLive !== true && !trialRoom) {
-          setClosedMessage('現在このルームで開催中の会はありません。');
+          setClosedMessage('現在この部屋で開催中の会はありません。');
           setLiveTitle('');
           setRoomDisplayTitle('');
           setStatus('closed');
@@ -100,7 +100,7 @@ export function JoinGate({ roomId }: JoinGateProps) {
             typeof data?.room?.displayTitle === 'string' ? data.room.displayTitle.trim() : '',
           );
         } else {
-          setLiveTitle(trialRoom ? '体験ルーム' : '');
+          setLiveTitle(trialRoom ? '体験部屋' : '');
           setRoomDisplayTitle('');
         }
 
@@ -138,34 +138,42 @@ export function JoinGate({ roomId }: JoinGateProps) {
     const supabase = createClient();
     const fromStart = typeof window !== 'undefined' && sessionStorage.getItem(FROM_START_KEY);
 
+    const tryEnterAsGuestFromStorage = (): boolean => {
+      if (typeof window === 'undefined' || fromStart) return false;
+      if (!sessionStorage.getItem(GUEST_STORAGE_KEY)) return false;
+      const savedRoom = sessionStorage.getItem(GUEST_ROOM_KEY);
+      if (savedRoom !== roomId) return false;
+      const savedName = sessionStorage.getItem(GUEST_NAME_STORAGE_KEY);
+      setDisplayName(savedName && savedName.trim() ? savedName.trim() : 'ゲスト');
+      setIsGuest(true);
+      setStatus('room');
+      return true;
+    };
+
     void checkRoomLive().then((isLive) => {
       if (!isLive) return;
 
-      if (typeof window !== 'undefined' && !fromStart && sessionStorage.getItem(GUEST_STORAGE_KEY)) {
-        const savedRoom = sessionStorage.getItem(GUEST_ROOM_KEY);
-        if (savedRoom === roomId) {
-          const savedName = sessionStorage.getItem(GUEST_NAME_STORAGE_KEY);
-          setDisplayName(savedName && savedName.trim() ? savedName.trim() : 'ゲスト');
-          setIsGuest(true);
-          setStatus('room');
-          return;
-        }
-      }
-
       if (!supabase) {
-        setStatus('choice');
+        if (!tryEnterAsGuestFromStorage()) setStatus('choice');
         return;
       }
 
-      supabase.auth.getSession().then(({ data: { session } }) => {
+      void supabase.auth.getSession().then(({ data: { session } }) => {
         if (session?.user) {
+          try {
+            sessionStorage.removeItem(GUEST_STORAGE_KEY);
+            sessionStorage.removeItem(GUEST_NAME_STORAGE_KEY);
+            sessionStorage.removeItem(GUEST_ROOM_KEY);
+          } catch {
+            /* ignore */
+          }
           setDisplayName(getDisplayNameFromUser(session.user));
           setIsGuest(false);
           clearFromStart();
           setStatus('room');
-        } else {
-          setStatus('choice');
+          return;
         }
+        if (!tryEnterAsGuestFromStorage()) setStatus('choice');
       });
     });
   }, [roomId, clientId, consentOk]);
@@ -195,7 +203,7 @@ export function JoinGate({ roomId }: JoinGateProps) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-gray-950 p-4">
         <p className="text-center text-lg text-amber-200">
-          利用制限中です。しばらくの間、このルームまたはサイトに入室できません。
+          利用制限中です。しばらくの間、この部屋またはサイトに入室できません。
         </p>
         <a
           href="/"
@@ -211,7 +219,7 @@ export function JoinGate({ roomId }: JoinGateProps) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-gray-950 p-4">
         <p className="max-w-lg text-center text-lg text-gray-100">
-          {closedMessage || '現在このルームは開催中ではないため入室できません。'}
+          {closedMessage || '現在この部屋は開催中ではないため入室できません。'}
         </p>
         {liveTitle && (
           <p className="text-center text-sm text-gray-300">

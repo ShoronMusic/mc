@@ -4,7 +4,7 @@
 
 ## 概要
 
-- **Next.js 14**（App Router）、**TypeScript**、ルーム同期チャット＋YouTube 選曲＋曲解説（Gemini）。
+- **Next.js 14**（App Router）、**TypeScript**、部屋同期チャット＋YouTube 選曲＋曲解説（Gemini）。
 - 本番・開発の秘密情報は **`.env.local`**（コミット禁止）。
 
 ## 心臓部（触るときはここを読む）

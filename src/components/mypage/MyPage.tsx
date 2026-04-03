@@ -21,6 +21,7 @@ import {
   DEFAULT_COMMENT_PACK_SLOTS,
   toggleCommentPackSlot,
 } from '@/lib/comment-pack-slots';
+import { assignDefaultGuestDisplayName } from '@/lib/guest-display-name';
 
 function getDisplayName(user: User | null): string {
   if (!user) return '';
@@ -160,7 +161,7 @@ function LobbyMessageOwnerBlock({
     setErr(null);
     setSavedOk(false);
     if (titleOver) {
-      setErr(`部屋タイトルは${ROOM_DISPLAY_TITLE_MAX_CHARS}文字以内にしてください。`);
+      setErr(`部屋の名前は${ROOM_DISPLAY_TITLE_MAX_CHARS}文字以内にしてください。`);
       return;
     }
     if (over) {
@@ -216,16 +217,16 @@ function LobbyMessageOwnerBlock({
 
   return (
     <div className="mb-4 border-b border-amber-800/30 pb-4">
-      <h4 className="mb-1 text-xs font-medium text-gray-300">主催者向け（部屋タイトル・PR文）</h4>
+      <h4 className="mb-1 text-xs font-medium text-gray-300">主催者向け（部屋の名前・PR文）</h4>
       <p className="mb-3 text-[11px] leading-relaxed text-gray-500">
-        開催中の会の主催者、またはチャットオーナーが編集できます。トップの開催中一覧・ルーム上部の見出しに部屋タイトルが使われます（未入力時は会のタイトルが表示されます）。PR文はトップのカード内の紹介文です。
+        開催中の会の主催者、またはチャットオーナーが編集できます。トップの開催中一覧・部屋上部の見出しに部屋の名前が使われます（未入力時は保存されている名称が表示されます）。PR文はトップのカード内の紹介文です。
       </p>
       {loading ? (
         <p className="text-xs text-gray-500">読み込み中…</p>
       ) : (
         <>
           <label className="mb-2 block">
-            <span className="mb-1 block text-xs text-gray-400">部屋のタイトル</span>
+            <span className="mb-1 block text-xs text-gray-400">部屋の名前</span>
             <input
               type="text"
               value={titleValue}
@@ -236,7 +237,7 @@ function LobbyMessageOwnerBlock({
               maxLength={ROOM_DISPLAY_TITLE_MAX_CHARS}
               className="w-full rounded border border-gray-600 bg-gray-800 px-3 py-2 text-sm text-white placeholder:text-gray-500"
               placeholder="例: ようつべ洋楽会"
-              aria-label="部屋のタイトル"
+              aria-label="部屋の名前"
             />
             <span className={`mt-0.5 block text-[11px] ${titleOver ? 'text-red-400' : 'text-gray-500'}`}>
               {titleN} / {ROOM_DISPLAY_TITLE_MAX_CHARS}
@@ -314,9 +315,9 @@ interface MyPageProps {
   onJpAiUnlockToggle?: () => void;
   /** オーナー時のみ。参加者を強制退出 */
   onForceExit?: (targetClientId: string, targetDisplayName: string) => void;
-  /** 入室前メッセージ用。同期ルームの roomId（例: 01） */
+  /** 入室前メッセージ用。同期する部屋の roomId（例: 01） */
   roomId?: string;
-  /** 部屋タイトル・PR保存後の即時反映用 */
+  /** 部屋の名前・PR保存後の即時反映用 */
   onRoomProfileSaved?: (payload: { displayTitle: string; message: string }) => void;
 }
 
@@ -539,7 +540,7 @@ export default function MyPage({
         const timeStr = `${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`;
         const title = row.title || row.video_id;
         const artist = row.artist ? `（${row.artist}）` : '';
-        lines.push(`ルーム ${row.room_id || '—'} · ${timeStr}`);
+        lines.push(`部屋 ${row.room_id || '—'} · ${timeStr}`);
         lines.push(`${title}${artist}`);
         lines.push(row.url);
         lines.push('');
@@ -679,7 +680,7 @@ export default function MyPage({
           <div className="mb-4 rounded border border-amber-700/50 bg-amber-900/20 p-3">
             <h3 className="mb-2 flex items-center gap-1.5 text-sm font-medium text-amber-200">
               <span aria-hidden>👑</span>
-              ルーム管理（主催者・オーナー）
+              部屋管理（主催者・オーナー）
             </h3>
             <LobbyMessageOwnerBlock
               roomId={effectiveRoomId}
@@ -702,7 +703,9 @@ export default function MyPage({
               />
               <button
                 type="button"
-                onClick={() => onGuestDisplayNameChange?.(guestNameValue.trim() || 'ゲスト')}
+                onClick={() =>
+                  onGuestDisplayNameChange?.(guestNameValue.trim() || assignDefaultGuestDisplayName())
+                }
                 className="rounded bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700"
               >
                 反映
@@ -826,7 +829,7 @@ export default function MyPage({
         <div className="mb-4 rounded border border-amber-700/50 bg-amber-900/20 p-3">
           <h3 className="mb-3 flex items-center gap-1.5 text-sm font-medium text-amber-200">
             <span aria-hidden>👑</span>
-            ルーム管理（主催者・オーナー）
+            部屋管理（主催者・オーナー）
           </h3>
 
           {showOrganizerRoomEditor ? (
@@ -1260,12 +1263,12 @@ export default function MyPage({
           {historyTab === 'songs' && (
             <>
               <p className="mb-3 text-xs text-gray-500">
-                参加したチャットで貼った曲を日付・ルーム・貼った時間で表示します。履歴テーブルの設定は docs/supabase-song-history-table.md を参照してください。
+                参加したチャットで貼った曲を日付・部屋・貼った時間で表示します。履歴テーブルの設定は docs/supabase-song-history-table.md を参照してください。
               </p>
               {songHistoryLoading ? (
             <p className="text-sm text-gray-500">読み込み中…</p>
           ) : songHistory.length === 0 ? (
-            <p className="text-sm text-gray-500">まだ履歴がありません。ルームでYouTubeのURLを貼ると保存されます。</p>
+            <p className="text-sm text-gray-500">まだ履歴がありません。部屋でYouTubeのURLを貼ると保存されます。</p>
           ) : (
             <div className="max-h-64 space-y-4 overflow-y-auto">
               {(() => {
@@ -1293,7 +1296,7 @@ export default function MyPage({
                           return (
                             <li key={row.id} className="border-b border-gray-700/50 pb-2 last:border-0 last:pb-0">
                               <p className="text-xs text-gray-500">
-                                ルーム {row.room_id || '—'} · {timeStr}
+                                部屋 {row.room_id || '—'} · {timeStr}
                               </p>
                               <p className="text-sm text-gray-200">
                                 {title}
@@ -1339,7 +1342,7 @@ export default function MyPage({
               {favoritesLoading ? (
                 <p className="text-sm text-gray-500">読み込み中…</p>
               ) : favorites.length === 0 ? (
-                <p className="text-sm text-gray-500">お気に入りはまだありません。ルームの視聴履歴でハートを押して追加できます。</p>
+                <p className="text-sm text-gray-500">お気に入りはまだありません。部屋の視聴履歴でハートを押して追加できます。</p>
               ) : (
                 <div className="max-h-64 space-y-3 overflow-y-auto">
                   {favorites.map((f) => {
@@ -1393,7 +1396,7 @@ export default function MyPage({
                     return (
                       <div key={row.id} className="rounded border border-gray-700 bg-gray-800/50 p-2">
                         <p className="text-xs text-gray-500">
-                          ルーム {row.room_id || '—'} · {row.gathering_title || '会タイトル未設定'}
+                          部屋 {row.room_id || '—'} · {row.gathering_title || '部屋の名前未設定'}
                         </p>
                         <p className="text-sm text-gray-200">入室: {joinedStr}</p>
                         <p className="text-xs text-gray-400">退出: {leftStr}</p>

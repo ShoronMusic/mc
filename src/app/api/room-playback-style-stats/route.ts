@@ -15,7 +15,7 @@ function aggregateStyles(rows: { style: string | null }[]): Record<string, numbe
 }
 
 /**
- * GET: ルームの視聴履歴からスタイル件数集計
+ * GET: 部屋の視聴履歴からスタイル件数集計
  * Query: roomId, mode = 24h | last100
  */
 export async function GET(request: Request) {

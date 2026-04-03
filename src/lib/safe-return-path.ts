@@ -1,5 +1,5 @@
 /**
- * クエリ `returnTo` 用。オープンリダイレクトを防ぎ、ルーム直下パスのみ許可する。
+ * クエリ `returnTo` 用。オープンリダイレクトを防ぎ、部屋直下パスのみ許可する。
  * roomId は API 側と同様に [a-zA-Z0-9_-]{1,48} を想定。
  */
 const BLOCKED_FIRST_SEGMENTS = new Set([

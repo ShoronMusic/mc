@@ -66,7 +66,7 @@ type LogRow = {
 };
 
 /**
- * GET: 指定ルーム・指定日（JST 1日）の会話ログをプレーンテキストで返す。
+ * GET: 指定部屋・指定日（JST 1日）の会話ログをプレーンテキストで返す。
  * Query: roomId（必須）, date=YYYY-MM-DD（省略時は今日 JST）, gatheringId（任意）, download=1（ファイルダウンロード）
  */
 export async function GET(request: Request) {
@@ -119,7 +119,7 @@ export async function GET(request: Request) {
   const list = truncated ? rows.slice(0, MAX_EXPORT_ROWS) : rows;
 
   const header = [
-    `ルームID: ${roomId}`,
+    `部屋ID: ${roomId}`,
     gatheringId ? `会ID: ${gatheringId}` : null,
     `日付（JST）: ${ymd}`,
     `件数: ${list.length}${truncated ? `（上限 ${MAX_EXPORT_ROWS} 件で打ち切り）` : ''}`,

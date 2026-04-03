@@ -1,6 +1,6 @@
 /**
- * ルームオーナー・強制退出まわり
- * - 同一ルーム用の安定した clientId（sessionStorage）
+ * 部屋オーナー・強制退出まわり
+ * - 同一部屋用の安定した clientId（sessionStorage）
  * - 強制退出後の 3 時間入室禁止（localStorage）
  * - オーナー不在時は5分経過で「残っているメンバーのうち、現在の在室セッションで最も早く入室した人」に自動付与
  */
@@ -61,7 +61,7 @@ export function getCommentPackModeStorageKey(roomId: string): string {
   return `${COMMENT_PACK_MODE_PREFIX}${roomId}`;
 }
 
-/** 曲紹介コメントのスロット選択。退室後も同一ブラウザ・同一ルームで復元する */
+/** 曲紹介コメントのスロット選択。退室後も同一ブラウザ・同一部屋で復元する */
 export function getCommentPackSlotsFromStorage(roomId: string): CommentPackSlotSelection | null {
   if (typeof window === 'undefined' || !roomId) return null;
   try {
@@ -93,7 +93,7 @@ export function getRoomClientIdStorageKey(roomId: string): string {
   return `${ABLY_CID_PREFIX}${roomId}`;
 }
 
-/** このルーム用の clientId を取得または生成（sessionStorage） */
+/** この部屋用の clientId を取得または生成（sessionStorage） */
 export function getOrCreateRoomClientId(roomId: string): string {
   if (typeof window === 'undefined') return '';
   const key = getRoomClientIdStorageKey(roomId);
@@ -133,7 +133,7 @@ export function setKicked(roomId: string, clientId: string): void {
   } catch {}
 }
 
-/** 現在の clientId がこのルームでキック済みかつ期限内か */
+/** 現在の clientId がこの部屋でキック済みかつ期限内か */
 export function isKickedForRoom(roomId: string, clientId: string): boolean {
   if (typeof window === 'undefined' || !roomId || !clientId) return false;
   try {

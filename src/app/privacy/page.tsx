@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { withPolicyModalQuery } from '@/lib/policy-modal-link';
 
 export const metadata: Metadata = {
   title: 'プライバシーポリシー | 洋楽AIチャット',
@@ -34,7 +35,10 @@ export default function PrivacyPage({ searchParams }: PrivacyPageProps) {
         <h1 className="text-2xl font-bold text-white">プライバシーポリシー（簡潔版）</h1>
         <p className="mt-2 text-gray-500">
           制定日・改定日は、本ページの更新時点を基準に運用します。詳細な利用条件は{' '}
-          <Link href="/terms" className="text-amber-400 underline-offset-2 hover:underline">
+          <Link
+            href={withPolicyModalQuery('/terms', isModal)}
+            className="text-amber-400 underline-offset-2 hover:underline"
+          >
             利用規約
           </Link>
           もあわせてご確認ください。

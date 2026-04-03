@@ -23,21 +23,21 @@ export interface OwnerStatePayload {
   ownerLeftAt: number | null;
 }
 
-/** 選曲順の同期（今誰の番か）。そのルームのセッションのみ */
+/** 選曲順の同期（今誰の番か）。その部屋のセッションのみ */
 export const TURN_STATE_EVENT = 'room:turnState';
 
 export interface TurnStatePayload {
   currentTurnClientId: string;
 }
 
-/** オーナーによる5分制限のON/OFF。そのルームのセッションのみ。デフォルトON */
+/** オーナーによる5分制限のON/OFF。その部屋のセッションのみ。デフォルトON */
 export const OWNER_5MIN_LIMIT_EVENT = 'owner:5minLimit';
 
 export interface Owner5MinLimitPayload {
   enabled: boolean;
 }
 
-/** オーナーによる曲紹介コメント本数設定（そのルームのセッションのみ） */
+/** オーナーによる曲紹介コメント本数設定（その部屋のセッションのみ） */
 export const OWNER_COMMENT_PACK_MODE_EVENT = 'owner:commentPackMode';
 
 export type { CommentPackSlotSelection };
@@ -49,7 +49,7 @@ export interface OwnerCommentPackModePayload {
   sentAt?: number;
 }
 
-/** オーナーによる「邦楽AI解説の解禁」設定（そのルームのセッションのみ）。デフォルトOFF */
+/** オーナーによる「邦楽AI解説の解禁」設定（その部屋のセッションのみ）。デフォルトOFF */
 export const OWNER_JP_AI_UNLOCK_EVENT = 'owner:jpAiUnlock';
 
 export interface OwnerJpAiUnlockPayload {

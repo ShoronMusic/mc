@@ -44,7 +44,7 @@ async function aggregateErasFromHistoryRows(
 }
 
 /**
- * GET: ルームの視聴履歴＋song_era から年代件数集計（再生1行ごとにカウント）
+ * GET: 部屋の視聴履歴＋song_era から年代件数集計（再生1行ごとにカウント）
  * Query: roomId, mode = 24h | last100
  */
 export async function GET(request: Request) {

@@ -1,5 +1,5 @@
 /**
- * チャットメッセージ・ルームまわりの型
+ * チャットメッセージ・部屋まわりの型
  */
 
 export type MessageType = 'user' | 'ai' | 'system';

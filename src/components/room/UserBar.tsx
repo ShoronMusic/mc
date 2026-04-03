@@ -2,13 +2,14 @@
 
 /**
  * 参加ユーザー一覧バー。
- * - PC (lg+): 左に参加者チップ、右にマイページ・視聴履歴（従来どおり）。
- * - モバイル: 1行固定。左＝全員表示トグル、中央＝再生中の選曲者＋波形、右＝アイコン（マイページ・履歴）。
+ * - PC (lg+): 左に参加者チップ、右にユーザー登録（ゲスト時のみ）・マイページ・視聴履歴など。
+ * - モバイル: 1行固定。左＝全員表示トグル、中央＝再生中の選曲者＋波形、右＝アイコン（登録・マイページ・履歴など）。
  */
 
 import { useEffect, useState } from 'react';
 import {
   UserCircleIcon,
+  UserPlusIcon,
   ClockIcon,
   UsersIcon,
   ChevronDownIcon,
@@ -29,6 +30,8 @@ export interface ParticipantItem {
 interface UserBarProps {
   displayName?: string;
   isGuest?: boolean;
+  /** ゲスト時のみ: 本登録を促す（マイページの左に「ユーザー登録」を出す） */
+  onGuestRegisterClick?: () => void;
   onMyPageClick?: () => void;
   /** モバイル等: マイページの右隣に「視聴履歴」ボタンを出す */
   onPlaybackHistoryClick?: () => void;
@@ -70,6 +73,7 @@ function participantDisplayName(
 export default function UserBar({
   displayName = 'ゲスト',
   isGuest = false,
+  onGuestRegisterClick,
   onMyPageClick,
   onPlaybackHistoryClick,
   onChatSummaryClick,
@@ -90,6 +94,7 @@ export default function UserBar({
   const isLg = useIsLgViewport();
   const [listOpen, setListOpen] = useState(false);
   const label = isGuest ? `${displayName}（ゲスト）` : displayName;
+  const showGuestRegister = isGuest && onGuestRegisterClick != null;
 
   const participantNamesTitle =
     participants.length > 0
@@ -119,6 +124,22 @@ export default function UserBar({
     currentSongPosterClientId !== ''
       ? participants.find((p) => p.clientId === currentSongPosterClientId)
       : undefined;
+
+  const guestRegisterButtonMobile =
+    showGuestRegister ? (
+      <button
+        type="button"
+        onClick={() => {
+          setListOpen(false);
+          onGuestRegisterClick?.();
+        }}
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-emerald-700/60 bg-emerald-950/40 text-emerald-100 hover:bg-emerald-900/50"
+        aria-label="ユーザー登録"
+        title="ユーザー登録"
+      >
+        <UserPlusIcon className="h-5 w-5" aria-hidden />
+      </button>
+    ) : null;
 
   const myPageButton =
     onMyPageClick != null ? (
@@ -350,8 +371,19 @@ export default function UserBar({
     );
 
   const desktopTrailing =
-    myPageButton || playbackHistoryButton || chatSummaryButton ? (
+    showGuestRegister || onMyPageClick != null || onPlaybackHistoryClick != null || onChatSummaryClick != null ? (
       <div className="flex shrink-0 items-center gap-2">
+        {showGuestRegister ? (
+          <button
+            type="button"
+            onClick={onGuestRegisterClick}
+            className="shrink-0 rounded border border-emerald-700/60 bg-emerald-950/40 px-3 py-2 text-sm font-medium text-emerald-100 hover:bg-emerald-900/50 sm:px-4"
+            aria-label="ユーザー登録"
+            title="ユーザー登録"
+          >
+            ユーザー登録
+          </button>
+        ) : null}
         {onMyPageClick != null ? (
           <button
             type="button"
@@ -482,9 +514,14 @@ export default function UserBar({
     );
 
   const mobileTrailing =
-    favoriteCurrentButton || myPageButton || playbackHistoryButton || chatSummaryButton ? (
+    favoriteCurrentButton ||
+    guestRegisterButtonMobile ||
+    myPageButton ||
+    playbackHistoryButton ||
+    chatSummaryButton ? (
       <div className="flex shrink-0 items-center gap-1">
         {favoriteCurrentButton}
+        {guestRegisterButtonMobile}
         {myPageButton}
         {playbackHistoryButton}
         {chatSummaryButton}

@@ -26,7 +26,7 @@ export function GuideFullNotice() {
       <article className="space-y-5 border-b border-gray-800 pb-6">
         <h2 className="text-lg font-bold text-white">チャットのマナー</h2>
         <section className="space-y-2">
-          <h3 className="font-semibold text-white">相手とルームへの敬意</h3>
+          <h3 className="font-semibold text-white">相手と部屋への敬意</h3>
           <ul className="list-disc space-y-1 pl-5 text-gray-400">
             <li>誹謗中傷・差別・煽り・荒らしは行わないでください。</li>
             <li>相手の趣味や好みを否定する発言は避け、建設的な会話を心がけてください。</li>
@@ -36,13 +36,13 @@ export function GuideFullNotice() {
           <h3 className="font-semibold text-white">スパム・宣伝・連投</h3>
           <ul className="list-disc space-y-1 pl-5 text-gray-400">
             <li>同じ内容の連投や、無関係な宣伝・外部誘導はご遠慮ください。</li>
-            <li>リンクを貼る場合は、相手やルームの文脈に合うものにしてください。</li>
+            <li>リンクを貼る場合は、相手や部屋の文脈に合うものにしてください。</li>
           </ul>
         </section>
         <section className="space-y-2">
           <h3 className="font-semibold text-white">トピック</h3>
           <p className="text-gray-400">
-            本サービスは洋楽を楽しむ場です。ルームの雰囲気に大きく反する話題は控えめにするか、別の場を検討してください。
+            本サービスは洋楽を楽しむ場です。部屋の雰囲気に大きく反する話題は控えめにするか、別の場を検討してください。
           </p>
         </section>
         <section className="space-y-2">
@@ -80,7 +80,7 @@ export function GuideFullNotice() {
             <li>1回目: システムから注意メッセージが表示されます。</li>
             <li>2回目: イエローカード1枚が付与され、参加者一覧の当該ユーザー名の前に表示されます。</li>
             <li>3回目: イエローカード2枚目が付与され、次の違反で退場となる旨の警告が表示されます。</li>
-            <li>4回目相当: ルームから強制退場となり、一定期間（現在は約3時間）ルームおよびサイトへの入室が制限される場合があります。</li>
+            <li>4回目相当: 部屋から強制退場となり、一定期間（現在は約3時間）部屋およびサイトへの入室が制限される場合があります。</li>
           </ul>
           <p className="text-gray-400">
             判定は自動のため、意図と異なる結果になることがあります。繰り返し問題になる場合は、チャットオーナーや運営の案内に従ってください。
@@ -159,11 +159,11 @@ export function GuideFullNotice() {
           </ul>
         </section>
         <section className="space-y-2">
-          <h3 className="font-semibold text-white">ルームの指定</h3>
+          <h3 className="font-semibold text-white">部屋の指定</h3>
           <p className="text-gray-400">
             トップから 01〜03 に入るほか、URL で <code className="rounded bg-gray-800 px-1 py-0.5 text-gray-200">/04</code>、
             <code className="rounded bg-gray-800 px-1 py-0.5 text-gray-200">/05</code>{' '}
-            のようにルーム番号を指定できます。知らないリンクからの入室には注意してください。
+            のように部屋番号を指定できます。知らないリンクからの入室には注意してください。
           </p>
         </section>
         <section className="space-y-2">

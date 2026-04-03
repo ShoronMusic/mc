@@ -57,7 +57,7 @@ export type RoomPlaybackHistoryRow = {
 const SINCE_MAX_FUTURE_SKEW_MS = 120_000;
 
 /**
- * GET: ルームの視聴履歴一覧（played_at 降順）
+ * GET: 部屋の視聴履歴一覧（played_at 降順）
  * Query: roomId, since（任意・ISO8601）— 指定時は played_at >= since の行のみ
  */
 export async function GET(request: Request) {
@@ -137,7 +137,7 @@ export async function GET(request: Request) {
  * Body: { roomId, videoId, displayName, isGuest }
  * - 同じ人・同じ曲が2分以内なら同一扱いで挿入しない
  * - ゲストは display_name を "ニックネーム (G)" 形式で保存
- * - 邦楽と判定され、かつルームで「邦楽解禁」が有効でない場合（公式チャ例外もなし）は挿入せず skipped: jp_domestic
+ * - 邦楽と判定され、かつ部屋で「邦楽解禁」が有効でない場合（公式チャ例外もなし）は挿入せず skipped: jp_domestic
  */
 export async function POST(request: Request) {
   const supabase = await createClient();

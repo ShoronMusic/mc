@@ -20,7 +20,7 @@ export function AdminLoginHint() {
         にアクセスしてください。
       </p>
       <p className="mt-2 text-xs text-amber-200/80">
-        ルーム入室時の「Google で続行」でログインできます。アカウントは{' '}
+        部屋入室時の「Google で続行」でログインできます。アカウントは{' '}
         <code className="rounded bg-black/30 px-1">STYLE_ADMIN_USER_IDS</code> に登録されている必要があります。
       </p>
     </div>

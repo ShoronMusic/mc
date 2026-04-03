@@ -87,7 +87,7 @@ function RoomRow({
       className="flex flex-col gap-1.5 rounded-lg border border-gray-600 bg-gray-800 px-4 py-3 text-white transition hover:bg-gray-700"
     >
       <span className="text-center font-medium">{label}</span>
-      <span className="text-center text-[11px] text-gray-500">ルームID: {room.roomId}</span>
+      <span className="text-center text-[11px] text-gray-500">部屋ID: {room.roomId}</span>
       {payload?.jpAiUnlockEnabled && (
         <span className="text-center text-[11px] font-medium text-emerald-300">邦楽解禁</span>
       )}

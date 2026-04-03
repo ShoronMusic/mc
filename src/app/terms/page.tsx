@@ -5,6 +5,7 @@ import {
   ServiceDisclaimerList,
 } from '@/components/legal/ServiceDisclaimer';
 import { ServicePricingNotice } from '@/components/legal/ServicePricingNotice';
+import { withPolicyModalQuery } from '@/lib/policy-modal-link';
 
 export const metadata: Metadata = {
   title: '利用規約 | 洋楽AIチャット',
@@ -22,7 +23,7 @@ function resolveReturnToPath(returnToRaw: string | string[] | undefined): string
   const value = Array.isArray(returnToRaw) ? returnToRaw[0] : returnToRaw;
   if (!value || typeof value !== 'string') return null;
   const decoded = value.trim();
-  // オープンリダイレクト防止: ローカルパスのみ許可（このアプリのルームは "/01" 形式）
+  // オープンリダイレクト防止: ローカルパスのみ許可（このアプリの部屋は "/01" 形式）
   if (!decoded.startsWith('/')) return null;
   if (decoded.startsWith('//')) return null;
   if (decoded.includes('://')) return null;
@@ -68,11 +69,17 @@ export default function TermsPage({ searchParams }: TermsPageProps) {
         <h1 className="text-2xl font-bold text-white">利用規約（要約）</h1>
         <p className="mt-2 text-gray-500">
           最終更新目安：掲載日時点。詳しいマナー・AI・楽曲・安全については{' '}
-          <Link href="/guide" className="text-amber-400 underline-offset-2 hover:underline">
+          <Link
+            href={withPolicyModalQuery('/guide', isModal)}
+            className="text-amber-400 underline-offset-2 hover:underline"
+          >
             ご利用上の注意
           </Link>
           、個人情報の取扱いは{' '}
-          <Link href="/privacy" className="text-amber-400 underline-offset-2 hover:underline">
+          <Link
+            href={withPolicyModalQuery('/privacy', isModal)}
+            className="text-amber-400 underline-offset-2 hover:underline"
+          >
             プライバシーポリシー
           </Link>
           をあわせてご確認ください。
@@ -126,12 +133,18 @@ export default function TermsPage({ searchParams }: TermsPageProps) {
             <p className="mt-1 text-gray-400">
               AI の出力は参考情報であり、正確性・完全性を保証しません。本サービス内に表示されるアーティスト名・楽曲に関する説明・経歴・リリース情報等のうち、外部の参照データに基づくものについても、
               <strong className="text-gray-300">正確性・真偽・網羅性・最新性および再生中の動画・楽曲との対応関係</strong>
-              を運営は保証しません。YouTube 等の第三者サービスは各提供者の規約に従います。詳細は{' '}
-              <Link href="/guide/ai" className="text-amber-400 underline-offset-2 hover:underline">
+              を運営は保証しません。YouTube 等の第三者サービスは各提供者の規約に従います。              詳細は{' '}
+              <Link
+                href={withPolicyModalQuery('/guide/ai', isModal)}
+                className="text-amber-400 underline-offset-2 hover:underline"
+              >
                 AI について
               </Link>
               ／
-              <Link href="/guide/music" className="text-amber-400 underline-offset-2 hover:underline">
+              <Link
+                href={withPolicyModalQuery('/guide/music', isModal)}
+                className="text-amber-400 underline-offset-2 hover:underline"
+              >
                 曲・コメント
               </Link>
               を参照してください。

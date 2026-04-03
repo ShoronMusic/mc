@@ -108,7 +108,7 @@ export default function UpdatePasswordPage() {
       <div className="mx-auto flex min-h-screen max-w-md flex-col justify-center bg-gray-950 p-4 text-gray-300">
         <h1 className="mb-3 text-lg font-semibold text-white">パスワード再設定</h1>
         <p className="text-sm leading-relaxed text-gray-400">
-          リンクの有効期限が切れているか、セッションを確認できませんでした。パスワード再設定メールのリンクをもう一度開くか、ルーム参加画面の「パスワードをお忘れですか？」からやり直してください。
+          リンクの有効期限が切れているか、セッションを確認できませんでした。パスワード再設定メールのリンクをもう一度開くか、部屋への参加画面の「パスワードをお忘れですか？」からやり直してください。
         </p>
         <Link
           href="/"

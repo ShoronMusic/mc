@@ -90,7 +90,7 @@ Google認証で参加できるようにするには、Supabase 側で Google を
 2. **Client ID** と **Client Secret** の欄に、5.2 でコピーした値を貼り付ける。
 3. **Save** で保存する。
 
-これで **「Google認証で参加」** のボタンが利用できます。ルームページ（例: /01）で Google 認証を選ぶと、認証後に同じルームに戻ります。
+これで **「Google認証で参加」** のボタンが利用できます。部屋ページ（例: /01）で Google 認証を選ぶと、認証後に同じ部屋に戻ります。
 
 ---
 
@@ -129,13 +129,13 @@ Google認証で参加できるようにするには、Supabase 側で Google を
 
 ## 8. マイページの「貼った曲の履歴」を使う場合
 
-マイページで、参加したチャットで貼った曲の履歴（日付・ルーム・アーティスト・タイトル・URL・貼った時間）を表示するには、Supabase に履歴用テーブルを作成する必要があります。手順は **docs/supabase-song-history-table.md** を参照してください。
+マイページで、参加したチャットで貼った曲の履歴（日付・部屋・アーティスト・タイトル・URL・貼った時間）を表示するには、Supabase に履歴用テーブルを作成する必要があります。手順は **docs/supabase-song-history-table.md** を参照してください。
 
 ---
 
-## 9. トップページ「ルーム入室前メッセージ」・部屋タイトルを使う場合
+## 9. トップページ「部屋入室前メッセージ」・部屋の名前を使う場合
 
-主催者／チャットオーナーがマイページから設定する **PR文**（入室前一覧に表示・100 文字以内）と **部屋タイトル**（トップの見出し・ルーム上部・40 文字以内）を保存するには、次の SQL を **SQL Editor** で実行してください。**書き込みは API がサービスロールで行う**ため、`SUPABASE_SERVICE_ROLE_KEY` を `.env.local` に設定している必要があります（7 章と同じキー）。
+主催者／チャットオーナーがマイページから設定する **PR文**（入室前一覧に表示・100 文字以内）と **部屋の名前**（トップの見出し・部屋上部・40 文字以内）を保存するには、次の SQL を **SQL Editor** で実行してください。**書き込みは API がサービスロールで行う**ため、`SUPABASE_SERVICE_ROLE_KEY` を `.env.local` に設定している必要があります（7 章と同じキー）。
 
 ```sql
 create table if not exists public.room_lobby_message (
@@ -145,7 +145,7 @@ create table if not exists public.room_lobby_message (
   constraint room_lobby_message_len check (char_length(message) <= 100)
 );
 
--- 既存テーブル向け: トップ・ルームヘッダー用の「部屋タイトル」（任意）
+-- 既存テーブル向け: トップ・部屋ヘッダー用の「部屋の名前」（任意）
 alter table public.room_lobby_message add column if not exists display_title text not null default '';
 alter table public.room_lobby_message drop constraint if exists room_lobby_display_title_len;
 alter table public.room_lobby_message add constraint room_lobby_display_title_len check (char_length(display_title) <= 40);
@@ -159,13 +159,13 @@ create policy "room_lobby_message_select_anon"
 
 （`insert` / `update` / `delete` は anon には付けず、サーバー API のサービスロールのみが RLS をバイパスして書き込みます。）
 
-トップページが参加人数を取得するたび（約 20 秒ごと）、**在室 0 人のルームの入室前メッセージ行は自動で削除**されます。本番でも `SUPABASE_SERVICE_ROLE_KEY` をデプロイ環境に設定してください（未設定だと削除はスキップされますが、API 側では在室 0 のときメッセージを返さないため一覧には出ません）。
+トップページが参加人数を取得するたび（約 20 秒ごと）、**在室 0 人の部屋の入室前メッセージ行は自動で削除**されます。本番でも `SUPABASE_SERVICE_ROLE_KEY` をデプロイ環境に設定してください（未設定だと削除はスキップされますが、API 側では在室 0 のときメッセージを返さないため一覧には出ません）。
 
 ---
 
 ## 10. マイページ「参加履歴」を使う場合
 
-ログインユーザーのチャット参加履歴（ルーム・会タイトル・入室/退出時刻）を記録するには、次の SQL を **SQL Editor** で実行してください。
+ログインユーザーのチャット参加履歴（部屋・開催タイトル・入室/退出時刻）を記録するには、次の SQL を **SQL Editor** で実行してください。
 
 ```sql
 create table if not exists public.user_room_participation_history (

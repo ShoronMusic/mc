@@ -1,5 +1,5 @@
 /**
- * ルーム再生まわりのデバッグログ。
+ * 部屋の再生まわりのデバッグログ。
  * - 開発時: 既定で ON（`localStorage mc:playback:debug=0` で抑止）
  * - 本番: `localStorage mc:playback:debug=1` のときのみ ON
  */

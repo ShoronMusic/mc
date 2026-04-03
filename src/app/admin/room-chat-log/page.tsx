@@ -86,7 +86,7 @@ export default function AdminRoomChatLogPage() {
       <div className="mx-auto max-w-5xl">
         <AdminMenuBar />
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-          <h1 className="text-xl font-semibold">ルーム会話ログ（日付・ルーム別）</h1>
+          <h1 className="text-xl font-semibold">部屋の会話ログ（日付・部屋別）</h1>
           <div className="flex flex-wrap items-center gap-2">
             <label className="flex items-center gap-2 text-sm">
               集計期間
@@ -114,10 +114,10 @@ export default function AdminRoomChatLogPage() {
         <section className="mb-6 rounded-lg border border-gray-700 bg-gray-900/50 p-4 text-sm text-gray-400">
           <p>
             <strong className="text-gray-300">STYLE_ADMIN_USER_IDS</strong> に入っているアカウントでのみ表示されます。集計は{' '}
-            <strong className="text-gray-300">日本時間の日付</strong>×<strong className="text-gray-300">ルームID</strong>です。
+            <strong className="text-gray-300">日本時間の日付</strong>×<strong className="text-gray-300">部屋ID</strong>です。
           </p>
           <p className="mt-2">
-            「テキスト」はブラウザで1日分のログを表示、「DL」は .txt ダウンロードです。ルームへは入室用リンクです。
+            「テキスト」はブラウザで1日分のログを表示、「DL」は .txt ダウンロードです。部屋へは入室用リンクです。
           </p>
         </section>
 
@@ -155,7 +155,7 @@ export default function AdminRoomChatLogPage() {
                       <table className="w-full min-w-[640px] text-left text-sm">
                         <thead className="border-b border-gray-700 bg-gray-800/80">
                           <tr>
-                            <th className="px-3 py-2">ルームID</th>
+                            <th className="px-3 py-2">部屋ID</th>
                             <th className="px-3 py-2 text-right">件数</th>
                             <th className="px-3 py-2">リンク</th>
                           </tr>
@@ -187,7 +187,7 @@ export default function AdminRoomChatLogPage() {
                                     href={`/${encodeURIComponent(r.room_id)}`}
                                     className="text-gray-400 hover:text-gray-300 hover:underline"
                                   >
-                                    ルームへ
+                                    部屋へ
                                   </Link>
                                 </div>
                               </td>

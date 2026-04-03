@@ -108,7 +108,7 @@ export async function POST(request: Request) {
   const admin = createAdminClient();
   if (!admin) {
     return NextResponse.json(
-      { error: 'ルームメッセージの保存には SUPABASE_SERVICE_ROLE_KEY が必要です。' },
+      { error: '部屋メッセージの保存には SUPABASE_SERVICE_ROLE_KEY が必要です。' },
       { status: 503 }
     );
   }
@@ -190,7 +190,7 @@ export async function POST(request: Request) {
     }
 
     if (!members.some((m) => m.clientId === clientId)) {
-      return NextResponse.json({ error: 'このルームに在室しているチャットオーナーのみ保存できます。' }, { status: 403 });
+      return NextResponse.json({ error: 'この部屋に在室しているチャットオーナーのみ保存できます。' }, { status: 403 });
     }
 
     if (!ownerId || ownerId !== clientId) {
@@ -218,7 +218,7 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           error:
-            'room_lobby_message テーブルがありません。docs/supabase-setup.md の「ルーム入室前メッセージ」に SQL があります。',
+            'room_lobby_message テーブルがありません。docs/supabase-setup.md の「部屋入室前メッセージ」に SQL があります。',
         },
         { status: 503 }
       );
@@ -227,7 +227,7 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           error:
-            'display_title 列がありません。docs/supabase-setup.md の「ルーム入室前メッセージ」に追記の alter を実行してください。',
+            'display_title 列がありません。docs/supabase-setup.md の「部屋入室前メッセージ」に追記の alter を実行してください。',
         },
         { status: 503 }
       );

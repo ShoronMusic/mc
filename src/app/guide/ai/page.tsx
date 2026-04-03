@@ -10,7 +10,7 @@ export default function GuideAiPage() {
     <article className="space-y-6 text-sm leading-relaxed text-gray-300">
       <h1 className="text-2xl font-bold text-white">AI について</h1>
       <p className="text-xs leading-relaxed text-gray-500">
-        ルーム内チャットのリンクから開いた場合、画面上部に「← チャットのルームに戻る」が表示されます。表示されない場合は、ブラウザの戻るでも直前の画面に戻れます。
+        部屋内チャットのリンクから開いた場合、画面上部に「← チャットの部屋に戻る」が表示されます。表示されない場合は、ブラウザの戻るでも直前の画面に戻れます。
       </p>
       <section className="space-y-3">
         <h2 className="text-base font-semibold text-white">回答の性質</h2>
@@ -37,7 +37,7 @@ export default function GuideAiPage() {
           <li>1回目: システムから注意メッセージが表示されます。</li>
           <li>2回目: イエローカード1枚が付与され、参加者一覧の当該ユーザー名の前に表示されます。</li>
           <li>3回目: イエローカード2枚目が付与され、次の違反で退場となる旨の警告が表示されます。</li>
-          <li>4回目相当: ルームから強制退場となり、一定期間（現在は約3時間）ルームおよびサイトへの入室が制限される場合があります。</li>
+          <li>4回目相当: 部屋から強制退場となり、一定期間（現在は約3時間）部屋およびサイトへの入室が制限される場合があります。</li>
         </ul>
         <p className="text-gray-400">
           判定は自動のため、意図と異なる結果になることがあります。繰り返し問題になる場合は、チャットオーナーや運営の案内に従ってください。

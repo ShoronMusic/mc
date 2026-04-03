@@ -6,6 +6,7 @@ import { createClient, isSupabaseConfigured } from '@/lib/supabase/client';
 import { getBrowserAppOrigin } from '@/lib/app-origin';
 import { setOAuthReturnPathCookie } from '@/lib/oauth-return-path';
 import { TRIAL_ROOM_IDS, pickTrialRoomId } from '@/lib/trial-rooms';
+import { assignDefaultGuestDisplayName } from '@/lib/guest-display-name';
 import { FROM_START_KEY } from './FromStartMarker';
 import { GUEST_NAME_STORAGE_KEY, GUEST_ROOM_KEY, GUEST_STORAGE_KEY } from './JoinChoice';
 import { SimpleAuthForm } from './SimpleAuthForm';
@@ -100,9 +101,10 @@ export function TopPageLoginEntry() {
           return a.roomId.localeCompare(b.roomId);
         });
       const selected = candidates[0]?.roomId || pickTrialRoomId();
+      const guestName = assignDefaultGuestDisplayName();
       try {
         sessionStorage.setItem(GUEST_STORAGE_KEY, '1');
-        sessionStorage.setItem(GUEST_NAME_STORAGE_KEY, 'ゲスト');
+        sessionStorage.setItem(GUEST_NAME_STORAGE_KEY, guestName);
         sessionStorage.setItem(GUEST_ROOM_KEY, selected);
         sessionStorage.removeItem(FROM_START_KEY);
       } catch {}
@@ -111,9 +113,10 @@ export function TopPageLoginEntry() {
     } catch {
       // 通信に失敗した場合だけランダムにフォールバック
       const fallback = pickTrialRoomId();
+      const guestName = assignDefaultGuestDisplayName();
       try {
         sessionStorage.setItem(GUEST_STORAGE_KEY, '1');
-        sessionStorage.setItem(GUEST_NAME_STORAGE_KEY, 'ゲスト');
+        sessionStorage.setItem(GUEST_NAME_STORAGE_KEY, guestName);
         sessionStorage.setItem(GUEST_ROOM_KEY, fallback);
         sessionStorage.removeItem(FROM_START_KEY);
       } catch {}
@@ -163,7 +166,7 @@ export function TopPageLoginEntry() {
             disabled={guestJoining}
             className="flex items-center justify-center gap-2 rounded border border-gray-600 bg-gray-800 px-3 py-2 text-sm text-white hover:bg-gray-700"
           >
-            {guestJoining ? 'ゲスト向けルームを準備中…' : 'ゲストで参加'}
+            {guestJoining ? 'ゲスト向けの部屋を準備中…' : 'ゲストで参加'}
           </button>
           {!hasSupabase && (
             <p className="text-center text-xs text-amber-400">

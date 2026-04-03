@@ -7,6 +7,7 @@ import ChatInput from '@/components/chat/ChatInput';
 import YouTubePlayer, {
   type YouTubePlayerHandle,
 } from '@/components/player/YouTubePlayer';
+import { GuestRegisterPromptModal } from '@/components/auth/GuestRegisterPromptModal';
 import MyPage from '@/components/mypage/MyPage';
 import NowPlaying from '@/components/room/NowPlaying';
 import RoomMainLayout from '@/components/room/RoomMainLayout';
@@ -47,9 +48,9 @@ function getTimeBasedGreeting(): string {
   return 'こんばんは';
 }
 
-/** AIの第一声（参加者へのルーム説明） */
+/** AIの第一声（参加者への部屋の説明） */
 const AI_FIRST_VOICE =
-  '洋楽好きで一緒に楽しむチャットルームです。参加者が順番にYouTubeから曲を貼って一緒に鑑賞します。投稿する動画は洋楽の曲・MV・ライブ映像など音楽コンテンツに限ってください（洋楽以外の動画は控えてください）。洋楽ならジャンルや時代は自由です。よろしくお願いします！';
+  '洋楽好きで一緒に楽しむチャットの部屋です。参加者が順番にYouTubeから曲を貼って一緒に鑑賞します。投稿する動画は洋楽の曲・MV・ライブ映像など音楽コンテンツに限ってください（洋楽以外の動画は控えてください）。洋楽ならジャンルや時代は自由です。よろしくお願いします！';
 const TIDBIT_COOLDOWN_SEC = 60;
 
 function createMessageId(): string {
@@ -98,6 +99,7 @@ export default function RoomWithoutSync({
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   useRoomChatLogPersistence(roomId, messages, { isGuest, myClientId: '' });
   const [myPageOpen, setMyPageOpen] = useState(false);
+  const [guestRegisterModalOpen, setGuestRegisterModalOpen] = useState(false);
   const [playbackHistoryModalOpen, setPlaybackHistoryModalOpen] = useState(false);
   const [chatSummaryModalOpen, setChatSummaryModalOpen] = useState(false);
   const [chatSummaryLoading, setChatSummaryLoading] = useState(false);
@@ -345,7 +347,7 @@ export default function RoomWithoutSync({
     let greeting: string;
     let isWelcomeBack = false;
     try {
-      // 同一ルームの退室記録だけ参照（他ルームでは「おかえりなさい」にしない）
+      // 同一部屋の退室記録だけ参照（他部屋では「おかえりなさい」にしない）
       const key = roomId ? getLastExitStorageKey(roomId) : null;
       const raw = key && typeof window !== 'undefined' ? sessionStorage.getItem(key) : null;
       if (raw) {
@@ -964,7 +966,7 @@ export default function RoomWithoutSync({
   return (
     <main className="flex h-screen flex-col overflow-hidden bg-gray-950 p-3">
       <div className="mb-2 shrink-0 rounded border border-amber-700 bg-amber-900/50 px-3 py-2 text-sm leading-snug text-amber-200">
-        .env.local に <strong>NEXT_PUBLIC_ABLY_API_KEY</strong> を設定すると、複数ブラウザ・タブが「同じルームの別々の参加者」として扱われ、参加者一覧・同期再生・チャット共有が利用できます。未設定の場合は各ウィンドウが独立して動作します。
+        .env.local に <strong>NEXT_PUBLIC_ABLY_API_KEY</strong> を設定すると、複数ブラウザ・タブが「同じ部屋の別々の参加者」として扱われ、参加者一覧・同期再生・チャット共有が利用できます。未設定の場合は各ウィンドウが独立して動作します。
       </div>
       <header className="mb-2 flex shrink-0 flex-row items-center justify-between gap-3 border-b border-gray-800 pb-2">
         <div className="flex min-w-0 flex-1 items-center gap-2">
@@ -986,7 +988,7 @@ export default function RoomWithoutSync({
               type="button"
               onClick={onLeave}
               className="rounded border border-gray-600 bg-gray-800 px-4 py-2 text-sm font-medium text-gray-200 hover:bg-gray-700 hover:text-white"
-              aria-label="ルームを退室して最初の画面に戻る"
+              aria-label="部屋を退室して最初の画面に戻る"
             >
               退室する
             </button>
@@ -998,6 +1000,7 @@ export default function RoomWithoutSync({
         <UserBar
           displayName={displayNameProp}
           isGuest={isGuest}
+          onGuestRegisterClick={isGuest ? () => setGuestRegisterModalOpen(true) : undefined}
           onMyPageClick={!isGuest ? () => setMyPageOpen(true) : undefined}
           onPlaybackHistoryClick={isLg ? undefined : () => setPlaybackHistoryModalOpen(true)}
           currentVideoId={videoId}
@@ -1010,6 +1013,12 @@ export default function RoomWithoutSync({
           myClientId="local-client"
         />
       </section>
+
+      <GuestRegisterPromptModal
+        open={guestRegisterModalOpen}
+        onClose={() => setGuestRegisterModalOpen(false)}
+        roomId={roomId}
+      />
 
       {myPageOpen && (
         <div

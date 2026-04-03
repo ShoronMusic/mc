@@ -84,7 +84,7 @@ export function TopPageAuthBar() {
           {isGuest ? 'クリアして参加方法を選び直す' : 'ログアウト'}
         </button>
         <span className="text-xs text-gray-500">
-          （Google認証など別の方法で入室するには上記を押してからルームを選び直してください）
+          （Google認証など別の方法で入室するには上記を押してから部屋を選び直してください）
         </span>
       </div>
     </div>

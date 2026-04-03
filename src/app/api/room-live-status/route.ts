@@ -48,8 +48,8 @@ async function lobbyDisplayTitleByRoomIds(
 
 /**
  * GET /api/room-live-status
- * - Query roomId=01 : 単一ルームの live 判定
- * - Query rooms=01,02,03 : live ルーム一覧
+ * - Query roomId=01 : 単一部屋の live 判定
+ * - Query rooms=01,02,03 : live 部屋一覧
  */
 export async function GET(request: Request) {
   const supabase = await createClient();

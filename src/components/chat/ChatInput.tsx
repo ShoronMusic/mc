@@ -523,7 +523,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
               <li>
                 <span className="font-medium text-gray-100">送信</span>
                 ：<span className="text-gray-100">YouTube のURL</span>
-                を入れて押すと、ルームのプレイヤーにその動画が表示されます。URL
+                を入れて押すと、部屋のプレイヤーにその動画が表示されます。URL
                 <span className="text-gray-100">以外</span>（感想・会話など）はチャットに表示されます。
               </li>
               <li>
@@ -554,7 +554,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
             <li>
               <span className="font-medium text-gray-300">送信</span>
               ：<span className="text-gray-300">YouTube のURL</span>
-              を入れて押すと、ルームのプレイヤーにその動画が表示されます。URL
+              を入れて押すと、部屋のプレイヤーにその動画が表示されます。URL
               <span className="text-gray-300">以外</span>（感想・会話など）はチャットに表示されます。
             </li>
             <li>

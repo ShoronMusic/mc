@@ -144,7 +144,7 @@ export default function AdminAiQuestionGuardObjectionsPage() {
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div className="min-w-0 flex-1 space-y-1">
                   <p className="text-xs text-gray-500">
-                    {new Date(r.created_at).toLocaleString('ja-JP')} / ルーム{' '}
+                    {new Date(r.created_at).toLocaleString('ja-JP')} / 部屋{' '}
                     <code className="text-amber-200/90">{r.room_id}</code> / 警告回数 {r.warning_count} /{' '}
                     {r.guard_action} / 送信: {r.user_id ? '登録ユーザー' : 'ゲスト'}
                   </p>

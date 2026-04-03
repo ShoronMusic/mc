@@ -19,9 +19,9 @@ function safeRoomId(raw: string): string | null {
 
 /**
  * POST body:
- * - { action: 'start', roomId: string, title?: string } … 会を live で開始
- * - { action: 'end', roomId: string } … 当該ルームの live を ended にする
- * - { action: 'rename', roomId: string, title: string } … 当該ルームの live タイトルを更新
+ * - { action: 'start', roomId: string, title?: string } … 開催を live で開始
+ * - { action: 'end', roomId: string } … 当該部屋の live を ended にする
+ * - { action: 'rename', roomId: string, title: string } … 当該部屋の live タイトルを更新
  *
  * ログインユーザーのみ。RLS で拒否される場合は Supabase 側ポリシーを要確認。
  */
@@ -54,7 +54,7 @@ export async function POST(request: Request) {
       title = title.slice(0, TITLE_MAX);
     }
     if (!title) {
-      title = '未設定の会';
+      title = '未設定の部屋';
     }
 
     if (!roomId && autoAssign) {
@@ -80,7 +80,7 @@ export async function POST(request: Request) {
       );
       roomId = DEFAULT_ROOM_IDS.find((id) => !liveSet.has(id)) ?? null;
       if (!roomId) {
-        return NextResponse.json({ error: '空きルームがありません。しばらくしてから再度お試しください。' }, { status: 409 });
+        return NextResponse.json({ error: '空きの部屋がありません。しばらくしてから再度お試しください。' }, { status: 409 });
       }
     }
     if (!roomId) {
@@ -106,7 +106,7 @@ export async function POST(request: Request) {
     }
     if (existing?.length) {
       return NextResponse.json(
-        { error: 'このルームではすでに開催中の会があります。' },
+        { error: 'この部屋ではすでに開催中の会があります。' },
         { status: 409 },
       );
     }
@@ -212,7 +212,7 @@ export async function POST(request: Request) {
 
 /**
  * GET /api/room-gatherings
- * ログインユーザーが過去に主催したルーム候補を返す
+ * ログインユーザーが過去に主催した部屋候補を返す
  */
 export async function GET() {
   const supabase = await createClient();

@@ -7,7 +7,7 @@ const FIVE_MIN_MS = 5 * 60 * 1000;
 const MAX_BODY = 2000;
 
 /**
- * ルーム内チャットを room_chat_log にバッチ保存する。
+ * 部屋内チャットを room_chat_log にバッチ保存する。
  * 5分間隔・タブ非表示 / pagehide 時にフラッシュ。client_message_id の unique で再送しても安全。
  */
 export function useRoomChatLogPersistence(

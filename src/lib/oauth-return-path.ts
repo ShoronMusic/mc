@@ -14,7 +14,7 @@ export function hasOAuthAuthorizationQuery(searchParams: URLSearchParams, pathna
 }
 
 /**
- * Supabase が Site URL 直下（/?code=）に戻すと URL に next が無くルーム等の戻り先が失われる。
+ * Supabase が Site URL 直下（/?code=）に戻すと URL に next が無く部屋等の戻り先が失われる。
  * OAuth 直前にクッキーへ保存し、ミドルウェア / クライアント救済で /auth/callback の next に載せる。
  */
 export const OAUTH_RETURN_COOKIE = 'mc_oauth_next';

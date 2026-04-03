@@ -12,6 +12,8 @@ interface SimpleAuthFormProps {
   onAwaitingEmailConfirmation?: (email: string) => void;
   /** パスワードリセットメール送信後（ログイン画面からの「パスワードをお忘れ」） */
   onResetEmailSent?: (email: string) => void;
+  /** true のとき初回表示を新規登録にする（ゲスト向け「メールで登録」導線など） */
+  startWithRegister?: boolean;
 }
 
 export function SimpleAuthForm({
@@ -20,8 +22,9 @@ export function SimpleAuthForm({
   onError,
   onAwaitingEmailConfirmation,
   onResetEmailSent,
+  startWithRegister = false,
 }: SimpleAuthFormProps) {
-  const [isLogin, setIsLogin] = useState(true);
+  const [isLogin, setIsLogin] = useState(!startWithRegister);
   const [forgotPassword, setForgotPassword] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');

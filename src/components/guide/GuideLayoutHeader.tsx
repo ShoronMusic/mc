@@ -20,7 +20,7 @@ export function GuideLayoutHeader() {
               href={returnTo}
               className="shrink-0 text-amber-400/95 underline-offset-2 transition hover:text-amber-300 hover:underline"
             >
-              ← チャットのルームに戻る
+              ← チャットの部屋に戻る
             </Link>
           ) : null}
         </div>

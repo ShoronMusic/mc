@@ -19,15 +19,35 @@ type LiveStatusResponse = {
   rooms?: Array<{ roomId?: string }>;
 };
 
+/** トップの主催UI用。ログイン表示名（またはメール先頭）に「の部屋」を付ける。取れなければゲスト扱い。 */
+function defaultGatheringTitleFromUser(user: {
+  user_metadata?: { display_name?: string; name?: string };
+  email?: string;
+}): string {
+  const meta = user?.user_metadata;
+  if (meta?.display_name && typeof meta.display_name === 'string' && meta.display_name.trim()) {
+    return `${meta.display_name.trim()}の部屋`;
+  }
+  if (meta?.name && typeof meta.name === 'string' && meta.name.trim()) {
+    return `${meta.name.trim()}の部屋`;
+  }
+  if (user?.email) {
+    return `${user.email.split('@')[0]}の部屋`;
+  }
+  return 'ゲストの部屋';
+}
+
 /**
- * ログイン済みユーザー向け: 会の開始・終了（運用・検証用の最小UI）
+ * ログイン済みユーザー向け: 部屋での開催の開始・終了（運用・検証用の最小UI）
  */
 export function MeetingStartPanel() {
   const [visible, setVisible] = useState(false);
   const [joinRoomId, setJoinRoomId] = useState<string>(DEFAULT_ROOM_IDS[0]);
-  const [joinTitle, setJoinTitle] = useState('本日の会');
-  const [newTitle, setNewTitle] = useState('本日の会');
+  const [joinTitle, setJoinTitle] = useState('');
+  const [newTitle, setNewTitle] = useState('');
   const [myRooms, setMyRooms] = useState<OrganizerRoom[]>([]);
+  /** GET /api/room-gatherings 完了後 true（初回主催者は myRooms が空のままなので第1枠を出さない） */
+  const [gatheringsLoaded, setGatheringsLoaded] = useState(false);
   const [liveRoomIds, setLiveRoomIds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -45,6 +65,11 @@ export function MeetingStartPanel() {
     }
     supabase.auth.getSession().then(({ data: { session } }) => {
       const loggedIn = !!session?.user;
+      if (session?.user) {
+        const defaultTitle = defaultGatheringTitleFromUser(session.user);
+        setNewTitle(defaultTitle);
+        setJoinTitle(defaultTitle);
+      }
       setVisible(loggedIn);
       if (!loggedIn) return;
       fetch('/api/room-gatherings', { credentials: 'include' })
@@ -61,7 +86,10 @@ export function MeetingStartPanel() {
           }
         })
         .catch(() => {
-          // 選択肢取得失敗時は固定候補をそのまま使う
+          // 選択肢取得失敗時は myRooms 空のまま（第1枠は非表示、新規作成のみ）
+        })
+        .finally(() => {
+          setGatheringsLoaded(true);
         });
 
       fetch('/api/room-live-status', { credentials: 'include' })
@@ -81,7 +109,7 @@ export function MeetingStartPanel() {
     });
   }, []);
 
-  const joinRoomOptions = myRooms.length > 0 ? myRooms.map((r) => r.roomId) : DEFAULT_ROOM_IDS;
+  const joinRoomOptions = myRooms.map((r) => r.roomId);
   const selectedRoom = myRooms.find((r) => r.roomId === joinRoomId);
   const createRoomOptions = DEFAULT_ROOM_IDS.filter((id) => !liveRoomIds.includes(id));
 
@@ -98,13 +126,13 @@ export function MeetingStartPanel() {
             action,
             roomId: payload.roomId,
             autoAssign: payload.autoAssign === true,
-            ...((action === 'start' || action === 'rename') ? { title: payload.title?.trim() || '未設定の会' } : {}),
+            ...((action === 'start' || action === 'rename') ? { title: payload.title?.trim() || '未設定の部屋' } : {}),
           }),
         });
         const data = (await res.json().catch(() => ({}))) as { error?: string; ok?: boolean };
         if (!res.ok) {
           if (action === 'start' && res.status === 409) {
-            setMessage('このルームはすでに主催中です。下の「このルームへ入る」から入室してください。');
+            setMessage('この部屋はすでに主催中です。下の「この部屋へ入る」から入室してください。');
             return;
           }
           setMessage(data?.error ?? '処理に失敗しました。');
@@ -112,10 +140,10 @@ export function MeetingStartPanel() {
         }
         setMessage(
           action === 'start'
-            ? '会を開始しました。一覧が更新されるまで数秒お待ちください。'
+            ? '部屋での開催を開始しました。一覧が更新されるまで数秒お待ちください。'
             : action === 'rename'
-              ? '会のタイトルを更新しました。'
-              : '会を終了しました。',
+              ? '部屋の名前を更新しました。'
+              : '開催を終了しました。',
         );
         window.setTimeout(() => window.location.reload(), 600);
       } catch {
@@ -126,6 +154,15 @@ export function MeetingStartPanel() {
     },
     [],
   );
+
+  const createNewRoom = useCallback(() => {
+    const t = newTitle.trim();
+    if (!t) {
+      setMessage('部屋の名前を入力してください。');
+      return;
+    }
+    void run('start', { title: t, autoAssign: true });
+  }, [newTitle, run]);
 
   const enterRoom = useCallback(async () => {
     const selected = myRooms.find((r) => r.roomId === joinRoomId);
@@ -147,10 +184,10 @@ export function MeetingStartPanel() {
         });
         if (!res.ok) {
           const data = (await res.json().catch(() => ({}))) as { error?: string };
-          setMessage(data?.error ?? 'タイトル更新に失敗しました。');
+          setMessage(data?.error ?? '名前の更新に失敗しました。');
         }
       } catch {
-        setMessage('タイトル更新に失敗しました。');
+        setMessage('名前の更新に失敗しました。');
       } finally {
         setBusy(false);
       }
@@ -160,100 +197,115 @@ export function MeetingStartPanel() {
 
   if (!visible) return null;
 
+  /** 主催履歴があるときだけ「再入室・終了」枠を出す（履歴ゼロ時は全室プルダウンになるが、入室は開催中の会が必要で誤解を招く） */
+  const showReturningOrganizerBlock = gatheringsLoaded && myRooms.length > 0;
+
   return (
     <div className="mt-4 flex flex-col gap-3">
-      <div className="rounded-xl border border-dashed border-slate-600/90 bg-slate-900/60 p-3 sm:p-4">
-        <p className="mb-3 text-center text-xs font-semibold tracking-wide text-slate-300">主催者向け（ログイン中のみ表示）</p>
-        <div className="grid grid-cols-1 gap-2.5">
-          <label className="flex min-w-0 flex-col gap-1 text-xs text-slate-400">
-            主催ルーム
-            <select
-              value={joinRoomId}
-              onChange={(e) => {
-                const nextRoomId = e.target.value;
-                setJoinRoomId(nextRoomId);
-                const selected = myRooms.find((r) => r.roomId === nextRoomId);
-                if (selected?.title?.trim()) {
-                  setJoinTitle(selected.title.trim());
-                }
-              }}
-              className="w-full rounded-md border border-slate-600 bg-slate-800 px-2.5 py-2 text-sm text-white"
+      {showReturningOrganizerBlock ? (
+        <div className="rounded-xl border border-dashed border-slate-600/90 bg-slate-900/60 p-3 sm:p-4">
+          <p className="mb-3 text-center text-xs font-semibold tracking-wide text-slate-300">
+            主催者向け・再開・終了（過去に開催したことのある部屋）
+          </p>
+          <div className="grid grid-cols-1 gap-2.5">
+            <label className="flex min-w-0 flex-col gap-1 text-xs text-slate-400">
+              主催する部屋
+              <select
+                value={joinRoomId}
+                onChange={(e) => {
+                  const nextRoomId = e.target.value;
+                  setJoinRoomId(nextRoomId);
+                  const selected = myRooms.find((r) => r.roomId === nextRoomId);
+                  if (selected?.title?.trim()) {
+                    setJoinTitle(selected.title.trim());
+                  }
+                }}
+                className="w-full rounded-md border border-slate-600 bg-slate-800 px-2.5 py-2 text-sm text-white"
+                disabled={busy}
+              >
+                {joinRoomOptions.map((id) => {
+                  const mine = myRooms.find((r) => r.roomId === id);
+                  const label = mine ? `${id}${mine.isLive ? '（主催中）' : ''}` : id;
+                  return (
+                    <option key={id} value={id}>
+                      {label}
+                    </option>
+                  );
+                })}
+              </select>
+            </label>
+            <label className="flex min-w-0 flex-col gap-1 text-xs text-slate-400">
+              部屋の名前
+              <input
+                type="text"
+                value={joinTitle}
+                onChange={(e) => setJoinTitle(e.target.value)}
+                maxLength={120}
+                className="w-full rounded-md border border-slate-600 bg-slate-800 px-2.5 py-2 text-sm text-white"
+                disabled={busy}
+                placeholder="例: 土曜洋楽会"
+              />
+            </label>
+          </div>
+          <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={() => void enterRoom()}
               disabled={busy}
+              className="block w-full rounded-md border border-sky-500/50 bg-sky-900/20 px-4 py-2 text-center text-sm font-medium text-sky-200 hover:bg-sky-900/35"
             >
-              {joinRoomOptions.map((id) => {
-                const mine = myRooms.find((r) => r.roomId === id);
-                const label = mine ? `${id}${mine.isLive ? '（主催中）' : ''}` : id;
-                return (
-                  <option key={id} value={id}>
-                    {label}
-                  </option>
-                );
-              })}
-            </select>
-          </label>
-          <label className="flex min-w-0 flex-col gap-1 text-xs text-slate-400">
-            会のタイトル
-            <input
-              type="text"
-              value={joinTitle}
-              onChange={(e) => setJoinTitle(e.target.value)}
-              maxLength={120}
-              className="w-full rounded-md border border-slate-600 bg-slate-800 px-2.5 py-2 text-sm text-white"
+              この部屋へ入る
+            </button>
+            <button
+              type="button"
+              onClick={() => void run('end', { roomId: joinRoomId })}
               disabled={busy}
-              placeholder="例: 土曜洋楽会"
-            />
-          </label>
+              className="rounded-md border border-slate-500 bg-slate-800 px-4 py-2 text-sm text-slate-200 hover:bg-slate-700 disabled:opacity-50"
+            >
+              この部屋の開催を終了
+            </button>
+          </div>
+          {selectedRoom?.title && (
+            <p className="mt-2 text-center text-[11px] text-slate-400">選択中の部屋の前回の名前: {selectedRoom.title}</p>
+          )}
         </div>
-        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
-          <button
-            type="button"
-            onClick={() => void enterRoom()}
-            disabled={busy}
-            className="block w-full rounded-md border border-sky-500/50 bg-sky-900/20 px-4 py-2 text-center text-sm font-medium text-sky-200 hover:bg-sky-900/35"
-          >
-            このルームへ入る
-          </button>
-          <button
-            type="button"
-            onClick={() => void run('end', { roomId: joinRoomId })}
-            disabled={busy}
-            className="rounded-md border border-slate-500 bg-slate-800 px-4 py-2 text-sm text-slate-200 hover:bg-slate-700 disabled:opacity-50"
-          >
-            このルームの会を終了
-          </button>
-        </div>
-        {selectedRoom?.title && (
-          <p className="mt-2 text-center text-[11px] text-slate-400">選択中ルームの前回タイトル: {selectedRoom.title}</p>
-        )}
-      </div>
+      ) : null}
 
       <div className="rounded-xl border border-dashed border-emerald-600/80 bg-emerald-950/10 p-3 sm:p-4">
-        <p className="mb-3 text-center text-xs font-semibold tracking-wide text-emerald-200">新規作成（空きルーム自動割当）</p>
-        <div className="grid grid-cols-1 gap-2.5">
+        <p className="mb-3 text-center text-xs font-semibold tracking-wide text-emerald-200">新規作成（空きの部屋の自動割当）</p>
+        <form
+          className="grid grid-cols-1 gap-2.5"
+          onSubmit={(e) => {
+            e.preventDefault();
+            createNewRoom();
+          }}
+        >
           <p className="rounded-md border border-emerald-700/50 bg-slate-900/40 px-3 py-2 text-center text-xs text-emerald-100">
-            割当予定ルーム: {createRoomOptions[0] ?? '空きルームなし'}
+            割当予定の部屋: {createRoomOptions[0] ?? '空きの部屋なし'}
           </p>
           <label className="flex min-w-0 flex-col gap-1 text-xs text-slate-300">
-            会のタイトル
+            部屋の名前（必須）
             <input
               type="text"
+              name="newGatheringTitle"
               value={newTitle}
               onChange={(e) => setNewTitle(e.target.value)}
               maxLength={120}
+              required
+              autoComplete="off"
               className="w-full rounded-md border border-emerald-700/70 bg-slate-800 px-2.5 py-2 text-sm text-white"
               disabled={busy || createRoomOptions.length === 0}
-              placeholder="例: 金曜ナイト洋楽会"
+              placeholder="あなたの表示名の部屋（初期値・編集可）"
             />
           </label>
-        </div>
-        <button
-          type="button"
-          onClick={() => void run('start', { title: newTitle, autoAssign: true })}
-          disabled={busy || createRoomOptions.length === 0}
-          className="mt-3 w-full rounded-md bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-600 disabled:opacity-50"
-        >
-          会を新規作成
-        </button>
+          <button
+            type="submit"
+            disabled={busy || createRoomOptions.length === 0}
+            className="mt-1 w-full rounded-md bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-600 disabled:opacity-50"
+          >
+            部屋を新規作成
+          </button>
+        </form>
       </div>
       {message && <p className="mt-2 text-center text-xs text-gray-300">{message}</p>}
     </div>

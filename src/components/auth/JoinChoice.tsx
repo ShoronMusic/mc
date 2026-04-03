@@ -4,6 +4,7 @@ import { EnvelopeIcon } from '@heroicons/react/24/outline';
 import Link from 'next/link';
 import { useState } from 'react';
 import { createClient, isSupabaseConfigured } from '@/lib/supabase/client';
+import { assignDefaultGuestDisplayName } from '@/lib/guest-display-name';
 import { setOAuthReturnPathCookie } from '@/lib/oauth-return-path';
 import { getBrowserAppOrigin } from '@/lib/app-origin';
 import { SimpleAuthForm } from './SimpleAuthForm';
@@ -12,7 +13,7 @@ export const GUEST_STORAGE_KEY = 'mc:guest';
 export const GUEST_NAME_STORAGE_KEY = 'mc:guest_name';
 export const GUEST_ROOM_KEY = 'mc:guest_room';
 
-function GoogleBrandIcon({ className }: { className?: string }) {
+export function GoogleBrandIcon({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" aria-hidden>
       <path
@@ -60,7 +61,7 @@ export function JoinChoice({ onJoin, roomId }: JoinChoiceProps) {
 
   const handleGuestSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const name = guestHandle.trim() || 'ゲスト';
+    const name = guestHandle.trim() || assignDefaultGuestDisplayName();
     if (typeof window !== 'undefined') {
       try {
         sessionStorage.setItem(GUEST_STORAGE_KEY, '1');
@@ -148,7 +149,7 @@ export function JoinChoice({ onJoin, roomId }: JoinChoiceProps) {
         <div className="w-full max-w-sm rounded-lg border border-gray-700 bg-gray-900 p-6">
           <h2 className="mb-4 text-lg font-semibold text-white">ゲストで参加</h2>
           <p className="mb-3 text-sm text-gray-400">
-            ハンドルネームを入力してください（未入力の場合は「ゲスト」で表示されます）
+            ハンドルネームを入力してください（未入力の場合は「ゲスト」＋番号が自動で付きます。例: ゲスト4821）
           </p>
           <form onSubmit={handleGuestSubmit} className="flex flex-col gap-3">
             <label className="flex flex-col gap-1">

@@ -103,7 +103,7 @@ export async function GET(request: Request) {
     })
   );
 
-  /** 誰もいないルームの入室前メッセージは DB から削除（古いテスト文言の残留を防ぐ） */
+  /** 誰もいない部屋の入室前メッセージは DB から削除（古いテスト文言の残留を防ぐ） */
   const emptyRoomIds = rooms.filter((r) => r.count === 0 && !r.error).map((r) => r.roomId);
   if (emptyRoomIds.length > 0) {
     const admin = createAdminClient();

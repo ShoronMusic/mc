@@ -182,7 +182,7 @@ export default function AdminRoomDailySummaryPage() {
       <div className="mx-auto max-w-6xl">
         <AdminMenuBar />
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-          <h1 className="text-xl font-semibold">ルーム日次チャットサマリー</h1>
+          <h1 className="text-xl font-semibold">部屋日次チャットサマリー</h1>
           <div className="flex flex-wrap items-center gap-2">
             <label className="text-sm">
               roomId
@@ -231,7 +231,7 @@ export default function AdminRoomDailySummaryPage() {
         </div>
 
         <section className="mb-4 rounded-lg border border-gray-700 bg-gray-900/50 p-4 text-sm text-gray-300">
-          日付単位・ルーム単位で、利用時間、参加者、参加者ごとの選曲数、時代/スタイル分布、Gemini使用量、内容サマリーを保存して確認します。
+          日付単位・部屋単位で、利用時間、参加者、参加者ごとの選曲数、時代/スタイル分布、Gemini使用量、内容サマリーを保存して確認します。
           <br />
           集計ウィンドウは <span className="font-semibold text-amber-200">第1部 06:00〜18:00 / 第2部 18:00〜翌06:00（JST）</span> の2枠です。
         </section>

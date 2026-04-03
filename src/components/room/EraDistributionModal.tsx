@@ -138,8 +138,8 @@ export default function EraDistributionModal({ roomId, open, onClose }: EraDistr
 
         <p className="mb-2 text-xs text-gray-500">
           {subTab === '24h'
-            ? 'このルームで直近24時間に再生された履歴の年代内訳です（song_era を参照）。'
-            : 'このルームの視聴履歴を新しい順に最大100件まで集計した年代内訳です。'}
+            ? 'この部屋で直近24時間に再生された履歴の年代内訳です（song_era を参照）。'
+            : 'この部屋の視聴履歴を新しい順に最大100件まで集計した年代内訳です。'}
         </p>
 
         {loading ? (

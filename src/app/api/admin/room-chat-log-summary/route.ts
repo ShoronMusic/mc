@@ -23,7 +23,7 @@ type SummaryRow = { room_id: string; date_jst: string; count: number };
 
 /**
  * STYLE_ADMIN_USER_IDS に含まれるユーザーのみ。
- * 直近 N 日の room_chat_log を走査し、(JST 日付 × ルーム) ごとの件数を返す。
+ * 直近 N 日の room_chat_log を走査し、(JST 日付 × 部屋) ごとの件数を返す。
  */
 export async function GET(request: Request) {
   const supabase = await createClient();
