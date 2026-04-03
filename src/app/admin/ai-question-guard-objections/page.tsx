@@ -108,18 +108,34 @@ export default function AdminAiQuestionGuardObjectionsPage() {
         <AdminMenuBar />
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
           <h1 className="text-xl font-semibold">AI 質問ガード異議申立て</h1>
-          <button
-            type="button"
-            onClick={() => load()}
-            className="rounded bg-gray-700 px-3 py-1 text-sm hover:bg-gray-600"
-            disabled={loading}
-          >
-            再読込
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <a
+              href="/api/admin/ai-question-guard-objections/export?format=json"
+              className="rounded bg-cyan-900/60 px-3 py-1 text-sm text-cyan-100 hover:bg-cyan-800/70"
+            >
+              JSON エクスポート
+            </a>
+            <a
+              href="/api/admin/ai-question-guard-objections/export?format=csv"
+              className="rounded bg-cyan-900/60 px-3 py-1 text-sm text-cyan-100 hover:bg-cyan-800/70"
+            >
+              CSV エクスポート
+            </a>
+            <button
+              type="button"
+              onClick={() => load()}
+              className="rounded bg-gray-700 px-3 py-1 text-sm hover:bg-gray-600"
+              disabled={loading}
+            >
+              再読込
+            </button>
+          </div>
         </div>
 
         <p className="mb-4 text-sm text-gray-400">
-          「@」質問の音楽関連チェックで警告が出た利用者からの異議です。会話スナップショットは送信時点の前後メッセージです。確認後「確認済み」にしてください。
+          「@」質問の音楽関連チェックで警告が出た利用者からの異議です。会話スナップショットは送信時点の前後メッセージです。確認後「確認済み」にしてください。エクスポートしたデータは分類プロンプト改善用に
+          <code className="text-gray-300"> docs/supabase-setup.md </code>
+          の手順へ。
         </p>
 
         {error ? (

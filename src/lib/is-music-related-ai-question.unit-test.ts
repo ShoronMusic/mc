@@ -10,5 +10,23 @@ assert.equal(
   true,
 );
 assert.equal(isMusicRelatedAiQuestion('今日の天気は？'), false);
+assert.equal(
+  isMusicRelatedAiQuestion('ケイシーはグラミー賞取ったんですよね'),
+  true,
+);
+assert.equal(isMusicRelatedAiQuestion('この曲はオスカー主題歌だった？'), true);
+assert.equal(isMusicRelatedAiQuestion('コーチェラで見たいアーティストは？'), true);
+assert.equal(isMusicRelatedAiQuestion('オリコンで何位だった？'), true);
+assert.equal(isMusicRelatedAiQuestion('Did they win a Grammy?'), true);
+assert.equal(
+  isMusicRelatedAiQuestion('彼はこれで賞を獲ったのですか？'),
+  true,
+);
+assert.equal(isMusicRelatedAiQuestion('Did this win any awards?'), true);
+assert.equal(
+  isMusicRelatedAiQuestion('この年の年間NO1ソングは？'),
+  true,
+);
+assert.equal(isMusicRelatedAiQuestion('What was the #1 hit that year?'), true);
 
 console.log('is-music-related-ai-question unit tests: OK');

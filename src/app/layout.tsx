@@ -38,7 +38,8 @@ const OAUTH_STRAY_CODE_SCRIPT = `
 
 export const metadata: Metadata = {
   title: '洋楽AIチャット',
-  description: 'AIと語る、YouTube同時視聴型・洋楽サロン',
+  description:
+    'YouTube同時視聴×チャットで洋楽を楽しむ。AIが選曲の進行と曲解説をサポート。おひとりでも、音楽の質問でも。',
   /** public の静的アイコン（PNG）をファビコンに使用 */
   icons: {
     icon: [{ url: '/musicAI_icon.png', type: 'image/png' }],

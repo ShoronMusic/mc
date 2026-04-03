@@ -3,12 +3,20 @@ import { createClient } from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
 
+const MAX_PARTICIPATION_DISPLAY_NAME = 200;
+
 function safeRoomId(raw: unknown): string | null {
   if (typeof raw !== 'string') return null;
   const t = raw.trim();
   if (!t || t.length > 48) return null;
   if (!/^[a-zA-Z0-9_-]+$/.test(t)) return null;
   return t;
+}
+
+function safeParticipationDisplayName(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  const t = raw.trim().slice(0, MAX_PARTICIPATION_DISPLAY_NAME);
+  return t === '' ? null : t;
 }
 
 /**
@@ -29,7 +37,7 @@ export async function GET() {
 
   const { data, error } = await supabase
     .from('user_room_participation_history')
-    .select('id, room_id, gathering_id, gathering_title, joined_at, left_at')
+    .select('id, room_id, gathering_id, gathering_title, display_name, joined_at, left_at')
     .order('joined_at', { ascending: false })
     .limit(200);
 
@@ -51,7 +59,7 @@ export async function GET() {
 }
 
 /**
- * POST body: { action: 'join' | 'leave', roomId: string }
+ * POST body: { action: 'join' | 'leave', roomId: string, displayName?: string }
  * - join: 未終了の同一 room + gathering の行がなければ1件作成
  * - leave: 直近の未終了行を終了
  */
@@ -68,7 +76,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, skipped: true });
   }
 
-  let body: { action?: string; roomId?: string };
+  let body: { action?: string; roomId?: string; displayName?: string };
   try {
     body = await request.json();
   } catch {
@@ -77,6 +85,7 @@ export async function POST(request: Request) {
 
   const action = typeof body?.action === 'string' ? body.action.trim().toLowerCase() : '';
   const roomId = safeRoomId(body?.roomId);
+  const participationDisplayName = safeParticipationDisplayName(body?.displayName);
   if (!roomId) {
     return NextResponse.json({ error: 'roomId が不正です。' }, { status: 400 });
   }
@@ -124,6 +133,7 @@ export async function POST(request: Request) {
       room_id: roomId,
       gathering_id: gatheringId,
       gathering_title: gatheringTitle,
+      display_name: participationDisplayName,
       joined_at: new Date().toISOString(),
       left_at: null,
     });

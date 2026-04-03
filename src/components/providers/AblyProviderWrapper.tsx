@@ -59,18 +59,26 @@ export function AblyProviderWrapper({
     async (action: 'join' | 'leave', keepalive = false) => {
       if (isGuest) return;
       try {
+        const payload: { action: 'join' | 'leave'; roomId: string; displayName?: string } = {
+          action,
+          roomId,
+        };
+        if (action === 'join') {
+          const dn = typeof displayName === 'string' ? displayName.trim() : '';
+          if (dn) payload.displayName = dn;
+        }
         await fetch('/api/user-room-participation', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
           keepalive,
-          body: JSON.stringify({ action, roomId }),
+          body: JSON.stringify(payload),
         });
       } catch {
         // 参加履歴は失敗してもUIを止めない
       }
     },
-    [isGuest, roomId],
+    [displayName, isGuest, roomId],
   );
 
   useEffect(() => {

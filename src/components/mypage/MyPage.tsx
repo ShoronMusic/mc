@@ -73,6 +73,7 @@ interface ParticipationHistoryRow {
   room_id: string;
   gathering_id: string | null;
   gathering_title: string | null;
+  display_name: string | null;
   joined_at: string;
   left_at: string | null;
 }
@@ -1398,6 +1399,9 @@ export default function MyPage({
                         <p className="text-xs text-gray-500">
                           部屋 {row.room_id || '—'} · {row.gathering_title || '部屋の名前未設定'}
                         </p>
+                        {row.display_name ? (
+                          <p className="text-xs text-gray-400">表示名（入室時）: {row.display_name}</p>
+                        ) : null}
                         <p className="text-sm text-gray-200">入室: {joinedStr}</p>
                         <p className="text-xs text-gray-400">退出: {leftStr}</p>
                       </div>

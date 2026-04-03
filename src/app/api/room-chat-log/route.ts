@@ -180,9 +180,9 @@ export async function POST(request: Request) {
   }
 
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  const sessionUserId = session?.user?.id ?? null;
+    data: { user },
+  } = await supabase.auth.getUser();
+  const sessionUserId = user?.id ?? null;
 
   const rows: Array<{
     room_id: string;

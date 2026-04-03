@@ -31,7 +31,7 @@ import {
   SYSTEM_MESSAGE_JP_NO_COMMENTARY,
   SYSTEM_MESSAGE_QUEUE_SONG_DEFERRED,
 } from '@/lib/chat-system-copy';
-import { isMusicRelatedAiQuestion } from '@/lib/is-music-related-ai-question';
+import { resolveAiQuestionMusicRelated } from '@/lib/client-ai-question-guard-resolve';
 import { isDevMinimalSongAi } from '@/lib/dev-minimal-song-ai';
 import { COMMENT_PACK_MAX_FREE_COMMENTS } from '@/lib/song-tidbits';
 import { playbackLog } from '@/lib/playback-debug';
@@ -89,6 +89,8 @@ import {
 import { createClient } from '@/lib/supabase/client';
 import { useIsLgViewport } from '@/hooks/useLgViewport';
 import { useRoomChatLogPersistence } from '@/hooks/useRoomChatLogPersistence';
+import { useSupabaseAuthUserId } from '@/hooks/useSupabaseAuthUserId';
+import { isAiQuestionGuardKickExemptUserId } from '@/lib/ai-question-guard-exempt-user-ids';
 
 const AI_DISPLAY_NAME = 'AI';
 const SILENCE_TIDBIT_SEC = 30;
@@ -309,6 +311,7 @@ export default function RoomWithSync({
   /** ゲスト用の表示名（マイページで変更可能）。非ゲストは displayNameProp をそのまま使う */
   const [guestDisplayName, setGuestDisplayName] = useState(displayNameProp);
   const effectiveDisplayName = isGuest ? guestDisplayName : displayNameProp;
+  const authUserId = useSupabaseAuthUserId(isGuest);
   /** 選曲に参加するか。false なら視聴専用。デフォルト true */
   const [participatesInSelection, setParticipatesInSelection] = useState(true);
   /** 今誰の選曲番か（clientId）。空は未定・曲0本時など */
@@ -697,13 +700,18 @@ export default function RoomWithSync({
           },
         },
       ]);
-      if (payload.action === 'ban' && payload.targetClientId === myClientId && roomId) {
+      if (
+        payload.action === 'ban' &&
+        payload.targetClientId === myClientId &&
+        roomId &&
+        !isAiQuestionGuardKickExemptUserId(authUserId)
+      ) {
         setKicked(roomId, myClientId);
         setKickedSitewide();
         onLeave?.();
       }
     },
-    [myClientId, onLeave, roomId],
+    [myClientId, onLeave, roomId, authUserId],
   );
 
   const { publish } = useChannel(channelName, (message) => {
@@ -2443,7 +2451,7 @@ export default function RoomWithSync({
   }, []);
 
   const handleSendMessage = useCallback(
-    (text: string) => {
+    async (text: string) => {
       const limit = checkSendLimit(text, lastSendAtRef, sendTimestampsRef);
       if (!limit.ok) {
         addSystemMessage(getSendLimitMessage(limit.reason));
@@ -2517,31 +2525,57 @@ export default function RoomWithSync({
       const trimmed = text.trim();
       const aiMentioned = trimmed.startsWith('@');
       const aiPromptText = aiMentioned ? trimmed.replace(/^@\s*/, '').trim() : '';
-      if (aiMentioned && aiPromptText && !isMusicRelatedAiQuestion(aiPromptText)) {
-        const warningCount = incrementAiQuestionWarnCount(roomId || 'unknown-room', myClientId || 'unknown-client');
-        const yellowCards = warningCount <= 1 ? 0 : Math.min(3, warningCount - 1);
-        const action: OwnerAiQuestionGuardPayload['action'] =
-          warningCount >= 4 ? 'ban' : warningCount === 1 ? 'warn' : 'yellow';
-        const message =
-          warningCount === 1
-            ? `システム警告: ${effectiveDisplayName}さんの質問は音楽に関係ない内容と判断しました。次回からお気をつけください。`
-            : warningCount === 2
-              ? `システム警告: ${effectiveDisplayName}さんにイエローカード1枚を付与しました（AI質問は音楽関連のみ）。`
-              : warningCount === 3
-                ? `システム警告: ${effectiveDisplayName}さんにイエローカード2枚目を付与しました。次のカードで退場となります。`
-                : `システム警告: ${effectiveDisplayName}さんに3枚目のカードを付与したため、強制退場と一定期間の入室禁止を実行しました。`;
-        const guardPayload: OwnerAiQuestionGuardPayload = {
-          targetClientId: myClientId,
-          targetDisplayName: effectiveDisplayName,
-          warningCount,
-          yellowCards,
-          action,
-          message,
-        };
-        applyAiQuestionGuardEvent(guardPayload);
-        safePublish(OWNER_AI_QUESTION_GUARD_EVENT, guardPayload);
-        touchActivity();
-        return;
+      if (aiMentioned && aiPromptText) {
+        const recentForGuard = [
+          ...messages.map((m) => ({
+            displayName: m.displayName,
+            body: m.body,
+            messageType: m.messageType ?? 'user',
+          })),
+          {
+            displayName: effectiveDisplayName,
+            body: trimmed,
+            messageType: 'user',
+          },
+        ].slice(-12);
+        const guardRes = await resolveAiQuestionMusicRelated(aiPromptText, recentForGuard, {
+          isGuest,
+          roomId: roomId ?? undefined,
+        });
+        if (guardRes.outcome === 'defer') {
+          addSystemMessage(guardRes.message);
+          touchActivity();
+          return;
+        }
+        if (guardRes.outcome === 'block') {
+          const warningCount = incrementAiQuestionWarnCount(roomId || 'unknown-room', myClientId || 'unknown-client');
+          const yellowCards = warningCount <= 1 ? 0 : Math.min(3, warningCount - 1);
+          const action: OwnerAiQuestionGuardPayload['action'] =
+            warningCount >= 4 ? 'ban' : warningCount === 1 ? 'warn' : 'yellow';
+          const kickExempt = !isGuest && isAiQuestionGuardKickExemptUserId(authUserId);
+          const message =
+            warningCount === 1
+              ? `システム警告: ${effectiveDisplayName}さんの質問は音楽に関係ない内容と判断しました。次回からお気をつけください。`
+              : warningCount === 2
+                ? `システム警告: ${effectiveDisplayName}さんにイエローカード1枚を付与しました（AI質問は音楽関連のみ）。`
+                : warningCount === 3
+                  ? `システム警告: ${effectiveDisplayName}さんにイエローカード2枚目を付与しました。次のカードで退場となります。`
+                  : kickExempt
+                    ? `システム警告: ${effectiveDisplayName}さんの「@」質問に関する警告が継続しています。管理者アカウントのため、退場および入室禁止は行いません。`
+                    : `システム警告: ${effectiveDisplayName}さんに3枚目のカードを付与したため、強制退場と一定期間の入室禁止を実行しました。`;
+          const guardPayload: OwnerAiQuestionGuardPayload = {
+            targetClientId: myClientId,
+            targetDisplayName: effectiveDisplayName,
+            warningCount,
+            yellowCards,
+            action,
+            message,
+          };
+          applyAiQuestionGuardEvent(guardPayload);
+          safePublish(OWNER_AI_QUESTION_GUARD_EVENT, guardPayload);
+          touchActivity();
+          return;
+        }
       }
 
       const doChatReply = () => {
@@ -2708,6 +2742,8 @@ export default function RoomWithSync({
       applyImmediateChangeVideo,
       applyAiQuestionGuardEvent,
       effectiveDisplayName,
+      isGuest,
+      authUserId,
     ]
   );
 

@@ -165,7 +165,7 @@ create policy "room_lobby_message_select_anon"
 
 ## 10. マイページ「参加履歴」を使う場合
 
-ログインユーザーのチャット参加履歴（部屋・開催タイトル・入室/退出時刻）を記録するには、次の SQL を **SQL Editor** で実行してください。
+ログインユーザーのチャット参加履歴（部屋・開催タイトル・入室時の表示名・入室/退出時刻）を記録するには、次の SQL を **SQL Editor** で実行してください。
 
 ```sql
 create table if not exists public.user_room_participation_history (
@@ -174,6 +174,7 @@ create table if not exists public.user_room_participation_history (
   room_id text not null,
   gathering_id uuid null references public.room_gatherings (id) on delete set null,
   gathering_title text null,
+  display_name text null,
   joined_at timestamptz not null default now(),
   left_at timestamptz null
 );
@@ -200,8 +201,15 @@ create policy "participation_update_own"
   with check (auth.uid() = user_id);
 ```
 
+**既にテーブルがある場合**に表示名を後から足すには、SQL Editor で次を実行してください。
+
+```sql
+alter table public.user_room_participation_history
+  add column if not exists display_name text null;
+```
+
 記録は `POST /api/user-room-participation` が担当します。  
-`Join` は入室時、`Leave` は退室ボタン押下時とページ離脱時に送信します。ネットワーク切断等で `Leave` が取れない場合は `left_at` が null のまま残ることがあります。
+`Join` は入室時（本文に `displayName` を付けると入室時点のチャット表示名が `display_name` に保存されます）、`Leave` は退室ボタン押下時とページ離脱時に送信します。ネットワーク切断等で `Leave` が取れない場合は `left_at` が null のまま残ることがあります。
 
 ---
 
@@ -275,3 +283,21 @@ create policy "ai_question_guard_objections_insert_own"
 ```
 
 テーブルが無い場合、API は 503 とヒントを返します。
+
+### 11.1 エクスポート → 分類精度の改善パイプライン
+
+1. **管理画面** `/admin/ai-question-guard-objections` で **JSON エクスポート** または **CSV エクスポート** をダウンロードする（認証: STYLE_ADMIN）。API 直叩きは `GET /api/admin/ai-question-guard-objections/export?format=json` または `format=csv`。
+2. エクスポートの各行の `conversation_snapshot`（配列）から、**実際の「@」質問文**と**直前の会話**を確認する。異議理由が「音楽関連だった」の行は **正例（本来 allow すべき）** としてメモする。
+3. **サーバー分類**は `POST /api/ai/question-guard-classify`（Gemini）が担当。質問がクライアントのキーワード判定で落ちたときだけ呼ばれる。プロンプト本文は `src/lib/ai-question-guard-prompt.ts` の `AI_QUESTION_GUARD_CLASSIFIER_INSTRUCTION`。
+4. **プロンプト差し替え手順（推奨）**
+   - 正例を数件〜数十件、次のようなブロックにまとめる（事実に基づく短い例のみ）:
+
+     ```
+     【正例】直前: … / 質問: … → musicRelated: true
+     【負例】直前: … / 質問: … → musicRelated: false
+     ```
+
+   - そのブロックを **`.env.local`（コミット禁止）** の環境変数 `AI_QUESTION_GUARD_EXTRA_PROMPT` に貼り付け、サーバー再起動。`buildAiQuestionGuardUserPayload` が各リクエストに追記する。
+   - 繰り返し誤判定が残る場合は `AI_QUESTION_GUARD_CLASSIFIER_INSTRUCTION` 本体を編集し、`npm run test` に含まれる `is-music-related-ai-question` の単体テストとあわせてクライアント側キーワード（`src/lib/is-music-related-ai-question.ts`）も必要に応じて補足する。
+5. **Gemini を分類に使わない**ときは `.env.local` に `AI_QUESTION_GUARD_GEMINI=0`（キーがあっても API はスキップし、従来どおりクライアント判定のみ）。
+6. **レート制限**（IP・60 秒窓）: 登録ユーザー `QUESTION_GUARD_CLASSIFY_PER_MINUTE`（既定 60）、ゲスト `QUESTION_GUARD_CLASSIFY_PER_MINUTE_GUEST`（既定 30）。

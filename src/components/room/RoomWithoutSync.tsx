@@ -28,13 +28,15 @@ import {
   SYSTEM_MESSAGE_COMMENTARY_FETCH_FAILED,
   SYSTEM_MESSAGE_JP_NO_COMMENTARY,
 } from '@/lib/chat-system-copy';
-import { isMusicRelatedAiQuestion } from '@/lib/is-music-related-ai-question';
+import { resolveAiQuestionMusicRelated } from '@/lib/client-ai-question-guard-resolve';
 import { isDevMinimalSongAi } from '@/lib/dev-minimal-song-ai';
 import { playbackLog } from '@/lib/playback-debug';
 import { extractVideoId, isStandaloneNonYouTubeUrl } from '@/lib/youtube';
 import type { ChatMessage, SystemMessageOptions } from '@/types/chat';
 import { useIsLgViewport } from '@/hooks/useLgViewport';
 import { useRoomChatLogPersistence } from '@/hooks/useRoomChatLogPersistence';
+import { useSupabaseAuthUserId } from '@/hooks/useSupabaseAuthUserId';
+import { isAiQuestionGuardKickExemptUserId } from '@/lib/ai-question-guard-exempt-user-ids';
 import { incrementAiQuestionWarnCount, setKicked, setKickedSitewide } from '@/lib/room-owner';
 
 const AI_DISPLAY_NAME = 'AI';
@@ -118,6 +120,7 @@ export default function RoomWithoutSync({
     popularTracks?: { artist: string; title: string; count: number }[];
   } | null>(null);
   const isLg = useIsLgViewport();
+  const authUserId = useSupabaseAuthUserId(isGuest);
   const [userTextColor, setUserTextColor] = useState(DEFAULT_CHAT_TEXT_COLOR);
   const lastActivityAtRef = useRef(Date.now());
   const lastTidbitAtRef = useRef(0);
@@ -701,7 +704,7 @@ export default function RoomWithoutSync({
   );
 
   const handleSendMessage = useCallback(
-    (text: string) => {
+    async (text: string) => {
       const limit = checkSendLimit(text, lastSendAtRef, sendTimestampsRef);
       if (!limit.ok) {
         addSystemMessage(getSendLimitMessage(limit.reason));
@@ -761,36 +764,62 @@ export default function RoomWithoutSync({
       const trimmed = text.trim();
       const aiMentioned = trimmed.startsWith('@');
       const aiPromptText = aiMentioned ? trimmed.replace(/^@\s*/, '').trim() : '';
-      if (aiMentioned && aiPromptText && !isMusicRelatedAiQuestion(aiPromptText)) {
-        const warningCount = incrementAiQuestionWarnCount(roomId || 'local', 'local-client');
-        const nextCards = warningCount <= 1 ? 0 : Math.min(3, warningCount - 1);
-        setYellowCards(nextCards);
-        const message =
-          warningCount === 1
-            ? `システム警告: ${displayNameProp}さんの質問は音楽に関係ない内容と判断しました。次回からお気をつけください。`
-            : warningCount === 2
-              ? `システム警告: ${displayNameProp}さんにイエローカード1枚を付与しました（AI質問は音楽関連のみ）。`
-              : warningCount === 3
-                ? `システム警告: ${displayNameProp}さんにイエローカード2枚目を付与しました。次のカードで退場となります。`
-                : `システム警告: ${displayNameProp}さんに3枚目のカードを付与したため、強制退場と一定期間の入室禁止を実行しました。`;
-        const action: 'warn' | 'yellow' | 'ban' =
-          warningCount >= 4 ? 'ban' : warningCount === 1 ? 'warn' : 'yellow';
-        addSystemMessage(message, {
-          systemKind: 'ai_question_guard',
-          aiGuardMeta: {
-            targetClientId: 'local-client',
-            warningCount,
-            yellowCards: nextCards,
-            action,
+      if (aiMentioned && aiPromptText) {
+        const recentForGuard = [
+          ...messages.map((m) => ({
+            displayName: m.displayName,
+            body: m.body,
+            messageType: m.messageType ?? 'user',
+          })),
+          {
+            displayName: displayNameProp,
+            body: trimmed,
+            messageType: 'user',
           },
+        ].slice(-12);
+        const guardRes = await resolveAiQuestionMusicRelated(aiPromptText, recentForGuard, {
+          isGuest,
+          roomId: roomId ?? undefined,
         });
-        if (warningCount >= 4 && onLeave) {
-          setKicked(roomId || 'local', 'local-client');
-          setKickedSitewide();
-          onLeave();
+        if (guardRes.outcome === 'defer') {
+          addSystemMessage(guardRes.message);
+          touchActivity();
+          return;
         }
-        touchActivity();
-        return;
+        if (guardRes.outcome === 'block') {
+          const warningCount = incrementAiQuestionWarnCount(roomId || 'local', 'local-client');
+          const nextCards = warningCount <= 1 ? 0 : Math.min(3, warningCount - 1);
+          setYellowCards(nextCards);
+          const kickExempt = !isGuest && isAiQuestionGuardKickExemptUserId(authUserId);
+          const message =
+            warningCount === 1
+              ? `システム警告: ${displayNameProp}さんの質問は音楽に関係ない内容と判断しました。次回からお気をつけください。`
+              : warningCount === 2
+                ? `システム警告: ${displayNameProp}さんにイエローカード1枚を付与しました（AI質問は音楽関連のみ）。`
+                : warningCount === 3
+                  ? `システム警告: ${displayNameProp}さんにイエローカード2枚目を付与しました。次のカードで退場となります。`
+                  : kickExempt
+                    ? `システム警告: ${displayNameProp}さんの「@」質問に関する警告が継続しています。管理者アカウントのため、退場および入室禁止は行いません。`
+                    : `システム警告: ${displayNameProp}さんに3枚目のカードを付与したため、強制退場と一定期間の入室禁止を実行しました。`;
+          const action: 'warn' | 'yellow' | 'ban' =
+            warningCount >= 4 ? 'ban' : warningCount === 1 ? 'warn' : 'yellow';
+          addSystemMessage(message, {
+            systemKind: 'ai_question_guard',
+            aiGuardMeta: {
+              targetClientId: 'local-client',
+              warningCount,
+              yellowCards: nextCards,
+              action,
+            },
+          });
+          if (warningCount >= 4 && onLeave && !kickExempt) {
+            setKicked(roomId || 'local', 'local-client');
+            setKickedSitewide();
+            onLeave();
+          }
+          touchActivity();
+          return;
+        }
       }
 
       const doChatReply = () => {
@@ -960,6 +989,9 @@ export default function RoomWithoutSync({
       fetchAnnounceAndPublish,
       fetchCommentaryAndPublish,
       scheduleLocalAutoPlayAfterLoad,
+      isGuest,
+      displayNameProp,
+      authUserId,
     ]
   );
 
