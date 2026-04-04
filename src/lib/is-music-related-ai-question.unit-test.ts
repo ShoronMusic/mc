@@ -28,5 +28,8 @@ assert.equal(
   true,
 );
 assert.equal(isMusicRelatedAiQuestion('What was the #1 hit that year?'), true);
+assert.equal(isMusicRelatedAiQuestion('オリジナルは誰ですか？'), true);
+assert.equal(isMusicRelatedAiQuestion('原曲は誰が歌ってますか？'), true);
+assert.equal(isMusicRelatedAiQuestion('Who did the original version?'), true);
 
 console.log('is-music-related-ai-question unit tests: OK');
