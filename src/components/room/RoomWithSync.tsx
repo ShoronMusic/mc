@@ -32,6 +32,10 @@ import {
   SYSTEM_MESSAGE_JP_NO_COMMENTARY,
   SYSTEM_MESSAGE_QUEUE_SONG_DEFERRED,
 } from '@/lib/chat-system-copy';
+import {
+  buildTurnOrderClarificationReply,
+  isAiTurnOrderClarificationText,
+} from '@/lib/ai-turn-order-clarification';
 import { resolveAiQuestionMusicRelated } from '@/lib/client-ai-question-guard-resolve';
 import { isDevMinimalSongAi } from '@/lib/dev-minimal-song-ai';
 import { COMMENT_PACK_MAX_FREE_COMMENTS } from '@/lib/song-tidbits';
@@ -1278,12 +1282,19 @@ export default function RoomWithSync({
         const pubId = pubIdForQueue;
         lastChangeVideoPublisherRef.current = pubId;
         setCurrentSongPosterClientId(pubId);
-        const nextId = participatingOrderRef.current.length === 0 ? '' : (() => {
-          const order = participatingOrderRef.current;
-          const i = order.findIndex((p) => p.clientId === pubId);
-          const nextIndex = i < 0 ? 0 : (i + 1) % order.length;
-          return order[nextIndex]?.clientId ?? '';
-        })();
+        const fromPayload =
+          typeof data.nextTurnClientId === 'string' ? data.nextTurnClientId.trim() : '';
+        const nextId =
+          fromPayload !== ''
+            ? fromPayload
+            : participatingOrderRef.current.length === 0
+              ? ''
+              : (() => {
+                  const order = participatingOrderRef.current;
+                  const i = order.findIndex((p) => p.clientId === pubId);
+                  const nextIndex = i < 0 ? 0 : (i + 1) % order.length;
+                  return order[nextIndex]?.clientId ?? '';
+                })();
         setCurrentTurnClientId(nextId);
         playerRef.current?.loadVideoById(data.videoId);
       } else if (data.type === 'play' && typeof data.currentTime === 'number') {
@@ -2653,6 +2664,17 @@ export default function RoomWithSync({
       const trimmed = text.trim();
       const aiMentioned = trimmed.startsWith('@');
       const aiPromptText = aiMentioned ? trimmed.replace(/^@\s*/, '').trim() : '';
+      if (aiMentioned && aiPromptText && isAiTurnOrderClarificationText(aiPromptText)) {
+        if (!jpUiBlocked) {
+          const reply = buildTurnOrderClarificationReply(
+            participatingOrderRef.current,
+            currentTurnClientIdRef.current,
+          );
+          addAiMessage(reply, { allowWhenAiStopped: true });
+        }
+        touchActivity();
+        return;
+      }
       if (aiMentioned && aiPromptText) {
         const recentForGuard = [
           ...messages.map((m) => ({

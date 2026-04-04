@@ -2,6 +2,7 @@
  * ブラウザ用: 「@」本文がクライアントヒューリスティックで非音楽扱いのとき、API で再判定。
  */
 
+import { isAiTurnOrderClarificationText } from '@/lib/ai-turn-order-clarification';
 import { isMusicRelatedAiQuestion } from '@/lib/is-music-related-ai-question';
 
 export type GuardRecentMessage = {
@@ -31,6 +32,7 @@ export async function resolveAiQuestionMusicRelated(
 ): Promise<ResolveAiQuestionMusicRelatedResult> {
   const q = aiPromptText.trim();
   if (!q) return { outcome: 'allow' };
+  if (isAiTurnOrderClarificationText(q)) return { outcome: 'allow' };
   if (isMusicRelatedAiQuestion(q)) return { outcome: 'allow' };
 
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
