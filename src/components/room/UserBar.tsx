@@ -47,8 +47,8 @@ interface UserBarProps {
   myClientId?: string;
   currentOwnerClientId?: string;
   currentSongPosterClientId?: string;
-  /** 次に再生予定の曲をキュー済みの参加者（5分制限・複数人時） */
-  queuedSongPublisherClientId?: string;
+  /** 次に再生予定の曲をキュー済みの参加者（5分制限・複数人時・複数可・順不同表示） */
+  queuedSongPublisherClientIds?: string[];
   /** 選曲者またはチャットオーナー: スキップが押せる見た目 */
   skipCurrentTrackActive?: boolean;
   /** 上記以外: グレーアウト（クリック不可） */
@@ -84,7 +84,7 @@ export default function UserBar({
   myClientId = '',
   currentOwnerClientId = '',
   currentSongPosterClientId = '',
-  queuedSongPublisherClientId = '',
+  queuedSongPublisherClientIds = [],
   nextTurnClientId = '',
   skipCurrentTrackActive = false,
   skipCurrentTrackDisabled = false,
@@ -242,7 +242,8 @@ export default function UserBar({
           const color = p.textColor ?? '#e5e7eb';
           const isCurrentSongPoster = p.clientId === currentSongPosterClientId;
           const isQueuedSongPoster =
-            Boolean(queuedSongPublisherClientId) && p.clientId === queuedSongPublisherClientId;
+            queuedSongPublisherClientIds.length > 0 &&
+            queuedSongPublisherClientIds.includes(p.clientId);
             const isNextTurnPoster =
               Boolean(nextTurnClientId) &&
               !isCurrentSongPoster &&
@@ -252,7 +253,7 @@ export default function UserBar({
           const chipTitle = isCurrentSongPoster
             ? '今の曲の選曲者（再生中）'
             : isQueuedSongPoster
-              ? '選曲済み。前の曲終了後に再生されます'
+              ? '選曲予約済み。前の曲の終了後、順番に再生されます'
                 : isNextTurnPoster
                   ? '次の選曲者（選曲待ち）'
               : undefined;
@@ -317,7 +318,7 @@ export default function UserBar({
                 )}
               </span>
               {isQueuedSongPoster && (
-                <span className="pl-5 text-[10px] leading-tight text-sky-300/95">選曲済み（待機中）</span>
+                <span className="pl-5 text-[10px] leading-tight text-sky-300/95">予約済み（順番待ち）</span>
               )}
               {isNextTurnPoster && (
                 <span className="pl-5 text-[10px] leading-tight text-emerald-200/95">NEXT（選曲待ち）</span>
@@ -600,7 +601,8 @@ export default function UserBar({
                 const color = p.textColor ?? '#e5e7eb';
                 const isCurrentSongPoster = p.clientId === currentSongPosterClientId;
                 const isQueuedSongPoster =
-                  Boolean(queuedSongPublisherClientId) && p.clientId === queuedSongPublisherClientId;
+                  queuedSongPublisherClientIds.length > 0 &&
+                  queuedSongPublisherClientIds.includes(p.clientId);
                 const isNextTurnPoster =
                   Boolean(nextTurnClientId) &&
                   !isCurrentSongPoster &&
@@ -687,7 +689,7 @@ export default function UserBar({
                       </div>
                     ) : null}
                     {isQueuedSongPoster && (
-                      <span className="pl-6 text-[11px] text-sky-200/85">選曲済み（待機中）</span>
+                      <span className="pl-6 text-[11px] text-sky-200/85">予約済み（順番待ち）</span>
                     )}
                     {isNextTurnPoster && (
                       <span className="pl-6 text-[11px] text-emerald-200/85">NEXT（選曲待ち）</span>

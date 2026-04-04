@@ -271,6 +271,8 @@ export default function RoomWithSync({
   const currentTrackStartedAtMsRef = useRef(0);
   const pendingQueuedVideoIdRef = useRef<string | null>(null);
   const pendingQueuedPublisherRef = useRef('');
+  /** 5分待ち中の選曲予約（FIFO）。各 publisherClientId は同時に1件まで */
+  const songReservationQueueRef = useRef<{ videoId: string; publisherClientId: string }[]>([]);
   const playbackEndedApplyRef = useRef<() => void>(() => {});
   /** 選曲キュー: 投稿者の ended が来ないとき最古参加者が遅延で適用するタイマー */
   const playbackQueueFallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -282,8 +284,21 @@ export default function RoomWithSync({
   const [playbackHistoryRefreshKey, setPlaybackHistoryRefreshKey] = useState(0);
   /** スキップ押下後、その動画IDではボタンを出さない（選曲者・オーナー各自のクライアント） */
   const [skipUsedForVideoId, setSkipUsedForVideoId] = useState<string | null>(null);
-  /** 5分制限キューで次に再生予定の曲を貼った参加者（参加者欄のステータス用） */
-  const [queuedSongPublisherClientId, setQueuedSongPublisherClientId] = useState('');
+  /** 5分制限キューで選曲予約中の参加者（参加者欄のステータス用・複数可） */
+  const [queuedSongPublisherClientIds, setQueuedSongPublisherClientIds] = useState<string[]>([]);
+
+  const syncSongReservationQueueHead = useCallback(() => {
+    const q = songReservationQueueRef.current;
+    const head = q[0];
+    if (head) {
+      pendingQueuedVideoIdRef.current = head.videoId;
+      pendingQueuedPublisherRef.current = head.publisherClientId;
+    } else {
+      pendingQueuedVideoIdRef.current = null;
+      pendingQueuedPublisherRef.current = '';
+    }
+    setQueuedSongPublisherClientIds(q.map((e) => e.publisherClientId));
+  }, []);
   const [favoritedVideoIds, setFavoritedVideoIds] = useState<string[]>([]);
   const recentlyUsedTidbitIdsRef = useRef<string[]>([]);
   const tidbitCountSinceUserMessageRef = useRef(0);
@@ -952,9 +967,10 @@ export default function RoomWithSync({
         clearTimeout(playbackQueueFallbackTimerRef.current);
         playbackQueueFallbackTimerRef.current = null;
       }
+      songReservationQueueRef.current = [];
       pendingQueuedVideoIdRef.current = null;
       pendingQueuedPublisherRef.current = '';
-      setQueuedSongPublisherClientId('');
+      setQueuedSongPublisherClientIds([]);
       jpDomesticSilenceVideoIdRef.current = null;
 
       setVideoId(targetVid);
@@ -1062,18 +1078,23 @@ export default function RoomWithSync({
       const queuedPublisherClientId =
         (typeof data.publisherClientId === 'string' && data.publisherClientId.trim()) ||
         (typeof queuedMsgClientId === 'string' ? queuedMsgClientId : '');
+      if (!queuedPublisherClientId) return;
+      const q = songReservationQueueRef.current;
+      if (q.some((e) => e.publisherClientId === queuedPublisherClientId)) {
+        return;
+      }
       if (playbackQueueFallbackTimerRef.current) {
         clearTimeout(playbackQueueFallbackTimerRef.current);
         playbackQueueFallbackTimerRef.current = null;
       }
-      pendingQueuedVideoIdRef.current = data.videoId;
-      pendingQueuedPublisherRef.current = queuedPublisherClientId;
-      setQueuedSongPublisherClientId(queuedPublisherClientId);
+      q.push({ videoId: data.videoId, publisherClientId: queuedPublisherClientId });
+      syncSongReservationQueueHead();
       const publisherDisplayName =
         participants.find((p) => p.clientId === queuedPublisherClientId)?.displayName?.trim() ||
         '参加者';
+      const position = q.length;
       addSystemMessage(
-        `${publisherDisplayName}さんの選曲を受け付けました。現在の曲の再生が終わり次第、次の曲を再生します。`
+        `${publisherDisplayName}さんの選曲を予約に追加しました（${position}番目。現在の曲の終了後、順に再生されます）。`
       );
       return;
     }
@@ -1111,13 +1132,25 @@ export default function RoomWithSync({
         if (!myClientId || !msgClientId || myClientId !== msgClientId) {
           return;
         }
+        const qSkip = songReservationQueueRef.current;
+        if (
+          qSkip.length > 0 &&
+          qSkip[0].videoId === pv &&
+          qSkip[0].publisherClientId === (pp || '')
+        ) {
+          qSkip.shift();
+          syncSongReservationQueueHead();
+        } else if (qSkip.length > 0) {
+          songReservationQueueRef.current = [];
+          syncSongReservationQueueHead();
+        }
         if (playbackQueueFallbackTimerRef.current) {
           clearTimeout(playbackQueueFallbackTimerRef.current);
           playbackQueueFallbackTimerRef.current = null;
         }
         applyingRemoteRef.current = true;
         try {
-          applyImmediateChangeVideo(pv, pp || myClientId);
+          applyImmediateChangeVideo(pv, pp || myClientId, { preserveReservationQueue: true });
         } finally {
           setTimeout(() => {
             applyingRemoteRef.current = false;
@@ -1176,15 +1209,23 @@ export default function RoomWithSync({
           clearTimeout(playbackQueueFallbackTimerRef.current);
           playbackQueueFallbackTimerRef.current = null;
         }
-        pendingQueuedVideoIdRef.current = null;
-        pendingQueuedPublisherRef.current = '';
-        setQueuedSongPublisherClientId('');
+        const qCv = songReservationQueueRef.current;
+        const pubIdForQueue = data.publisherClientId ?? '';
+        if (qCv.length > 0) {
+          const h = qCv[0];
+          if (h.videoId === data.videoId && h.publisherClientId === pubIdForQueue) {
+            qCv.shift();
+          } else {
+            qCv.length = 0;
+          }
+        }
+        syncSongReservationQueueHead();
         jpDomesticSilenceVideoIdRef.current = null;
         setVideoId(data.videoId);
         /* commentPackMode は owner:commentPackMode のみで同期 */
         /* 5分待機判定用。useEffect([videoId]) では上書きしない（スナップショットの trackStartedAtMs を壊さない） */
         currentTrackStartedAtMsRef.current = Date.now();
-        const pubId = data.publisherClientId ?? '';
+        const pubId = pubIdForQueue;
         lastChangeVideoPublisherRef.current = pubId;
         setCurrentSongPosterClientId(pubId);
         const nextId = participatingOrderRef.current.length === 0 ? '' : (() => {
@@ -1824,7 +1865,7 @@ export default function RoomWithSync({
   const FIVE_MIN_MS = 5 * 60 * 1000;
 
   /** 複数人・5分制限ON・再生中で、開始から5分未満なら次曲はキューのみ（オーナー含む全員。即時切替しない） */
-  const shouldDeferMultiSongPost = () => {
+  const shouldDeferMultiSongPost = useCallback(() => {
     if (!songLimit5MinEnabledRef.current) return false;
     const order = participatingOrderRef.current;
     if (order.length <= 1) return false;
@@ -1834,7 +1875,7 @@ export default function RoomWithSync({
     const started = currentTrackStartedAtMsRef.current;
     if (!started) return false;
     return Date.now() - started < FIVE_MIN_MS;
-  };
+  }, [FIVE_MIN_MS]);
 
   const clearPendingFreeCommentTimers = useCallback(() => {
     if (freeCommentTimeoutsRef.current.length > 0) {
@@ -2249,15 +2290,21 @@ export default function RoomWithSync({
   );
 
   const applyImmediateChangeVideo = useCallback(
-    (id: string, publisherClientId: string) => {
+    (
+      id: string,
+      publisherClientId: string,
+      options?: { preserveReservationQueue?: boolean },
+    ) => {
       playbackLog('applyImmediateChangeVideo', { id, publisherClientId });
       if (playbackQueueFallbackTimerRef.current) {
         clearTimeout(playbackQueueFallbackTimerRef.current);
         playbackQueueFallbackTimerRef.current = null;
       }
-      pendingQueuedVideoIdRef.current = null;
-      pendingQueuedPublisherRef.current = '';
-      setQueuedSongPublisherClientId('');
+      const preserve = options?.preserveReservationQueue === true;
+      if (!preserve) {
+        songReservationQueueRef.current = [];
+        syncSongReservationQueueHead();
+      }
       const previousVideoId = videoIdRef.current;
       const sameVideoReplay = Boolean(previousVideoId && previousVideoId === id);
       jpDomesticSilenceVideoIdRef.current = null;
@@ -2297,6 +2344,7 @@ export default function RoomWithSync({
       saveSongHistory,
       roomId,
       schedulePlaybackHistory,
+      syncSongReservationQueueHead,
     ]
   );
 
@@ -2317,16 +2365,20 @@ export default function RoomWithSync({
       const imOldest = Boolean(myClientId && oldestRef.current && myClientId === oldestRef.current);
 
       const tryApplyQueued = () => {
-        const pv = pendingQueuedVideoIdRef.current;
-        const pp = pendingQueuedPublisherRef.current;
-        if (!pv) return;
+        const qApply = songReservationQueueRef.current;
+        const head = qApply[0];
+        if (!head?.videoId) return;
+        const pv = head.videoId;
+        const pp = head.publisherClientId;
+        qApply.shift();
+        syncSongReservationQueueHead();
         if (playbackQueueFallbackTimerRef.current) {
           clearTimeout(playbackQueueFallbackTimerRef.current);
           playbackQueueFallbackTimerRef.current = null;
         }
         applyingRemoteRef.current = true;
         try {
-          applyImmediateChangeVideo(pv, pp || myClientId);
+          applyImmediateChangeVideo(pv, pp || myClientId, { preserveReservationQueue: true });
         } finally {
           setTimeout(() => {
             applyingRemoteRef.current = false;
@@ -2357,7 +2409,7 @@ export default function RoomWithSync({
         }, QUEUE_APPLY_FALLBACK_MS);
       }
     };
-  }, [myClientId, applyImmediateChangeVideo]);
+  }, [myClientId, applyImmediateChangeVideo, syncSongReservationQueueHead]);
 
   const handleVideoUrlFromChat = useCallback(
     (url: string) => {
@@ -2379,6 +2431,29 @@ export default function RoomWithSync({
       const multipleParticipants = order.length > 1 && !sameDisplayNameOnly;
       const isMyTurn = turnClientId && turnClientId === myClientId;
 
+      if (shouldDeferMultiSongPost()) {
+        const posterLive = lastChangeVideoPublisherRef.current;
+        if (myClientId && posterLive && myClientId === posterLive) {
+          addSystemMessage(
+            'いま再生中の曲を選んだ方は、この曲が終わるまで予約に追加できません。',
+          );
+          return;
+        }
+        if (
+          myClientId &&
+          songReservationQueueRef.current.some((e) => e.publisherClientId === myClientId)
+        ) {
+          addSystemMessage('この曲の再生中は、予約はおひとりさま1曲までです。');
+          return;
+        }
+        safePublish('queueSong', {
+          type: 'queueSong',
+          videoId: id,
+          publisherClientId: myClientId,
+        } as PlaybackMessage);
+        return;
+      }
+
       if (currentVid && multipleParticipants && !isMyTurn && !isOwner) {
         const turnParticipant =
           order.find((p) => p.clientId === turnClientId) ?? null;
@@ -2389,18 +2464,16 @@ export default function RoomWithSync({
         return;
       }
 
-      if (shouldDeferMultiSongPost()) {
-        safePublish('queueSong', {
-          type: 'queueSong',
-          videoId: id,
-          publisherClientId: myClientId,
-        } as PlaybackMessage);
-        return;
-      }
-
       applyImmediateChangeVideo(id, myClientId);
     },
-    [safePublish, applyImmediateChangeVideo, myClientId, isOwner, addSystemMessage]
+    [
+      safePublish,
+      applyImmediateChangeVideo,
+      myClientId,
+      isOwner,
+      addSystemMessage,
+      shouldDeferMultiSongPost,
+    ]
   );
 
   const handleAddCandidateFromSearch = useCallback(
@@ -2662,6 +2735,22 @@ export default function RoomWithSync({
             }
             if (data2?.ok && data2?.videoId && data2?.artistTitle) {
               if (shouldDeferMultiSongPost()) {
+                const posterLive = lastChangeVideoPublisherRef.current;
+                if (myClientId && posterLive && myClientId === posterLive) {
+                  addSystemMessage(
+                    'いま再生中の曲を選んだ方は、この曲が終わるまで予約に追加できません。',
+                  );
+                  touchActivity();
+                  return;
+                }
+                if (
+                  myClientId &&
+                  songReservationQueueRef.current.some((e) => e.publisherClientId === myClientId)
+                ) {
+                  addSystemMessage('この曲の再生中は、予約はおひとりさま1曲までです。');
+                  touchActivity();
+                  return;
+                }
                 safePublish('queueSong', {
                   type: 'queueSong',
                   videoId: data2.videoId,
@@ -2744,6 +2833,7 @@ export default function RoomWithSync({
       effectiveDisplayName,
       isGuest,
       authUserId,
+      shouldDeferMultiSongPost,
     ]
   );
 
@@ -2818,7 +2908,7 @@ export default function RoomWithSync({
           myClientId={myClientId}
           currentOwnerClientId={ownerLeftAt === null ? ownerClientId : ''}
           currentSongPosterClientId={currentSongPosterClientId}
-          queuedSongPublisherClientId={queuedSongPublisherClientId}
+          queuedSongPublisherClientIds={queuedSongPublisherClientIds}
           nextTurnClientId={currentTurnClientId}
           skipCurrentTrackActive={Boolean(
             videoId &&
