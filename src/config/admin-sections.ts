@@ -27,6 +27,11 @@ export const ADMIN_SECTIONS: AdminSection[] = [
       'チャット保存ログ上の [NEW]/[DB] 発言数と DB 比率。曲解説・comment-pack の Gemini API 回数・トークン（経費の目安）',
   },
   {
+    href: '/admin/site-feedback',
+    title: 'サイトご意見',
+    description: '部屋画面から送信されたサイト評価（-2〜2）と自由コメントの一覧',
+  },
+  {
     href: '/admin/ai-question-guard-objections',
     title: 'AI質問ガード異議',
     description:

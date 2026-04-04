@@ -301,3 +301,29 @@ create policy "ai_question_guard_objections_insert_own"
    - 繰り返し誤判定が残る場合は `AI_QUESTION_GUARD_CLASSIFIER_INSTRUCTION` 本体を編集し、`npm run test` に含まれる `is-music-related-ai-question` の単体テストとあわせてクライアント側キーワード（`src/lib/is-music-related-ai-question.ts`）も必要に応じて補足する。
 5. **Gemini を分類に使わない**ときは `.env.local` に `AI_QUESTION_GUARD_GEMINI=0`（キーがあっても API はスキップし、従来どおりクライアント判定のみ）。
 6. **レート制限**（IP・60 秒窓）: 登録ユーザー `QUESTION_GUARD_CLASSIFY_PER_MINUTE`（既定 60）、ゲスト `QUESTION_GUARD_CLASSIFY_PER_MINUTE_GUEST`（既定 30）。
+
+---
+
+## 12. サイト全体ご意見（`site_feedback`）
+
+部屋画面ヘッダーの「ご意見」から送信する評価（-2〜2）と自由コメントを保存します。書き込みは **`POST /api/site-feedback`** が **サービスロール**で行うため、`.env.local` に **`SUPABASE_SERVICE_ROLE_KEY`** が必要です。管理画面: `/admin/site-feedback`（STYLE_ADMIN）。
+
+```sql
+create table if not exists public.site_feedback (
+  id uuid primary key default gen_random_uuid(),
+  created_at timestamptz not null default now(),
+  rating smallint not null check (rating >= -2 and rating <= 2),
+  comment text,
+  room_id text,
+  display_name text,
+  is_guest boolean not null default true,
+  user_id uuid references auth.users (id) on delete set null
+);
+
+create index if not exists site_feedback_created_idx
+  on public.site_feedback (created_at desc);
+
+alter table public.site_feedback enable row level security;
+```
+
+anon には `insert` / `select` ポリシーを付けません（クライアント直叩き不可）。API のみサービスロールで挿入し、管理 API のみ読み取ります。

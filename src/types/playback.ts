@@ -21,6 +21,8 @@ export interface PlaybackMessage {
   playing?: boolean;
   /** changeVideo の送信者 clientId（次の曲促しを誰が出すか判定用） */
   publisherClientId?: string;
+  /** 選曲者が計算した「次のターン」。受信側は participatingOrder がずれていてもこれを優先する */
+  nextTurnClientId?: string;
   /** sync スナップショット用 */
   currentTurnClientId?: string;
   trackStartedAtMs?: number;

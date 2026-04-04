@@ -14,6 +14,7 @@ import { GuestRegisterPromptModal } from '@/components/auth/GuestRegisterPromptM
 import MyPage from '@/components/mypage/MyPage';
 import RoomMainLayout from '@/components/room/RoomMainLayout';
 import RoomPlaybackHistory from '@/components/room/RoomPlaybackHistory';
+import { SiteFeedbackModal } from '@/components/room/SiteFeedbackModal';
 import UserBar from '@/components/room/UserBar';
 import { getLastExitStorageKey } from '@/components/providers/AblyProviderWrapper';
 import {
@@ -87,6 +88,7 @@ import {
   setCommentPackModeToStorage,
 } from '@/lib/room-owner';
 import { createClient } from '@/lib/supabase/client';
+import { EnvelopeIcon } from '@heroicons/react/24/outline';
 import { useIsLgViewport } from '@/hooks/useLgViewport';
 import { useRoomChatLogPersistence } from '@/hooks/useRoomChatLogPersistence';
 import { useSupabaseAuthUserId } from '@/hooks/useSupabaseAuthUserId';
@@ -173,6 +175,11 @@ interface PresenceMemberData {
   status?: string;
   /** オーナー設定: 邦楽AI解説解禁（セッション設定） */
   jpAiUnlockEnabled?: boolean;
+  /**
+   * このクライアントがこの部屋に presence を出し始めた時刻（並び順用）。
+   * updateStatus で名前・色が変わっても変えない（Ably の timestamp は更新のたびに進むため並びが崩れるのを防ぐ）。
+   */
+  joinedAtMs?: number;
 }
 
 interface CandidateSong {
@@ -230,6 +237,7 @@ export default function RoomWithSync({
   const [chatSummaryLoading, setChatSummaryLoading] = useState(false);
   const [chatSummaryError, setChatSummaryError] = useState<string | null>(null);
   const [termsModalOpen, setTermsModalOpen] = useState(false);
+  const [siteFeedbackOpen, setSiteFeedbackOpen] = useState(false);
   const [policyTab, setPolicyTab] = useState<'terms' | 'privacy' | 'guide'>('terms');
   useEffect(() => {
     setRoomDisplayTitleCurrent(roomDisplayTitle);
@@ -323,6 +331,17 @@ export default function RoomWithSync({
   const ownerStatePublishRef = useRef(false);
   const currentTurnClientIdRef = useRef('');
   const participatingOrderRef = useRef<{ clientId: string; displayName: string }[]>([]);
+  /** 入室順のフォールバック（古いクライアントが joinedAtMs を送らない場合）＋ ref 更新後に participants を再計算する */
+  const joinOrderByClientIdRef = useRef<Map<string, number>>(new Map());
+  const [joinOrderEpoch, setJoinOrderEpoch] = useState(0);
+  const lastPresenceRoomIdRef = useRef<string | null>(null);
+  /** この部屋で presence を出し始めた時刻（並び用・部屋が変わったらリセット） */
+  const roomPresenceJoinedAtMsRef = useRef<number | null>(null);
+  if (lastPresenceRoomIdRef.current !== roomId) {
+    lastPresenceRoomIdRef.current = roomId ?? null;
+    joinOrderByClientIdRef.current.clear();
+    roomPresenceJoinedAtMsRef.current = null;
+  }
   /** ゲスト用の表示名（マイページで変更可能）。非ゲストは displayNameProp をそのまま使う */
   const [guestDisplayName, setGuestDisplayName] = useState(displayNameProp);
   const effectiveDisplayName = isGuest ? guestDisplayName : displayNameProp;
@@ -464,19 +483,32 @@ export default function RoomWithSync({
     }
   }, []);
 
+  if (roomPresenceJoinedAtMsRef.current === null) {
+    roomPresenceJoinedAtMsRef.current = Date.now();
+  }
+
   const presencePayload: PresenceMemberData = {
     displayName: effectiveDisplayName,
     participatesInSelection,
     textColor: userTextColor,
     status: userStatus || undefined,
     jpAiUnlockEnabled: jpAiUnlockEnabledRef.current,
+    joinedAtMs: roomPresenceJoinedAtMsRef.current,
   };
   const { updateStatus } = usePresence(channelName, presencePayload);
   const { presenceData } = usePresenceListener<PresenceMemberData>(channelName);
 
   useEffect(() => {
     updateStatus(presencePayload);
-  }, [updateStatus, effectiveDisplayName, participatesInSelection, userTextColor, userStatus, jpAiUnlockEnabled]);
+  }, [
+    updateStatus,
+    effectiveDisplayName,
+    participatesInSelection,
+    userTextColor,
+    userStatus,
+    jpAiUnlockEnabled,
+    presencePayload.joinedAtMs,
+  ]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -486,23 +518,24 @@ export default function RoomWithSync({
       // ignore
     }
   }, [candidateSongs, candidateStorageKey]);
-  /** 入室した順（timestamp 昇順）の参加者一覧 */
-  const joinOrderByClientIdRef = useRef<Map<string, number>>(new Map());
-
-  // presenceData の timestamp が更新されても、初回登場順を固定する
+  // presenceData の初回登場を記録（joinedAtMs 非対応クライアント向け）。マップ変更時は joinOrderEpoch で participants を再計算する。
   useEffect(() => {
     const idsInPresence = new Set(presenceData.map((p) => p.clientId));
-    // presence に存在するものは初回登場順を記録
+    let mapChanged = false;
     presenceData.forEach((p) => {
       const id = p.clientId;
       if (!joinOrderByClientIdRef.current.has(id)) {
-        joinOrderByClientIdRef.current.set(id, typeof p.timestamp === 'number' ? p.timestamp : Date.now());
+        joinOrderByClientIdRef.current.set(id, typeof p.timestamp === 'number' ? p.timestamp : 0);
+        mapChanged = true;
       }
     });
-    // presence から消えた clientId は削除（再入室したら末尾扱いにする）
     joinOrderByClientIdRef.current.forEach((_v, id) => {
-      if (!idsInPresence.has(id)) joinOrderByClientIdRef.current.delete(id);
+      if (!idsInPresence.has(id)) {
+        joinOrderByClientIdRef.current.delete(id);
+        mapChanged = true;
+      }
     });
+    if (mapChanged) setJoinOrderEpoch((e) => e + 1);
     setYellowCardByClientId((prev) => {
       const next = Object.fromEntries(Object.entries(prev).filter(([id]) => idsInPresence.has(id)));
       return Object.keys(next).length === Object.keys(prev).length ? prev : next;
@@ -510,10 +543,17 @@ export default function RoomWithSync({
   }, [presenceData]);
 
   const participants = useMemo(() => {
+    void joinOrderEpoch;
+    const sortKey = (p: (typeof presenceData)[number]) => {
+      const d = p.data as PresenceMemberData | undefined;
+      const j = d?.joinedAtMs;
+      if (typeof j === 'number' && Number.isFinite(j)) return j;
+      return joinOrderByClientIdRef.current.get(p.clientId) ?? (p.timestamp ?? 0);
+    };
     return [...presenceData]
       .sort((a, b) => {
-        const at = joinOrderByClientIdRef.current.get(a.clientId) ?? (a.timestamp ?? 0);
-        const bt = joinOrderByClientIdRef.current.get(b.clientId) ?? (b.timestamp ?? 0);
+        const at = sortKey(a);
+        const bt = sortKey(b);
         if (at !== bt) return at - bt;
         return a.clientId.localeCompare(b.clientId);
       })
@@ -521,8 +561,7 @@ export default function RoomWithSync({
         clientId: p.clientId,
         displayName: (p.data?.displayName ?? 'ゲスト').trim() || 'ゲスト',
         participatesInSelection: p.data?.participatesInSelection !== false,
-        // 並び順固定のため、timestamp には固定済みの初回登場順を入れる
-        timestamp: joinOrderByClientIdRef.current.get(p.clientId) ?? (p.timestamp ?? 0),
+        timestamp: sortKey(p),
         textColor:
           typeof p.data?.textColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(p.data.textColor)
             ? p.data.textColor
@@ -530,7 +569,7 @@ export default function RoomWithSync({
         status: typeof p.data?.status === 'string' && p.data.status.trim() ? p.data.status.trim() : undefined,
         yellowCards: yellowCardByClientId[p.clientId] ?? 0,
       }));
-  }, [presenceData, yellowCardByClientId]);
+  }, [presenceData, yellowCardByClientId, joinOrderEpoch]);
   /** 選曲に参加する人のみ・入室順（左から1,2,3...の番号に対応） */
   const participatingOrder = useMemo(
     () => participants.filter((p) => p.participatesInSelection),
@@ -549,6 +588,16 @@ export default function RoomWithSync({
 
   currentTurnClientIdRef.current = currentTurnClientId;
   participatingOrderRef.current = participatingOrder;
+  /** 参加者欄の [n] と同じ入室順（1始まり）。Ably ハンドラから参照 */
+  const participantJoinRankByClientIdRef = useRef<Map<string, number>>(new Map());
+  useEffect(() => {
+    const m = new Map<string, number>();
+    participants.forEach((p, i) => {
+      m.set(p.clientId, i + 1);
+    });
+    participantJoinRankByClientIdRef.current = m;
+  }, [participants]);
+
   const oldestParticipantClientId = useMemo(() => {
     if (participants.length === 0) return '';
     const sorted = [...participants].sort((a, b) => a.timestamp - b.timestamp);
@@ -1092,9 +1141,10 @@ export default function RoomWithSync({
       const publisherDisplayName =
         participants.find((p) => p.clientId === queuedPublisherClientId)?.displayName?.trim() ||
         '参加者';
-      const position = q.length;
+      const joinRank =
+        participantJoinRankByClientIdRef.current.get(queuedPublisherClientId) ?? q.length;
       addSystemMessage(
-        `${publisherDisplayName}さんの選曲を予約に追加しました（${position}番目。現在の曲の終了後、順に再生されます）。`
+        `${publisherDisplayName}さんの選曲を予約に追加しました（入室順${joinRank}番目。現在の曲の終了後、予約した曲は順に再生されます）。`
       );
       return;
     }
@@ -1473,9 +1523,11 @@ export default function RoomWithSync({
 
   /** 曲を貼った後にターンを次の人に進める（`afterClientId` は選曲した人の clientId） */
   const advanceTurnAfterPost = useCallback(
-    (afterClientId?: string) => {
+    (afterClientId?: string, precomputedNextId?: string) => {
       const id = afterClientId ?? myClientId;
-      const nextId = getNextTurnClientId(id);
+      const trimmed =
+        typeof precomputedNextId === 'string' ? precomputedNextId.trim() : '';
+      const nextId = trimmed !== '' ? trimmed : getNextTurnClientId(id);
       setCurrentTurnClientId(nextId);
       publishRef.current?.(TURN_STATE_EVENT, { currentTurnClientId: nextId } as TurnStatePayload);
     },
@@ -2315,14 +2367,16 @@ export default function RoomWithSync({
       const publisherDisplayName =
         participants.find((p) => p.clientId === publisherClientId)?.displayName?.trim() ||
         effectiveDisplayName;
+      const nextTurnId = getNextTurnClientId(publisherClientId);
       safePublish('changeVideo', {
         type: 'changeVideo',
         videoId: id,
         publisherClientId,
+        nextTurnClientId: nextTurnId,
       } as PlaybackMessage);
       playerRef.current?.loadVideoById(id);
       scheduleAutoPlayAfterChangeVideo();
-      advanceTurnAfterPost(publisherClientId);
+      advanceTurnAfterPost(publisherClientId, nextTurnId);
       fetchAnnounceAndPublish(
         id,
         (sameVideoReplay || isDevMinimalSongAi())
@@ -2339,6 +2393,7 @@ export default function RoomWithSync({
       safePublish,
       scheduleAutoPlayAfterChangeVideo,
       advanceTurnAfterPost,
+      getNextTurnClientId,
       fetchAnnounceAndPublish,
       fetchCommentaryAndPublish,
       saveSongHistory,
@@ -2870,6 +2925,15 @@ export default function RoomWithSync({
                 </button>
                 <button
                   type="button"
+                  onClick={() => setSiteFeedbackOpen(true)}
+                  className="inline-flex items-center gap-1 text-sm text-gray-300 underline decoration-dotted underline-offset-2 hover:text-white"
+                  title="このサイトへのご意見"
+                >
+                  <EnvelopeIcon className="h-4 w-4 shrink-0" aria-hidden />
+                  ご意見
+                </button>
+                <button
+                  type="button"
                   onClick={async () => {
                     const supabase = createClient();
                     if (supabase) await supabase.auth.signOut();
@@ -2881,6 +2945,17 @@ export default function RoomWithSync({
                   ログアウト
                 </button>
               </>
+            )}
+            {isGuest && (
+              <button
+                type="button"
+                onClick={() => setSiteFeedbackOpen(true)}
+                className="inline-flex items-center gap-1 text-sm text-gray-300 underline decoration-dotted underline-offset-2 hover:text-white"
+                title="このサイトへのご意見"
+              >
+                <EnvelopeIcon className="h-4 w-4 shrink-0" aria-hidden />
+                ご意見
+              </button>
             )}
             <button
               type="button"
@@ -2929,6 +3004,13 @@ export default function RoomWithSync({
           onParticipantClick={(displayName) => chatInputRef.current?.insertText(` ${displayName}さん `)}
         />
       </section>
+
+      <SiteFeedbackModal
+        open={siteFeedbackOpen}
+        onClose={() => setSiteFeedbackOpen(false)}
+        roomId={roomId}
+        displayName={effectiveDisplayName}
+      />
 
       <GuestRegisterPromptModal
         open={guestRegisterModalOpen}

@@ -1,6 +1,7 @@
 'use client';
 
 import Image from 'next/image';
+import { EnvelopeIcon } from '@heroicons/react/24/outline';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Chat from '@/components/chat/Chat';
 import ChatInput from '@/components/chat/ChatInput';
@@ -12,6 +13,7 @@ import MyPage from '@/components/mypage/MyPage';
 import NowPlaying from '@/components/room/NowPlaying';
 import RoomMainLayout from '@/components/room/RoomMainLayout';
 import RoomPlaybackHistory from '@/components/room/RoomPlaybackHistory';
+import { SiteFeedbackModal } from '@/components/room/SiteFeedbackModal';
 import UserBar from '@/components/room/UserBar';
 import { getLastExitStorageKey } from '@/components/providers/AblyProviderWrapper';
 import {
@@ -102,6 +104,7 @@ export default function RoomWithoutSync({
   useRoomChatLogPersistence(roomId, messages, { isGuest, myClientId: '' });
   const [myPageOpen, setMyPageOpen] = useState(false);
   const [guestRegisterModalOpen, setGuestRegisterModalOpen] = useState(false);
+  const [siteFeedbackOpen, setSiteFeedbackOpen] = useState(false);
   const [playbackHistoryModalOpen, setPlaybackHistoryModalOpen] = useState(false);
   const [chatSummaryModalOpen, setChatSummaryModalOpen] = useState(false);
   const [chatSummaryLoading, setChatSummaryLoading] = useState(false);
@@ -1018,6 +1021,15 @@ export default function RoomWithoutSync({
           <div className="flex shrink-0 flex-nowrap items-center justify-end gap-2">
             <button
               type="button"
+              onClick={() => setSiteFeedbackOpen(true)}
+              className="inline-flex items-center gap-1 text-sm text-gray-300 underline decoration-dotted underline-offset-2 hover:text-white"
+              title="このサイトへのご意見"
+            >
+              <EnvelopeIcon className="h-4 w-4 shrink-0" aria-hidden />
+              ご意見
+            </button>
+            <button
+              type="button"
               onClick={onLeave}
               className="rounded border border-gray-600 bg-gray-800 px-4 py-2 text-sm font-medium text-gray-200 hover:bg-gray-700 hover:text-white"
               aria-label="部屋を退室して最初の画面に戻る"
@@ -1045,6 +1057,13 @@ export default function RoomWithoutSync({
           myClientId="local-client"
         />
       </section>
+
+      <SiteFeedbackModal
+        open={siteFeedbackOpen}
+        onClose={() => setSiteFeedbackOpen(false)}
+        roomId={roomId}
+        displayName={displayNameProp}
+      />
 
       <GuestRegisterPromptModal
         open={guestRegisterModalOpen}
