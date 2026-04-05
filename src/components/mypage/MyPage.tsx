@@ -1,7 +1,7 @@
 'use client';
 
 import { useParams, useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { getOrCreateRoomClientId } from '@/lib/room-owner';
 import type { User } from '@supabase/supabase-js';
@@ -26,6 +26,7 @@ import {
   readJoinEntryChimeEnabled,
   writeJoinEntryChimeEnabled,
 } from '@/lib/participant-join-announcements-preference';
+import { USER_SONG_HISTORY_UPDATED_EVENT } from '@/lib/user-song-history-events';
 
 function getDisplayName(user: User | null): string {
   if (!user) return '';
@@ -525,10 +526,9 @@ export default function MyPage({
     });
   }, [supabase, isGuest]);
 
-  useEffect(() => {
+  const loadSongHistory = useCallback(() => {
     if (!supabase || !user) return;
     setSongHistoryLoading(true);
-    // Supabase の thenable は PromiseLike のため Promise.resolve でラップして finally を使う
     void Promise.resolve(
       supabase
         .from('user_song_history')
@@ -544,6 +544,28 @@ export default function MyPage({
       })
       .finally(() => setSongHistoryLoading(false));
   }, [supabase, user]);
+
+  /** 初回・「貼った曲」タブへ戻る・部屋で保存成功・タブを再表示したときに最新化 */
+  useEffect(() => {
+    if (!user || historyTab !== 'songs') return;
+    loadSongHistory();
+  }, [user, historyTab, loadSongHistory]);
+
+  useEffect(() => {
+    if (!user || historyTab !== 'songs') return;
+    const onVis = () => {
+      if (document.visibilityState === 'visible') loadSongHistory();
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, [user, historyTab, loadSongHistory]);
+
+  useEffect(() => {
+    if (!user || historyTab !== 'songs') return;
+    const onUpdated = () => loadSongHistory();
+    window.addEventListener(USER_SONG_HISTORY_UPDATED_EVENT, onUpdated);
+    return () => window.removeEventListener(USER_SONG_HISTORY_UPDATED_EVENT, onUpdated);
+  }, [user, historyTab, loadSongHistory]);
 
   useEffect(() => {
     if (!user) return;
@@ -1356,7 +1378,7 @@ export default function MyPage({
           {historyTab === 'songs' && (
             <>
               <p className="mb-3 text-xs text-gray-500">
-                参加したチャットで貼った曲を日付・部屋・貼った時間で表示します（同期部屋では時間の横に選曲ラウンド R）。同一曲の短時間の二重記録は抑止します。DB の追加手順は docs/supabase-song-history-table.md を参照してください。
+                参加したチャットで貼った曲を日付・部屋・貼った時間で表示します（同期部屋では時間の横に選曲ラウンド R）。このタブ表示中・タブ切替・ブラウザを再表示したときに一覧を再取得します。同一曲の短時間の二重記録は抑止します。DB の追加手順は docs/supabase-song-history-table.md を参照してください。
               </p>
               {songHistoryLoading ? (
             <p className="text-sm text-gray-500">読み込み中…</p>

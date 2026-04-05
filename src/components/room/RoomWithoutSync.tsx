@@ -32,6 +32,7 @@ import {
 } from '@/lib/chat-system-copy';
 import { resolveAiQuestionMusicRelated } from '@/lib/client-ai-question-guard-resolve';
 import { isDevMinimalSongAi } from '@/lib/dev-minimal-song-ai';
+import { USER_SONG_HISTORY_UPDATED_EVENT } from '@/lib/user-song-history-events';
 import { playbackLog } from '@/lib/playback-debug';
 import { extractVideoId, isStandaloneNonYouTubeUrl } from '@/lib/youtube';
 import type { ChatMessage, SystemMessageOptions } from '@/types/chat';
@@ -673,12 +674,20 @@ export default function RoomWithoutSync({
       fetch('/api/song-history', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           videoId: videoIdToSave,
           roomId: roomId ?? '',
           selectionRound: 1,
         }),
-      }).catch(() => {});
+      })
+        .then((r) => r.json().catch(() => null))
+        .then((data) => {
+          if (data?.ok && typeof window !== 'undefined') {
+            window.dispatchEvent(new Event(USER_SONG_HISTORY_UPDATED_EVENT));
+          }
+        })
+        .catch(() => {});
     },
     [isGuest, roomId]
   );

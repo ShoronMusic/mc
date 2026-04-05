@@ -28,6 +28,7 @@ import {
   DEFAULT_CHAT_TEXT_COLOR,
 } from '@/lib/chat-text-color';
 import { readJoinEntryChimeEnabled } from '@/lib/participant-join-announcements-preference';
+import { USER_SONG_HISTORY_UPDATED_EVENT } from '@/lib/user-song-history-events';
 import { NON_YOUTUBE_URL_SYSTEM_MESSAGE } from '@/lib/chat-non-youtube-url';
 import {
   SYSTEM_MESSAGE_COMMENTARY_FETCH_FAILED,
@@ -2840,12 +2841,20 @@ export default function RoomWithSync({
       fetch('/api/song-history', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           videoId: videoIdToSave,
           roomId: roomId ?? '',
           selectionRound: roundSnap,
         }),
-      }).catch(() => {});
+      })
+        .then((r) => r.json().catch(() => null))
+        .then((data) => {
+          if (data?.ok && typeof window !== 'undefined') {
+            window.dispatchEvent(new Event(USER_SONG_HISTORY_UPDATED_EVENT));
+          }
+        })
+        .catch(() => {});
     },
     [isGuest, roomId]
   );
