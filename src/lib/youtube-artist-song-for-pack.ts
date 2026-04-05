@@ -47,6 +47,14 @@ function finalizePackArtistSong(
   return swapIfCompoundArtistStuckInSongSlot(r.artist, r.artistDisplay, r.song, description ?? null);
 }
 
+export type ResolveArtistSongForPackOptions = {
+  /**
+   * video_playback_display_override 等で渡す「正しいアーティスト - タイトル」があるとき true。
+   * 有名PVの videoId 固定をスキップし、渡された title / authorName を正として解決する。
+   */
+  trustProvidedTitleOverFamousPv?: boolean;
+};
+
 /**
  * comment-pack / announce-song 共通: oEmbed タイトル・作者・snippet からアーティスト・曲名を解決。
  */
@@ -55,8 +63,10 @@ export function resolveArtistSongForPack(
   authorName: string | null | undefined,
   snippet: VideoSnippet | null,
   videoId?: string | null,
+  options?: ResolveArtistSongForPackOptions,
 ): { artist: string | null; artistDisplay: string | null; song: string } {
-  const famous = resolveFamousPvArtistSongPack(videoId);
+  const famous =
+    !options?.trustProvidedTitleOverFamousPv && resolveFamousPvArtistSongPack(videoId);
   if (famous) {
     return finalizePackArtistSong(
       {
@@ -104,8 +114,10 @@ export async function resolveArtistSongForPackAsync(
   authorName: string | null | undefined,
   snippet: VideoSnippet | null,
   videoId?: string | null,
+  options?: ResolveArtistSongForPackOptions,
 ): Promise<ResolvedArtistSong> {
-  const famous = resolveFamousPvArtistSongPack(videoId);
+  const famous =
+    !options?.trustProvidedTitleOverFamousPv && resolveFamousPvArtistSongPack(videoId);
   if (famous) {
     return logArtistPackResolution(
       'famous-pv-override',
@@ -149,6 +161,6 @@ export async function resolveArtistSongForPackAsync(
     'heuristic',
     title,
     authorName,
-    resolveArtistSongForPack(title, authorName, snippet, videoId),
+    resolveArtistSongForPack(title, authorName, snippet, videoId, options),
   );
 }

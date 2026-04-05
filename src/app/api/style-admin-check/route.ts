@@ -4,7 +4,7 @@ import { getStyleAdminUserIds } from '@/lib/style-admin';
 
 export const dynamic = 'force-dynamic';
 
-/** 現在のセッションが視聴履歴スタイル変更できるか（UI 用） */
+/** 現在のセッションが視聴履歴のスタイル／アーティスト-タイトル修正できるか（UI 用） */
 export async function GET() {
   const supabase = await createClient();
   if (!supabase) {

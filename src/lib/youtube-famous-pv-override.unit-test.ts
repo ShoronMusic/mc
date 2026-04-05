@@ -40,6 +40,30 @@ async function run(): Promise<void> {
     assert.equal(asyncPack.song, 'Walk This Way');
   }
 
+  {
+    const packTrust = resolveArtistSongForPack(
+      'Admin Fixed Artist - Admin Fixed Song',
+      null,
+      null,
+      '4B_UYYPb-Gk',
+      { trustProvidedTitleOverFamousPv: true },
+    );
+    assert.equal(packTrust.artistDisplay, 'Admin Fixed Artist');
+    assert.equal(packTrust.song, 'Admin Fixed Song');
+  }
+
+  {
+    const asyncTrust = await resolveArtistSongForPackAsync(
+      'Admin Fixed Artist - Admin Fixed Song',
+      null,
+      null,
+      '4B_UYYPb-Gk',
+      { trustProvidedTitleOverFamousPv: true },
+    );
+    assert.equal(asyncTrust.artistDisplay, 'Admin Fixed Artist');
+    assert.equal(asyncTrust.song, 'Admin Fixed Song');
+  }
+
   console.log('youtube-famous-pv-override unit tests: OK');
 }
 

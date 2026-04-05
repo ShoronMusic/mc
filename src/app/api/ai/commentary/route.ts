@@ -9,7 +9,11 @@ import {
 import { generateCommentary } from '@/lib/gemini';
 import { upsertSongAndVideo } from '@/lib/song-entities';
 import { insertTidbit } from '@/lib/song-tidbits';
-import { resolveArtistSongForPackAsync } from '@/lib/youtube-artist-song-for-pack';
+import {
+  resolveArtistSongForPackAsync,
+  type ResolveArtistSongForPackOptions,
+} from '@/lib/youtube-artist-song-for-pack';
+import { fetchPlaybackDisplayOverride } from '@/lib/video-playback-display-override';
 import { getVideoSnippet } from '@/lib/youtube-search';
 import { resolveJapaneseEconomyWithMusicBrainz } from '@/lib/resolve-japanese-economy';
 import { isJpDomesticOfficialChannelAiException } from '@/lib/jp-official-channel-exception';
@@ -29,14 +33,23 @@ export async function POST(request: Request) {
     const supabase = await createClient();
     const reader = createAdminClient() ?? supabase;
     const [oembed, snippet] = await Promise.all([fetchOEmbed(videoId), getVideoSnippet(videoId)]);
-    const title = oembed?.title ?? snippet?.title ?? videoId;
-    const authorName = oembed?.author_name ?? snippet?.channelTitle ?? null;
+    const rawYouTubeTitle = oembed?.title ?? snippet?.title ?? videoId;
+    const displayOverride = reader ? await fetchPlaybackDisplayOverride(reader, videoId) : null;
+    const title = displayOverride?.title ?? rawYouTubeTitle;
+    const authorName =
+      displayOverride?.artist_name?.trim()
+        ? displayOverride.artist_name.trim()
+        : oembed?.author_name ?? snippet?.channelTitle ?? null;
+    const resolvePackOpts: ResolveArtistSongForPackOptions | undefined = displayOverride
+      ? { trustProvidedTitleOverFamousPv: true }
+      : undefined;
 
     const { artist, artistDisplay, song } = await resolveArtistSongForPackAsync(
       title,
       authorName,
       snippet,
       videoId,
+      resolvePackOpts,
     );
 
     const isJpEconomy = await resolveJapaneseEconomyWithMusicBrainz({
@@ -108,7 +121,7 @@ export async function POST(request: Request) {
 
     const text = await generateCommentary(song ?? title, artistDisplay ?? artist ?? authorName ?? undefined, {
       videoId,
-      rawYouTubeTitle: title,
+      rawYouTubeTitle,
     });
     if (!text) {
       return NextResponse.json({ error: 'AI is not configured or failed.' }, { status: 503 });
@@ -134,7 +147,10 @@ export async function POST(request: Request) {
       source: 'new',
       songId,
       songTidbitId,
-      artistTitle: formatArtistTitle(title, authorName, snippet?.description),
+      artistTitle:
+        artistDisplay && song
+          ? `${artistDisplay} - ${song}`
+          : formatArtistTitle(title, authorName, snippet?.description),
     });
   } catch (e) {
     console.error('[api/ai/commentary]', e);

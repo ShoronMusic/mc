@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { getStyleAdminUserIds } from '@/lib/style-admin';
 import { fetchOEmbed } from '@/lib/youtube-oembed';
 import {
+  getArtistAndSong,
   getMainArtist,
   isGarbageArtistSongParse,
   isLikelyPersonalChannelName,
@@ -20,12 +21,18 @@ import { isRoomJpAiUnlockEnabled } from '@/lib/room-jp-ai-unlock-server';
 import { getOrAssignEra } from '@/lib/song-era';
 import { getOrAssignStyle, setStyleInDb } from '@/lib/song-style';
 import { upsertSongAndVideo, updateSongStyle, incrementSongPlayCount } from '@/lib/song-entities';
+import {
+  fetchPlaybackDisplayOverride,
+  upsertPlaybackDisplayOverride,
+} from '@/lib/video-playback-display-override';
 import { SONG_STYLE_OPTIONS } from '@/lib/song-styles';
 import type { SongStyle } from '@/lib/gemini';
 
 export const dynamic = 'force-dynamic';
 
 const TWO_MINUTES_MS = 2 * 60 * 1000;
+/** STYLE_ADMIN が視聴履歴の「アーティスト - タイトル」行を修正するときの最大文字数 */
+const PLAYBACK_TITLE_PATCH_MAX_LEN = 500;
 
 function friendlySupabaseErrorMessage(raw: string): string {
   const s = raw.toLowerCase();
@@ -338,14 +345,24 @@ export async function POST(request: Request) {
     console.error('[room-playback-history] getOrAssignEra', e);
   }
 
+  /** 管理者が保存した video_id 単位の表記があれば、履歴行の表示に優先 */
+  let historyTitle = titleForDb;
+  let historyArtistName: string | null = artist ?? effectiveAuthor ?? null;
+  const overrideReader = createAdminClient() ?? supabase;
+  const displayOverride = await fetchPlaybackDisplayOverride(overrideReader, videoId);
+  if (displayOverride) {
+    historyTitle = displayOverride.title;
+    historyArtistName = displayOverride.artist_name;
+  }
+
   const insertPlayback: Record<string, unknown> = {
     room_id: roomId,
     video_id: videoId,
     display_name: displayNameToStore,
     is_guest: isGuest,
     user_id: userId,
-    title: titleForDb,
-    artist_name: artist ?? effectiveAuthor ?? null,
+    title: historyTitle,
+    artist_name: historyArtistName,
     style,
   };
   if (selectionRound != null) {
@@ -373,8 +390,9 @@ export async function POST(request: Request) {
 }
 
 /**
- * PATCH: 視聴履歴のスタイルをユーザーが修正。song_style キャッシュと当該行の style を更新。
- * Body: { id, videoId, style }
+ * PATCH: 視聴履歴のスタイル・表示タイトル（アーティスト - タイトル）を修正。
+ * Body: { id, videoId, style? , title? } — style と title のどちらか一方以上が必要。
+ * STYLE_ADMIN_USER_IDS 未設定時は従来どおり誰でも更新可。設定時はリスト内ユーザーのみ。
  */
 export async function PATCH(request: Request) {
   const supabase = await createClient();
@@ -382,7 +400,7 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: 'DBが利用できません。' }, { status: 503 });
   }
 
-  let body: { id?: string; videoId?: string; style?: string };
+  let body: { id?: string; videoId?: string; style?: string; title?: string };
   try {
     body = await request.json();
   } catch {
@@ -391,13 +409,30 @@ export async function PATCH(request: Request) {
 
   const id = typeof body?.id === 'string' ? body.id.trim() : '';
   const videoId = typeof body?.videoId === 'string' ? body.videoId.trim() : '';
-  const style = typeof body?.style === 'string' ? body.style.trim() : '';
+  const styleRaw = typeof body?.style === 'string' ? body.style.trim() : '';
+  const titleRaw = typeof body?.title === 'string' ? body.title.trim() : '';
 
   if (!id || !videoId) {
     return NextResponse.json({ error: 'id and videoId are required' }, { status: 400 });
   }
-  if (!SONG_STYLE_OPTIONS.includes(style as (typeof SONG_STYLE_OPTIONS)[number])) {
+
+  const hasStyle = styleRaw !== '';
+  const hasTitle = titleRaw !== '';
+  if (!hasStyle && !hasTitle) {
+    return NextResponse.json({ error: 'style または title のいずれかを指定してください。' }, { status: 400 });
+  }
+
+  if (hasStyle && !SONG_STYLE_OPTIONS.includes(styleRaw as (typeof SONG_STYLE_OPTIONS)[number])) {
     return NextResponse.json({ error: 'Invalid style' }, { status: 400 });
+  }
+
+  if (hasTitle) {
+    if (titleRaw.length > PLAYBACK_TITLE_PATCH_MAX_LEN) {
+      return NextResponse.json(
+        { error: `title は ${PLAYBACK_TITLE_PATCH_MAX_LEN} 文字以内にしてください。` },
+        { status: 400 },
+      );
+    }
   }
 
   const adminIds = getStyleAdminUserIds();
@@ -408,24 +443,41 @@ export async function PATCH(request: Request) {
     const uid = session?.user?.id;
     if (!uid || !adminIds.includes(uid)) {
       return NextResponse.json(
-        { error: 'スタイル変更は管理者のみ行えます。ログインしている管理者アカウントで操作してください。' },
-        { status: 403 }
+        {
+          error:
+            '視聴履歴の修正は管理者のみ行えます。STYLE_ADMIN_USER_IDS に含まれるアカウントでログインしてください。',
+        },
+        { status: 403 },
       );
     }
   }
 
-  const styleCacheSaved = await setStyleInDb(supabase, videoId, style as SongStyle);
+  const updates: Record<string, unknown> = {};
+  if (hasStyle) {
+    updates.style = styleRaw;
+  }
+  if (hasTitle) {
+    updates.title = titleRaw;
+    const parsed = getArtistAndSong(titleRaw, null);
+    updates.artist_name =
+      parsed.artistDisplay && parsed.song
+        ? getMainArtist(parsed.artist ?? parsed.artistDisplay)
+        : null;
+  }
 
-  // サービスロールがあれば RLS をバイパスして更新（ゲスト・他ユーザー貼り曲でもスタイル変更可能）
+  let styleCacheSaved = false;
+  if (hasStyle) {
+    styleCacheSaved = await setStyleInDb(supabase, videoId, styleRaw as SongStyle);
+  }
+
   const admin = createAdminClient();
   let updateClient = admin ?? supabase;
   let { data: updated, error } = await updateClient
     .from('room_playback_history')
-    .update({ style })
+    .update(updates)
     .eq('id', id)
-    .select('id, style');
+    .select('id, style, title, artist_name');
 
-  // Vercel 等で SUPABASE_SERVICE_ROLE_KEY が誤っていると Invalid API key になる。セッション用クライアントで再試行。
   if (
     error &&
     admin &&
@@ -434,9 +486,9 @@ export async function PATCH(request: Request) {
     console.warn('[room-playback-history PATCH] service role key rejected; retrying with session client');
     const second = await supabase
       .from('room_playback_history')
-      .update({ style })
+      .update(updates)
       .eq('id', id)
-      .select('id, style');
+      .select('id, style, title, artist_name');
     updated = second.data;
     error = second.error;
   }
@@ -450,7 +502,10 @@ export async function PATCH(request: Request) {
     }
     if (error.code === '42703') {
       return NextResponse.json(
-        { error: '視聴履歴に style カラムがありません。docs/supabase-room-playback-history-table.md のテーブル定義を確認してください。' },
+        {
+          error:
+            '視聴履歴の列が不足しています。docs/supabase-room-playback-history-table.md のテーブル定義を確認してください。',
+        },
         { status: 503 }
       );
     }
@@ -463,14 +518,44 @@ export async function PATCH(request: Request) {
 
   if (!updated || updated.length === 0) {
     return NextResponse.json(
-      { error: '該当する履歴が見つかりません。id が正しいか、room_playback_history に style カラムがあるか確認してください。' },
+      { error: '該当する履歴が見つかりません。id を確認してください。' },
       { status: 404 }
     );
   }
 
+  const row = updated[0] as {
+    id?: string;
+    style?: string | null;
+    title?: string | null;
+    artist_name?: string | null;
+  };
+
+  let displayOverrideSaved = false;
+  if (hasTitle) {
+    const service = createAdminClient();
+    if (service) {
+      const savedTitle =
+        typeof row.title === 'string' && row.title.trim() ? row.title.trim() : titleRaw;
+      const savedArtist = (updates.artist_name ?? null) as string | null;
+      displayOverrideSaved = await upsertPlaybackDisplayOverride(
+        service,
+        videoId,
+        savedTitle,
+        savedArtist,
+      );
+    } else {
+      console.warn(
+        '[room-playback-history PATCH] SUPABASE_SERVICE_ROLE_KEY 未設定のため video_playback_display_override に保存できません。次回再生への反映にはサービスロールと docs/supabase-song-history-table.md のテーブル作成が必要です。',
+      );
+    }
+  }
+
   return NextResponse.json({
     ok: true,
-    style: updated[0]?.style,
+    style: row.style ?? undefined,
+    title: row.title ?? undefined,
+    artist_name: row.artist_name ?? undefined,
     styleCacheSaved,
+    displayOverrideSaved,
   });
 }

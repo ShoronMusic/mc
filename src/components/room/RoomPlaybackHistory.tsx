@@ -6,7 +6,7 @@
  */
 
 import { CalendarDaysIcon, ChartBarIcon } from '@heroicons/react/24/outline';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { RoomPlaybackHistoryRow } from '@/app/api/room-playback-history/route';
 import { getArtistAndSong, getMainArtist } from '@/lib/format-song-display';
 import { resolveFamousPvArtistSongPack } from '@/lib/youtube-famous-pv-override';
@@ -216,9 +216,13 @@ function normalizeArtistNameForMusic8Lookup(mixedArtistName: string): string {
   return getMainArtist(raw);
 }
 
+function normalizePlaybackTitleForCompare(s: string): string {
+  return s.toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
 /**
  * 一覧の「アーティスト - タイトル」と Music8 タブ用の共通解決。
- * 有名PVは videoId で固定（POST 前に保存された誤 title が残っていても表示を直す）。
+ * 有名PVは videoId で既定表示するが、DB の title がその既定と異なるときは保存文字列を優先（管理者修正など）。
  */
 function resolvedPlaybackArtistSong(row: RoomPlaybackHistoryRow): {
   artistDisplay: string;
@@ -227,11 +231,18 @@ function resolvedPlaybackArtistSong(row: RoomPlaybackHistoryRow): {
 } | null {
   const famous = resolveFamousPvArtistSongPack(row.video_id);
   if (famous) {
-    return {
-      artistDisplay: famous.artistDisplay,
-      song: famous.song,
-      tabArtist: normalizeArtistNameForMusic8Lookup(famous.artist),
-    };
+    const dbTitle = row.title?.trim() ?? '';
+    const famousLine = `${famous.artistDisplay} - ${famous.song}`;
+    if (
+      !dbTitle ||
+      normalizePlaybackTitleForCompare(dbTitle) === normalizePlaybackTitleForCompare(famousLine)
+    ) {
+      return {
+        artistDisplay: famous.artistDisplay,
+        song: famous.song,
+        tabArtist: normalizeArtistNameForMusic8Lookup(famous.artist),
+      };
+    }
   }
   const t = row.title?.trim();
   if (!t) return null;
@@ -278,6 +289,14 @@ interface RoomPlaybackHistoryProps {
   onFavoriteClick?: (row: RoomPlaybackHistoryRow, isFavorited: boolean) => void;
   /** ゲストがハートを押したとき（登録促しメッセージ用） */
   onGuestFavoriteClick?: () => void;
+  /**
+   * 視聴履歴の「アーティスト - タイトル」保存後、いま再生中の同一 video_id なら部屋側で AI 解説を取り直す。
+   */
+  onRegenerateAiAfterPlaybackTitleSave?: (detail: {
+    videoId: string;
+    title: string;
+    artist_name: string | null | undefined;
+  }) => void;
 }
 
 const GUEST_DISPLAY_SUFFIX = ' (G)';
@@ -301,6 +320,7 @@ export default function RoomPlaybackHistory({
   favoritedVideoIds = [],
   onFavoriteClick,
   onGuestFavoriteClick,
+  onRegenerateAiAfterPlaybackTitleSave,
 }: RoomPlaybackHistoryProps) {
   const [items, setItems] = useState<RoomPlaybackHistoryRow[]>([]);
   const [sortKey, setSortKey] = useState<SortKey>('played_at');
@@ -310,10 +330,14 @@ export default function RoomPlaybackHistory({
   const [styleEditRow, setStyleEditRow] = useState<RoomPlaybackHistoryRow | null>(null);
   const [styleEditValue, setStyleEditValue] = useState('');
   const [styleSaving, setStyleSaving] = useState(false);
+  const [titleEditRowId, setTitleEditRowId] = useState<string | null>(null);
+  const [titleDraft, setTitleDraft] = useState('');
+  const [titleSaving, setTitleSaving] = useState(false);
+  const titleEditInputRef = useRef<HTMLInputElement | null>(null);
   const [activeTab, setActiveTab] = useState<'history' | 'artist' | 'songdata'>('history');
   const [hasMainArtistData, setHasMainArtistData] = useState(false);
   const [hasSongData, setHasSongData] = useState(false);
-  /** STYLE_ADMIN_USER_IDS 未設定なら true。設定時は管理者ログイン時のみ true */
+  /** STYLE_ADMIN_USER_IDS 未設定なら true。設定時はリスト内ユーザーのみ（スタイル・アーティスト行の修正） */
   const [canEditStyles, setCanEditStyles] = useState(true);
   const [styleDistOpen, setStyleDistOpen] = useState(false);
   const [eraDistOpen, setEraDistOpen] = useState(false);
@@ -570,6 +594,111 @@ export default function RoomPlaybackHistory({
     }
   }, [styleEditRow, styleEditValue]);
 
+  useEffect(() => {
+    if (titleEditRowId && titleEditInputRef.current) {
+      titleEditInputRef.current.focus();
+      titleEditInputRef.current.select();
+    }
+  }, [titleEditRowId]);
+
+  const cancelTitleEdit = useCallback(() => {
+    if (titleSaving) return;
+    setTitleEditRowId(null);
+    setTitleDraft('');
+  }, [titleSaving]);
+
+  const beginTitleEdit = useCallback(
+    (row: RoomPlaybackHistoryRow) => {
+      if (!canEditStyles || titleSaving) return;
+      setTitleEditRowId(row.id);
+      setTitleDraft(artistTitle(row));
+    },
+    [canEditStyles, titleSaving],
+  );
+
+  const saveTitleEdit = useCallback(async () => {
+    if (!titleEditRowId || titleSaving) return;
+    const trimmed = titleDraft.trim();
+    if (!trimmed) {
+      alert('タイトルを空にはできません。');
+      return;
+    }
+    const rowToSave = items.find((r) => r.id === titleEditRowId);
+    if (!rowToSave) {
+      cancelTitleEdit();
+      return;
+    }
+    setTitleSaving(true);
+    try {
+      const res = await fetch('/api/room-playback-history', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          id: rowToSave.id,
+          videoId: rowToSave.video_id,
+          title: trimmed,
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        error?: string;
+        title?: string;
+        artist_name?: string | null;
+        displayOverrideSaved?: boolean;
+      };
+      if (!res.ok) {
+        alert(data?.error ?? '保存に失敗しました');
+        setTitleSaving(false);
+        return;
+      }
+      if (data.ok === true && data.displayOverrideSaved === false) {
+        alert(
+          'この行の表記は保存済みです。同じ動画の次回再生にも反映するには、サーバーに SUPABASE_SERVICE_ROLE_KEY と DB テーブル video_playback_display_override（docs/supabase-song-history-table.md）が必要です。',
+        );
+      }
+      setItems((prev) =>
+        prev.map((r) =>
+          r.id === rowToSave.id
+            ? {
+                ...r,
+                title: typeof data.title === 'string' ? data.title : trimmed,
+                artist_name:
+                  data.artist_name !== undefined ? data.artist_name : r.artist_name,
+              }
+            : r,
+        ),
+      );
+      setTitleEditRowId(null);
+      setTitleDraft('');
+      const savedTitle = typeof data.title === 'string' ? data.title : trimmed;
+      const cv = currentVideoId?.trim() ?? '';
+      if (
+        cv &&
+        rowToSave.video_id === cv &&
+        onRegenerateAiAfterPlaybackTitleSave
+      ) {
+        onRegenerateAiAfterPlaybackTitleSave({
+          videoId: rowToSave.video_id,
+          title: savedTitle,
+          artist_name: data.artist_name,
+        });
+      }
+    } catch {
+      alert('保存に失敗しました');
+    } finally {
+      setTitleSaving(false);
+    }
+  }, [
+    titleEditRowId,
+    titleDraft,
+    titleSaving,
+    items,
+    cancelTitleEdit,
+    currentVideoId,
+    onRegenerateAiAfterPlaybackTitleSave,
+  ]);
+
   if (!roomId) return null;
 
   const watchInNewTabUrl =
@@ -694,6 +823,11 @@ export default function RoomPlaybackHistory({
                 className="border-b border-gray-600 py-1 pr-1 font-medium text-gray-400"
                 style={{ minWidth: COL_MIN_WIDTH_ARTIST_TITLE }}
                 scope="col"
+                title={
+                  canEditStyles
+                    ? 'アーティスト - タイトル（STYLE_ADMIN: セルをクリックして修正）'
+                    : 'アーティスト - タイトル'
+                }
               >
                 <span className="block truncate">{COL_ARTIST_TITLE}</span>
               </th>
@@ -818,11 +952,78 @@ export default function RoomPlaybackHistory({
                         {row.style ?? '—'}
                       </td>
                       <td
-                        className="truncate border-b border-gray-700/80 py-0.5 pr-1 text-gray-200"
+                        className={
+                          canEditStyles && titleEditRowId !== row.id
+                            ? 'cursor-pointer truncate border-b border-gray-700/80 py-0.5 pr-1 text-gray-200 hover:bg-gray-700/40'
+                            : 'truncate border-b border-gray-700/80 py-0.5 pr-1 text-gray-200'
+                        }
                         style={{ minWidth: COL_MIN_WIDTH_ARTIST_TITLE }}
-                        title={artistTitle(row)}
+                        title={
+                          canEditStyles
+                            ? `${artistTitle(row)}（クリックで修正）`
+                            : artistTitle(row)
+                        }
+                        onClick={
+                          canEditStyles && titleEditRowId !== row.id
+                            ? () => beginTitleEdit(row)
+                            : undefined
+                        }
+                        role={canEditStyles && titleEditRowId !== row.id ? 'button' : undefined}
+                        tabIndex={canEditStyles && titleEditRowId !== row.id ? 0 : undefined}
+                        onKeyDown={
+                          canEditStyles && titleEditRowId !== row.id
+                            ? (e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                  e.preventDefault();
+                                  beginTitleEdit(row);
+                                }
+                              }
+                            : undefined
+                        }
                       >
-                        {artistTitle(row)}
+                        {titleEditRowId === row.id ? (
+                          <div className="flex min-w-0 flex-col gap-1 py-0.5" onClick={(e) => e.stopPropagation()}>
+                            <input
+                              ref={titleEditInputRef}
+                              type="text"
+                              value={titleDraft}
+                              onChange={(e) => setTitleDraft(e.target.value)}
+                              disabled={titleSaving}
+                              className="w-full min-w-0 rounded border border-gray-600 bg-gray-800 px-1 py-0.5 text-xs text-white"
+                              aria-label="アーティスト - タイトルを編集"
+                              onKeyDown={(e) => {
+                                if (e.key === 'Escape') {
+                                  e.preventDefault();
+                                  cancelTitleEdit();
+                                }
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  void saveTitleEdit();
+                                }
+                              }}
+                            />
+                            <div className="flex flex-wrap gap-1">
+                              <button
+                                type="button"
+                                disabled={titleSaving}
+                                onClick={() => void saveTitleEdit()}
+                                className="rounded bg-blue-600 px-2 py-0.5 text-[11px] text-white hover:bg-blue-500 disabled:opacity-50"
+                              >
+                                保存
+                              </button>
+                              <button
+                                type="button"
+                                disabled={titleSaving}
+                                onClick={cancelTitleEdit}
+                                className="rounded border border-gray-600 px-2 py-0.5 text-[11px] text-gray-300 hover:bg-gray-700 disabled:opacity-50"
+                              >
+                                取消
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          artistTitle(row)
+                        )}
                       </td>
                       <td
                         className="border-b border-gray-700/80 py-0.5 pr-1"

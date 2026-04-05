@@ -9,7 +9,16 @@ import {
   isGeniusChannelAuthor,
   shouldSkipAiCommentaryForUncertainArtistResolution,
 } from '@/lib/format-song-display';
-import { resolveArtistSongForPackAsync } from '@/lib/youtube-artist-song-for-pack';
+import {
+  resolveArtistSongForPackAsync,
+  type ResolveArtistSongForPackOptions,
+} from '@/lib/youtube-artist-song-for-pack';
+import { sessionMayEditRoomPlaybackHistoryFields } from '@/lib/admin-access';
+import {
+  applyPlaybackDisplayHintWhenDbMissing,
+  fetchPlaybackDisplayOverride,
+  parseAdminPlaybackDisplayHint,
+} from '@/lib/video-playback-display-override';
 import { getVideoSnippet } from '@/lib/youtube-search';
 import { containsUnreliableCommentPackClaim } from '@/lib/ai-output-policy';
 import { getGeminiModel, logGeminiUsage } from '@/lib/gemini';
@@ -158,20 +167,47 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'videoId is required' }, { status: 400 });
     }
 
+    const skipCommentPackCacheRequested = body?.skipCommentPackCache === true;
+    const adminPlaybackHintRaw = parseAdminPlaybackDisplayHint(body?.adminPlaybackDisplayHint);
+
     const supabase = await createClient();
+    if (skipCommentPackCacheRequested) {
+      const allowed = await sessionMayEditRoomPlaybackHistoryFields(supabase);
+      if (!allowed) {
+        return NextResponse.json(
+          {
+            error:
+              'skipCommentPackCache は、視聴履歴の表記修正と同じ条件（STYLE_ADMIN_USER_IDS 設定時は該当アカウントのみ）で利用できます。',
+          },
+          { status: 403 },
+        );
+      }
+    }
+
+    const reader = createAdminClient() ?? supabase;
 
     const [oembed, snippet] = await Promise.all([
       fetchOEmbed(videoId),
       getVideoSnippet(videoId, { roomId: roomId || undefined, source: 'api/ai/comment-pack' }),
     ]);
 
-    const title = oembed?.title ?? snippet?.title ?? videoId;
-    const authorName = oembed?.author_name;
+    const rawYouTubeTitleForPrompt = oembed?.title ?? snippet?.title ?? videoId;
+    let displayOverride = reader ? await fetchPlaybackDisplayOverride(reader, videoId) : null;
+    if (skipCommentPackCacheRequested && adminPlaybackHintRaw) {
+      displayOverride = applyPlaybackDisplayHintWhenDbMissing(displayOverride, adminPlaybackHintRaw);
+    }
+    const title = displayOverride?.title ?? rawYouTubeTitleForPrompt;
+    const authorName =
+      displayOverride?.artist_name?.trim() ? displayOverride.artist_name.trim() : oembed?.author_name;
+    const resolvePackOpts: ResolveArtistSongForPackOptions | undefined = displayOverride
+      ? { trustProvidedTitleOverFamousPv: true }
+      : undefined;
     const { artist, artistDisplay, song } = await resolveArtistSongForPackAsync(
       title,
       authorName,
       snippet,
       videoId,
+      resolvePackOpts,
     );
 
     const isNewRelease = isPublishedWithinLastDays(snippet?.publishedAt, NEW_RELEASE_DAYS);
@@ -229,9 +265,9 @@ export async function POST(request: Request) {
       });
     }
 
-    const skipCache = process.env.COMMENT_PACK_SKIP_CACHE === '1';
+    const skipCache =
+      process.env.COMMENT_PACK_SKIP_CACHE === '1' || skipCommentPackCacheRequested;
     if (!skipCache) {
-      const reader = createAdminClient() ?? supabase;
       if (isNewRelease) {
         const nrCached = await getStoredNewReleaseCommentPack(reader, videoId);
         if (nrCached) {
@@ -275,7 +311,7 @@ export async function POST(request: Request) {
     const currentYear = new Date().getFullYear();
     const artistLabel = artistDisplay || artist || authorName || 'Unknown Artist';
     const songLabel = song || title;
-    const rawYouTubeTitle = title;
+    const rawYouTubeTitle = rawYouTubeTitleForPrompt;
 
     const colorsOfficialLock = colorsStudiosTrustsOembedArtistFirst(authorName, title)
       ? `・COLORS（A COLORS SHOW）公式配信: 「${artistLabel}」＝アーティスト、「${songLabel}」＝曲名で確定。逆の対応・別読み・言い逃れは禁止。\n`
@@ -291,8 +327,11 @@ export async function POST(request: Request) {
 
     const collaborationBlock = buildCollaborationPromptBlock(artist, artistLabel);
 
+    const adminTitleHint = displayOverride
+      ? `・**アーティスト名・曲名の正**: 視聴履歴の管理者修正（DB）の表記「${title}」を前提に分解した【アーティスト】【曲名】を使っています。YouTube 原文と異なる場合は必ずこちらに従うこと。\n`
+      : '';
     const metaLockBlock = `【メタデータの前提（厳守）】
-・YouTube 動画タイトル（原文）: ${rawYouTubeTitle}
+${adminTitleHint}・YouTube 動画タイトル（原文）: ${rawYouTubeTitle}
 ・【アーティスト（歌手・バンド）】= 「${artistLabel}」。カンマ区切りは**複数の歌唱・演奏クレジット**（共演・フィーチャリング）を表す。各名を曲名と取り違えないこと。
 ・【曲名】= 「${songLabel}」のみ。これは楽曲のタイトルです。
 ・重要：曲名に含まれる英単語「With」は**共演者をつなぐ語ではなくタイトルの一部**です（例: 『Die With A Smile』全体が曲名）。【曲名】を短くした別名にしたり、「With」以降を別人名として新たな共演者にしたりしないこと。架空のアルバム名・プロジェクト名を作らないこと。

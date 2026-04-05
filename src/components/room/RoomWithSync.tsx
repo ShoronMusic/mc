@@ -43,6 +43,7 @@ import { resolveAiQuestionMusicRelated } from '@/lib/client-ai-question-guard-re
 import { isDevMinimalSongAi } from '@/lib/dev-minimal-song-ai';
 import { COMMENT_PACK_MAX_FREE_COMMENTS } from '@/lib/song-tidbits';
 import { playbackLog } from '@/lib/playback-debug';
+import { useResumeYoutubeWhenTabVisible } from '@/hooks/useResumeYoutubeWhenTabVisible';
 import { extractVideoId, isStandaloneNonYouTubeUrl } from '@/lib/youtube';
 import {
   type PlaybackMessage,
@@ -467,6 +468,7 @@ export default function RoomWithSync({
   songLimit5MinEnabledRef.current = songLimit5MinEnabled;
   videoIdRef.current = videoId;
   playingRef.current = playing;
+  useResumeYoutubeWhenTabVisible(playerRef, videoIdRef, playingRef);
   /** 自分のステータス（離席・ROM・食事中など）。参加者名横に表示 */
   const [userStatus, setUserStatus] = useState('');
   /** 自分専用の「次に貼りたい曲」候補リスト（ブラウザ内保存） */
@@ -2512,7 +2514,11 @@ export default function RoomWithSync({
   const fetchAnnounceAndPublish = useCallback(
     (
       vid: string,
-      options?: { silent?: boolean; displayNameOverride?: string }
+      options?: {
+        silent?: boolean;
+        displayNameOverride?: string;
+        adminPlaybackDisplayHint?: { title: string; artist_name: string | null };
+      },
     ) => {
       const silent = options?.silent === true;
       const announceDisplayName =
@@ -2520,6 +2526,7 @@ export default function RoomWithSync({
         options.displayNameOverride.trim()
           ? options.displayNameOverride.trim()
           : effectiveDisplayName;
+      const hint = options?.adminPlaybackDisplayHint;
       fetch('/api/ai/announce-song', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -2528,6 +2535,14 @@ export default function RoomWithSync({
           displayName: announceDisplayName,
           roomId,
           jpAiUnlockEnabled: jpAiUnlockEnabledRef.current,
+          ...(hint?.title?.trim()
+            ? {
+                adminPlaybackDisplayHint: {
+                  title: hint.title.trim(),
+                  artist_name: hint.artist_name,
+                },
+              }
+            : {}),
         }),
       })
         .then((r) => (r.ok ? r.json() : null))
@@ -2588,11 +2603,17 @@ export default function RoomWithSync({
         })
         .catch(() => {});
     },
-    [addAiMessage, touchActivity, effectiveDisplayName, promptNextTurn]
+    [addAiMessage, touchActivity, effectiveDisplayName, promptNextTurn, roomId]
   );
 
   const fetchCommentaryAndPublish = useCallback(
-    (vid: string) => {
+    (
+      vid: string,
+      options?: {
+        skipCommentPackCache?: boolean;
+        adminPlaybackDisplayHint?: { title: string; artist_name: string | null };
+      },
+    ) => {
       const slots = commentPackSlotsRef.current;
       if (isCommentPackFullyOff(slots)) {
         if (freeCommentTimeoutsRef.current.length > 0) {
@@ -2604,6 +2625,8 @@ export default function RoomWithSync({
         commentPackVideoIdRef.current = null;
         return;
       }
+      const skipPackCache = options?.skipCommentPackCache === true;
+      const packHint = options?.adminPlaybackDisplayHint;
       // まず comment-pack を試し、基本コメント＋自由コメント3本をまとめて取得して小出しにする
       fetch('/api/ai/comment-pack', {
         method: 'POST',
@@ -2613,6 +2636,15 @@ export default function RoomWithSync({
           slots,
           roomId,
           jpAiUnlockEnabled: jpAiUnlockEnabledRef.current,
+          ...(skipPackCache ? { skipCommentPackCache: true } : {}),
+          ...(packHint?.title?.trim()
+            ? {
+                adminPlaybackDisplayHint: {
+                  title: packHint.title.trim(),
+                  artist_name: packHint.artist_name,
+                },
+              }
+            : {}),
         }),
       })
         .then((r) => (r.ok ? r.json() : null))
@@ -2744,7 +2776,56 @@ export default function RoomWithSync({
           addSystemMessage(SYSTEM_MESSAGE_COMMENTARY_FETCH_FAILED);
         });
     },
-    [addAiMessage, addSystemMessage, touchActivity]
+    [addAiMessage, addSystemMessage, touchActivity, roomId]
+  );
+
+  const regenerateAiSongIntroAfterPlaybackTitleSave = useCallback(
+    (detail: { videoId: string; title: string; artist_name: string | null | undefined }) => {
+      const vid = detail.videoId.trim();
+      if (!vid || videoIdRef.current !== vid) return;
+
+      freeCommentTimeoutsRef.current.forEach((t) => clearTimeout(t));
+      freeCommentTimeoutsRef.current = [];
+
+      setMessages((prev) =>
+        prev.filter((m) => {
+          if (m.messageType !== 'ai' || m.videoId !== vid) return true;
+          if (m.aiSource === 'tidbit') return false;
+          if (/さんの選曲です[！!]/.test(m.body ?? '')) return false;
+          return true;
+        }),
+      );
+
+      const pubId = lastChangeVideoPublisherRef.current;
+      const publisherDisplayName =
+        participants.find((p) => p.clientId === pubId)?.displayName?.trim() ||
+        (pubId === myClientId ? effectiveDisplayName : 'ゲスト');
+
+      const hint = {
+        title: detail.title.trim(),
+        artist_name:
+          typeof detail.artist_name === 'string' && detail.artist_name.trim()
+            ? detail.artist_name.trim()
+            : null,
+      };
+
+      fetchAnnounceAndPublish(vid, {
+        silent: isDevMinimalSongAi(),
+        displayNameOverride: publisherDisplayName,
+        adminPlaybackDisplayHint: hint,
+      });
+      fetchCommentaryAndPublish(vid, {
+        skipCommentPackCache: true,
+        adminPlaybackDisplayHint: hint,
+      });
+    },
+    [
+      participants,
+      myClientId,
+      effectiveDisplayName,
+      fetchAnnounceAndPublish,
+      fetchCommentaryAndPublish,
+    ]
   );
 
   const handleTidbitLibraryReject = useCallback(async (messageId: string, tidbitId: string) => {
@@ -3891,6 +3972,7 @@ export default function RoomWithSync({
             isGuest={isGuest}
             favoritedVideoIds={favoritedVideoIds}
             onFavoriteClick={handleFavoriteClick}
+            onRegenerateAiAfterPlaybackTitleSave={regenerateAiSongIntroAfterPlaybackTitleSave}
           />
         }
         playbackHistoryModalOpen={playbackHistoryModalOpen}

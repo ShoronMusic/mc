@@ -8,6 +8,7 @@ import ChatInput from '@/components/chat/ChatInput';
 import YouTubePlayer, {
   type YouTubePlayerHandle,
 } from '@/components/player/YouTubePlayer';
+import { useResumeYoutubeWhenTabVisible } from '@/hooks/useResumeYoutubeWhenTabVisible';
 import { GuestRegisterPromptModal } from '@/components/auth/GuestRegisterPromptModal';
 import MyPage from '@/components/mypage/MyPage';
 import NowPlaying from '@/components/room/NowPlaying';
@@ -101,6 +102,7 @@ export default function RoomWithoutSync({
   const [roomDisplayTitleCurrent, setRoomDisplayTitleCurrent] = useState(roomDisplayTitle);
   const [videoId, setVideoId] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
+  const playingRef = useRef(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   useRoomChatLogPersistence(roomId, messages, { isGuest, myClientId: '' });
   const [myPageOpen, setMyPageOpen] = useState(false);
@@ -151,6 +153,8 @@ export default function RoomWithoutSync({
   /** 開発簡略モードで comment-pack 基本を出した動画。豆知識を当該曲中は抑止 */
   const commentPackVideoIdRef = useRef<string | null>(null);
   videoIdRef.current = videoId;
+  playingRef.current = playing;
+  useResumeYoutubeWhenTabVisible(playerRef, videoIdRef, playingRef);
 
   /** プレビュー中だけメイン再生音量を落とす */
   const previewActiveRef = useRef(false);

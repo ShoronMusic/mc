@@ -5,9 +5,20 @@ import {
   suppressJpDomesticAnnounceTagForArtist,
 } from '@/lib/jp-official-channel-exception';
 import { resolveJapaneseEconomyWithMusicBrainz } from '@/lib/resolve-japanese-economy';
+import { sessionMayEditRoomPlaybackHistoryFields } from '@/lib/admin-access';
+import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
+import {
+  applyPlaybackDisplayHintWhenDbMissing,
+  fetchPlaybackDisplayOverride,
+  parseAdminPlaybackDisplayHint,
+} from '@/lib/video-playback-display-override';
 import { fetchOEmbed } from '@/lib/youtube-oembed';
 import { getVideoDurationSeconds, getVideoSnippet } from '@/lib/youtube-search';
-import { resolveArtistSongForPackAsync } from '@/lib/youtube-artist-song-for-pack';
+import {
+  resolveArtistSongForPackAsync,
+  type ResolveArtistSongForPackOptions,
+} from '@/lib/youtube-artist-song-for-pack';
 import { isRoomJpAiUnlockEnabled } from '@/lib/room-jp-ai-unlock-server';
 
 export const dynamic = 'force-dynamic';
@@ -27,12 +38,12 @@ export async function POST(request: Request) {
       getVideoDurationSeconds(videoId, { roomId: roomId || undefined, source: 'api/ai/announce-song' }),
       getVideoSnippet(videoId, { roomId: roomId || undefined, source: 'api/ai/announce-song' }),
     ]);
-    const title = oembed?.title ?? videoId;
-    const authorName = oembed?.author_name;
+    const rawYouTubeTitle = oembed?.title ?? videoId;
+    const authorNameOembed = oembed?.author_name;
 
     // タイトル・チャンネル名から「明らかに音楽コンテンツではなさそう」なものを簡易判定
-    const lowerTitle = title.toLowerCase();
-    const lowerAuthor = (authorName ?? '').toLowerCase();
+    const lowerTitle = rawYouTubeTitle.toLowerCase();
+    const lowerAuthor = (authorNameOembed ?? '').toLowerCase();
     const nonMusicKeywords = [
       'アニメ',
       'anime',
@@ -55,20 +66,34 @@ export async function POST(request: Request) {
     const isNonMusic =
       nonMusicKeywords.some((kw) => lowerTitle.includes(kw) || lowerAuthor.includes(kw)) ||
       // 明らかにプレイリスト／BGM系だけのタイトルも弾く
-      /作業用|bgm|睡眠用|relax/i.test(title);
+      /作業用|bgm|睡眠用|relax/i.test(rawYouTubeTitle);
 
     if (isNonMusic) {
       return NextResponse.json({
         nonMusic: true,
-        title,
+        title: rawYouTubeTitle,
       });
     }
 
+    const supabase = await createClient();
+    const reader = createAdminClient() ?? supabase;
+    let displayOverride = reader ? await fetchPlaybackDisplayOverride(reader, videoId) : null;
+    const hintParsed = parseAdminPlaybackDisplayHint(body?.adminPlaybackDisplayHint);
+    if (hintParsed && (await sessionMayEditRoomPlaybackHistoryFields(supabase))) {
+      displayOverride = applyPlaybackDisplayHintWhenDbMissing(displayOverride, hintParsed);
+    }
+    const title = displayOverride?.title ?? rawYouTubeTitle;
+    const authorName =
+      displayOverride?.artist_name?.trim() ? displayOverride.artist_name.trim() : authorNameOembed;
+    const resolvePackOpts: ResolveArtistSongForPackOptions | undefined = displayOverride
+      ? { trustProvidedTitleOverFamousPv: true }
+      : undefined;
     const { artist, artistDisplay, song } = await resolveArtistSongForPackAsync(
       title,
       authorName,
       snippet,
       videoId,
+      resolvePackOpts,
     );
     const artistTitleBase =
       artistDisplay && song
