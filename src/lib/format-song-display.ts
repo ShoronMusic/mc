@@ -675,6 +675,56 @@ export function parseSongPerformedByFromDescription(description: string): { arti
  * artist: メインアーティスト（AI・スタイル用）
  * artistDisplay: 表示用（複数はカンマ区切り。「アーティスト - 曲名」の先頭に使う）
  */
+/**
+ * 概要の「music video by A performing B」が、タイトルの「左 - 右」と突き合わせて
+ * A が曲名側・B がアーティスト側に入れ替わっているとき true。
+ * 左側に「A & B」共演がある公式タイトルで、誤った performing 行が先にマッチすると
+ * 履歴・AI が「曲名 - アーティスト」になることがある（例: Bowie & Metheny / This Is Not America）。
+ */
+function officialPerformingLineContradictsHyphenTitle(
+  title: string,
+  authorName: string | null | undefined,
+  performing: { artist: string; song: string },
+): boolean {
+  let { rest: titleForParse, hadGeniusBrandPrefix } = stripGeniusBrandPrefixFromTitleIfPresent(title);
+  let hadAppleMusicBrandPrefix = false;
+  if (!hadGeniusBrandPrefix) {
+    const apple = stripAppleMusicBrandPrefixFromTitleIfPresent(titleForParse);
+    titleForParse = apple.rest;
+    hadAppleMusicBrandPrefix = apple.hadAppleMusicBrandPrefix;
+  }
+  const allowQuotedTail = hadGeniusBrandPrefix || isGeniusChannelAuthor(authorName);
+  const allowColonQuoted = hadAppleMusicBrandPrefix || isAppleMusicChannelAuthor(authorName);
+  const parsed = parseArtistTitle(titleForParse, {
+    allowQuotedSongWithTrailingParens: allowQuotedTail,
+    allowColonQuotedSongWithTrailingParens: allowColonQuoted,
+  });
+  if (!parsed) return false;
+  const left = parsed.artist.trim();
+  const right = parsed.song.trim();
+  if (!/\s&\s/.test(left)) return false;
+
+  const compact = (s: string) =>
+    s
+      .toLowerCase()
+      .replace(/\s+/g, ' ')
+      .trim()
+      .replace(/[^a-z0-9]/g, '');
+  const MIN = 12;
+  const pArt = compact(performing.artist);
+  const pSong = compact(performing.song);
+  const tL = compact(left);
+  const tR = compact(right);
+  if (pArt.length < MIN || pSong.length < MIN || tL.length < MIN || tR.length < MIN) return false;
+
+  const overlap = (a: string, b: string) =>
+    a.startsWith(b) || b.startsWith(a) || a.includes(b) || b.includes(a);
+
+  const performingArtistIsTitleSongSide = overlap(pArt, tR);
+  const performingSongIsTitleArtistSide = overlap(pSong, tL);
+  return performingArtistIsTitleSongSide && performingSongIsTitleArtistSide;
+}
+
 export function getArtistAndSong(
   title: string,
   authorName?: string | null,
@@ -683,8 +733,16 @@ export function getArtistAndSong(
   const desc = options?.videoDescription;
   if (desc?.trim()) {
     const perf = parsePerformingFromDescription(desc);
-    const perfInverted = perf ? null : parseSongPerformedByFromDescription(desc);
-    const fromDesc = perf ?? perfInverted;
+    let fromDesc: { artist: string; song: string } | null = null;
+    if (perf) {
+      if (!officialPerformingLineContradictsHyphenTitle(title, authorName ?? null, perf)) {
+        fromDesc = perf;
+      }
+    }
+    if (!fromDesc) {
+      const perfInverted = parseSongPerformedByFromDescription(desc);
+      if (perfInverted) fromDesc = perfInverted;
+    }
     if (fromDesc) {
       const artistPart = fromDesc.artist;
       const songPart = cleanTitle(fromDesc.song);

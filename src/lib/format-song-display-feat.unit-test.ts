@@ -154,6 +154,17 @@ assert.equal(cleanTitle('Foo © 1999 Some Label LLC'), 'Foo');
   assert.equal(r.artistDisplay, 'Daryl Hall & John Oates');
   assert.equal(r.song, 'Maneater');
 }
+
+// 左に「A & B」がある公式タイトルに対し、誤った performing（曲名とアーティストが入れ替わり）を無視する
+{
+  const title =
+    'David Bowie & Pat Metheny Group - This Is Not America (official video reworked)';
+  const desc =
+    'Music video by This Is Not America performing David Bowie & Pat Metheny Group.\n© 1985';
+  const r = getArtistAndSong(title, 'Weird Channel', { videoDescription: desc });
+  assert.equal(r.artistDisplay, 'David Bowie, Pat Metheny Group');
+  assert.equal(r.song, 'This Is Not America');
+}
 {
   const desc = 'Music video by Maneater performing Daryl Hall & John Oates\n\nMore';
   const r = resolveArtistSongForPack('Daryl Hall & John Oates - Maneater (Official Video)', 'Unrelated', {
