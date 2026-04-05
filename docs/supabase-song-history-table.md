@@ -15,7 +15,8 @@ create table if not exists public.user_song_history (
   url text not null,
   title text,
   artist text,
-  posted_at timestamptz not null default now()
+  posted_at timestamptz not null default now(),
+  selection_round integer null
 );
 
 alter table public.user_song_history enable row level security;
@@ -32,3 +33,18 @@ create policy "Users can select own song history"
 ```
 
 3. 実行後、マイページの「貼った曲の履歴」が利用できます。
+
+## 既存テーブルへの追加（選曲ラウンド・視聴履歴との整合）
+
+すでに `user_song_history` がある場合は、次を **SQL Editor** で実行してください（部屋の視聴履歴 `room_playback_history` にも同名列を追加します）。
+
+```sql
+alter table public.user_song_history
+  add column if not exists selection_round integer null;
+
+alter table public.room_playback_history
+  add column if not exists selection_round integer null;
+```
+
+- **重複行の抑止**: `/api/song-history` は、同一ユーザー・同一部屋・同一 `video_id` で **2分以内**の再投稿を挿入しません（大人数・二重送信時の履歴ずれ対策）。
+- **ラウンド表示**: 同期部屋で貼曲時の選曲ラウンドが保存され、マイページの履歴・部屋の視聴履歴の「時間」欄に併記されます（列未追加時は API がエラーになるため、上記 ALTER を先に実行してください）。

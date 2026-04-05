@@ -22,6 +22,10 @@ import {
   toggleCommentPackSlot,
 } from '@/lib/comment-pack-slots';
 import { assignDefaultGuestDisplayName } from '@/lib/guest-display-name';
+import {
+  readJoinEntryChimeEnabled,
+  writeJoinEntryChimeEnabled,
+} from '@/lib/participant-join-announcements-preference';
 
 function getDisplayName(user: User | null): string {
   if (!user) return '';
@@ -67,6 +71,8 @@ interface SongHistoryRow {
   title: string | null;
   artist: string | null;
   posted_at: string;
+  /** 同期部屋の選曲ラウンド（列未追加のDBでは undefined） */
+  selection_round?: number | null;
 }
 interface ParticipationHistoryRow {
   id: string;
@@ -320,6 +326,44 @@ interface MyPageProps {
   roomId?: string;
   /** 部屋の名前・PR保存後の即時反映用 */
   onRoomProfileSaved?: (payload: { displayTitle: string; message: string }) => void;
+  /** 参加者の入室・退室効果音（同期部屋）。未指定時はこの端末の localStorage のみ */
+  joinEntryChimeEnabled?: boolean;
+  onJoinEntryChimeEnabledChange?: (value: boolean) => void;
+}
+
+/** 入室・退室の効果音トグル（チャット文言は常に表示） */
+function JoinEntryChimeToggle({
+  enabled,
+  onChange,
+}: {
+  enabled: boolean;
+  onChange: (next: boolean) => void;
+}) {
+  return (
+    <div className="mt-3 flex items-center justify-between gap-3">
+      <span className="text-sm text-gray-300">{enabled ? '鳴らす' : '鳴らさない'}</span>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={enabled}
+        aria-label={
+          enabled
+            ? '入室・退室の効果音はオンです。タップでオフにします。'
+            : '入室・退室の効果音はオフです。タップでオンにします。'
+        }
+        onClick={() => onChange(!enabled)}
+        className={`relative inline-flex h-7 w-12 shrink-0 cursor-pointer rounded-full border transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900 ${
+          enabled ? 'border-blue-500 bg-blue-600' : 'border-gray-600 bg-gray-700'
+        }`}
+      >
+        <span
+          className={`pointer-events-none absolute top-0.5 left-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform duration-200 ease-out ${
+            enabled ? 'translate-x-5' : 'translate-x-0'
+          }`}
+        />
+      </button>
+    </div>
+  );
 }
 
 /** マイページで選べるステータス（参加者名横に表示） */
@@ -360,6 +404,8 @@ export default function MyPage({
   onForceExit,
   roomId = '',
   onRoomProfileSaved,
+  joinEntryChimeEnabled,
+  onJoinEntryChimeEnabledChange,
 }: MyPageProps) {
   const routeParams = useParams();
   const roomIdFromRoute = useMemo(() => {
@@ -374,6 +420,24 @@ export default function MyPage({
     (effectiveRoomId ? getOrCreateRoomClientId(effectiveRoomId) : '');
 
   const [isLiveOrganizer, setIsLiveOrganizer] = useState(false);
+
+  const isJoinChimeControlled =
+    typeof onJoinEntryChimeEnabledChange === 'function' &&
+    typeof joinEntryChimeEnabled === 'boolean';
+  const [joinChimeInternal, setJoinChimeInternal] = useState(() =>
+    typeof window === 'undefined' ? true : readJoinEntryChimeEnabled(),
+  );
+  const joinChimeDisplay = isJoinChimeControlled
+    ? (joinEntryChimeEnabled as boolean)
+    : joinChimeInternal;
+  const handleJoinChimeChange = (next: boolean) => {
+    writeJoinEntryChimeEnabled(next);
+    if (isJoinChimeControlled) {
+      onJoinEntryChimeEnabledChange!(next);
+    } else {
+      setJoinChimeInternal(next);
+    }
+  };
 
   useEffect(() => {
     if (!effectiveRoomId || isGuest) {
@@ -468,7 +532,7 @@ export default function MyPage({
     void Promise.resolve(
       supabase
         .from('user_song_history')
-        .select('id, room_id, video_id, url, title, artist, posted_at')
+        .select('id, room_id, video_id, url, title, artist, posted_at, selection_round')
         .order('posted_at', { ascending: false }),
     )
       .then(({ data, error }) => {
@@ -532,6 +596,12 @@ export default function MyPage({
       byDate.get(dateKey)!.push(row);
     }
     const sortedDates = Array.from(byDate.keys()).sort((a, b) => b.localeCompare(a));
+    Array.from(byDate.values()).forEach((rows) => {
+      rows.sort(
+        (a: SongHistoryRow, b: SongHistoryRow) =>
+          new Date(b.posted_at).getTime() - new Date(a.posted_at).getTime(),
+      );
+    });
     const lines: string[] = [...header];
     for (const dateKey of sortedDates) {
       const [y, m, d] = dateKey.split('-');
@@ -539,9 +609,15 @@ export default function MyPage({
       for (const row of byDate.get(dateKey)!) {
         const at = new Date(row.posted_at);
         const timeStr = `${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`;
+        const roundSuffix =
+          typeof row.selection_round === 'number' &&
+          Number.isFinite(row.selection_round) &&
+          row.selection_round >= 1
+            ? ` R${Math.floor(row.selection_round)}`
+            : '';
         const title = row.title || row.video_id;
         const artist = row.artist ? `（${row.artist}）` : '';
-        lines.push(`部屋 ${row.room_id || '—'} · ${timeStr}`);
+        lines.push(`部屋 ${row.room_id || '—'} · ${timeStr}${roundSuffix}`);
         lines.push(`${title}${artist}`);
         lines.push(row.url);
         lines.push('');
@@ -733,6 +809,14 @@ export default function MyPage({
                 視聴専用
               </button>
             </div>
+          </div>
+
+          <div className="rounded border border-gray-700 bg-gray-800/50 p-3">
+            <label className="block text-xs text-gray-500">参加者の入室・退室の効果音</label>
+            <p className="mt-1 text-sm text-gray-400">
+              オンにすると、誰かが入室したときと退室したときにそれぞれ通知音が鳴ります。オフにするとこのブラウザだけ無音です。入室・退出のチャット表示は常に出ます。設定はこの端末に保存され、入退室を繰り返しても維持されます。
+            </p>
+            <JoinEntryChimeToggle enabled={joinChimeDisplay} onChange={handleJoinChimeChange} />
           </div>
 
           <div className="rounded border border-gray-700 bg-gray-800/50 p-3">
@@ -1101,6 +1185,14 @@ export default function MyPage({
           </div>
         )}
 
+        <div className="mt-6 rounded border border-gray-700 bg-gray-800/50 p-3">
+          <label className="block text-xs text-gray-500">参加者の入室・退室の効果音</label>
+          <p className="mt-1 text-sm text-gray-400">
+            オンにすると、誰かが入室したときと退室したときにそれぞれ通知音が鳴ります。オフにするとこのブラウザだけ無音です。入室・退出のチャット表示は常に出ます。設定はこの端末に保存され、入退室を繰り返しても維持されます。
+          </p>
+          <JoinEntryChimeToggle enabled={joinChimeDisplay} onChange={handleJoinChimeChange} />
+        </div>
+
         {/* 自分のステータス（参加者名横に表示） */}
         {onUserStatusChange && (
           <div className="mt-6 rounded border border-gray-700/80 bg-gray-800/50 p-3">
@@ -1264,7 +1356,7 @@ export default function MyPage({
           {historyTab === 'songs' && (
             <>
               <p className="mb-3 text-xs text-gray-500">
-                参加したチャットで貼った曲を日付・部屋・貼った時間で表示します。履歴テーブルの設定は docs/supabase-song-history-table.md を参照してください。
+                参加したチャットで貼った曲を日付・部屋・貼った時間で表示します（同期部屋では時間の横に選曲ラウンド R）。同一曲の短時間の二重記録は抑止します。DB の追加手順は docs/supabase-song-history-table.md を参照してください。
               </p>
               {songHistoryLoading ? (
             <p className="text-sm text-gray-500">読み込み中…</p>
@@ -1281,6 +1373,12 @@ export default function MyPage({
                   byDate.get(dateKey)!.push(row);
                 }
                 const sortedDates = Array.from(byDate.keys()).sort((a, b) => b.localeCompare(a));
+                Array.from(byDate.values()).forEach((rows) => {
+                  rows.sort(
+                    (a: SongHistoryRow, b: SongHistoryRow) =>
+                      new Date(b.posted_at).getTime() - new Date(a.posted_at).getTime(),
+                  );
+                });
                 return sortedDates.map((dateKey) => {
                   const [y, m, d] = dateKey.split('-');
                   const label = `${y}年${m}月${d}日`;
@@ -1292,12 +1390,19 @@ export default function MyPage({
                         {rows.map((row) => {
                           const at = new Date(row.posted_at);
                           const timeStr = `${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`;
+                          const roundSuffix =
+                            typeof row.selection_round === 'number' &&
+                            Number.isFinite(row.selection_round) &&
+                            row.selection_round >= 1
+                              ? ` R${Math.floor(row.selection_round)}`
+                              : '';
                           const title = row.title || row.video_id;
                           const artist = row.artist ? `（${row.artist}）` : '';
                           return (
                             <li key={row.id} className="border-b border-gray-700/50 pb-2 last:border-0 last:pb-0">
                               <p className="text-xs text-gray-500">
                                 部屋 {row.room_id || '—'} · {timeStr}
+                                {roundSuffix}
                               </p>
                               <p className="text-sm text-gray-200">
                                 {title}

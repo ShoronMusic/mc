@@ -61,6 +61,7 @@ declare namespace YT {
 }
 
 /** IFrame API の getPlayerState 値（-1 未開始, 0 終了, 1 再生中, 2 一時停止, 3 バッファ, 5 キュー） */
+export const YT_PLAYER_STATE_ENDED = 0;
 export const YT_PLAYER_STATE_PLAYING = 1;
 export const YT_PLAYER_STATE_BUFFERING = 3;
 

@@ -84,8 +84,11 @@ function RoomRow({
   return (
     <Link
       href={`/${room.roomId}`}
-      className="flex flex-col gap-1.5 rounded-lg border border-gray-600 bg-gray-800 px-4 py-3 text-white transition hover:bg-gray-700"
+      className="flex flex-col gap-1.5 rounded-lg border border-gray-600 bg-gray-800 px-4 py-3 text-white transition hover:bg-gray-700 hover:border-sky-600/50"
     >
+      <span className="self-center rounded-full bg-emerald-600/25 px-2.5 py-0.5 text-[10px] font-semibold tracking-wide text-emerald-300">
+        開催中
+      </span>
       <span className="text-center font-medium">{label}</span>
       <span className="text-center text-[11px] text-gray-500">部屋ID: {room.roomId}</span>
       {payload?.jpAiUnlockEnabled && (
@@ -172,14 +175,41 @@ export function HomeRoomLinks() {
       )}
       {configured === true && !loading && activeRooms.length === 0 && (
         <p className="rounded-md border border-gray-700 bg-gray-800/70 px-3 py-2 text-center text-sm text-gray-300">
-          現在、稼働中の部屋はありません。
+          現在、参加者がいる開催中の部屋はありません。
         </p>
       )}
-      {activeRooms.map((room) => (
-        <RoomRow key={room.roomId} room={room} configured={configured === true} loading={loading} payload={byId[room.roomId]} />
-      ))}
-      {configured === true && activeRooms.length > 0 && (
-        <p className="text-center text-[11px] text-gray-600">参加状況は約{POLL_MS / 1000}秒ごとに更新されます</p>
+      {activeRooms.length > 0 && (
+        <section
+          className="rounded-xl border border-emerald-800/40 bg-gradient-to-b from-emerald-950/35 to-gray-900/40 p-3 shadow-inner sm:p-4"
+          aria-labelledby="home-live-rooms-heading"
+        >
+          <div className="mb-3 flex flex-col items-center gap-1 border-b border-emerald-800/30 pb-3">
+            <h2
+              id="home-live-rooms-heading"
+              className="text-center text-sm font-semibold text-emerald-100"
+            >
+              開催中の部屋（参加中）
+            </h2>
+            <p className="text-center text-[11px] leading-relaxed text-emerald-200/70">
+              いま誰かが入室している会です。タップするとその部屋へ入れます。
+            </p>
+          </div>
+          <ul className="flex flex-col gap-2.5">
+            {activeRooms.map((room) => (
+              <li key={room.roomId}>
+                <RoomRow
+                  room={room}
+                  configured={configured === true}
+                  loading={loading}
+                  payload={byId[room.roomId]}
+                />
+              </li>
+            ))}
+          </ul>
+          <p className="mt-3 text-center text-[11px] text-emerald-200/50">
+            参加人数・表示名は約{POLL_MS / 1000}秒ごとに更新されます
+          </p>
+        </section>
       )}
     </div>
   );

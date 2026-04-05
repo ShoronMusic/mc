@@ -30,7 +30,8 @@ const COL_LINK = 'リンク';
 const COL_FAV = '♡';
 
 const COL_WIDTH_PARTICIPANT = 68;
-const COL_WIDTH_TIME = 52;
+/** 例: 16:33 R2（ラウンド併記） */
+const COL_WIDTH_TIME = 72;
 /** アーティスト - タイトルは残り幅を使うため minWidth のみ（横スクロールを出さない） */
 const COL_MIN_WIDTH_ARTIST_TITLE = 80;
 const COL_WIDTH_STYLE = 56;
@@ -105,6 +106,14 @@ function formatPlayedAt(iso: string): string {
   } catch {
     return '--:--';
   }
+}
+
+function formatPlayedAtWithRound(iso: string, selectionRound: number | null | undefined): string {
+  const t = formatPlayedAt(iso);
+  if (typeof selectionRound === 'number' && Number.isFinite(selectionRound) && selectionRound >= 1) {
+    return `${t} R${Math.floor(selectionRound)}`;
+  }
+  return t;
 }
 
 function formatPlayedDateWithWeekday(iso: string): { key: string; label: string } | null {
@@ -259,6 +268,8 @@ interface RoomPlaybackHistoryProps {
   currentVideoId: string | null;
   /** 変更されると再取得する（部屋側で10秒後にPOSTしたあと更新用） */
   refreshKey?: number;
+  /** 参加者名の色（チャット・UserBar と同じ。表示名一致で選曲者列に適用） */
+  participantsWithColor?: { displayName: string; textColor: string }[];
   /** ゲストでないときのみお気に入り利用可 */
   isGuest?: boolean;
   /** 自分がお気に入り登録した video_id の一覧（この曲の行はハート点灯） */
@@ -269,10 +280,23 @@ interface RoomPlaybackHistoryProps {
   onGuestFavoriteClick?: () => void;
 }
 
+const GUEST_DISPLAY_SUFFIX = ' (G)';
+
+/** DB の display_name（ゲストは末尾「 (G)」）から、参加者色マップ用のキーへ */
+function playbackHistoryNameLookupKey(displayNameStored: string): string {
+  const raw = displayNameStored.trim();
+  if (!raw) return '';
+  if (raw.endsWith(GUEST_DISPLAY_SUFFIX)) {
+    return raw.slice(0, -GUEST_DISPLAY_SUFFIX.length).trim();
+  }
+  return raw;
+}
+
 export default function RoomPlaybackHistory({
   roomId,
   currentVideoId,
   refreshKey,
+  participantsWithColor = [],
   isGuest = true,
   favoritedVideoIds = [],
   onFavoriteClick,
@@ -295,6 +319,26 @@ export default function RoomPlaybackHistory({
   const [eraDistOpen, setEraDistOpen] = useState(false);
 
   const currentRowForTabs = currentVideoId ? items.find((r) => r.video_id === currentVideoId) : undefined;
+
+  /** 同じ表示名が複数いる場合は入室順の先勝ち（UserBar と同じ participants 順） */
+  const participantColorByDisplayName = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const { displayName, textColor } of participantsWithColor) {
+      const key = displayName.trim();
+      if (!key || !textColor?.trim()) continue;
+      if (!m.has(key)) m.set(key, textColor);
+    }
+    return m;
+  }, [participantsWithColor]);
+
+  const participantNameColor = useCallback(
+    (displayNameStored: string) => {
+      const key = playbackHistoryNameLookupKey(displayNameStored);
+      if (!key) return undefined;
+      return participantColorByDisplayName.get(key);
+    },
+    [participantColorByDisplayName]
+  );
 
   /** メインアーティスト／ソングデータタブ用。DB の artist_name / title が誤っていても再解決する */
   const playbackTabsResolve = useMemo(() => {
@@ -420,6 +464,7 @@ export default function RoomPlaybackHistory({
       setItems(
         raw.map((r: RoomPlaybackHistoryRow) => ({
           ...r,
+          selection_round: r.selection_round ?? null,
           era: r.era ?? null,
         })),
       );
@@ -443,10 +488,18 @@ export default function RoomPlaybackHistory({
       }
       const tA = new Date(a.played_at).getTime();
       const tB = new Date(b.played_at).getTime();
-      return sortOrder === 'desc' ? tB - tA : tA - tB;
+      if (tA !== tB) {
+        return sortOrder === 'desc' ? tB - tA : tA - tB;
+      }
+      return (a.id ?? '').localeCompare(b.id ?? '');
     }
-    const nameA = (a.display_name ?? '').localeCompare(b.display_name ?? '');
-    return sortOrder === 'desc' ? -nameA : nameA;
+    const nameCmp = (a.display_name ?? '').localeCompare(b.display_name ?? '');
+    if (nameCmp !== 0) {
+      return sortOrder === 'desc' ? -nameCmp : nameCmp;
+    }
+    const tA = new Date(a.played_at).getTime();
+    const tB = new Date(b.played_at).getTime();
+    return tB - tA;
   });
 
   const currentRow = currentVideoId ? sorted.find((r) => r.video_id === currentVideoId) : undefined;
@@ -616,7 +669,7 @@ export default function RoomPlaybackHistory({
                 className="cursor-pointer border-b border-gray-600 py-1 pr-1 font-medium text-gray-400"
                 style={{ width: COL_WIDTH_TIME, minWidth: COL_WIDTH_TIME, maxWidth: COL_WIDTH_TIME }}
                 scope="col"
-                title="時間でソート"
+                title="時間でソート。R は選曲ラウンド（同期部屋）"
                 onClick={setSortByTime}
               >
                 <span className="block truncate">{COL_TIME}</span>
@@ -698,11 +751,12 @@ export default function RoomPlaybackHistory({
                   return (
                     <tr key={row.id} className={isActive ? 'bg-blue-900/30' : ''}>
                       <td
-                        className="truncate border-b border-gray-700/80 py-0.5 pr-1 text-gray-200"
+                        className="truncate border-b border-gray-700/80 py-0.5 pr-1"
                         style={{
                           width: COL_WIDTH_PARTICIPANT,
                           minWidth: COL_WIDTH_PARTICIPANT,
                           maxWidth: COL_WIDTH_PARTICIPANT,
+                          color: participantNameColor(row.display_name) ?? '#e5e7eb',
                         }}
                         title={row.display_name}
                       >
@@ -712,7 +766,9 @@ export default function RoomPlaybackHistory({
                         className="truncate border-b border-gray-700/80 py-0.5 pr-1 text-gray-400"
                         style={{ width: COL_WIDTH_TIME, minWidth: COL_WIDTH_TIME, maxWidth: COL_WIDTH_TIME }}
                       >
-                        {formatPlayedAt(row.played_at)}
+                        <span title={row.selection_round != null ? `ラウンド ${row.selection_round}` : undefined}>
+                          {formatPlayedAtWithRound(row.played_at, row.selection_round)}
+                        </span>
                       </td>
                       <td
                         className="truncate border-b border-gray-700/80 py-0.5 pr-1 text-gray-400"

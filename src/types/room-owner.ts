@@ -28,6 +28,8 @@ export const TURN_STATE_EVENT = 'room:turnState';
 
 export interface TurnStatePayload {
   currentTurnClientId: string;
+  /** チャットオーナー基準の選曲ラウンド番号（省略時は受信側は既存値を維持） */
+  selectionRoundNumber?: number;
 }
 
 /** オーナーによる5分制限のON/OFF。その部屋のセッションのみ。デフォルトON */

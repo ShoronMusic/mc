@@ -70,26 +70,18 @@ function mergeKnownHyphenArtistLeadingParts(parts: string[]): { artist: string; 
 }
 
 /**
- * YouTube タイトルに付くリマスター・画質・配信向けの副題を除き、会話・AI プロンプト用の「曲名だけ」に近づける。
- * 楽曲の正式タイトルに意図的に含まれる括弧より、配信メタデータ側の付与を想定。
+ * YouTube タイトルに付く配信向けの副題のうち、**Remix・Remaster は楽曲バージョンとして残す**。
+ * Album Version / Radio Edit など、別表記の区別に用いないメタだけ落とす。
  */
 function stripStreamingEditionMarkers(title: string): string {
   let t = title;
   const reList = [
-    /\s*\[(?:4K|8K|2K|HD|UHD)\s+Remaster(?:ed)?\]\s*/gi,
-    /\s*[\(（](?:4K|8K|2K|HD|UHD)\s+Remaster(?:ed)?[\)）]\s*/gi,
-    /\s*[\(（]HD\s+Remaster(?:ed)?[\)）]\s*/gi,
-    /\s*\[HD\s+Remaster(?:ed)?\]\s*/gi,
-    /\s*[\(（]Remaster(?:ed)?(?:\s+\d{4})?[\)）]\s*/gi,
-    /\s*[\(（]\d{4}\s+Remaster(?:ed)?[\)）]\s*/gi,
-    /\s*\[Remaster(?:ed)?(?:\s+\d{4})?]\s*/gi,
     /\s*[\(（]Mastered\s+for\s+iTunes[\)）]\s*/gi,
     /\s*[\(（]Album\s+Version[\)）]\s*/gi,
     /\s*[\(（]Single\s+Version[\)）]\s*/gi,
     /\s*[\(（][^()（）]*\bVersion\b[^()（）]*[\)）]\s*$/gi,
     /\s*[\(（][^()（）]*\bMix\b[^()（）]*[\)）]\s*$/gi,
     /\s*[\(（][^()（）]*\bEdit\b[^()（）]*[\)）]\s*$/gi,
-    /\s*[\(（][^()（）]*\bRemix\b[^()（）]*[\)）]\s*$/gi,
     /\s*[\(（]Radio\s+Edit[\)）]\s*/gi,
     /\s*[\(（]Extended\s+Version[\)）]\s*/gi,
     /\s*[\(（]Stereo\s+Mix[\)）]\s*/gi,
@@ -148,7 +140,12 @@ export function cleanTitle(title: string): string {
     /** 「曲名 • TopPop」「曲名 · 番組名」など TV・ライブ番組のタグ（曲名の一部ではない） */
     .replace(/\s+[·•]\s+[^\n]+$/, ' ')
     .replace(/\s*-\s*Official[^-]*$/gi, ' ')
-    .replace(/\s*\([^)]*Official[^)]*\)\s*/gi, ' ')
+    /** (Official Video) 等は落とすが、(Official Remix)・(… Remaster) は楽曲バージョンとして残す */
+    .replace(/\s*\(([^)]*)\)\s*/gi, (full, inner: string) => {
+      if (!/\bofficial\b/i.test(inner)) return full;
+      if (/\bremix\b/i.test(inner) || /\bremaster(?:ed)?\b/i.test(inner)) return full;
+      return ' ';
+    })
     .replace(/\s+/g, ' ')
     .trim();
   t = stripStreamingEditionMarkers(t);

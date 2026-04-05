@@ -61,7 +61,7 @@ function createMessageId(): string {
   return `msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-/** 離席・ROM（無言）の意思表明か。このときAIは「〇〇さん、いってらっしゃいませ」と返す */
+/** 離席・ROM（無言）の意思表明か。Gemini への通常チャット API は呼ばない（挨拶は出さない） */
 function isLeaveOrRomPhrase(body: string): boolean {
   const t = body.trim();
   if (!t) return false;
@@ -581,6 +581,7 @@ export default function RoomWithoutSync({
             videoId: vid,
             displayName: displayNameProp,
             isGuest,
+            selectionRound: 1,
           }),
         })
           .then((r) => r.json())
@@ -672,7 +673,11 @@ export default function RoomWithoutSync({
       fetch('/api/song-history', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ videoId: videoIdToSave, roomId: roomId ?? '' }),
+        body: JSON.stringify({
+          videoId: videoIdToSave,
+          roomId: roomId ?? '',
+          selectionRound: 1,
+        }),
       }).catch(() => {});
     },
     [isGuest, roomId]
@@ -756,11 +761,8 @@ export default function RoomWithoutSync({
         return;
       }
 
-      /* 離席・ROMの意思表明には「〇〇さん、いってらっしゃいませ」と返す（API呼び出しなし） */
+      /* 離席・ROMの意思表明時は API を呼ばない（挨拶メッセージは出さない） */
       if (isLeaveOrRomPhrase(text)) {
-        if (!jpUiBlocked) {
-          addAiMessage(`${displayNameProp}さん、いってらっしゃいませ`);
-        }
         touchActivity();
         return;
       }
@@ -1176,6 +1178,7 @@ export default function RoomWithoutSync({
             roomId={roomId}
             currentVideoId={videoId}
             refreshKey={playbackHistoryRefreshKey}
+            participantsWithColor={[{ displayName: displayNameProp, textColor: userTextColor }]}
             isGuest={isGuest}
             favoritedVideoIds={favoritedVideoIds}
             onFavoriteClick={handleFavoriteClick}

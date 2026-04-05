@@ -5,6 +5,7 @@
 export type PlaybackMessageType =
   | 'changeVideo'
   | 'queueSong'
+  | 'cancelQueueSong'
   | 'play'
   | 'pause'
   | 'seek'
@@ -26,6 +27,8 @@ export interface PlaybackMessage {
   /** sync スナップショット用 */
   currentTurnClientId?: string;
   trackStartedAtMs?: number;
+  /** 遅延入室 sync 用・選曲ラウンド */
+  selectionRoundNumber?: number;
 }
 
 /** 後から入室したクライアントが再生状態を問い合わせ */

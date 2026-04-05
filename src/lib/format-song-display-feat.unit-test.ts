@@ -54,7 +54,24 @@ assert.equal(getArtistDisplayString('Drake ft. Rihanna'), 'Drake, Rihanna');
   assert.ok(out.includes('80年代のポップ'));
 }
 
-assert.equal(cleanTitle('Big Apple (2004 Remaster)').includes('Remaster'), false);
+assert.ok(
+  cleanTitle('Big Apple (2004 Remaster)').includes('Remaster'),
+  'Remaster は楽曲バージョンとして残す',
+);
+
+assert.equal(
+  cleanTitle('Family Affair (Spanish Fly Remix)'),
+  'Family Affair (Spanish Fly Remix)',
+  '名前付きリミックス括弧は曲名の一部として残す',
+);
+assert.equal(cleanTitle('Song (Remix)'), 'Song (Remix)', '(Remix) は残す');
+assert.equal(cleanTitle('Song (Official Remix)'), 'Song (Official Remix)', 'Official Remix も残す');
+assert.equal(cleanTitle('Song (Extended Remix)'), 'Song (Extended Remix)', 'Extended Remix も残す');
+
+{
+  const r = getArtistAndSong('Mary J. Blige - Family Affair (Spanish Fly Remix)', 'Mary J. Blige');
+  assert.match(r.song, /Spanish Fly Remix/);
+}
 
 assert.equal(cleanTitle('What Is Love • TopPop'), 'What Is Love');
 

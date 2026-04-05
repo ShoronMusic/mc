@@ -49,9 +49,17 @@ export type RoomPlaybackHistoryRow = {
   title: string | null;
   artist_name: string | null;
   style: string | null;
+  /** 同期部屋の選曲ラウンド（列未追加のDBでは null） */
+  selection_round: number | null;
   /** `song_era` テーブル由来（GET 時に video_id で結合） */
   era: string | null;
 };
+
+function parseSelectionRoundForHistory(raw: unknown): number | null {
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) return null;
+  const n = Math.floor(raw);
+  return n >= 1 ? n : null;
+}
 
 /** クライアント時計が未来にずれているとき since を無視する秒数 */
 const SINCE_MAX_FUTURE_SKEW_MS = 120_000;
@@ -83,7 +91,7 @@ export async function GET(request: Request) {
 
   let historyQuery = supabase
     .from('room_playback_history')
-    .select('id, room_id, video_id, display_name, is_guest, played_at, title, artist_name, style')
+    .select('id, room_id, video_id, display_name, is_guest, played_at, title, artist_name, style, selection_round')
     .eq('room_id', roomId);
   if (sinceIso) {
     historyQuery = historyQuery.gte('played_at', sinceIso);
@@ -104,6 +112,11 @@ export async function GET(request: Request) {
   const rows = data ?? [];
   let items: RoomPlaybackHistoryRow[] = rows.map((row) => ({
     ...row,
+    selection_round:
+      typeof (row as { selection_round?: unknown }).selection_round === 'number' &&
+      Number.isFinite((row as { selection_round: number }).selection_round)
+        ? Math.floor((row as { selection_round: number }).selection_round)
+        : null,
     era: null,
   }));
   const videoIds = Array.from(new Set(items.map((r) => r.video_id).filter(Boolean)));
@@ -134,7 +147,7 @@ export async function GET(request: Request) {
 
 /**
  * POST: 視聴履歴に1件追加（曲が流れてから約10秒後にクライアントから呼ぶ想定）
- * Body: { roomId, videoId, displayName, isGuest }
+ * Body: { roomId, videoId, displayName, isGuest, selectionRound?: number }
  * - 同じ人・同じ曲が2分以内なら同一扱いで挿入しない
  * - ゲストは display_name を "ニックネーム (G)" 形式で保存
  * - 邦楽と判定され、かつ部屋で「邦楽解禁」が有効でない場合（公式チャ例外もなし）は挿入せず skipped: jp_domestic
@@ -145,7 +158,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'DBが利用できません。' }, { status: 503 });
   }
 
-  let body: { roomId?: string; videoId?: string; displayName?: string; isGuest?: boolean };
+  let body: {
+    roomId?: string;
+    videoId?: string;
+    displayName?: string;
+    isGuest?: boolean;
+    selectionRound?: number;
+  };
   try {
     body = await request.json();
   } catch {
@@ -156,6 +175,7 @@ export async function POST(request: Request) {
   const videoId = typeof body?.videoId === 'string' ? body.videoId.trim() : '';
   const displayName = typeof body?.displayName === 'string' ? body.displayName.trim() : '';
   const isGuest = Boolean(body?.isGuest);
+  const selectionRound = parseSelectionRoundForHistory(body?.selectionRound);
 
   if (!roomId || !videoId) {
     return NextResponse.json({ error: 'roomId and videoId are required' }, { status: 400 });
@@ -318,7 +338,7 @@ export async function POST(request: Request) {
     console.error('[room-playback-history] getOrAssignEra', e);
   }
 
-  const { error } = await supabase.from('room_playback_history').insert({
+  const insertPlayback: Record<string, unknown> = {
     room_id: roomId,
     video_id: videoId,
     display_name: displayNameToStore,
@@ -327,7 +347,12 @@ export async function POST(request: Request) {
     title: titleForDb,
     artist_name: artist ?? effectiveAuthor ?? null,
     style,
-  });
+  };
+  if (selectionRound != null) {
+    insertPlayback.selection_round = selectionRound;
+  }
+
+  const { error } = await supabase.from('room_playback_history').insert(insertPlayback);
 
   if (!error && songId) {
     await incrementSongPlayCount(supabase, songId);

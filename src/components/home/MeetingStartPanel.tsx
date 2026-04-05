@@ -109,9 +109,9 @@ export function MeetingStartPanel() {
     });
   }, []);
 
-  const joinRoomOptions = myRooms.map((r) => r.roomId);
   const selectedRoom = myRooms.find((r) => r.roomId === joinRoomId);
   const createRoomOptions = DEFAULT_ROOM_IDS.filter((id) => !liveRoomIds.includes(id));
+  const liveOrganizingCount = myRooms.filter((r) => r.isLive).length;
 
   const run = useCallback(
     async (action: 'start' | 'end' | 'rename', payload: { roomId?: string; title?: string; autoAssign?: boolean }) => {
@@ -204,36 +204,63 @@ export function MeetingStartPanel() {
     <div className="mt-4 flex flex-col gap-3">
       {showReturningOrganizerBlock ? (
         <div className="rounded-xl border border-dashed border-slate-600/90 bg-slate-900/60 p-3 sm:p-4">
-          <p className="mb-3 text-center text-xs font-semibold tracking-wide text-slate-300">
-            主催者向け・再開・終了（過去に開催したことのある部屋）
-          </p>
+          <div className="mb-3 space-y-1 text-center">
+            <p className="text-sm font-semibold text-slate-100">主催者メニュー</p>
+            <p className="text-[11px] leading-relaxed text-slate-400">
+              操作する部屋を下のカードから選びます。
+              <span className="text-emerald-300/90"> 緑「主催中」</span>
+              はいま会が開いている部屋、
+              <span className="text-slate-500"> 灰「終了済」</span>
+              は過去に主催した部屋（再開・終了用）です。
+            </p>
+            {liveOrganizingCount > 0 && (
+              <p className="rounded-md border border-emerald-800/50 bg-emerald-950/40 px-2 py-1.5 text-[11px] font-medium text-emerald-200/95">
+                いま主催中の会：{liveOrganizingCount} 部屋
+              </p>
+            )}
+          </div>
+          <p className="mb-2 text-xs font-medium text-slate-400">主催する部屋を選択</p>
+          <ul className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-2" role="list">
+            {myRooms.map((r) => {
+              const selected = joinRoomId === r.roomId;
+              return (
+                <li key={r.roomId}>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    aria-pressed={selected}
+                    onClick={() => {
+                      setJoinRoomId(r.roomId);
+                      if (r.title?.trim()) setJoinTitle(r.title.trim());
+                    }}
+                    className={`flex w-full flex-col gap-1 rounded-lg border px-3 py-2.5 text-left transition ${
+                      selected
+                        ? 'border-sky-500 bg-sky-950/50 ring-2 ring-sky-500/60'
+                        : 'border-slate-600 bg-slate-800/80 hover:border-slate-500'
+                    } ${r.isLive ? 'border-l-4 border-l-emerald-500' : ''}`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-mono text-sm font-medium text-white">部屋 {r.roomId}</span>
+                      {r.isLive ? (
+                        <span className="shrink-0 rounded-full bg-emerald-600/35 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-200">
+                          主催中
+                        </span>
+                      ) : (
+                        <span className="shrink-0 rounded-full bg-slate-700 px-2 py-0.5 text-[10px] text-slate-400">
+                          終了済
+                        </span>
+                      )}
+                    </div>
+                    <span className="line-clamp-2 text-xs text-slate-300">{r.title}</span>
+                    {selected && (
+                      <span className="text-[10px] font-medium text-sky-300">選択中 · 下のボタンで入室・終了</span>
+                    )}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
           <div className="grid grid-cols-1 gap-2.5">
-            <label className="flex min-w-0 flex-col gap-1 text-xs text-slate-400">
-              主催する部屋
-              <select
-                value={joinRoomId}
-                onChange={(e) => {
-                  const nextRoomId = e.target.value;
-                  setJoinRoomId(nextRoomId);
-                  const selected = myRooms.find((r) => r.roomId === nextRoomId);
-                  if (selected?.title?.trim()) {
-                    setJoinTitle(selected.title.trim());
-                  }
-                }}
-                className="w-full rounded-md border border-slate-600 bg-slate-800 px-2.5 py-2 text-sm text-white"
-                disabled={busy}
-              >
-                {joinRoomOptions.map((id) => {
-                  const mine = myRooms.find((r) => r.roomId === id);
-                  const label = mine ? `${id}${mine.isLive ? '（主催中）' : ''}` : id;
-                  return (
-                    <option key={id} value={id}>
-                      {label}
-                    </option>
-                  );
-                })}
-              </select>
-            </label>
             <label className="flex min-w-0 flex-col gap-1 text-xs text-slate-400">
               部屋の名前
               <input

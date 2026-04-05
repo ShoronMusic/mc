@@ -46,6 +46,10 @@ export interface ChatMessage {
   tidbitLibraryRejected?: boolean;
   /** 邦楽アナウンス同期用（表示には使わない） */
   jpDomesticSilenceForVideoId?: string;
+  /** 参加者入室通知メッセージ専用。true のときだけ入室効果音を鳴らす（本文の部分一致に依存しない） */
+  playJoinChime?: boolean;
+  /** 参加者退室通知メッセージ専用。true のときだけ退室効果音を鳴らす */
+  playLeaveChime?: boolean;
   /** システムメッセージの種別（異議ボタン表示など） */
   systemKind?: 'ai_question_guard';
   /** AI 質問ガード警告の詳細（systemKind が ai_question_guard のとき） */
@@ -73,4 +77,8 @@ export interface ChatMessagePayload {
   tidbitId?: string | null;
   /** 邦楽選曲アナウンス時のみ。受信クライアントが同じ videoId の間 AI 発言を止める */
   jpDomesticSilenceForVideoId?: string;
+  /** 参加者入室通知。受信側で入室音用 */
+  playJoinChime?: boolean;
+  /** 参加者退室通知。受信側で退室音用 */
+  playLeaveChime?: boolean;
 }
