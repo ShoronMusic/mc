@@ -1092,9 +1092,8 @@ export default function RoomWithoutSync({
           role="dialog"
           aria-modal="true"
           aria-label="マイページ"
-          onClick={() => setMyPageOpen(false)}
         >
-          <div className="max-h-full max-w-md overflow-auto" onClick={(e) => e.stopPropagation()}>
+          <div className="max-h-full max-w-md overflow-auto">
             <MyPage
               onClose={() => setMyPageOpen(false)}
               currentUserTextColor={userTextColor}

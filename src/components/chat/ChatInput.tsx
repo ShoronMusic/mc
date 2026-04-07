@@ -6,6 +6,7 @@
 
 import {
   forwardRef,
+  useEffect,
   useImperativeHandle,
   useRef,
   useState,
@@ -13,6 +14,7 @@ import {
   type ReactNode,
 } from 'react';
 import { MAX_MESSAGE_LENGTH } from '@/lib/chat-limits';
+import { MUSICAI_EXTENSION_SET_CHAT_TEXT_EVENT } from '@/lib/musicai-extension-events';
 import { NON_YOUTUBE_URL_SYSTEM_MESSAGE } from '@/lib/chat-non-youtube-url';
 import { extractVideoId, isStandaloneNonYouTubeUrl } from '@/lib/youtube';
 import type { SystemMessageOptions } from '@/types/chat';
@@ -108,6 +110,20 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
       inputRef.current?.focus();
     },
   }), []);
+
+  useEffect(() => {
+    const onExtensionSetText = (e: Event) => {
+      if (!(e instanceof CustomEvent)) return;
+      const raw = (e.detail as { text?: unknown })?.text;
+      if (typeof raw !== 'string' || !raw.trim()) return;
+      const text = raw.trim().slice(0, MAX_MESSAGE_LENGTH);
+      setValue(text);
+      requestAnimationFrame(() => inputRef.current?.focus());
+    };
+    window.addEventListener(MUSICAI_EXTENSION_SET_CHAT_TEXT_EVENT, onExtensionSetText);
+    return () =>
+      window.removeEventListener(MUSICAI_EXTENSION_SET_CHAT_TEXT_EVENT, onExtensionSetText);
+  }, []);
 
   const handleSubmit = () => {
     const trimmed = value.trim();

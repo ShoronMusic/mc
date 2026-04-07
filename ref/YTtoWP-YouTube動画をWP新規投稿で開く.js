@@ -10,7 +10,7 @@
 (function () {
 	'use strict';
 
-	var exclusionArtists = ["AC/DC", "Allie X", "Anderson .Paak & The Free Nationals", "Belle and Sebastian", "Bob Marley and The Wailers", "Chance the Rapper", "Coheed and Cambria", "D'Angelo and The Vanguard", "Florence + Machine", "Florence + The Machine", "Guns N' Roses", "Hit-Boy", "Kanye West & Jay-Z", "Leigh-Anne", "Mumford & Sons", "Ne-Yo", "nothing,nowhere.", "Outkast", "Pete & Bas", "Peter Bjorn and John", "piri & tommy", "Q-Tip", "Salt-N-Pepa", "Simon & Garfunkel", "Simon and Garfunkel", "T-Pain", "Tones and I"];
+	var exclusionArtists = ["AC/DC", "Allie X", "Anderson .Paak & The Free Nationals", "Belle and Sebastian", "Bob Marley and The Wailers", "Chance the Rapper", "Coheed and Cambria", "D'Angelo and The Vanguard", "Florence + Machine", "Florence + The Machine", "Guns N' Roses", "Hit-Boy", "Kanye West & Jay-Z", "Leigh-Anne", "Mumford & Sons", "Ne-Yo", "nothing,nowhere.", "Outkast", "Pete & Bas", "Peter Bjorn and John", "piri & tommy", "Q-Tip", "Salt-N-Pepa", "Simon & Garfunkel", "Simon and Garfunkel", "T-Pain", "Tones and I","Prince & The Revolution","Prince & The New Power Generation","Haute & Freddy"];
 	var artistNameMapping = { "Mike Clark Jr.": "Mike Clark Jr", "Anne Marie": "Anne-Marie", "mgk": "Machine Gun Kelly", "BEYOND THE BLACK": "Beyond the Black" };
 
 	function splitMultipleArtists(artistStr) {

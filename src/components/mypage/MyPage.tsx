@@ -28,6 +28,52 @@ import {
 } from '@/lib/participant-join-announcements-preference';
 import { USER_SONG_HISTORY_UPDATED_EVENT } from '@/lib/user-song-history-events';
 
+const MY_LIST_LIB_INDEX_HASH = '#';
+const MY_LIST_LIB_INDEX_OTHER = 'その他';
+const MY_LIST_NEW_SONGS_PAGE_SIZE = 10;
+
+function myListLibraryArtistNameForIndexing(displayName: string): string {
+  const t = displayName.trim();
+  const m = /^the\s+/i.exec(t);
+  if (m) return t.slice(m[0].length).trimStart();
+  return t;
+}
+
+function myListLibraryArtistIndexKey(displayName: string): string {
+  const t = myListLibraryArtistNameForIndexing(displayName);
+  if (!t) return MY_LIST_LIB_INDEX_OTHER;
+  const c0 = t[0];
+  if (c0 >= 'A' && c0 <= 'Z') return c0;
+  if (c0 >= 'a' && c0 <= 'z') return c0.toUpperCase();
+  if (c0 >= '0' && c0 <= '9') return MY_LIST_LIB_INDEX_HASH;
+  return MY_LIST_LIB_INDEX_OTHER;
+}
+
+function buildMyListNewSongsPaginationItems(
+  current: number,
+  total: number,
+): Array<number | 'ellipsis'> {
+  if (total <= 1) return [1];
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+  const items: Array<number | 'ellipsis'> = [1];
+  const pushEllipsis = () => {
+    if (items[items.length - 1] !== 'ellipsis') items.push('ellipsis');
+  };
+  if (current <= 3) {
+    for (let p = 2; p <= Math.min(5, total - 1); p++) items.push(p);
+    pushEllipsis();
+  } else if (current >= total - 2) {
+    pushEllipsis();
+    for (let p = Math.max(2, total - 4); p < total; p++) items.push(p);
+  } else {
+    pushEllipsis();
+    items.push(current - 1, current, current + 1);
+    pushEllipsis();
+  }
+  items.push(total);
+  return items;
+}
+
 function getDisplayName(user: User | null): string {
   if (!user) return '';
   const meta = user.user_metadata;
@@ -83,6 +129,36 @@ interface ParticipationHistoryRow {
   display_name: string | null;
   joined_at: string;
   left_at: string | null;
+}
+
+interface MyListItemRow {
+  id: string;
+  video_id: string;
+  url: string;
+  title: string | null;
+  artist: string | null;
+  note: string | null;
+  source: string;
+  music8_song_id: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface MyListLibraryArtistItemRow {
+  id: string;
+  title: string | null;
+  artist: string | null;
+  video_id: string;
+  url: string;
+  position: number;
+  created_at: string;
+}
+
+interface MyListLibraryArtistRow {
+  id: string;
+  display_name: string;
+  linked_count: number;
+  items: MyListLibraryArtistItemRow[];
 }
 
 export interface ParticipantForTransfer {
@@ -477,6 +553,7 @@ export default function MyPage({
         onSongLimit5MinToggle,
     );
   const showRoomManagementPanel = showOrganizerRoomEditor || showOwnerOnlyControls;
+  const showOwnerTab = showRoomManagementPanel;
 
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(!isGuest);
@@ -492,12 +569,23 @@ export default function MyPage({
   const [deleteInProgress, setDeleteInProgress] = useState(false);
   const [songHistory, setSongHistory] = useState<SongHistoryRow[]>([]);
   const [songHistoryLoading, setSongHistoryLoading] = useState(false);
-  const [historyTab, setHistoryTab] = useState<'songs' | 'favorites' | 'participation'>('songs');
+  const [historyTab, setHistoryTab] = useState<'songs' | 'favorites' | 'participation' | 'mylist'>('songs');
   const [favorites, setFavorites] = useState<{ id: string; video_id: string; display_name: string; played_at: string; title: string | null; artist_name: string | null }[]>([]);
   const [favoritesLoading, setFavoritesLoading] = useState(false);
   const [participationHistory, setParticipationHistory] = useState<ParticipationHistoryRow[]>([]);
   const [participationLoading, setParticipationLoading] = useState(false);
+  const [myListItems, setMyListItems] = useState<MyListItemRow[]>([]);
+  const [myListLoading, setMyListLoading] = useState(false);
+  const [myListAddUrl, setMyListAddUrl] = useState('');
+  const [myListAddBusy, setMyListAddBusy] = useState(false);
+  const [myListMessage, setMyListMessage] = useState<string | null>(null);
+  const [myListTab, setMyListTab] = useState<'newSongs' | 'artists'>('newSongs');
+  const [myListNewSongsPage, setMyListNewSongsPage] = useState(1);
+  const [myListLibraryArtists, setMyListLibraryArtists] = useState<MyListLibraryArtistRow[]>([]);
+  const [myListLibraryArtistExpandedId, setMyListLibraryArtistExpandedId] = useState<string | null>(null);
+  const [myListArtistFilterLetter, setMyListArtistFilterLetter] = useState<string | null>(null);
   const [textColorModalOpen, setTextColorModalOpen] = useState(false);
+  const [mainTab, setMainTab] = useState<'owner' | 'user' | 'music' | 'mylist'>('user');
 
   const supabase = createClient();
   const router = useRouter();
@@ -505,6 +593,15 @@ export default function MyPage({
   useEffect(() => {
     setGuestNameValue(guestDisplayName);
   }, [guestDisplayName]);
+
+  useEffect(() => {
+    if (!showOwnerTab && mainTab === 'owner') setMainTab('user');
+  }, [showOwnerTab, mainTab]);
+
+  useEffect(() => {
+    if (mainTab === 'mylist' && historyTab !== 'mylist') setHistoryTab('mylist');
+    if (mainTab === 'music' && historyTab === 'mylist') setHistoryTab('songs');
+  }, [mainTab, historyTab]);
 
   useEffect(() => {
     if (isGuest) {
@@ -591,6 +688,150 @@ export default function MyPage({
       .catch(() => setParticipationHistory([]))
       .finally(() => setParticipationLoading(false));
   }, [user]);
+
+  const loadMyList = useCallback(async () => {
+    if (!user) return;
+    setMyListLoading(true);
+    try {
+      const [rList, rArt] = await Promise.all([
+        fetch('/api/my-list', { credentials: 'include' }),
+        fetch('/api/my-list/library-artists', { credentials: 'include' }),
+      ]);
+      const listData = (await rList.json().catch(() => ({}))) as {
+        items?: MyListItemRow[];
+        error?: string;
+      };
+      const artData = (await rArt.json().catch(() => ({}))) as {
+        artists?: MyListLibraryArtistRow[];
+      };
+      if (!rList.ok) {
+        setMyListItems([]);
+        setMyListMessage(
+          typeof listData?.error === 'string' ? listData.error : 'マイリストを読み込めませんでした。',
+        );
+      } else {
+        setMyListItems(Array.isArray(listData?.items) ? listData.items : []);
+      }
+      if (rArt.ok && Array.isArray(artData.artists)) {
+        setMyListLibraryArtists(artData.artists);
+      } else {
+        setMyListLibraryArtists([]);
+      }
+    } catch {
+      setMyListItems([]);
+      setMyListLibraryArtists([]);
+      setMyListMessage('マイリストを読み込めませんでした。');
+    } finally {
+      setMyListLoading(false);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (!user || historyTab !== 'mylist') return;
+    void loadMyList();
+  }, [user, historyTab, loadMyList]);
+
+  const submitMyListUrl = async () => {
+    if (myListAddBusy) return;
+    const q = myListAddUrl.trim();
+    if (!q) return;
+    setMyListAddBusy(true);
+    setMyListMessage(null);
+    try {
+      const res = await fetch('/api/my-list', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: q, source: 'manual_url' }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { duplicate?: boolean; error?: string };
+      if (!res.ok) {
+        setMyListMessage(typeof data?.error === 'string' ? data.error : '追加に失敗しました。');
+        return;
+      }
+      setMyListMessage(
+        data.duplicate ? 'すでにマイリストにあります（同一動画は1件まで）。' : 'マイリストに追加しました。',
+      );
+      if (!data.duplicate) setMyListAddUrl('');
+      await loadMyList();
+    } finally {
+      setMyListAddBusy(false);
+    }
+  };
+
+  const removeMyListItem = async (id: string) => {
+    setMyListMessage(null);
+    const res = await fetch(`/api/my-list?id=${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      credentials: 'include',
+    });
+    const data = (await res.json().catch(() => ({}))) as { error?: string };
+    if (!res.ok) {
+      setMyListMessage(typeof data?.error === 'string' ? data.error : '削除に失敗しました。');
+      return;
+    }
+    setMyListMessage('削除しました。');
+    await loadMyList();
+  };
+
+  const libraryArtistAlphabetBuckets = useMemo(() => {
+    const m = new Map<string, MyListLibraryArtistRow[]>();
+    for (const row of myListLibraryArtists) {
+      const k = myListLibraryArtistIndexKey(row.display_name);
+      if (!/^[A-Z]$/.test(k)) continue;
+      const list = m.get(k) ?? [];
+      list.push(row);
+      m.set(k, list);
+    }
+    Array.from(m.values()).forEach((list) => {
+      list.sort((x, y) =>
+        myListLibraryArtistNameForIndexing(x.display_name).localeCompare(
+          myListLibraryArtistNameForIndexing(y.display_name),
+          'en',
+          { sensitivity: 'base' },
+        ),
+      );
+    });
+    const keys = Array.from(m.keys()).sort((a, b) => a.localeCompare(b, 'en'));
+    return keys.map((key) => ({ key, artists: m.get(key)! }));
+  }, [myListLibraryArtists]);
+
+  useEffect(() => {
+    const letters = libraryArtistAlphabetBuckets.map((x) => x.key);
+    if (letters.length === 0) {
+      setMyListArtistFilterLetter(null);
+      return;
+    }
+    if (!myListArtistFilterLetter || !letters.includes(myListArtistFilterLetter)) {
+      setMyListArtistFilterLetter(letters[0]);
+    }
+  }, [libraryArtistAlphabetBuckets, myListArtistFilterLetter]);
+
+  const filteredLibraryArtists = useMemo(() => {
+    if (!myListArtistFilterLetter) return [];
+    return libraryArtistAlphabetBuckets.find((x) => x.key === myListArtistFilterLetter)?.artists ?? [];
+  }, [libraryArtistAlphabetBuckets, myListArtistFilterLetter]);
+
+  const myListNewSongsTotalPages = useMemo(
+    () => Math.max(1, Math.ceil(myListItems.length / MY_LIST_NEW_SONGS_PAGE_SIZE)),
+    [myListItems.length],
+  );
+  useEffect(() => {
+    setMyListNewSongsPage((p) => Math.min(Math.max(1, p), myListNewSongsTotalPages));
+  }, [myListNewSongsTotalPages]);
+  const myListNewSongsPageItems = useMemo(() => {
+    const page = Math.min(myListNewSongsPage, myListNewSongsTotalPages);
+    const start = (page - 1) * MY_LIST_NEW_SONGS_PAGE_SIZE;
+    return myListItems.slice(start, start + MY_LIST_NEW_SONGS_PAGE_SIZE);
+  }, [myListItems, myListNewSongsPage, myListNewSongsTotalPages]);
+  const myListNewSongsPaginationSlots = useMemo(
+    () =>
+      buildMyListNewSongsPaginationItems(
+        Math.min(myListNewSongsPage, myListNewSongsTotalPages),
+        myListNewSongsTotalPages,
+      ),
+    [myListNewSongsPage, myListNewSongsTotalPages],
+  );
 
   const removeFavorite = async (videoId: string) => {
     await fetch(`/api/favorites?videoId=${encodeURIComponent(videoId)}`, { method: 'DELETE' });
@@ -925,6 +1166,47 @@ export default function MyPage({
         </button>
       </div>
       <p className="mb-4 text-sm text-gray-500">登録情報の確認と変更ができます。</p>
+      <p className="mb-3 text-xs text-gray-500">オーナー向けの部屋運用・ユーザー向けの登録情報・曲の履歴・マイリストをタブで切り替えます。</p>
+      <div className="mb-4 flex flex-wrap gap-2">
+        {showOwnerTab ? (
+          <button
+            type="button"
+            onClick={() => setMainTab('owner')}
+            className={`rounded px-3 py-1.5 text-sm font-medium ${
+              mainTab === 'owner' ? 'bg-gray-700 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'
+            }`}
+          >
+            オーナー機能
+          </button>
+        ) : null}
+        <button
+          type="button"
+          onClick={() => setMainTab('user')}
+          className={`rounded px-3 py-1.5 text-sm font-medium ${
+            mainTab === 'user' ? 'bg-gray-700 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'
+          }`}
+        >
+          ユーザー機能
+        </button>
+        <button
+          type="button"
+          onClick={() => setMainTab('music')}
+          className={`rounded px-3 py-1.5 text-sm font-medium ${
+            mainTab === 'music' ? 'bg-gray-700 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'
+          }`}
+        >
+          曲管理
+        </button>
+        <button
+          type="button"
+          onClick={() => setMainTab('mylist')}
+          className={`rounded px-3 py-1.5 text-sm font-medium ${
+            mainTab === 'mylist' ? 'bg-gray-700 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'
+          }`}
+        >
+          マイリスト
+        </button>
+      </div>
 
       {saveError && (
         <div className="mb-4 rounded border border-red-800 bg-red-900/30 px-3 py-2 text-sm text-red-300">
@@ -932,7 +1214,7 @@ export default function MyPage({
         </div>
       )}
 
-      {showRoomManagementPanel && (
+      {mainTab === 'owner' && showRoomManagementPanel && (
         <div className="mb-4 rounded border border-amber-700/50 bg-amber-900/20 p-3">
           <h3 className="mb-3 flex items-center gap-1.5 text-sm font-medium text-amber-200">
             <span aria-hidden>👑</span>
@@ -1086,6 +1368,8 @@ export default function MyPage({
       )}
 
       <div className="space-y-4">
+        {mainTab === 'user' ? (
+          <>
         {/* 表示名 */}
         <div className="rounded border border-gray-700 bg-gray-800/50 p-3">
           <label className="block text-xs text-gray-500">表示名</label>
@@ -1327,37 +1611,45 @@ export default function MyPage({
           )}
         </div>
 
+          </>
+        ) : null}
+
         {/* 貼った曲の履歴 / お気に入りリスト（タブ切り替え） */}
+        {mainTab === 'music' || mainTab === 'mylist' ? (
         <div className="mt-6 border-t border-gray-700 pt-4">
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
             <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => setHistoryTab('songs')}
-                className={`rounded px-3 py-1.5 text-sm font-medium ${historyTab === 'songs' ? 'bg-gray-700 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'}`}
-              >
-                貼った曲の履歴
-              </button>
-              <button
-                type="button"
-                onClick={() => setHistoryTab('favorites')}
-                className={`rounded px-3 py-1.5 text-sm font-medium ${historyTab === 'favorites' ? 'bg-gray-700 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'}`}
-              >
-                お気に入りリスト
-              </button>
-              <button
-                type="button"
-                onClick={() => setHistoryTab('participation')}
-                className={`rounded px-3 py-1.5 text-sm font-medium ${historyTab === 'participation' ? 'bg-gray-700 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'}`}
-              >
-                参加履歴
-              </button>
+              {mainTab === 'music' ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setHistoryTab('songs')}
+                    className={`rounded px-3 py-1.5 text-sm font-medium ${historyTab === 'songs' ? 'bg-gray-700 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'}`}
+                  >
+                    貼った曲の履歴
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setHistoryTab('favorites')}
+                    className={`rounded px-3 py-1.5 text-sm font-medium ${historyTab === 'favorites' ? 'bg-gray-700 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'}`}
+                  >
+                    お気に入りリスト
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setHistoryTab('participation')}
+                    className={`rounded px-3 py-1.5 text-sm font-medium ${historyTab === 'participation' ? 'bg-gray-700 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'}`}
+                  >
+                    参加履歴
+                  </button>
+                </>
+              ) : null}
             </div>
             <button
               type="button"
               onClick={historyTab === 'songs' ? exportSongHistoryAsText : exportFavoritesAsText}
               disabled={
-                historyTab === 'participation'
+                mainTab === 'mylist' || historyTab === 'participation' || historyTab === 'mylist'
                   ? true
                   : historyTab === 'songs'
                   ? songHistoryLoading || songHistory.length === 0
@@ -1365,8 +1657,8 @@ export default function MyPage({
               }
               className="shrink-0 rounded border border-emerald-700/60 bg-emerald-900/30 px-3 py-1.5 text-sm font-medium text-emerald-200 hover:bg-emerald-900/50 disabled:cursor-not-allowed disabled:opacity-40"
               title={
-                historyTab === 'participation'
-                  ? '参加履歴のTEXT保存は後続対応です'
+                mainTab === 'mylist' || historyTab === 'participation' || historyTab === 'mylist'
+                  ? 'このタブのTEXT保存は後続対応です'
                   : historyTab === 'songs'
                   ? '貼った曲リストをUTF-8テキストで保存'
                   : 'お気に入りをUTF-8テキストで保存'
@@ -1375,7 +1667,7 @@ export default function MyPage({
               TEXT保存
             </button>
           </div>
-          {historyTab === 'songs' && (
+          {mainTab === 'music' && historyTab === 'songs' && (
             <>
               <p className="mb-3 text-xs text-gray-500">
                 参加したチャットで貼った曲を日付・部屋・貼った時間で表示します（同期部屋では時間の横に選曲ラウンド R）。このタブ表示中・タブ切替・ブラウザを再表示したときに一覧を再取得します。同一曲の短時間の二重記録は抑止します。DB の追加手順は docs/supabase-song-history-table.md を参照してください。
@@ -1462,7 +1754,7 @@ export default function MyPage({
           )}
             </>
           )}
-          {historyTab === 'favorites' && (
+          {mainTab === 'music' && historyTab === 'favorites' && (
             <>
               <p className="mb-3 text-xs text-gray-500">
                 視聴履歴からお気に入りにした曲です。新しい順で表示しています。
@@ -1505,7 +1797,7 @@ export default function MyPage({
               )}
             </>
           )}
-          {historyTab === 'participation' && (
+          {mainTab === 'music' && historyTab === 'participation' && (
             <>
               <p className="mb-3 text-xs text-gray-500">
                 ログイン状態で入室した会の参加履歴です。入室時刻と退出時刻（取得できた場合）を表示します。
@@ -1538,9 +1830,257 @@ export default function MyPage({
               )}
             </>
           )}
+          {mainTab === 'mylist' && (
+            <>
+              <p className="mb-3 text-xs text-gray-500">
+                チャット参加とは別の<strong className="text-gray-400">自分のライブラリ</strong>です。同一の YouTube 動画（
+                <code className="text-gray-400">video_id</code>）は 1 件までです。テーブル未作成のときは{' '}
+                <code className="text-gray-500">docs/supabase-user-my-list-table.md</code> の SQL を Supabase で実行してください。
+              </p>
+              {myListMessage ? (
+                <p className="mb-3 rounded border border-amber-800/50 bg-amber-900/20 px-2 py-1.5 text-xs text-amber-100">
+                  {myListMessage}
+                </p>
+              ) : null}
+              <div className="mb-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setMyListTab('newSongs')}
+                  className={`rounded px-3 py-1.5 text-xs font-medium transition ${
+                    myListTab === 'newSongs'
+                      ? 'border border-violet-600/60 bg-violet-900/40 text-violet-100'
+                      : 'border border-gray-600 bg-gray-800 text-gray-300 hover:bg-gray-700'
+                  }`}
+                >
+                  新規追加曲
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMyListTab('artists')}
+                  className={`rounded px-3 py-1.5 text-xs font-medium transition ${
+                    myListTab === 'artists'
+                      ? 'border border-violet-600/60 bg-violet-900/40 text-violet-100'
+                      : 'border border-gray-600 bg-gray-800 text-gray-300 hover:bg-gray-700'
+                  }`}
+                >
+                  保存済アーティスト
+                </button>
+              </div>
+              {myListTab === 'newSongs' ? (
+                <>
+                  <div className="mb-3">
+                    <div className="flex flex-wrap items-end gap-2">
+                      <input
+                        id="my-list-add-url"
+                        type="text"
+                        value={myListAddUrl}
+                        onChange={(e) => setMyListAddUrl(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') void submitMyListUrl();
+                        }}
+                        placeholder="https://www.youtube.com/watch?v=… または dQw4w9WgXcQ"
+                        className="min-w-[200px] flex-1 rounded border border-gray-600 bg-gray-800 px-3 py-2 text-sm text-white placeholder:text-gray-500"
+                      />
+                      <button
+                        type="button"
+                        disabled={myListAddBusy || !myListAddUrl.trim()}
+                        onClick={() => void submitMyListUrl()}
+                        className="shrink-0 rounded bg-violet-600 px-3 py-2 text-sm font-medium text-white hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        {myListAddBusy ? '追加中…' : '追加'}
+                      </button>
+                    </div>
+                  </div>
+                  {myListLoading ? (
+                    <p className="text-sm text-gray-500">読み込み中…</p>
+                  ) : myListItems.length === 0 ? (
+                    <p className="text-sm text-gray-500">
+                      まだありません。上の欄に URL を入れると追加できます。
+                    </p>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="max-h-72 space-y-3 overflow-y-auto">
+                        {myListNewSongsPageItems.map((item) => {
+                          const added = new Date(item.created_at);
+                          const label =
+                            item.artist && item.title
+                              ? `${item.artist} — ${item.title}`
+                              : item.title || item.artist || item.video_id;
+                          return (
+                            <div key={item.id} className="rounded border border-gray-700 bg-gray-800/50 p-2">
+                              <p className="text-xs text-gray-500">
+                                追加: {added.toLocaleString('ja-JP')}
+                                {item.source ? <span className="ml-2 text-gray-600">· {item.source}</span> : null}
+                              </p>
+                              <p className="text-sm text-gray-200">{label}</p>
+                              <div className="mt-1 flex flex-wrap items-center gap-2">
+                                <a
+                                  href={item.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="min-w-0 flex-1 break-all text-xs text-blue-400 hover:underline"
+                                >
+                                  {item.url}
+                                </a>
+                                <button
+                                  type="button"
+                                  onClick={() => void removeMyListItem(item.id)}
+                                  className="shrink-0 rounded border border-red-900/50 bg-red-900/30 px-2 py-1 text-xs text-red-200 hover:bg-red-900/50"
+                                >
+                                  削除
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      {myListNewSongsTotalPages > 1 ? (
+                        <nav
+                          className="flex flex-wrap items-center justify-center gap-1 border-t border-gray-700/50 pt-2 text-xs"
+                          aria-label="マイリストのページ送り"
+                        >
+                          <button
+                            type="button"
+                            disabled={Math.min(myListNewSongsPage, myListNewSongsTotalPages) <= 1}
+                            onClick={() => setMyListNewSongsPage((p) => Math.max(1, p - 1))}
+                            className="rounded border border-gray-600 px-2 py-1 text-gray-300 hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-40"
+                          >
+                            ←
+                          </button>
+                          {myListNewSongsPaginationSlots.map((slot, si) =>
+                            slot === 'ellipsis' ? (
+                              <span key={`my-list-page-ellipsis-${si}`} className="px-1 text-gray-500">
+                                …
+                              </span>
+                            ) : (
+                              <button
+                                key={slot}
+                                type="button"
+                                onClick={() => setMyListNewSongsPage(slot)}
+                                className={`min-w-[1.75rem] rounded border px-1.5 py-1 ${
+                                  Math.min(myListNewSongsPage, myListNewSongsTotalPages) === slot
+                                    ? 'border-violet-600/70 bg-violet-900/40 text-violet-100'
+                                    : 'border-gray-600 text-gray-300 hover:bg-gray-700'
+                                }`}
+                              >
+                                {slot}
+                              </button>
+                            ),
+                          )}
+                          <button
+                            type="button"
+                            disabled={Math.min(myListNewSongsPage, myListNewSongsTotalPages) >= myListNewSongsTotalPages}
+                            onClick={() => setMyListNewSongsPage((p) => Math.min(myListNewSongsTotalPages, p + 1))}
+                            className="rounded border border-gray-600 px-2 py-1 text-gray-300 hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-40"
+                          >
+                            →
+                          </button>
+                        </nav>
+                      ) : null}
+                    </div>
+                  )}
+                </>
+              ) : null}
+              {myListTab === 'artists' ? (
+                <div className="rounded border border-gray-700 bg-gray-900/40 p-3">
+                  <h3 className="text-sm font-medium text-gray-200">保存済みアーティスト</h3>
+                  <p className="mt-1 text-xs text-gray-500">
+                    括弧内は、このアーティスト名で紐づいているマイリスト曲の件数です。アルファベットを押すと、当該文字のアーティストのみ表示します。
+                  </p>
+                  {myListLoading && myListLibraryArtists.length === 0 ? (
+                    <p className="mt-2 text-sm text-gray-500">読み込み中…</p>
+                  ) : myListLibraryArtists.length === 0 ? (
+                    <p className="mt-2 text-xs text-gray-500">
+                      まだありません。曲を追加すると名前ごとに集約されます。
+                    </p>
+                  ) : libraryArtistAlphabetBuckets.length === 0 ? (
+                    <p className="mt-2 text-xs text-gray-500">
+                      現在は英字（A-Z）で始まるアーティストがありません。
+                    </p>
+                  ) : (
+                    <>
+                      <nav className="mt-2 flex flex-wrap gap-1" aria-label="アーティスト名の頭文字で絞り込み">
+                        {libraryArtistAlphabetBuckets.map(({ key }) => (
+                          <button
+                            key={key}
+                            type="button"
+                            onClick={() => setMyListArtistFilterLetter(key)}
+                            className={`min-w-[1.75rem] rounded border px-1.5 py-0.5 text-center text-xs font-medium ${
+                              myListArtistFilterLetter === key
+                                ? 'border-violet-600/70 bg-violet-900/50 text-violet-100'
+                                : 'border-gray-600 bg-gray-800/80 text-violet-200 hover:border-violet-600/60 hover:bg-violet-950/40'
+                            }`}
+                          >
+                            {key}
+                          </button>
+                        ))}
+                      </nav>
+                      <div className="mt-2 max-h-[min(50vh,28rem)] overflow-y-auto rounded border border-gray-800/60 pr-0.5">
+                        <ul className="space-y-1">
+                          {filteredLibraryArtists.map((a) => {
+                            const open = myListLibraryArtistExpandedId === a.id;
+                            return (
+                              <li key={a.id} className="rounded border border-gray-700/80 bg-gray-800/40">
+                                <button
+                                  type="button"
+                                  aria-expanded={open}
+                                  onClick={() =>
+                                    setMyListLibraryArtistExpandedId((prev) => (prev === a.id ? null : a.id))
+                                  }
+                                  className="flex w-full items-center justify-between gap-2 px-2 py-2 text-left text-sm text-gray-200 hover:bg-gray-800/80"
+                                >
+                                  <span className="min-w-0 truncate font-medium">
+                                    {a.display_name}
+                                    <span className="ml-1 font-normal text-gray-400">（{a.linked_count}）</span>
+                                  </span>
+                                  <span className="shrink-0 text-xs text-gray-500">{open ? '閉じる' : '開く'}</span>
+                                </button>
+                                {open ? (
+                                  <ul className="space-y-2 border-t border-gray-700/80 px-2 py-2">
+                                    {a.items.length === 0 ? (
+                                      <li className="text-xs text-gray-500">紐づく曲がありません。</li>
+                                    ) : (
+                                      a.items.map((it) => (
+                                        <li
+                                          key={`${a.id}-${it.id}-${it.position}`}
+                                          className="rounded bg-gray-900/50 px-2 py-1.5 text-xs text-gray-300"
+                                        >
+                                          <p className="font-medium text-gray-200">
+                                            {it.title?.trim() || it.video_id}
+                                            {it.artist?.trim() ? ` / ${it.artist.trim()}` : ''}
+                                          </p>
+                                          <div className="mt-1 flex flex-wrap items-center gap-2">
+                                            <a
+                                              href={it.url}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className="break-all text-blue-400 hover:underline"
+                                              onClick={(e) => e.stopPropagation()}
+                                            >
+                                              YouTube で開く
+                                            </a>
+                                          </div>
+                                        </li>
+                                      ))
+                                    )}
+                                  </ul>
+                                ) : null}
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </div>
+                    </>
+                  )}
+                </div>
+              ) : null}
+            </>
+          )}
         </div>
+        ) : null}
 
         {/* アカウント削除 */}
+        {mainTab === 'user' ? (
         <div className="mt-6 border-t border-gray-700 pt-4">
           <p className="mb-2 text-xs text-gray-500">
             アカウントを削除すると、登録情報はデータベースから完全に削除され、元に戻せません。
@@ -1579,6 +2119,7 @@ export default function MyPage({
             </div>
           )}
         </div>
+        ) : null}
       </div>
     </div>
   );

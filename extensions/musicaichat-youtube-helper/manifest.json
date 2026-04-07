@@ -1,0 +1,36 @@
+{
+  "manifest_version": 3,
+  "name": "MUSIC AI CHAT — YouTube 連携（開発用）",
+  "version": "0.1.0",
+  "description": "YouTube で視聴中の動画 URL を、開いている洋楽チャット（MUSIC AI CHAT）の発言欄に送ります。",
+  "permissions": ["scripting", "tabs"],
+  "host_permissions": [
+    "https://www.youtube.com/*",
+    "https://youtube.com/*",
+    "https://m.youtube.com/*",
+    "https://music.youtube.com/*",
+    "https://youtu.be/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*",
+    "https://*.vercel.app/*"
+  ],
+  "background": {
+    "service_worker": "service-worker.js"
+  },
+  "action": {
+    "default_title": "洋楽チャットに送る"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.youtube.com/*",
+        "https://youtube.com/*",
+        "https://m.youtube.com/*",
+        "https://music.youtube.com/*",
+        "https://youtu.be/*"
+      ],
+      "js": ["content-youtube.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

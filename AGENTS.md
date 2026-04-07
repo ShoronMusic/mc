@@ -17,6 +17,20 @@
 | 「@」音楽関連の二次判定 | `src/app/api/ai/question-guard-classify/route.ts` ＋ `src/lib/ai-question-guard-prompt.ts` | クライアントでキーワード落ちしたときだけ Gemini。無効化は `AI_QUESTION_GUARD_GEMINI=0`。異議データの活用手順は `docs/supabase-setup.md` 11.1 |
 | AI 質問ガード（退場のみ免除） | `src/lib/ai-question-guard-exempt-user-ids.ts` | 指定した登録ユーザーは警告・カードは通常どおり。累積後の自動退場・入室禁止だけスキップ（`RoomWithSync` / `RoomWithoutSync`） |
 
+### 設計メモ（拡張予定）
+
+- **視聴履歴**: スタイル・時代・アーティスト抽出の整理と今後の DB/API 展開 → `docs/room-playback-history-style-era-artist-design.md`
+- **DB に記録できる項目一覧**（テーブル別） → `docs/recorded-data-fields.md`
+- **Music8 曲 JSON**（WP 固定 `id`・URL 規則・マスタ連携メモ） → `docs/music8-song-json-schema.md`
+- **マイリスト**（チャット非依存・拡張連携・企画） → `docs/my-list-spec.md`。**実装**: `src/app/api/my-list/route.ts`、DB `docs/supabase-user-my-list-table.md`、アーティスト参照（正規化）用 `docs/supabase-user-my-library-artists-tables.md`
+- **曲・アーティスト DB 項目**（基本／拡張） → `docs/song-artist-db-fields.md`
+
+### Chrome 拡張（YouTube → 発言欄・任意）
+
+- **概要・ロードマップ**: `docs/chrome-extension-musicaichat.md`
+- **拡張本体**: `extensions/musicaichat-youtube-helper/`（読み込み手順は同梱の `INSTALL.txt`）
+- **アプリ側の受け口**: `src/lib/musicai-extension-events.ts` のイベント名と `ChatInput` のリスナー（イベント名は拡張の `service-worker.js` と一致させる）
+
 ## コマンド
 
 ```bash

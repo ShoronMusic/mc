@@ -46,7 +46,7 @@ create policy "Users can delete own favorites"
 | id | uuid | 主キー |
 | user_id | uuid | ユーザーID |
 | video_id | text | YouTube 動画ID |
-| display_name | text | お気に入りにしたときの参加者名 |
+| display_name | text | 選曲者の表示名（視聴履歴行の `display_name`＝その曲を貼った人。再生中ハートは現在の選曲者） |
 | played_at | timestamptz | その曲が流れた日時 |
 | title | text | 動画タイトル |
 | artist_name | text | アーティスト名等 |
