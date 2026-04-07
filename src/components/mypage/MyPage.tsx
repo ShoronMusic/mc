@@ -34,6 +34,43 @@ import MainArtistTabPanel from '@/components/room/MainArtistTabPanel';
 const MY_LIST_LIB_INDEX_HASH = '#';
 const MY_LIST_LIB_INDEX_OTHER = 'その他';
 const MY_LIST_NEW_SONGS_PAGE_SIZE = 10;
+const MUSIC_HISTORY_PAGE_SIZE = 10;
+
+function participationSlotStartMs(t: Date): number {
+  const y = t.getFullYear();
+  const m = t.getMonth();
+  const d = t.getDate();
+  const h = t.getHours();
+  if (h >= 6 && h < 18) return new Date(y, m, d, 6, 0, 0, 0).getTime();
+  if (h >= 18) return new Date(y, m, d, 18, 0, 0, 0).getTime();
+  return new Date(y, m, d - 1, 18, 0, 0, 0).getTime();
+}
+
+function formatParticipationSlotLabel(startMs: number, endMs: number): string {
+  const s = new Date(startMs);
+  const e = new Date(endMs);
+  const y = s.getFullYear();
+  const m = String(s.getMonth() + 1).padStart(2, '0');
+  const d = String(s.getDate()).padStart(2, '0');
+  const sh = String(s.getHours()).padStart(2, '0');
+  const eh = String(e.getHours()).padStart(2, '0');
+  if (s.getHours() === 18) {
+    const ny = e.getFullYear();
+    const nm = String(e.getMonth() + 1).padStart(2, '0');
+    const nd = String(e.getDate()).padStart(2, '0');
+    return `${y}/${m}/${d} ${sh}:00 - ${ny}/${nm}/${nd} ${eh}:00`;
+  }
+  return `${y}/${m}/${d} ${sh}:00 - ${eh}:00`;
+}
+
+function formatDurationJa(totalMs: number): string {
+  const sec = Math.max(0, Math.floor(totalMs / 1000));
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  if (h > 0 && m > 0) return `${h}時間${m}分`;
+  if (h > 0) return `${h}時間`;
+  return `${m}分`;
+}
 
 function buildArtistSlugForProfile(displayName: string): string | null {
   let s = displayName.trim();
@@ -145,6 +182,19 @@ interface ParticipationHistoryRow {
   display_name: string | null;
   joined_at: string;
   left_at: string | null;
+}
+
+interface ParticipationSummaryRow {
+  slotStartMs: number;
+  slotEndMs: number;
+  slotLabel: string;
+  room_id: string;
+  gathering_title: string | null;
+  display_name: string | null;
+  first_joined_ms: number;
+  last_left_ms: number | null;
+  hasOpenSession: boolean;
+  total_stay_ms: number;
 }
 
 interface MyListItemRow {
@@ -586,11 +636,14 @@ export default function MyPage({
   const [deleteInProgress, setDeleteInProgress] = useState(false);
   const [songHistory, setSongHistory] = useState<SongHistoryRow[]>([]);
   const [songHistoryLoading, setSongHistoryLoading] = useState(false);
+  const [songHistoryPage, setSongHistoryPage] = useState(1);
   const [historyTab, setHistoryTab] = useState<'songs' | 'favorites' | 'participation' | 'mylist'>('songs');
   const [favorites, setFavorites] = useState<{ id: string; video_id: string; display_name: string; played_at: string; title: string | null; artist_name: string | null }[]>([]);
   const [favoritesLoading, setFavoritesLoading] = useState(false);
+  const [favoritesPage, setFavoritesPage] = useState(1);
   const [participationHistory, setParticipationHistory] = useState<ParticipationHistoryRow[]>([]);
   const [participationLoading, setParticipationLoading] = useState(false);
+  const [participationPage, setParticipationPage] = useState(1);
   const [myListItems, setMyListItems] = useState<MyListItemRow[]>([]);
   const [myListLoading, setMyListLoading] = useState(false);
   const [myListAddUrl, setMyListAddUrl] = useState('');
@@ -909,6 +962,121 @@ export default function MyPage({
       ),
     [myListNewSongsPage, myListNewSongsTotalPages],
   );
+  const songHistoryTotalPages = useMemo(
+    () => Math.max(1, Math.ceil(songHistory.length / MUSIC_HISTORY_PAGE_SIZE)),
+    [songHistory.length],
+  );
+  useEffect(() => {
+    setSongHistoryPage((p) => Math.min(Math.max(1, p), songHistoryTotalPages));
+  }, [songHistoryTotalPages]);
+  const songHistoryPageRows = useMemo(() => {
+    const page = Math.min(songHistoryPage, songHistoryTotalPages);
+    const start = (page - 1) * MUSIC_HISTORY_PAGE_SIZE;
+    return songHistory.slice(start, start + MUSIC_HISTORY_PAGE_SIZE);
+  }, [songHistory, songHistoryPage, songHistoryTotalPages]);
+  const songHistoryPaginationSlots = useMemo(
+    () =>
+      buildMyListNewSongsPaginationItems(
+        Math.min(songHistoryPage, songHistoryTotalPages),
+        songHistoryTotalPages,
+      ),
+    [songHistoryPage, songHistoryTotalPages],
+  );
+
+  const favoritesTotalPages = useMemo(
+    () => Math.max(1, Math.ceil(favorites.length / MUSIC_HISTORY_PAGE_SIZE)),
+    [favorites.length],
+  );
+  useEffect(() => {
+    setFavoritesPage((p) => Math.min(Math.max(1, p), favoritesTotalPages));
+  }, [favoritesTotalPages]);
+  const favoritesPageRows = useMemo(() => {
+    const page = Math.min(favoritesPage, favoritesTotalPages);
+    const start = (page - 1) * MUSIC_HISTORY_PAGE_SIZE;
+    return favorites.slice(start, start + MUSIC_HISTORY_PAGE_SIZE);
+  }, [favorites, favoritesPage, favoritesTotalPages]);
+  const favoritesPaginationSlots = useMemo(
+    () =>
+      buildMyListNewSongsPaginationItems(
+        Math.min(favoritesPage, favoritesTotalPages),
+        favoritesTotalPages,
+      ),
+    [favoritesPage, favoritesTotalPages],
+  );
+  const participationSummaryRows = useMemo<ParticipationSummaryRow[]>(() => {
+    if (participationHistory.length === 0) return [];
+    const nowMs = Date.now();
+    const merged = new Map<string, ParticipationSummaryRow>();
+
+    for (const row of participationHistory) {
+      const joinedMs = new Date(row.joined_at).getTime();
+      if (!Number.isFinite(joinedMs)) continue;
+      const rawLeftMs = row.left_at ? new Date(row.left_at).getTime() : nowMs;
+      const leftMs = Number.isFinite(rawLeftMs) ? Math.max(joinedMs, rawLeftMs) : joinedMs;
+      let cursor = joinedMs;
+      while (cursor < leftMs) {
+        const slotStartMs = participationSlotStartMs(new Date(cursor));
+        const slotEndMs = slotStartMs + 12 * 60 * 60 * 1000;
+        const segStart = Math.max(cursor, slotStartMs);
+        const segEnd = Math.min(leftMs, slotEndMs);
+        if (segEnd > segStart) {
+          const roomKey = row.room_id || '—';
+          const key = `${slotStartMs}::${roomKey}`;
+          const prev = merged.get(key);
+          const openInsideSlot = !row.left_at || (new Date(row.left_at).getTime() > slotEndMs);
+          if (!prev) {
+            merged.set(key, {
+              slotStartMs,
+              slotEndMs,
+              slotLabel: formatParticipationSlotLabel(slotStartMs, slotEndMs),
+              room_id: roomKey,
+              gathering_title: row.gathering_title,
+              display_name: row.display_name,
+              first_joined_ms: segStart,
+              last_left_ms: openInsideSlot ? null : segEnd,
+              hasOpenSession: openInsideSlot,
+              total_stay_ms: segEnd - segStart,
+            });
+          } else {
+            prev.first_joined_ms = Math.min(prev.first_joined_ms, segStart);
+            prev.total_stay_ms += segEnd - segStart;
+            if (openInsideSlot) {
+              prev.hasOpenSession = true;
+              prev.last_left_ms = null;
+            } else if (!prev.hasOpenSession) {
+              prev.last_left_ms = Math.max(prev.last_left_ms ?? 0, segEnd);
+            }
+          }
+        }
+        cursor = slotEndMs;
+      }
+    }
+
+    return Array.from(merged.values()).sort((a, b) => {
+      if (b.slotStartMs !== a.slotStartMs) return b.slotStartMs - a.slotStartMs;
+      return b.first_joined_ms - a.first_joined_ms;
+    });
+  }, [participationHistory]);
+  const participationTotalPages = useMemo(
+    () => Math.max(1, Math.ceil(participationSummaryRows.length / MUSIC_HISTORY_PAGE_SIZE)),
+    [participationSummaryRows.length],
+  );
+  useEffect(() => {
+    setParticipationPage((p) => Math.min(Math.max(1, p), participationTotalPages));
+  }, [participationTotalPages]);
+  const participationPageRows = useMemo(() => {
+    const page = Math.min(participationPage, participationTotalPages);
+    const start = (page - 1) * MUSIC_HISTORY_PAGE_SIZE;
+    return participationSummaryRows.slice(start, start + MUSIC_HISTORY_PAGE_SIZE);
+  }, [participationSummaryRows, participationPage, participationTotalPages]);
+  const participationPaginationSlots = useMemo(
+    () =>
+      buildMyListNewSongsPaginationItems(
+        Math.min(participationPage, participationTotalPages),
+        participationTotalPages,
+      ),
+    [participationPage, participationTotalPages],
+  );
 
   const openMyListArtistProfile = useCallback((displayName: string, artistSlug: string | null) => {
     setMyListArtistProfileName(displayName);
@@ -928,6 +1096,12 @@ export default function MyPage({
     setHistoryTab('songs');
     setMyListMessage('選曲欄にセットしました。送信すると再生予約されます。');
   }, []);
+
+  useEffect(() => {
+    if (historyTab === 'songs') setSongHistoryPage(1);
+    if (historyTab === 'favorites') setFavoritesPage(1);
+    if (historyTab === 'participation') setParticipationPage(1);
+  }, [historyTab]);
 
   const removeFavorite = async (videoId: string) => {
     await fetch(`/api/favorites?videoId=${encodeURIComponent(videoId)}`, { method: 'DELETE' });
@@ -1311,22 +1485,52 @@ export default function MyPage({
       )}
 
       {mainTab === 'owner' && showRoomManagementPanel && (
-        <div className="mb-4 rounded border border-amber-700/50 bg-amber-900/20 p-3">
-          <h3 className="mb-3 flex items-center gap-1.5 text-sm font-medium text-amber-200">
-            <span aria-hidden>👑</span>
-            部屋管理（主催者・オーナー）
-          </h3>
+        <div className="mb-4 space-y-4">
+          <div className="rounded border border-amber-700/50 bg-amber-900/20 p-3">
+            <h3 className="flex items-center gap-1.5 text-sm font-medium text-amber-200">
+              <span aria-hidden>👑</span>
+              部屋管理（主催者・オーナー）
+            </h3>
+          </div>
 
           {showOrganizerRoomEditor ? (
-            <LobbyMessageOwnerBlock
-              roomId={effectiveRoomId}
-              clientId={effectiveClientId}
-              onSaved={onRoomProfileSaved}
-            />
+            <div className="rounded border border-amber-700/50 bg-amber-900/20 p-3">
+              <LobbyMessageOwnerBlock
+                roomId={effectiveRoomId}
+                clientId={effectiveClientId}
+                onSaved={onRoomProfileSaved}
+              />
+            </div>
           ) : null}
 
+          {isChatOwner && onSongLimit5MinToggle && (
+            <div className="rounded border border-amber-700/50 bg-amber-900/20 p-3">
+              <h4 className="mb-2 flex items-center gap-1.5 text-sm font-medium text-amber-200">
+                <span aria-hidden>👑</span>
+                一曲5分制限
+              </h4>
+              <p className="mb-2 text-xs text-gray-400">ONのとき、5分経過で次の人に選曲を促します。OFFなら長いPVも最後まで視聴できます。</p>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={songLimit5MinEnabled ? undefined : onSongLimit5MinToggle}
+                  className={`rounded px-3 py-1.5 text-sm ${songLimit5MinEnabled ? 'bg-amber-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                >
+                  ON
+                </button>
+                <button
+                  type="button"
+                  onClick={!songLimit5MinEnabled ? undefined : onSongLimit5MinToggle}
+                  className={`rounded px-3 py-1.5 text-sm ${!songLimit5MinEnabled ? 'bg-gray-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                >
+                  OFF
+                </button>
+              </div>
+            </div>
+          )}
+
           {onAiFreeSpeechStopToggle && (
-            <div className="mb-4 border-b border-amber-800/30 pb-4">
+            <div className="rounded border border-amber-700/50 bg-amber-900/20 p-3">
               <p className="mb-2 text-xs text-gray-400">
                 沈黙時の AI による雑談発言の ON/OFF です。停止中は再び押すと再開できます。
               </p>
@@ -1346,7 +1550,7 @@ export default function MyPage({
           )}
 
           {onCommentPackSlotsChange && (
-            <div className="mb-4 border-b border-amber-800/30 pb-4">
+            <div className="rounded border border-amber-700/50 bg-amber-900/20 p-3">
               <h4 className="mb-2 text-xs font-medium text-gray-300">曲紹介コメント</h4>
               <p className="mb-2 text-xs text-gray-400">
                 選曲後に出す AI 解説の種類です。すべてオフにすると解説は出ません。好きな組み合わせ（例: 1 と 4
@@ -1402,7 +1606,7 @@ export default function MyPage({
           )}
 
           {onJpAiUnlockToggle && (
-            <div className="mb-4 border-b border-amber-800/30 pb-4">
+            <div className="rounded border border-amber-700/50 bg-amber-900/20 p-3">
               <h4 className="mb-2 text-xs font-medium text-gray-300">邦楽AI解説</h4>
               <p className="mb-2 text-xs text-gray-400">
                 デフォルトは洋楽推奨（邦楽AI解説なし）です。必要なときだけ邦楽のAI解説を解禁できます。
@@ -1423,7 +1627,7 @@ export default function MyPage({
           )}
 
           {onTransferOwner && (
-            <>
+            <div className="rounded border border-amber-700/50 bg-amber-900/20 p-3">
               <h4 className="mb-2 text-xs font-medium text-gray-300">チャットオーナーを譲る・参加者の退出</h4>
               <p className="mb-2 text-xs text-gray-400">
                 現在在室している参加者のみ対象です。譲渡するとその人がオーナーになります。
@@ -1458,7 +1662,7 @@ export default function MyPage({
                   ))}
                 </ul>
               )}
-            </>
+            </div>
           )}
         </div>
       )}
@@ -1617,33 +1821,6 @@ export default function MyPage({
           </div>
         )}
 
-        {/* オーナー: 5分制限 */}
-        {isChatOwner && onSongLimit5MinToggle && (
-          <div className="mt-6 rounded border border-amber-700/50 bg-amber-900/20 p-3">
-            <h3 className="mb-2 flex items-center gap-1.5 text-sm font-medium text-amber-200">
-              <span aria-hidden>👑</span>
-              一曲5分制限
-            </h3>
-            <p className="mb-2 text-xs text-gray-400">ONのとき、5分経過で次の人に選曲を促します。OFFなら長いPVも最後まで視聴できます。</p>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={songLimit5MinEnabled ? undefined : onSongLimit5MinToggle}
-                className={`rounded px-3 py-1.5 text-sm ${songLimit5MinEnabled ? 'bg-amber-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-              >
-                ON
-              </button>
-              <button
-                type="button"
-                onClick={!songLimit5MinEnabled ? undefined : onSongLimit5MinToggle}
-                className={`rounded px-3 py-1.5 text-sm ${!songLimit5MinEnabled ? 'bg-gray-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-              >
-                OFF
-              </button>
-            </div>
-          </div>
-        )}
-
         {/* 発言のテキストカラー（クリックでモーダル） */}
         <div className="mt-6 border-t border-gray-700 pt-4">
           <h3 className="mb-2 text-sm font-medium text-gray-300">発言のテキストカラー</h3>
@@ -1710,7 +1887,7 @@ export default function MyPage({
           </>
         ) : null}
 
-        {/* 貼った曲の履歴 / お気に入りリスト（タブ切り替え） */}
+        {/* 選曲リスト / お気に入り（タブ切り替え） */}
         {mainTab === 'music' || mainTab === 'mylist' ? (
         <div className="mt-6 border-t border-gray-700 pt-4">
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
@@ -1722,14 +1899,14 @@ export default function MyPage({
                     onClick={() => setHistoryTab('songs')}
                     className={`rounded px-3 py-1.5 text-sm font-medium ${historyTab === 'songs' ? 'bg-gray-700 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'}`}
                   >
-                    貼った曲の履歴
+                    選曲リスト
                   </button>
                   <button
                     type="button"
                     onClick={() => setHistoryTab('favorites')}
                     className={`rounded px-3 py-1.5 text-sm font-medium ${historyTab === 'favorites' ? 'bg-gray-700 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'}`}
                   >
-                    お気に入りリスト
+                    お気に入り
                   </button>
                   <button
                     type="button"
@@ -1765,102 +1942,141 @@ export default function MyPage({
           </div>
           {mainTab === 'music' && historyTab === 'songs' && (
             <>
-              <p className="mb-3 text-xs text-gray-500">
-                参加したチャットで貼った曲を日付・部屋・貼った時間で表示します（同期部屋では時間の横に選曲ラウンド R）。このタブ表示中・タブ切替・ブラウザを再表示したときに一覧を再取得します。同一曲の短時間の二重記録は抑止します。DB の追加手順は docs/supabase-song-history-table.md を参照してください。
-              </p>
               {songHistoryLoading ? (
             <p className="text-sm text-gray-500">読み込み中…</p>
           ) : songHistory.length === 0 ? (
             <p className="text-sm text-gray-500">まだ履歴がありません。部屋でYouTubeのURLを貼ると保存されます。</p>
           ) : (
-            <div className="max-h-64 space-y-4 overflow-y-auto">
-              {(() => {
-                const byDate = new Map<string, SongHistoryRow[]>();
-                for (const row of songHistory) {
-                  const d = new Date(row.posted_at);
-                  const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-                  if (!byDate.has(dateKey)) byDate.set(dateKey, []);
-                  byDate.get(dateKey)!.push(row);
-                }
-                const sortedDates = Array.from(byDate.keys()).sort((a, b) => b.localeCompare(a));
-                Array.from(byDate.values()).forEach((rows) => {
-                  rows.sort(
-                    (a: SongHistoryRow, b: SongHistoryRow) =>
-                      new Date(b.posted_at).getTime() - new Date(a.posted_at).getTime(),
-                  );
-                });
-                return sortedDates.map((dateKey) => {
-                  const [y, m, d] = dateKey.split('-');
-                  const label = `${y}年${m}月${d}日`;
-                  const rows = byDate.get(dateKey)!;
-                  return (
-                    <div key={dateKey} className="rounded border border-gray-700 bg-gray-800/50 p-2">
-                      <p className="mb-2 text-xs font-medium text-gray-400">{label}</p>
-                      <ul className="space-y-2">
-                        {rows.map((row) => {
-                          const at = new Date(row.posted_at);
-                          const timeStr = `${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`;
-                          const roundSuffix =
-                            typeof row.selection_round === 'number' &&
-                            Number.isFinite(row.selection_round) &&
-                            row.selection_round >= 1
-                              ? ` R${Math.floor(row.selection_round)}`
-                              : '';
-                          const title = row.title || row.video_id;
-                          const artist = row.artist ? `（${row.artist}）` : '';
-                          return (
-                            <li key={row.id} className="border-b border-gray-700/50 pb-2 last:border-0 last:pb-0">
-                              <p className="text-xs text-gray-500">
-                                部屋 {row.room_id || '—'} · {timeStr}
-                                {roundSuffix}
-                              </p>
-                              <p className="text-sm text-gray-200">
-                                {title}
-                                {artist}
-                              </p>
-                              <div className="mt-1 flex items-center gap-2">
-                                <a
-                                  href={row.url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="break-all text-xs text-blue-400 hover:underline"
-                                >
-                                  {row.url}
-                                </a>
-                                <button
-                                  type="button"
-                                  onClick={() => pickSongFromMyList(row.url)}
-                                  className="shrink-0 rounded border border-emerald-700/60 bg-emerald-900/30 px-2 py-1 text-xs text-emerald-200 hover:bg-emerald-900/50"
-                                  title="この曲を選曲欄にセット"
-                                >
-                                  選曲
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    void postMyListItem({
-                                      videoId: row.video_id,
-                                      url: row.url,
-                                      title: row.title,
-                                      artist: row.artist,
-                                      source: 'song_history',
-                                    })
-                                  }
-                                  className="shrink-0 rounded border border-violet-600/60 bg-violet-900/40 px-2 py-1 text-xs text-violet-100 hover:bg-violet-900/60"
-                                  title="自分のライブラリ（マイリスト）に追加"
-                                >
-                                  マイリストに追加
-                                </button>
-                              </div>
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    </div>
-                  );
-                });
-              })()}
-            </div>
+            <>
+              <div className="space-y-4">
+                {(() => {
+                  const byDate = new Map<string, SongHistoryRow[]>();
+                  for (const row of songHistoryPageRows) {
+                    const d = new Date(row.posted_at);
+                    const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+                    if (!byDate.has(dateKey)) byDate.set(dateKey, []);
+                    byDate.get(dateKey)!.push(row);
+                  }
+                  const sortedDates = Array.from(byDate.keys()).sort((a, b) => b.localeCompare(a));
+                  Array.from(byDate.values()).forEach((rows) => {
+                    rows.sort(
+                      (a: SongHistoryRow, b: SongHistoryRow) =>
+                        new Date(b.posted_at).getTime() - new Date(a.posted_at).getTime(),
+                    );
+                  });
+                  return sortedDates.map((dateKey) => {
+                    const [y, m, d] = dateKey.split('-');
+                    const label = `${y}年${m}月${d}日`;
+                    const rows = byDate.get(dateKey)!;
+                    return (
+                      <div key={dateKey} className="rounded border border-gray-700 bg-gray-800/50 p-2">
+                        <p className="mb-2 text-xs font-medium text-gray-400">{label}</p>
+                        <ul className="space-y-2">
+                          {rows.map((row) => {
+                            const at = new Date(row.posted_at);
+                            const timeStr = `${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`;
+                            const roundSuffix =
+                              typeof row.selection_round === 'number' &&
+                              Number.isFinite(row.selection_round) &&
+                              row.selection_round >= 1
+                                ? ` R${Math.floor(row.selection_round)}`
+                                : '';
+                            const title = row.title || row.video_id;
+                            const artist = row.artist ? `（${row.artist}）` : '';
+                            return (
+                              <li key={row.id} className="border-b border-gray-700/50 pb-2 last:border-0 last:pb-0">
+                                <p className="text-xs text-gray-500">
+                                  部屋 {row.room_id || '—'} · {timeStr}
+                                  {roundSuffix}
+                                </p>
+                                <p className="text-sm text-gray-200">
+                                  {title}
+                                  {artist}
+                                </p>
+                                <div className="mt-1 flex items-center gap-2">
+                                  <a
+                                    href={row.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="break-all text-xs text-blue-400 hover:underline"
+                                  >
+                                    {row.url}
+                                  </a>
+                                  <button
+                                    type="button"
+                                    onClick={() => pickSongFromMyList(row.url)}
+                                    className="shrink-0 rounded border border-emerald-700/60 bg-emerald-900/30 px-2 py-1 text-xs text-emerald-200 hover:bg-emerald-900/50"
+                                    title="この曲を選曲欄にセット"
+                                  >
+                                    選曲
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      void postMyListItem({
+                                        videoId: row.video_id,
+                                        url: row.url,
+                                        title: row.title,
+                                        artist: row.artist,
+                                        source: 'song_history',
+                                      })
+                                    }
+                                    className="shrink-0 rounded border border-violet-600/60 bg-violet-900/40 px-2 py-1 text-xs text-violet-100 hover:bg-violet-900/60"
+                                    title="自分のライブラリ（マイリスト）に追加"
+                                  >
+                                    マイリストに追加
+                                  </button>
+                                </div>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+              {songHistoryTotalPages > 1 ? (
+                <nav className="mt-3 flex flex-wrap items-center justify-center gap-1 border-t border-gray-700/50 pt-2 text-xs" aria-label="貼った曲の履歴のページ送り">
+                  <button
+                    type="button"
+                    disabled={Math.min(songHistoryPage, songHistoryTotalPages) <= 1}
+                    onClick={() => setSongHistoryPage((p) => Math.max(1, p - 1))}
+                    className="rounded border border-gray-600 px-2 py-1 text-gray-300 hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    ←
+                  </button>
+                  {songHistoryPaginationSlots.map((slot, si) =>
+                    slot === 'ellipsis' ? (
+                      <span key={`song-history-page-ellipsis-${si}`} className="px-1 text-gray-500">
+                        …
+                      </span>
+                    ) : (
+                      <button
+                        key={slot}
+                        type="button"
+                        onClick={() => setSongHistoryPage(slot)}
+                        className={`min-w-[1.75rem] rounded border px-1.5 py-1 ${
+                          Math.min(songHistoryPage, songHistoryTotalPages) === slot
+                            ? 'border-violet-600/70 bg-violet-900/40 text-violet-100'
+                            : 'border-gray-600 text-gray-300 hover:bg-gray-700'
+                        }`}
+                      >
+                        {slot}
+                      </button>
+                    ),
+                  )}
+                  <button
+                    type="button"
+                    disabled={Math.min(songHistoryPage, songHistoryTotalPages) >= songHistoryTotalPages}
+                    onClick={() => setSongHistoryPage((p) => Math.min(songHistoryTotalPages, p + 1))}
+                    className="rounded border border-gray-600 px-2 py-1 text-gray-300 hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    →
+                  </button>
+                </nav>
+              ) : null}
+            </>
           )}
             </>
           )}
@@ -1874,53 +2090,95 @@ export default function MyPage({
               ) : favorites.length === 0 ? (
                 <p className="text-sm text-gray-500">お気に入りはまだありません。部屋の視聴履歴でハートを押して追加できます。</p>
               ) : (
-                <div className="max-h-64 space-y-3 overflow-y-auto">
-                  {favorites.map((f) => {
-                    const playedAt = new Date(f.played_at);
-                    const dateStr = playedAt.toLocaleDateString('ja-JP');
-                    const timeStr = playedAt.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
-                    const artistTitle = f.artist_name && f.title ? `${f.artist_name} - ${f.title}` : (f.title || f.video_id);
-                    const url = `https://www.youtube.com/watch?v=${f.video_id}`;
-                    return (
-                      <div key={f.id} className="rounded border border-gray-700 bg-gray-800/50 p-2">
-                        <p className="text-xs text-gray-500">
-                          {dateStr} {timeStr} · {f.display_name}
-                        </p>
-                        <p className="text-sm text-gray-200">{artistTitle}</p>
-                        <div className="mt-1 flex flex-wrap items-center gap-2">
-                          <a href={url} target="_blank" rel="noopener noreferrer" className="break-all text-xs text-blue-400 hover:underline">
-                            {url}
-                          </a>
-                          <button
-                            type="button"
-                            onClick={() => removeFavorite(f.video_id)}
-                            className="shrink-0 rounded border border-gray-600 bg-gray-700 px-2 py-1 text-xs text-gray-300 hover:bg-gray-600"
-                            title="お気に入り解除"
-                          >
-                            解除
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              void postMyListItem({
-                                videoId: f.video_id,
-                                url,
-                                title: f.title,
-                                artist: f.artist_name,
-                                note: `選曲者: ${f.display_name.trim() || '—'}`,
-                                source: 'favorites',
-                              })
-                            }
-                            className="shrink-0 rounded border border-violet-600/60 bg-violet-900/40 px-2 py-1 text-xs text-violet-100 hover:bg-violet-900/60"
-                            title="自分のライブラリ（マイリスト）に追加"
-                          >
-                            マイリストに追加
-                          </button>
+                <>
+                  <div className="space-y-3">
+                    {favoritesPageRows.map((f) => {
+                      const playedAt = new Date(f.played_at);
+                      const dateStr = playedAt.toLocaleDateString('ja-JP');
+                      const timeStr = playedAt.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+                      const artistTitle = f.artist_name && f.title ? `${f.artist_name} - ${f.title}` : (f.title || f.video_id);
+                      const url = `https://www.youtube.com/watch?v=${f.video_id}`;
+                      return (
+                        <div key={f.id} className="rounded border border-gray-700 bg-gray-800/50 p-2">
+                          <p className="text-xs text-gray-500">
+                            {dateStr} {timeStr} · {f.display_name}
+                          </p>
+                          <p className="text-sm text-gray-200">{artistTitle}</p>
+                          <div className="mt-1 flex flex-wrap items-center gap-2">
+                            <a href={url} target="_blank" rel="noopener noreferrer" className="break-all text-xs text-blue-400 hover:underline">
+                              {url}
+                            </a>
+                            <button
+                              type="button"
+                              onClick={() => removeFavorite(f.video_id)}
+                              className="shrink-0 rounded border border-gray-600 bg-gray-700 px-2 py-1 text-xs text-gray-300 hover:bg-gray-600"
+                              title="お気に入り解除"
+                            >
+                              解除
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                void postMyListItem({
+                                  videoId: f.video_id,
+                                  url,
+                                  title: f.title,
+                                  artist: f.artist_name,
+                                  note: `選曲者: ${f.display_name.trim() || '—'}`,
+                                  source: 'favorites',
+                                })
+                              }
+                              className="shrink-0 rounded border border-violet-600/60 bg-violet-900/40 px-2 py-1 text-xs text-violet-100 hover:bg-violet-900/60"
+                              title="自分のライブラリ（マイリスト）に追加"
+                            >
+                              マイリストに追加
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                      );
+                    })}
+                  </div>
+                  {favoritesTotalPages > 1 ? (
+                    <nav className="mt-3 flex flex-wrap items-center justify-center gap-1 border-t border-gray-700/50 pt-2 text-xs" aria-label="お気に入りリストのページ送り">
+                      <button
+                        type="button"
+                        disabled={Math.min(favoritesPage, favoritesTotalPages) <= 1}
+                        onClick={() => setFavoritesPage((p) => Math.max(1, p - 1))}
+                        className="rounded border border-gray-600 px-2 py-1 text-gray-300 hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        ←
+                      </button>
+                      {favoritesPaginationSlots.map((slot, si) =>
+                        slot === 'ellipsis' ? (
+                          <span key={`favorites-page-ellipsis-${si}`} className="px-1 text-gray-500">
+                            …
+                          </span>
+                        ) : (
+                          <button
+                            key={slot}
+                            type="button"
+                            onClick={() => setFavoritesPage(slot)}
+                            className={`min-w-[1.75rem] rounded border px-1.5 py-1 ${
+                              Math.min(favoritesPage, favoritesTotalPages) === slot
+                                ? 'border-violet-600/70 bg-violet-900/40 text-violet-100'
+                                : 'border-gray-600 text-gray-300 hover:bg-gray-700'
+                            }`}
+                          >
+                            {slot}
+                          </button>
+                        ),
+                      )}
+                      <button
+                        type="button"
+                        disabled={Math.min(favoritesPage, favoritesTotalPages) >= favoritesTotalPages}
+                        onClick={() => setFavoritesPage((p) => Math.min(favoritesTotalPages, p + 1))}
+                        className="rounded border border-gray-600 px-2 py-1 text-gray-300 hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        →
+                      </button>
+                    </nav>
+                  ) : null}
+                </>
               )}
             </>
           )}
@@ -1931,29 +2189,71 @@ export default function MyPage({
               </p>
               {participationLoading ? (
                 <p className="text-sm text-gray-500">読み込み中…</p>
-              ) : participationHistory.length === 0 ? (
+              ) : participationSummaryRows.length === 0 ? (
                 <p className="text-sm text-gray-500">参加履歴はまだありません。</p>
               ) : (
-                <div className="max-h-64 space-y-3 overflow-y-auto">
-                  {participationHistory.map((row) => {
-                    const joined = new Date(row.joined_at);
-                    const left = row.left_at ? new Date(row.left_at) : null;
-                    const joinedStr = joined.toLocaleString('ja-JP');
-                    const leftStr = left ? left.toLocaleString('ja-JP') : '在室中 / 未取得';
-                    return (
-                      <div key={row.id} className="rounded border border-gray-700 bg-gray-800/50 p-2">
-                        <p className="text-xs text-gray-500">
-                          部屋 {row.room_id || '—'} · {row.gathering_title || '部屋の名前未設定'}
-                        </p>
-                        {row.display_name ? (
-                          <p className="text-xs text-gray-400">表示名（入室時）: {row.display_name}</p>
-                        ) : null}
-                        <p className="text-sm text-gray-200">入室: {joinedStr}</p>
-                        <p className="text-xs text-gray-400">退出: {leftStr}</p>
-                      </div>
-                    );
-                  })}
-                </div>
+                <>
+                  <div className="space-y-3">
+                    {participationPageRows.map((row) => {
+                      const joinedStr = new Date(row.first_joined_ms).toLocaleString('ja-JP');
+                      const leftStr = row.last_left_ms ? new Date(row.last_left_ms).toLocaleString('ja-JP') : '在室中 / 未取得';
+                      return (
+                        <div key={`${row.slotStartMs}-${row.room_id}`} className="rounded border border-gray-700 bg-gray-800/50 p-2">
+                          <p className="text-xs text-amber-200">{row.slotLabel}</p>
+                          <p className="text-xs text-gray-500">
+                            部屋 {row.room_id || '—'} · {row.gathering_title || '部屋の名前未設定'}
+                          </p>
+                          {row.display_name ? (
+                            <p className="text-xs text-gray-400">表示名（入室時）: {row.display_name}</p>
+                          ) : null}
+                          <p className="text-sm text-gray-200">最初の入室: {joinedStr}</p>
+                          <p className="text-xs text-gray-400">最後の退出: {leftStr}</p>
+                          <p className="text-xs text-emerald-300">滞在合計: {formatDurationJa(row.total_stay_ms)}</p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {participationTotalPages > 1 ? (
+                    <nav className="mt-3 flex flex-wrap items-center justify-center gap-1 border-t border-gray-700/50 pt-2 text-xs" aria-label="参加履歴のページ送り">
+                      <button
+                        type="button"
+                        disabled={Math.min(participationPage, participationTotalPages) <= 1}
+                        onClick={() => setParticipationPage((p) => Math.max(1, p - 1))}
+                        className="rounded border border-gray-600 px-2 py-1 text-gray-300 hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        ←
+                      </button>
+                      {participationPaginationSlots.map((slot, si) =>
+                        slot === 'ellipsis' ? (
+                          <span key={`participation-page-ellipsis-${si}`} className="px-1 text-gray-500">
+                            …
+                          </span>
+                        ) : (
+                          <button
+                            key={slot}
+                            type="button"
+                            onClick={() => setParticipationPage(slot)}
+                            className={`min-w-[1.75rem] rounded border px-1.5 py-1 ${
+                              Math.min(participationPage, participationTotalPages) === slot
+                                ? 'border-violet-600/70 bg-violet-900/40 text-violet-100'
+                                : 'border-gray-600 text-gray-300 hover:bg-gray-700'
+                            }`}
+                          >
+                            {slot}
+                          </button>
+                        ),
+                      )}
+                      <button
+                        type="button"
+                        disabled={Math.min(participationPage, participationTotalPages) >= participationTotalPages}
+                        onClick={() => setParticipationPage((p) => Math.min(participationTotalPages, p + 1))}
+                        className="rounded border border-gray-600 px-2 py-1 text-gray-300 hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        →
+                      </button>
+                    </nav>
+                  ) : null}
+                </>
               )}
             </>
           )}
