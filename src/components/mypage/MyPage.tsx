@@ -27,10 +27,26 @@ import {
   writeJoinEntryChimeEnabled,
 } from '@/lib/participant-join-announcements-preference';
 import { USER_SONG_HISTORY_UPDATED_EVENT } from '@/lib/user-song-history-events';
+import { suggestMyListArtistTitleFromYoutubeStyle } from '@/lib/my-list-youtube-title-suggest';
+import { MUSICAI_EXTENSION_SET_CHAT_TEXT_EVENT } from '@/lib/musicai-extension-events';
+import MainArtistTabPanel from '@/components/room/MainArtistTabPanel';
 
 const MY_LIST_LIB_INDEX_HASH = '#';
 const MY_LIST_LIB_INDEX_OTHER = 'その他';
 const MY_LIST_NEW_SONGS_PAGE_SIZE = 10;
+
+function buildArtistSlugForProfile(displayName: string): string | null {
+  let s = displayName.trim();
+  if (!s) return null;
+  s = s.normalize('NFKD').replace(/[\u0300-\u036f]/g, '');
+  s = s.replace(/^the\s+/i, '');
+  s = s.toLowerCase();
+  s = s.replace(/&/g, ' and ');
+  s = s.replace(/['’]/g, '');
+  s = s.replace(/[^a-z0-9]+/g, '-');
+  s = s.replace(/-+/g, '-').replace(/^-|-$/g, '');
+  return s || null;
+}
 
 function myListLibraryArtistNameForIndexing(displayName: string): string {
   const t = displayName.trim();
@@ -157,6 +173,7 @@ interface MyListLibraryArtistItemRow {
 interface MyListLibraryArtistRow {
   id: string;
   display_name: string;
+  artist_slug: string | null;
   linked_count: number;
   items: MyListLibraryArtistItemRow[];
 }
@@ -579,11 +596,19 @@ export default function MyPage({
   const [myListAddUrl, setMyListAddUrl] = useState('');
   const [myListAddBusy, setMyListAddBusy] = useState(false);
   const [myListMessage, setMyListMessage] = useState<string | null>(null);
+  const [myListEditing, setMyListEditing] = useState<string | null>(null);
+  const [myListEditTitle, setMyListEditTitle] = useState('');
+  const [myListEditArtist, setMyListEditArtist] = useState('');
+  const [myListEditNote, setMyListEditNote] = useState('');
+  const [myListSaveBusy, setMyListSaveBusy] = useState(false);
   const [myListTab, setMyListTab] = useState<'newSongs' | 'artists'>('newSongs');
   const [myListNewSongsPage, setMyListNewSongsPage] = useState(1);
   const [myListLibraryArtists, setMyListLibraryArtists] = useState<MyListLibraryArtistRow[]>([]);
   const [myListLibraryArtistExpandedId, setMyListLibraryArtistExpandedId] = useState<string | null>(null);
   const [myListArtistFilterLetter, setMyListArtistFilterLetter] = useState<string | null>(null);
+  const [myListArtistProfileOpen, setMyListArtistProfileOpen] = useState(false);
+  const [myListArtistProfileName, setMyListArtistProfileName] = useState('');
+  const [myListArtistProfileSlug, setMyListArtistProfileSlug] = useState<string | null>(null);
   const [textColorModalOpen, setTextColorModalOpen] = useState(false);
   const [mainTab, setMainTab] = useState<'owner' | 'user' | 'music' | 'mylist'>('user');
 
@@ -731,29 +756,44 @@ export default function MyPage({
     void loadMyList();
   }, [user, historyTab, loadMyList]);
 
+  const postMyListItem = useCallback(
+    async (payload: {
+      url?: string;
+      videoId?: string;
+      title?: string | null;
+      artist?: string | null;
+      note?: string | null;
+      source: 'manual_url' | 'song_history' | 'favorites' | 'extension' | 'import';
+    }): Promise<{ ok: true; duplicate: boolean } | { ok: false }> => {
+      setMyListMessage(null);
+      const res = await fetch('/api/my-list', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = (await res.json().catch(() => ({}))) as { duplicate?: boolean; error?: string };
+      if (!res.ok) {
+        setMyListMessage(typeof data?.error === 'string' ? data.error : '追加に失敗しました。');
+        return { ok: false };
+      }
+      setMyListMessage(
+        data.duplicate ? 'すでにマイリストにあります（同一動画は1件まで）。' : 'マイリストに追加しました。',
+      );
+      await loadMyList();
+      return { ok: true, duplicate: Boolean(data.duplicate) };
+    },
+    [loadMyList],
+  );
+
   const submitMyListUrl = async () => {
     if (myListAddBusy) return;
     const q = myListAddUrl.trim();
     if (!q) return;
     setMyListAddBusy(true);
-    setMyListMessage(null);
     try {
-      const res = await fetch('/api/my-list', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: q, source: 'manual_url' }),
-      });
-      const data = (await res.json().catch(() => ({}))) as { duplicate?: boolean; error?: string };
-      if (!res.ok) {
-        setMyListMessage(typeof data?.error === 'string' ? data.error : '追加に失敗しました。');
-        return;
-      }
-      setMyListMessage(
-        data.duplicate ? 'すでにマイリストにあります（同一動画は1件まで）。' : 'マイリストに追加しました。',
-      );
-      if (!data.duplicate) setMyListAddUrl('');
-      await loadMyList();
+      const result = await postMyListItem({ url: q, source: 'manual_url' });
+      if (result.ok && !result.duplicate) setMyListAddUrl('');
     } finally {
       setMyListAddBusy(false);
     }
@@ -772,6 +812,43 @@ export default function MyPage({
     }
     setMyListMessage('削除しました。');
     await loadMyList();
+  };
+
+  const openMyListEdit = (row: MyListItemRow) => {
+    const suggested = suggestMyListArtistTitleFromYoutubeStyle(row.artist, row.title);
+    setMyListEditing(row.id);
+    setMyListEditTitle(suggested.title);
+    setMyListEditArtist(suggested.artists.join(', '));
+    setMyListEditNote(row.note ?? '');
+    setMyListMessage(null);
+  };
+
+  const saveMyListEdit = async () => {
+    if (!myListEditing || myListSaveBusy) return;
+    setMyListSaveBusy(true);
+    setMyListMessage(null);
+    try {
+      const res = await fetch(`/api/my-list?id=${encodeURIComponent(myListEditing)}`, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: myListEditTitle,
+          artist: myListEditArtist,
+          note: myListEditNote,
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        setMyListMessage(typeof data?.error === 'string' ? data.error : '保存に失敗しました。');
+        return;
+      }
+      setMyListEditing(null);
+      setMyListMessage('保存しました。');
+      await loadMyList();
+    } finally {
+      setMyListSaveBusy(false);
+    }
   };
 
   const libraryArtistAlphabetBuckets = useMemo(() => {
@@ -832,6 +909,25 @@ export default function MyPage({
       ),
     [myListNewSongsPage, myListNewSongsTotalPages],
   );
+
+  const openMyListArtistProfile = useCallback((displayName: string, artistSlug: string | null) => {
+    setMyListArtistProfileName(displayName);
+    setMyListArtistProfileSlug(artistSlug);
+    setMyListArtistProfileOpen(true);
+  }, []);
+
+  const pickSongFromMyList = useCallback((url: string) => {
+    const text = url.trim();
+    if (!text) return;
+    window.dispatchEvent(
+      new CustomEvent(MUSICAI_EXTENSION_SET_CHAT_TEXT_EVENT, {
+        detail: { text },
+      }),
+    );
+    setMainTab('music');
+    setHistoryTab('songs');
+    setMyListMessage('選曲欄にセットしました。送信すると再生予約されます。');
+  }, []);
 
   const removeFavorite = async (videoId: string) => {
     await fetch(`/api/favorites?videoId=${encodeURIComponent(videoId)}`, { method: 'DELETE' });
@@ -1733,13 +1829,27 @@ export default function MyPage({
                                 </a>
                                 <button
                                   type="button"
-                                  onClick={() => {
-                                    navigator.clipboard.writeText(row.url).catch(() => {});
-                                  }}
-                                  className="shrink-0 rounded border border-gray-600 bg-gray-700 px-2 py-1 text-xs text-gray-300 hover:bg-gray-600"
-                                  title="URLをコピー"
+                                  onClick={() => pickSongFromMyList(row.url)}
+                                  className="shrink-0 rounded border border-emerald-700/60 bg-emerald-900/30 px-2 py-1 text-xs text-emerald-200 hover:bg-emerald-900/50"
+                                  title="この曲を選曲欄にセット"
                                 >
-                                  URLをコピー
+                                  選曲
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    void postMyListItem({
+                                      videoId: row.video_id,
+                                      url: row.url,
+                                      title: row.title,
+                                      artist: row.artist,
+                                      source: 'song_history',
+                                    })
+                                  }
+                                  className="shrink-0 rounded border border-violet-600/60 bg-violet-900/40 px-2 py-1 text-xs text-violet-100 hover:bg-violet-900/60"
+                                  title="自分のライブラリ（マイリスト）に追加"
+                                >
+                                  マイリストに追加
                                 </button>
                               </div>
                             </li>
@@ -1788,6 +1898,23 @@ export default function MyPage({
                             title="お気に入り解除"
                           >
                             解除
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void postMyListItem({
+                                videoId: f.video_id,
+                                url,
+                                title: f.title,
+                                artist: f.artist_name,
+                                note: `選曲者: ${f.display_name.trim() || '—'}`,
+                                source: 'favorites',
+                              })
+                            }
+                            className="shrink-0 rounded border border-violet-600/60 bg-violet-900/40 px-2 py-1 text-xs text-violet-100 hover:bg-violet-900/60"
+                            title="自分のライブラリ（マイリスト）に追加"
+                          >
+                            マイリストに追加
                           </button>
                         </div>
                       </div>
@@ -1913,23 +2040,91 @@ export default function MyPage({
                                 {item.source ? <span className="ml-2 text-gray-600">· {item.source}</span> : null}
                               </p>
                               <p className="text-sm text-gray-200">{label}</p>
-                              <div className="mt-1 flex flex-wrap items-center gap-2">
-                                <a
-                                  href={item.url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="min-w-0 flex-1 break-all text-xs text-blue-400 hover:underline"
-                                >
-                                  {item.url}
-                                </a>
-                                <button
-                                  type="button"
-                                  onClick={() => void removeMyListItem(item.id)}
-                                  className="shrink-0 rounded border border-red-900/50 bg-red-900/30 px-2 py-1 text-xs text-red-200 hover:bg-red-900/50"
-                                >
-                                  削除
-                                </button>
-                              </div>
+                              {myListEditing === item.id ? (
+                                <div className="mt-2 space-y-2">
+                                  <div>
+                                    <label className="mb-1 block text-xs text-gray-400">タイトル（曲名）</label>
+                                    <input
+                                      type="text"
+                                      value={myListEditTitle}
+                                      onChange={(e) => setMyListEditTitle(e.target.value)}
+                                      className="w-full rounded border border-gray-600 bg-gray-800 px-2 py-1.5 text-sm text-white"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="mb-1 block text-xs text-gray-400">アーティスト（カンマ区切り可）</label>
+                                    <input
+                                      type="text"
+                                      value={myListEditArtist}
+                                      onChange={(e) => setMyListEditArtist(e.target.value)}
+                                      className="w-full rounded border border-gray-600 bg-gray-800 px-2 py-1.5 text-sm text-white"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="mb-1 block text-xs text-gray-400">メモ（任意）</label>
+                                    <textarea
+                                      value={myListEditNote}
+                                      onChange={(e) => setMyListEditNote(e.target.value)}
+                                      rows={2}
+                                      className="w-full rounded border border-gray-600 bg-gray-800 px-2 py-1.5 text-sm text-white"
+                                    />
+                                  </div>
+                                  <div className="flex flex-wrap gap-2">
+                                    <button
+                                      type="button"
+                                      disabled={myListSaveBusy}
+                                      onClick={() => void saveMyListEdit()}
+                                      className="rounded bg-violet-600 px-2 py-1 text-xs text-white hover:bg-violet-700 disabled:opacity-40"
+                                    >
+                                      {myListSaveBusy ? '保存中…' : '保存'}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setMyListEditing(null)}
+                                      className="rounded border border-gray-600 bg-gray-700 px-2 py-1 text-xs text-gray-300 hover:bg-gray-600"
+                                    >
+                                      キャンセル
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <>
+                                  {item.note ? (
+                                    <p className="mt-1 text-xs text-gray-400 whitespace-pre-wrap">{item.note}</p>
+                                  ) : null}
+                                  <div className="mt-1 flex flex-wrap items-center gap-2">
+                                    <a
+                                      href={item.url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="min-w-0 flex-1 break-all text-xs text-blue-400 hover:underline"
+                                    >
+                                      {item.url}
+                                    </a>
+                                    <button
+                                      type="button"
+                                      onClick={() => pickSongFromMyList(item.url)}
+                                      className="shrink-0 rounded border border-emerald-700/60 bg-emerald-900/30 px-2 py-1 text-xs text-emerald-200 hover:bg-emerald-900/50"
+                                    >
+                                      選曲
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => openMyListEdit(item)}
+                                      className="shrink-0 rounded border border-gray-600 bg-gray-700 px-2 py-1 text-xs text-gray-300 hover:bg-gray-600"
+                                    >
+                                      編集
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => void removeMyListItem(item.id)}
+                                      className="shrink-0 rounded border border-red-900/50 bg-red-900/30 px-2 py-1 text-xs text-red-200 hover:bg-red-900/50"
+                                    >
+                                      削除
+                                    </button>
+                                  </div>
+                                </>
+                              )}
                             </div>
                           );
                         })}
@@ -2019,22 +2214,37 @@ export default function MyPage({
                         <ul className="space-y-1">
                           {filteredLibraryArtists.map((a) => {
                             const open = myListLibraryArtistExpandedId === a.id;
+                            const effectiveSlug = a.artist_slug ?? buildArtistSlugForProfile(a.display_name);
                             return (
                               <li key={a.id} className="rounded border border-gray-700/80 bg-gray-800/40">
-                                <button
-                                  type="button"
-                                  aria-expanded={open}
-                                  onClick={() =>
-                                    setMyListLibraryArtistExpandedId((prev) => (prev === a.id ? null : a.id))
-                                  }
-                                  className="flex w-full items-center justify-between gap-2 px-2 py-2 text-left text-sm text-gray-200 hover:bg-gray-800/80"
-                                >
-                                  <span className="min-w-0 truncate font-medium">
-                                    {a.display_name}
-                                    <span className="ml-1 font-normal text-gray-400">（{a.linked_count}）</span>
-                                  </span>
-                                  <span className="shrink-0 text-xs text-gray-500">{open ? '閉じる' : '開く'}</span>
-                                </button>
+                                <div className="flex items-center gap-2 px-2 py-2">
+                                  <button
+                                    type="button"
+                                    aria-expanded={open}
+                                    onClick={() =>
+                                      setMyListLibraryArtistExpandedId((prev) => (prev === a.id ? null : a.id))
+                                    }
+                                    className="flex min-w-0 flex-1 items-center justify-between gap-2 text-left text-sm text-gray-200 hover:text-white"
+                                  >
+                                    <span className="min-w-0 truncate font-medium">
+                                      {a.display_name}
+                                      <span className="ml-1 font-normal text-gray-400">（{a.linked_count}）</span>
+                                    </span>
+                                    <span className="shrink-0 rounded border border-gray-600 bg-gray-800 px-2 py-1 text-[11px] text-gray-300">
+                                      {open ? '曲一覧▲' : '曲一覧▼'}
+                                    </span>
+                                  </button>
+                                  {effectiveSlug ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => openMyListArtistProfile(a.display_name, effectiveSlug)}
+                                      className="shrink-0 rounded border border-sky-700/60 bg-sky-900/30 px-2 py-1 text-[11px] font-medium text-sky-100 hover:bg-sky-900/50"
+                                      title="アーティスト情報を表示"
+                                    >
+                                      PROFILE
+                                    </button>
+                                  ) : null}
+                                </div>
                                 {open ? (
                                   <ul className="space-y-2 border-t border-gray-700/80 px-2 py-2">
                                     {a.items.length === 0 ? (
@@ -2059,6 +2269,16 @@ export default function MyPage({
                                             >
                                               YouTube で開く
                                             </a>
+                                            <button
+                                              type="button"
+                                              className="rounded border border-emerald-700/60 bg-emerald-900/30 px-1.5 py-0.5 text-emerald-200 hover:bg-emerald-900/50"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                pickSongFromMyList(it.url);
+                                              }}
+                                            >
+                                              選曲
+                                            </button>
                                           </div>
                                         </li>
                                       ))
@@ -2121,6 +2341,40 @@ export default function MyPage({
         </div>
         ) : null}
       </div>
+      {myListArtistProfileOpen && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="アーティスト情報"
+          onClick={() => setMyListArtistProfileOpen(false)}
+        >
+          <div
+            className="max-h-[85vh] w-full max-w-2xl overflow-auto rounded-lg border border-gray-700 bg-gray-900 p-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-base font-semibold text-white">
+                アーティスト情報
+                <span className="ml-2 text-xs font-normal text-gray-400">{myListArtistProfileName}</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setMyListArtistProfileOpen(false)}
+                className="rounded border border-gray-600 bg-gray-800 px-3 py-1.5 text-sm text-gray-200 hover:bg-gray-700"
+              >
+                閉じる
+              </button>
+            </div>
+            <div className="rounded border border-gray-700 bg-gray-800/40">
+              <MainArtistTabPanel
+                artistName={myListArtistProfileSlug || myListArtistProfileName}
+                songTitle={null}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

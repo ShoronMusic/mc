@@ -16,6 +16,7 @@ export type MyListLibraryArtistItem = {
 export type MyListLibraryArtistRow = {
   id: string;
   display_name: string;
+  artist_slug: string | null;
   linked_count: number;
   items: MyListLibraryArtistItem[];
 };
@@ -48,11 +49,19 @@ export async function GET() {
 
   const uid = session.user.id;
 
-  const { data: artistRows, error: aErr } = await supabase
+  const { data: artistRowsWithSlug, error: aErrWithSlug } = await supabase
     .from('user_my_library_artists')
-    .select('id, display_name')
+    .select('id, display_name, artist_slug')
     .eq('user_id', uid)
     .order('display_name');
+  const fallbackOldSelect = aErrWithSlug?.code === '42703';
+  const { data: artistRows, error: aErr } = fallbackOldSelect
+    ? await supabase
+        .from('user_my_library_artists')
+        .select('id, display_name')
+        .eq('user_id', uid)
+        .order('display_name')
+    : { data: artistRowsWithSlug, error: aErrWithSlug };
 
   if (aErr?.code === '42P01') {
     return NextResponse.json({ artists: [] as MyListLibraryArtistRow[] });
@@ -109,6 +118,7 @@ export async function GET() {
     return {
       id: a.id,
       display_name: a.display_name,
+      artist_slug: fallbackOldSelect ? null : ((a as { artist_slug?: string | null }).artist_slug ?? null),
       linked_count: items.length,
       items,
     };

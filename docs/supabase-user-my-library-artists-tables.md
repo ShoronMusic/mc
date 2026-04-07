@@ -22,6 +22,7 @@ create table if not exists public.user_my_library_artists (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   display_name text not null,
+  artist_slug text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (user_id, display_name)
@@ -29,6 +30,10 @@ create table if not exists public.user_my_library_artists (
 
 create index if not exists idx_user_my_library_artists_user
   on public.user_my_library_artists (user_id);
+
+create unique index if not exists uq_user_my_library_artists_user_slug
+  on public.user_my_library_artists (user_id, artist_slug)
+  where artist_slug is not null and artist_slug <> '';
 
 comment on table public.user_my_library_artists is 'マイリスト等で参照するユーザー単位のアーティスト行';
 
@@ -103,6 +108,7 @@ create policy "Users can delete own my list item artists"
 ## 補足
 
 - **`unique (user_id, display_name)`** は表記が完全一致するときのみ重複防止。名寄せ（`The Police` と `Police`）はアプリ側または将来 `normalized_name` 列・別索引で拡張する。
+- **`artist_slug`** は Music8 JSON 参照用（例: `the police` → `police`）。アプリ同期では表示名から英数字ハイフン形式へ自動生成し、`unique(user_id, artist_slug)`（部分ユニーク）で衝突を避ける。
 - **`position`**: `0` をメイン、`1, 2, …` を 2 人目以降にすると UI と一致しやすい。
 - アーティスト行を削除すると **`on delete cascade`** で紐づけも消える。マスタ削除は慎重にするか、先に `user_my_list_item_artists` だけ消す運用でもよい。
 - **アプリ実装**: `POST` / `PATCH` `src/app/api/my-list/route.ts` 成功後に `syncMyListItemLibraryArtists`（`src/lib/my-list-sync-library-artists.ts`）が走り、`user_my_list_items.artist` を `,\s+` で分割してマスタ upsert＋紐づけを更新する。テーブル未作成時はログのみでスキップ。

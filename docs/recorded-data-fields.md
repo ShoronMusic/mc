@@ -58,6 +58,7 @@ API: `src/app/api/my-list/route.ts`
 |------|------|
 | `user_id` | ログインユーザー |
 | `display_name` | 表示名（ユーザー内 `display_name` で一意） |
+| `artist_slug` | Music8 JSON 参照用のスラッグ（`police` など） |
 | `created_at` / `updated_at` | 作成・更新時刻 |
 
 詳細・SQL: `docs/supabase-user-my-library-artists-tables.md`
