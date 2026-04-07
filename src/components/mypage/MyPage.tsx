@@ -30,11 +30,48 @@ import { USER_SONG_HISTORY_UPDATED_EVENT } from '@/lib/user-song-history-events'
 import { suggestMyListArtistTitleFromYoutubeStyle } from '@/lib/my-list-youtube-title-suggest';
 import { MUSICAI_EXTENSION_SET_CHAT_TEXT_EVENT } from '@/lib/musicai-extension-events';
 import MainArtistTabPanel from '@/components/room/MainArtistTabPanel';
+import { SONG_STYLE_OPTIONS } from '@/lib/song-styles';
+import { SONG_ERA_OPTIONS } from '@/lib/song-era-options';
 
 const MY_LIST_LIB_INDEX_HASH = '#';
 const MY_LIST_LIB_INDEX_OTHER = 'その他';
 const MY_LIST_NEW_SONGS_PAGE_SIZE = 10;
 const MUSIC_HISTORY_PAGE_SIZE = 10;
+const MY_PAGE_STYLE_TEXT_COLORS: Record<string, string> = {
+  Rock: '#6246ea',
+  Pop: '#f25042',
+  Dance: '#f39800',
+  'Alternative rock': '#448aca',
+  Electronica: '#ffd803',
+  'R&B': '#8c7851',
+  'Hip-hop': '#078080',
+  Metal: '#9646ea',
+  Other: '#BDBDBD',
+  Others: '#BDBDBD',
+  Jazz: '#BDBDBD',
+};
+const MY_PAGE_ERA_TEXT_COLORS: Record<string, string> = {
+  'Pre-50s': '#9e9e9e',
+  '50s': '#a1887f',
+  '60s': '#90caf9',
+  '70s': '#81c784',
+  '80s': '#ffab91',
+  '90s': '#ce93d8',
+  '00s': '#fff176',
+  '10s': '#80deea',
+  '20s': '#aed581',
+  Other: '#9e9e9e',
+};
+
+function getMyPageStyleTextColor(style: string | null | undefined): string | undefined {
+  if (!style || !style.trim()) return undefined;
+  return MY_PAGE_STYLE_TEXT_COLORS[style] ?? MY_PAGE_STYLE_TEXT_COLORS[style.trim()];
+}
+
+function getMyPageEraTextColor(era: string | null | undefined): string | undefined {
+  if (!era || !era.trim()) return undefined;
+  return MY_PAGE_ERA_TEXT_COLORS[era] ?? '#b0bec5';
+}
 
 function participationSlotStartMs(t: Date): number {
   const y = t.getFullYear();
@@ -173,6 +210,8 @@ interface SongHistoryRow {
   posted_at: string;
   /** 同期部屋の選曲ラウンド（列未追加のDBでは undefined） */
   selection_round?: number | null;
+  style?: string | null;
+  era?: string | null;
 }
 interface ParticipationHistoryRow {
   id: string;
@@ -197,12 +236,25 @@ interface ParticipationSummaryRow {
   total_stay_ms: number;
 }
 
+interface FavoriteRow {
+  id: string;
+  video_id: string;
+  display_name: string;
+  played_at: string;
+  title: string | null;
+  artist_name: string | null;
+  style?: string | null;
+  era?: string | null;
+}
+
 interface MyListItemRow {
   id: string;
   video_id: string;
   url: string;
   title: string | null;
   artist: string | null;
+  style?: string | null;
+  era?: string | null;
   note: string | null;
   source: string;
   music8_song_id: number | null;
@@ -638,7 +690,7 @@ export default function MyPage({
   const [songHistoryLoading, setSongHistoryLoading] = useState(false);
   const [songHistoryPage, setSongHistoryPage] = useState(1);
   const [historyTab, setHistoryTab] = useState<'songs' | 'favorites' | 'participation' | 'mylist'>('songs');
-  const [favorites, setFavorites] = useState<{ id: string; video_id: string; display_name: string; played_at: string; title: string | null; artist_name: string | null }[]>([]);
+  const [favorites, setFavorites] = useState<FavoriteRow[]>([]);
   const [favoritesLoading, setFavoritesLoading] = useState(false);
   const [favoritesPage, setFavoritesPage] = useState(1);
   const [participationHistory, setParticipationHistory] = useState<ParticipationHistoryRow[]>([]);
@@ -653,6 +705,8 @@ export default function MyPage({
   const [myListEditTitle, setMyListEditTitle] = useState('');
   const [myListEditArtist, setMyListEditArtist] = useState('');
   const [myListEditNote, setMyListEditNote] = useState('');
+  const [myListEditStyle, setMyListEditStyle] = useState('');
+  const [myListEditEra, setMyListEditEra] = useState('');
   const [myListSaveBusy, setMyListSaveBusy] = useState(false);
   const [myListTab, setMyListTab] = useState<'newSongs' | 'artists'>('newSongs');
   const [myListNewSongsPage, setMyListNewSongsPage] = useState(1);
@@ -710,12 +764,73 @@ export default function MyPage({
         .select('id, room_id, video_id, url, title, artist, posted_at, selection_round')
         .order('posted_at', { ascending: false }),
     )
-      .then(({ data, error }) => {
+      .then(async ({ data, error }) => {
         if (error) {
           if (error.code === '42P01') return;
           console.error('[MyPage] song history', error);
         }
-        setSongHistory((data as SongHistoryRow[]) ?? []);
+        const baseRows = ((data as SongHistoryRow[]) ?? []).map((row) => ({
+          ...row,
+          style: null,
+          era: null,
+        }));
+        if (baseRows.length === 0) {
+          setSongHistory([]);
+          return;
+        }
+
+        const videoIds = Array.from(new Set(baseRows.map((r) => r.video_id).filter(Boolean)));
+        const roomIds = Array.from(new Set(baseRows.map((r) => r.room_id).filter(Boolean)));
+        const [styleRes, eraRes, playbackStyleRes] = await Promise.all([
+          supabase.from('song_style').select('video_id, style').in('video_id', videoIds),
+          supabase.from('song_era').select('video_id, era').in('video_id', videoIds),
+          supabase
+            .from('room_playback_history')
+            .select('room_id, video_id, style, played_at')
+            .in('video_id', videoIds)
+            .in('room_id', roomIds)
+            .order('played_at', { ascending: false })
+            .limit(1000),
+        ]);
+        if (styleRes.error && styleRes.error.code !== '42P01') {
+          console.error('[MyPage] song style lookup', styleRes.error);
+        }
+        if (eraRes.error && eraRes.error.code !== '42P01') {
+          console.error('[MyPage] song era lookup', eraRes.error);
+        }
+        if (playbackStyleRes.error && playbackStyleRes.error.code !== '42P01') {
+          console.error('[MyPage] playback style lookup', playbackStyleRes.error);
+        }
+
+        const styleMap = new Map<string, string>();
+        for (const r of styleRes.data ?? []) {
+          const vid = typeof r.video_id === 'string' ? r.video_id : '';
+          const style = typeof r.style === 'string' ? r.style.trim() : '';
+          if (vid && style) styleMap.set(vid, style);
+        }
+        const eraMap = new Map<string, string>();
+        for (const r of eraRes.data ?? []) {
+          const vid = typeof r.video_id === 'string' ? r.video_id : '';
+          const era = typeof r.era === 'string' ? r.era.trim() : '';
+          if (vid && era) eraMap.set(vid, era);
+        }
+        const roomVideoStyleMap = new Map<string, string>();
+        for (const r of playbackStyleRes.data ?? []) {
+          const roomId = typeof r.room_id === 'string' ? r.room_id : '';
+          const vid = typeof r.video_id === 'string' ? r.video_id : '';
+          const style = typeof r.style === 'string' ? r.style.trim() : '';
+          if (!roomId || !vid || !style) continue;
+          const key = `${roomId}::${vid}`;
+          if (!roomVideoStyleMap.has(key)) roomVideoStyleMap.set(key, style);
+        }
+
+        setSongHistory(
+          baseRows.map((row) => ({
+            ...row,
+            style: roomVideoStyleMap.get(`${row.room_id}::${row.video_id}`) ?? styleMap.get(row.video_id) ?? null,
+            era: eraMap.get(row.video_id) ?? null,
+          })),
+        );
       })
       .finally(() => setSongHistoryLoading(false));
   }, [supabase, user]);
@@ -747,10 +862,67 @@ export default function MyPage({
     setFavoritesLoading(true);
     fetch('/api/favorites')
       .then((r) => (r.ok ? r.json() : null))
-      .then((data) => setFavorites(Array.isArray(data?.items) ? data.items : []))
+      .then(async (data) => {
+        const baseRows: FavoriteRow[] = (Array.isArray(data?.items) ? data.items : []).map((row: FavoriteRow) => ({
+          ...row,
+          style: null,
+          era: null,
+        }));
+        if (!baseRows.length) {
+          setFavorites([]);
+          return;
+        }
+        const videoIds = Array.from(new Set(baseRows.map((r) => r.video_id).filter(Boolean)));
+        const [styleRes, eraRes, playbackStyleRes] = await Promise.all([
+          supabase.from('song_style').select('video_id, style').in('video_id', videoIds),
+          supabase.from('song_era').select('video_id, era').in('video_id', videoIds),
+          supabase
+            .from('room_playback_history')
+            .select('video_id, style, played_at')
+            .in('video_id', videoIds)
+            .order('played_at', { ascending: false })
+            .limit(1000),
+        ]);
+        if (styleRes.error && styleRes.error.code !== '42P01') {
+          console.error('[MyPage] favorites song style lookup', styleRes.error);
+        }
+        if (eraRes.error && eraRes.error.code !== '42P01') {
+          console.error('[MyPage] favorites song era lookup', eraRes.error);
+        }
+        if (playbackStyleRes.error && playbackStyleRes.error.code !== '42P01') {
+          console.error('[MyPage] favorites playback style lookup', playbackStyleRes.error);
+        }
+
+        const styleMap = new Map<string, string>();
+        for (const r of styleRes.data ?? []) {
+          const vid = typeof r.video_id === 'string' ? r.video_id : '';
+          const style = typeof r.style === 'string' ? r.style.trim() : '';
+          if (vid && style) styleMap.set(vid, style);
+        }
+        const playbackStyleMap = new Map<string, string>();
+        for (const r of playbackStyleRes.data ?? []) {
+          const vid = typeof r.video_id === 'string' ? r.video_id : '';
+          const style = typeof r.style === 'string' ? r.style.trim() : '';
+          if (vid && style && !playbackStyleMap.has(vid)) playbackStyleMap.set(vid, style);
+        }
+        const eraMap = new Map<string, string>();
+        for (const r of eraRes.data ?? []) {
+          const vid = typeof r.video_id === 'string' ? r.video_id : '';
+          const era = typeof r.era === 'string' ? r.era.trim() : '';
+          if (vid && era) eraMap.set(vid, era);
+        }
+
+        setFavorites(
+          baseRows.map((row) => ({
+            ...row,
+            style: playbackStyleMap.get(row.video_id) ?? styleMap.get(row.video_id) ?? null,
+            era: eraMap.get(row.video_id) ?? null,
+          })),
+        );
+      })
       .catch(() => setFavorites([]))
       .finally(() => setFavoritesLoading(false));
-  }, [user]);
+  }, [user, supabase]);
 
   useEffect(() => {
     if (!user) return;
@@ -788,7 +960,62 @@ export default function MyPage({
           typeof listData?.error === 'string' ? listData.error : 'マイリストを読み込めませんでした。',
         );
       } else {
-        setMyListItems(Array.isArray(listData?.items) ? listData.items : []);
+        const baseItems: MyListItemRow[] = (Array.isArray(listData?.items) ? listData.items : []).map((item) => ({
+          ...item,
+          style: null,
+          era: null,
+        }));
+        if (!baseItems.length) {
+          setMyListItems([]);
+        } else {
+          const videoIds = Array.from(new Set(baseItems.map((r) => r.video_id).filter(Boolean)));
+          const [styleRes, eraRes, playbackStyleRes] = await Promise.all([
+            supabase.from('song_style').select('video_id, style').in('video_id', videoIds),
+            supabase.from('song_era').select('video_id, era').in('video_id', videoIds),
+            supabase
+              .from('room_playback_history')
+              .select('video_id, style, played_at')
+              .in('video_id', videoIds)
+              .order('played_at', { ascending: false })
+              .limit(1000),
+          ]);
+          if (styleRes.error && styleRes.error.code !== '42P01') {
+            console.error('[MyPage] my-list song style lookup', styleRes.error);
+          }
+          if (eraRes.error && eraRes.error.code !== '42P01') {
+            console.error('[MyPage] my-list song era lookup', eraRes.error);
+          }
+          if (playbackStyleRes.error && playbackStyleRes.error.code !== '42P01') {
+            console.error('[MyPage] my-list playback style lookup', playbackStyleRes.error);
+          }
+
+          const styleMap = new Map<string, string>();
+          for (const r of styleRes.data ?? []) {
+            const vid = typeof r.video_id === 'string' ? r.video_id : '';
+            const style = typeof r.style === 'string' ? r.style.trim() : '';
+            if (vid && style) styleMap.set(vid, style);
+          }
+          const playbackStyleMap = new Map<string, string>();
+          for (const r of playbackStyleRes.data ?? []) {
+            const vid = typeof r.video_id === 'string' ? r.video_id : '';
+            const style = typeof r.style === 'string' ? r.style.trim() : '';
+            if (vid && style && !playbackStyleMap.has(vid)) playbackStyleMap.set(vid, style);
+          }
+          const eraMap = new Map<string, string>();
+          for (const r of eraRes.data ?? []) {
+            const vid = typeof r.video_id === 'string' ? r.video_id : '';
+            const era = typeof r.era === 'string' ? r.era.trim() : '';
+            if (vid && era) eraMap.set(vid, era);
+          }
+
+          setMyListItems(
+            baseItems.map((row) => ({
+              ...row,
+              style: playbackStyleMap.get(row.video_id) ?? styleMap.get(row.video_id) ?? null,
+              era: eraMap.get(row.video_id) ?? null,
+            })),
+          );
+        }
       }
       if (rArt.ok && Array.isArray(artData.artists)) {
         setMyListLibraryArtists(artData.artists);
@@ -802,7 +1029,7 @@ export default function MyPage({
     } finally {
       setMyListLoading(false);
     }
-  }, [user]);
+  }, [user, supabase]);
 
   useEffect(() => {
     if (!user || historyTab !== 'mylist') return;
@@ -873,6 +1100,8 @@ export default function MyPage({
     setMyListEditTitle(suggested.title);
     setMyListEditArtist(suggested.artists.join(', '));
     setMyListEditNote(row.note ?? '');
+    setMyListEditStyle(row.style?.trim() ?? '');
+    setMyListEditEra(row.era?.trim() ?? '');
     setMyListMessage(null);
   };
 
@@ -889,6 +1118,8 @@ export default function MyPage({
           title: myListEditTitle,
           artist: myListEditArtist,
           note: myListEditNote,
+          style: myListEditStyle,
+          era: myListEditEra,
         }),
       });
       const data = (await res.json().catch(() => ({}))) as { error?: string };
@@ -1993,6 +2224,29 @@ export default function MyPage({
                                   {title}
                                   {artist}
                                 </p>
+                              <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px]">
+                                {row.style?.trim() ? (
+                                  <span
+                                    className="rounded border border-gray-700/70 bg-gray-900/40 px-1.5 py-0.5"
+                                    style={{ color: getMyPageStyleTextColor(row.style) }}
+                                    title={`スタイル: ${row.style}`}
+                                  >
+                                    {row.style}
+                                  </span>
+                                ) : null}
+                                {row.era?.trim() ? (
+                                  <span
+                                    className="rounded border border-gray-700/70 bg-gray-900/40 px-1.5 py-0.5"
+                                    style={{ color: getMyPageEraTextColor(row.era) }}
+                                    title={`年代: ${row.era}`}
+                                  >
+                                    {row.era}
+                                  </span>
+                                ) : null}
+                                {!row.style?.trim() && !row.era?.trim() ? (
+                                  <span className="text-gray-500">—</span>
+                                ) : null}
+                              </div>
                                 <div className="mt-1 flex items-center gap-2">
                                   <a
                                     href={row.url}
@@ -2104,10 +2358,41 @@ export default function MyPage({
                             {dateStr} {timeStr} · {f.display_name}
                           </p>
                           <p className="text-sm text-gray-200">{artistTitle}</p>
+                          <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px]">
+                            {f.style?.trim() ? (
+                              <span
+                                className="rounded border border-gray-700/70 bg-gray-900/40 px-1.5 py-0.5"
+                                style={{ color: getMyPageStyleTextColor(f.style) }}
+                                title={`スタイル: ${f.style}`}
+                              >
+                                {f.style}
+                              </span>
+                            ) : null}
+                            {f.era?.trim() ? (
+                              <span
+                                className="rounded border border-gray-700/70 bg-gray-900/40 px-1.5 py-0.5"
+                                style={{ color: getMyPageEraTextColor(f.era) }}
+                                title={`年代: ${f.era}`}
+                              >
+                                {f.era}
+                              </span>
+                            ) : null}
+                            {!f.style?.trim() && !f.era?.trim() ? (
+                              <span className="text-gray-500">—</span>
+                            ) : null}
+                          </div>
                           <div className="mt-1 flex flex-wrap items-center gap-2">
                             <a href={url} target="_blank" rel="noopener noreferrer" className="break-all text-xs text-blue-400 hover:underline">
                               {url}
                             </a>
+                            <button
+                              type="button"
+                              onClick={() => pickSongFromMyList(url)}
+                              className="shrink-0 rounded border border-emerald-700/60 bg-emerald-900/30 px-2 py-1 text-xs text-emerald-200 hover:bg-emerald-900/50"
+                              title="この曲を選曲欄にセット"
+                            >
+                              選曲
+                            </button>
                             <button
                               type="button"
                               onClick={() => removeFavorite(f.video_id)}
@@ -2329,6 +2614,11 @@ export default function MyPage({
                       <div className="max-h-72 space-y-3 overflow-y-auto">
                         {myListNewSongsPageItems.map((item) => {
                           const added = new Date(item.created_at);
+                          const updated = new Date(item.updated_at);
+                          const showUpdated =
+                            Number.isFinite(updated.getTime()) &&
+                            Number.isFinite(added.getTime()) &&
+                            updated.getTime() - added.getTime() >= 1000;
                           const label =
                             item.artist && item.title
                               ? `${item.artist} — ${item.title}`
@@ -2339,7 +2629,33 @@ export default function MyPage({
                                 追加: {added.toLocaleString('ja-JP')}
                                 {item.source ? <span className="ml-2 text-gray-600">· {item.source}</span> : null}
                               </p>
+                              {showUpdated ? (
+                                <p className="text-xs text-gray-500">最終更新: {updated.toLocaleString('ja-JP')}</p>
+                              ) : null}
                               <p className="text-sm text-gray-200">{label}</p>
+                              <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px]">
+                                {item.style?.trim() ? (
+                                  <span
+                                    className="rounded border border-gray-700/70 bg-gray-900/40 px-1.5 py-0.5"
+                                    style={{ color: getMyPageStyleTextColor(item.style) }}
+                                    title={`スタイル: ${item.style}`}
+                                  >
+                                    {item.style}
+                                  </span>
+                                ) : null}
+                                {item.era?.trim() ? (
+                                  <span
+                                    className="rounded border border-gray-700/70 bg-gray-900/40 px-1.5 py-0.5"
+                                    style={{ color: getMyPageEraTextColor(item.era) }}
+                                    title={`年代: ${item.era}`}
+                                  >
+                                    {item.era}
+                                  </span>
+                                ) : null}
+                                {!item.style?.trim() && !item.era?.trim() ? (
+                                  <span className="text-gray-500">—</span>
+                                ) : null}
+                              </div>
                               {myListEditing === item.id ? (
                                 <div className="mt-2 space-y-2">
                                   <div>
@@ -2368,6 +2684,36 @@ export default function MyPage({
                                       rows={2}
                                       className="w-full rounded border border-gray-600 bg-gray-800 px-2 py-1.5 text-sm text-white"
                                     />
+                                  </div>
+                                  <div>
+                                    <label className="mb-1 block text-xs text-gray-400">スタイル</label>
+                                    <select
+                                      value={myListEditStyle}
+                                      onChange={(e) => setMyListEditStyle(e.target.value)}
+                                      className="w-full rounded border border-gray-600 bg-gray-800 px-2 py-1.5 text-sm text-white"
+                                    >
+                                      <option value="">未設定</option>
+                                      {SONG_STYLE_OPTIONS.map((opt) => (
+                                        <option key={opt} value={opt}>
+                                          {opt}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                  <div>
+                                    <label className="mb-1 block text-xs text-gray-400">年代</label>
+                                    <select
+                                      value={myListEditEra}
+                                      onChange={(e) => setMyListEditEra(e.target.value)}
+                                      className="w-full rounded border border-gray-600 bg-gray-800 px-2 py-1.5 text-sm text-white"
+                                    >
+                                      <option value="">未設定</option>
+                                      {SONG_ERA_OPTIONS.map((opt) => (
+                                        <option key={opt} value={opt}>
+                                          {opt}
+                                        </option>
+                                      ))}
+                                    </select>
                                   </div>
                                   <div className="flex flex-wrap gap-2">
                                     <button

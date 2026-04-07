@@ -18,6 +18,17 @@ function buildArtistSlugForMusic8(displayName: string): string | null {
   return s.slice(0, ARTIST_SLUG_MAX);
 }
 
+function isMissingArtistSlugColumnError(
+  err: { code?: string | null; message?: string | null } | null | undefined,
+): boolean {
+  if (!err) return false;
+  if (err.code === '42703') return true;
+  if (err.code === 'PGRST204' && typeof err.message === 'string' && err.message.includes('artist_slug')) {
+    return true;
+  }
+  return false;
+}
+
 async function getOrCreateLibraryArtistId(
   supabase: SupabaseClient,
   userId: string,
@@ -33,7 +44,7 @@ async function getOrCreateLibraryArtistId(
     .eq('user_id', userId)
     .eq('display_name', name)
     .maybeSingle();
-  const needsOldSelect = selWithSlugErr?.code === '42703';
+  const needsOldSelect = isMissingArtistSlugColumnError(selWithSlugErr);
   const { data: existing, error: selErr } = needsOldSelect
     ? await supabase
         .from('user_my_library_artists')
@@ -55,7 +66,7 @@ async function getOrCreateLibraryArtistId(
         .update({ artist_slug: slug })
         .eq('id', existing.id)
         .eq('user_id', userId);
-      if (upErr && upErr.code !== '42703') {
+      if (upErr && !isMissingArtistSlugColumnError(upErr)) {
         console.error('[my-list-sync-artists] update artist slug', upErr);
       }
     }
@@ -68,7 +79,7 @@ async function getOrCreateLibraryArtistId(
     .select('id')
     .single();
   const finalInsErr =
-    insErr?.code === '42703'
+    isMissingArtistSlugColumnError(insErr)
       ? (
           await supabase
             .from('user_my_library_artists')
@@ -78,7 +89,7 @@ async function getOrCreateLibraryArtistId(
         ).error
       : insErr;
   const finalInsData =
-    insErr?.code === '42703'
+    isMissingArtistSlugColumnError(insErr)
       ? (
           await supabase
             .from('user_my_library_artists')
@@ -103,7 +114,17 @@ async function getOrCreateLibraryArtistId(
     console.error('[my-list-sync-artists] insert artist', finalInsErr);
     return { id: null, missingTable: false };
   }
-  return { id: finalInsData?.id ?? null, missingTable: false };
+  if (finalInsData?.id) {
+    return { id: finalInsData.id, missingTable: false };
+  }
+  // 一部環境では insert+select が data:null になることがあるため、最終的に再検索する。
+  const { data: afterIns } = await supabase
+    .from('user_my_library_artists')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('display_name', name)
+    .maybeSingle();
+  return { id: afterIns?.id ?? null, missingTable: false };
 }
 
 /**
@@ -118,11 +139,19 @@ export async function syncMyListItemLibraryArtists(
   artistBlob: string | null,
 ): Promise<void> {
   const names = parseCommaSeparatedArtists(artistBlob ?? '');
+  console.info('[my-list-sync-artists] start', {
+    userId,
+    itemId,
+    artistBlob,
+    parsedNames: names,
+  });
   const artistIds: string[] = [];
 
   for (const raw of names) {
     const { id, missingTable } = await getOrCreateLibraryArtistId(supabase, userId, raw);
+    console.info('[my-list-sync-artists] getOrCreate', { raw, id, missingTable });
     if (missingTable) {
+      console.warn('[my-list-sync-artists] missing table, abort sync', { userId, itemId });
       return;
     }
     if (id) artistIds.push(id);
@@ -134,12 +163,14 @@ export async function syncMyListItemLibraryArtists(
     .eq('my_list_item_id', itemId);
 
   if (delErr?.code === '42P01') {
+    console.warn('[my-list-sync-artists] link table missing on delete', { userId, itemId });
     return;
   }
   if (delErr) {
     console.error('[my-list-sync-artists] delete links', delErr);
     return;
   }
+  console.info('[my-list-sync-artists] links deleted', { itemId });
 
   for (let i = 0; i < artistIds.length; i++) {
     const { error: linkErr } = await supabase.from('user_my_list_item_artists').insert({
@@ -148,11 +179,22 @@ export async function syncMyListItemLibraryArtists(
       position: i,
     });
     if (linkErr?.code === '42P01') {
+      console.warn('[my-list-sync-artists] link table missing on insert', { userId, itemId });
       return;
     }
     if (linkErr) {
       console.error('[my-list-sync-artists] insert link', linkErr);
       return;
     }
+    console.info('[my-list-sync-artists] link inserted', {
+      itemId,
+      artistId: artistIds[i],
+      position: i,
+    });
   }
+  console.info('[my-list-sync-artists] done', {
+    userId,
+    itemId,
+    linkCount: artistIds.length,
+  });
 }

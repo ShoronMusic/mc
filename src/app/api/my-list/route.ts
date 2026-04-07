@@ -3,6 +3,8 @@ import { createClient } from '@/lib/supabase/server';
 import { extractVideoId, normalizeToAbsoluteUrlIfStandalone } from '@/lib/youtube';
 import { fetchOEmbed } from '@/lib/youtube-oembed';
 import { syncMyListItemLibraryArtists } from '@/lib/my-list-sync-library-artists';
+import { SONG_STYLE_OPTIONS } from '@/lib/song-styles';
+import { SONG_ERA_OPTIONS } from '@/lib/song-era-options';
 
 export const dynamic = 'force-dynamic';
 
@@ -226,7 +228,7 @@ export async function POST(request: Request) {
 
 /**
  * PATCH: メタ更新 ?id=<uuid>
- * Body: { title?, artist?, note? }（いずれか必須）
+ * Body: { title?, artist?, note?, style?, era? }（いずれか必須）
  */
 export async function PATCH(request: Request) {
   const supabase = await createClient();
@@ -247,7 +249,7 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: 'id（UUID）が必要です。' }, { status: 400 });
   }
 
-  let body: { title?: string; artist?: string; note?: string };
+  let body: { title?: string; artist?: string; note?: string; style?: string; era?: string };
   try {
     body = await request.json();
   } catch {
@@ -258,9 +260,30 @@ export async function PATCH(request: Request) {
   if (typeof body.title === 'string') patch.title = clampStr(body.title, 500);
   if (typeof body.artist === 'string') patch.artist = clampStr(body.artist, 500);
   if (typeof body.note === 'string') patch.note = clampStr(body.note, 4000);
+  const wantsStyle = typeof body.style === 'string';
+  const wantsEra = typeof body.era === 'string';
+  const style = wantsStyle ? body.style.trim() : '';
+  const era = wantsEra ? body.era.trim() : '';
+  console.info('[my-list PATCH] request', {
+    userId: session.user.id,
+    id,
+    hasTitle: typeof body.title === 'string',
+    hasArtist: typeof body.artist === 'string',
+    hasNote: typeof body.note === 'string',
+    wantsStyle,
+    wantsEra,
+    style,
+    era,
+  });
+  if (wantsStyle && style && !SONG_STYLE_OPTIONS.includes(style as (typeof SONG_STYLE_OPTIONS)[number])) {
+    return NextResponse.json({ error: 'style が不正です。' }, { status: 400 });
+  }
+  if (wantsEra && era && !SONG_ERA_OPTIONS.includes(era as (typeof SONG_ERA_OPTIONS)[number])) {
+    return NextResponse.json({ error: 'era が不正です。' }, { status: 400 });
+  }
 
-  if (Object.keys(patch).length === 0) {
-    return NextResponse.json({ error: 'title / artist / note のいずれかを指定してください。' }, { status: 400 });
+  if (Object.keys(patch).length === 0 && !wantsStyle && !wantsEra) {
+    return NextResponse.json({ error: 'title / artist / note / style / era のいずれかを指定してください。' }, { status: 400 });
   }
 
   patch.updated_at = new Date().toISOString();
@@ -282,8 +305,55 @@ export async function PATCH(request: Request) {
   if (!data) {
     return NextResponse.json({ error: '見つかりません。' }, { status: 404 });
   }
+  console.info('[my-list PATCH] updated row', {
+    id: data.id,
+    videoId: data.video_id,
+    artist: data.artist,
+  });
+
+  if (wantsStyle) {
+    if (style) {
+      const { error: styleErr } = await supabase
+        .from('song_style')
+        .upsert({ video_id: data.video_id, style }, { onConflict: 'video_id' });
+      if (styleErr && styleErr.code !== '42P01') {
+        console.error('[my-list PATCH] song_style upsert', styleErr);
+      }
+    } else {
+      const { error: styleDelErr } = await supabase
+        .from('song_style')
+        .delete()
+        .eq('video_id', data.video_id);
+      if (styleDelErr && styleDelErr.code !== '42P01') {
+        console.error('[my-list PATCH] song_style delete', styleDelErr);
+      }
+    }
+  }
+  if (wantsEra) {
+    if (era) {
+      const { error: eraErr } = await supabase
+        .from('song_era')
+        .upsert({ video_id: data.video_id, era }, { onConflict: 'video_id' });
+      if (eraErr && eraErr.code !== '42P01') {
+        console.error('[my-list PATCH] song_era upsert', eraErr);
+      }
+    } else {
+      const { error: eraDelErr } = await supabase
+        .from('song_era')
+        .delete()
+        .eq('video_id', data.video_id);
+      if (eraDelErr && eraDelErr.code !== '42P01') {
+        console.error('[my-list PATCH] song_era delete', eraDelErr);
+      }
+    }
+  }
 
   await syncMyListItemLibraryArtists(supabase, session.user.id, data.id, data.artist);
+  console.info('[my-list PATCH] sync requested', {
+    id: data.id,
+    videoId: data.video_id,
+    artist: data.artist,
+  });
 
   return NextResponse.json({ ok: true, item: data as MyListItemRow });
 }

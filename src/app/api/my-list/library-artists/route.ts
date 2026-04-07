@@ -1,5 +1,6 @@
 ﻿import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { syncMyListItemLibraryArtists } from '@/lib/my-list-sync-library-artists';
 
 export const dynamic = 'force-dynamic';
 
@@ -48,6 +49,22 @@ export async function GET() {
   }
 
   const uid = session.user.id;
+  console.info('[my-list/library-artists] GET start', { userId: uid });
+
+  // 既存データとの不整合（過去保存分・一部失敗）を吸収するため、
+  // 一覧取得時にアーティスト紐付けを軽く再同期する。
+  const { data: rawItems, error: itemsErr } = await supabase
+    .from('user_my_list_items')
+    .select('id, artist')
+    .eq('user_id', uid);
+  if (!itemsErr && rawItems?.length) {
+    console.info('[my-list/library-artists] resync items', { count: rawItems.length });
+    for (const it of rawItems as { id: string; artist: string | null }[]) {
+      await syncMyListItemLibraryArtists(supabase, uid, it.id, it.artist);
+    }
+  } else if (itemsErr && itemsErr.code !== '42P01') {
+    console.error('[my-list/library-artists] items for resync', itemsErr);
+  }
 
   const { data: artistRowsWithSlug, error: aErrWithSlug } = await supabase
     .from('user_my_library_artists')
@@ -125,6 +142,11 @@ export async function GET() {
   });
 
   artists.sort((a, b) => a.display_name.localeCompare(b.display_name, 'ja'));
+  console.info('[my-list/library-artists] GET done', {
+    userId: uid,
+    artistCount: artists.length,
+    artistNames: artists.map((a) => a.display_name),
+  });
 
   return NextResponse.json({ artists });
 }
