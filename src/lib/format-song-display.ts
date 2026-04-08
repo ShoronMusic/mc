@@ -573,6 +573,61 @@ export function parseArtistTitleFromDescription(description: string): { artist: 
 const normKey = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
 
 /**
+ * ハイフン分割後の片側から末尾の公式MV系括弧だけ落とす（チャンネル照合・looksLikeArtistName 用）。
+ * cleanTitle 全体はかけない（誤爆防止）。
+ */
+function stripTrailingOfficialStyleParensFromSegment(segment: string): string {
+  let t = segment.trim();
+  const tailRes = [
+    /\s*\(\s*Official\s+Video\s*\)\s*$/i,
+    /\s*\(\s*Official\s+Music\s+Video\s*\)\s*$/i,
+    /\s*\(\s*Official\s+Audio\s*\)\s*$/i,
+    /\s*\(\s*Official\s+Visualizer\s*\)\s*$/i,
+    /\s*\(\s*Official\s+Lyric\s+Video\s*\)\s*$/i,
+    /\s*\(\s*Lyrics?\s+Video\s*\)\s*$/i,
+    /\s*\(\s*Music\s+Video\s*\)\s*$/i,
+  ];
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const re of tailRes) {
+      const next = t.replace(re, '').trim();
+      if (next !== t) {
+        t = next;
+        changed = true;
+        break;
+      }
+    }
+  }
+  return t;
+}
+
+/** oEmbed の "and" とタイトル側 "&" をチャンネル照合で揃える */
+function normSegmentForChannelCompare(s: string): string {
+  return normKey(s).replace(/\s*&\s*/g, ' and ');
+}
+
+function alnumCompactForChannelCompare(s: string): string {
+  return normSegmentForChannelCompare(s).replace(/[^a-z0-9]/g, '');
+}
+
+/**
+ * Genius / Apple 典型の「アーティスト "曲名"」先頭付近パターン（左右スワップ抑止用）。
+ * `rock 'n' roll` の単独1文字 `'n'` に `^.+\\s+['"]…` がマッチすると「"曲 - アーティスト"」が救えなくなるため、
+ * 単引用の内側が短すぎる場合は除外する。
+ */
+function titleHasExplicitLeadingArtistQuotedSongForSwapGuard(titleForParse: string): boolean {
+  const t = titleForParse.trim();
+  if (!t) return false;
+  if (/^.+\s+"[^"]+"(?:\s|$)/.test(t) || /^.+:\s+"[^"]+"(?:\s|$)/.test(t)) return true;
+  const spaced = t.match(/^(.+)\s+'([^']+)'(?:\s|$)/);
+  if (spaced && spaced[2].trim().length >= 3) return true;
+  const colon = t.match(/^(.+):\s*'([^']+)'(?:\s|$)/);
+  if (colon && colon[2].trim().length >= 3) return true;
+  return false;
+}
+
+/**
  * タイトルから取った曲名に、客演っぽい語（with / and / & / feat）が含まれる可能性があるか。
  * このとき概要欄の単独曲名と突き合わせる（「Be With You」の with を誤爆しやすい）。
  */
@@ -789,8 +844,7 @@ export function getArtistAndSong(
   });
   if (parsed) {
     const explicitQuotedArtistSongPattern =
-      /^.+\s+["'][^"']+["'](?:\s|$)/.test(titleForParse.trim()) ||
-      /^.+:\s*["'][^"']+["'](?:\s|$)/.test(titleForParse.trim());
+      titleHasExplicitLeadingArtistQuotedSongForSwapGuard(titleForParse);
     // 逆パターン対策:
     // 日本のPVや一部チャンネルで「曲名 - アーティスト」になっていることがある。
     // 例: "Heal the World - Music Travel Love & Friends (Al Madam, UAE)"
@@ -800,6 +854,8 @@ export function getArtistAndSong(
 
     const left = parsed.artist.trim(); // parseArtistTitle上は artist 扱い（左側）
     const right = parsed.song.trim();  // parseArtistTitle上は song 扱い（右側）
+    const leftForCh = stripTrailingOfficialStyleParensFromSegment(left);
+    const rightForCh = stripTrailingOfficialStyleParensFromSegment(right);
 
     const norm = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
     /** VEVO 等のスラッグ（georgemichael）とタイトル側の「名 姓」（george michael）を突き合わせる */
@@ -813,29 +869,37 @@ export function getArtistAndSong(
     const leftAc = alnumCompact(left);
     const rightAc = alnumCompact(right);
 
+    /** タイトル片と oEmbed author の & / and 差・末尾 (Official Video) を吸収してチャンネル一致を見る */
+    const chNormLoose = normSegmentForChannelCompare(ch);
+    const leftNormLoose = normSegmentForChannelCompare(leftForCh);
+    const rightNormLoose = normSegmentForChannelCompare(rightForCh);
+    const chAcLoose = alnumCompactForChannelCompare(ch);
+    const leftAcLoose = alnumCompactForChannelCompare(leftForCh);
+    const rightAcLoose = alnumCompactForChannelCompare(rightForCh);
+
     const channelLooksLikeRight =
-      Boolean(chNorm) &&
-      (rightNorm === chNorm ||
-        rightNorm.startsWith(chNorm + ' ') ||
-        rightNorm.startsWith(chNorm + '&') ||
-        rightNorm.startsWith(chNorm + ' (') ||
-        rightNorm.includes(chNorm + ' &') ||
-        rightNorm.includes(chNorm + ' and') ||
-        (chAc.length >= MIN_CHANNEL_ALNUM_MATCH &&
-          rightAc.length >= MIN_CHANNEL_ALNUM_MATCH &&
-          chAc === rightAc));
+      Boolean(chNormLoose) &&
+      (rightNormLoose === chNormLoose ||
+        rightNormLoose.startsWith(chNormLoose + ' ') ||
+        rightNormLoose.startsWith(chNormLoose + '&') ||
+        rightNormLoose.startsWith(chNormLoose + ' (') ||
+        rightNormLoose.includes(chNormLoose + ' &') ||
+        rightNormLoose.includes(chNormLoose + ' and') ||
+        (chAcLoose.length >= MIN_CHANNEL_ALNUM_MATCH &&
+          rightAcLoose.length >= MIN_CHANNEL_ALNUM_MATCH &&
+          chAcLoose === rightAcLoose));
 
     const channelLooksLikeLeft =
-      Boolean(chNorm) &&
-      (leftNorm === chNorm ||
-        leftNorm.startsWith(chNorm + ' ') ||
-        leftNorm.startsWith(chNorm + '&') ||
-        leftNorm.startsWith(chNorm + ' (') ||
-        leftNorm.includes(chNorm + ' &') ||
-        leftNorm.includes(chNorm + ' and') ||
-        (chAc.length >= MIN_CHANNEL_ALNUM_MATCH &&
-          leftAc.length >= MIN_CHANNEL_ALNUM_MATCH &&
-          chAc === leftAc));
+      Boolean(chNormLoose) &&
+      (leftNormLoose === chNormLoose ||
+        leftNormLoose.startsWith(chNormLoose + ' ') ||
+        leftNormLoose.startsWith(chNormLoose + '&') ||
+        leftNormLoose.startsWith(chNormLoose + ' (') ||
+        leftNormLoose.includes(chNormLoose + ' &') ||
+        leftNormLoose.includes(chNormLoose + ' and') ||
+        (chAcLoose.length >= MIN_CHANNEL_ALNUM_MATCH &&
+          leftAcLoose.length >= MIN_CHANNEL_ALNUM_MATCH &&
+          chAcLoose === leftAcLoose));
 
     // 左側が「曲名っぽい」か（MV系の接尾辞や括弧付きなども含めて判定）
     const looksLikeSongTitle = (s: string) => {
@@ -849,13 +913,13 @@ export function getArtistAndSong(
 
     // 右側が「アーティストっぽい」か（短め／人名・バンド名に出やすい記号程度）
     const looksLikeArtistName = (s: string) => {
-      const x = s.trim();
+      const x = stripTrailingOfficialStyleParensFromSegment(s.trim());
       if (!x) return false;
       if (x.length <= 2) return false;
       if (x.length > 60) return false;
       // 年や解説の断片は避ける
       if (/\b(19\d{2}|20\d{2})\b/.test(x)) return false;
-      // MV/歌詞などは曲名側に寄ることが多い
+      // MV/歌詞などは曲名側に寄ることが多い（末尾の (Official Video) は上で除去済み）
       if (/(official|music video|lyric|lyrics|hd|4k|remaster|live|cover)\b/i.test(x)) return false;
       // 記号はバンド名であり得る範囲だけ許容（ATARASHII GAKKO! 等）
       if (!/^[A-Za-z0-9 '&.\-!?]+$/.test(x)) return false;

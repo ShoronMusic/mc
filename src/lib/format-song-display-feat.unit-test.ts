@@ -196,6 +196,15 @@ assert.equal(cleanTitle('Foo © 1999 Some Label LLC'), 'Foo');
   assert.equal(r.song, 'Maneater');
 }
 
+// 先頭が二重引用符の曲名「"Song" - Artist (Official Video)」：& / and と末尾括弧を吸収してチャンネル一致でスワップ（wMsazR6Tnf8）
+{
+  const title = '"I Love Rock \'n\' Roll" - Joan Jett & the Blackhearts (Official Video)';
+  const r = getArtistAndSong(title, 'Joan Jett and the Blackhearts');
+  assert.ok(/Joan Jett/i.test(r.artistDisplay ?? ''));
+  assert.ok(/Blackhearts/i.test(r.artistDisplay ?? ''));
+  assert.ok(/\bI Love Rock/.test(r.song));
+}
+
 // 公式MVで多い「曲名 - Linkin Park X Steve Aoki」（X コラボは & / and と同様に逆順の手がかり）
 {
   const r = getArtistAndSong(
