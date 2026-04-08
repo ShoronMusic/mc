@@ -201,7 +201,7 @@ const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>(
           playerRef.current = null;
         }
       };
-    }, [apiReady, videoId, syncPlayerSize]);
+    }, [apiReady, containerId, videoId, syncPlayerSize]);
 
     /**
      * 再生対象が無くなったとき（skip で videoId=null など）は

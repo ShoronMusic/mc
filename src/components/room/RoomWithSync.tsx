@@ -265,6 +265,11 @@ interface CandidateSong {
   usedAt?: number;
 }
 
+/** Hook 依存配列から外す（再生成不要の定数） */
+const SEC_AFTER_END_BEFORE_PROMPT = 30;
+const DEFAULT_DURATION_WHEN_UNKNOWN_SEC = 240;
+const FIVE_MIN_MS = 5 * 60 * 1000;
+
 interface RoomWithSyncProps {
   displayName?: string;
   channelName: string;
@@ -605,14 +610,23 @@ export default function RoomWithSync({
     roomPresenceJoinedAtMsRef.current = Date.now();
   }
 
-  const presencePayload: PresenceMemberData = {
-    displayName: effectiveDisplayName,
-    participatesInSelection,
-    textColor: userTextColor,
-    status: userStatus || undefined,
-    jpAiUnlockEnabled: jpAiUnlockEnabledRef.current,
-    joinedAtMs: roomPresenceJoinedAtMsRef.current,
-  };
+  const presencePayload: PresenceMemberData = useMemo(
+    () => ({
+      displayName: effectiveDisplayName,
+      participatesInSelection,
+      textColor: userTextColor,
+      status: userStatus || undefined,
+      jpAiUnlockEnabled,
+      joinedAtMs: roomPresenceJoinedAtMsRef.current ?? undefined,
+    }),
+    [
+      effectiveDisplayName,
+      participatesInSelection,
+      userTextColor,
+      userStatus,
+      jpAiUnlockEnabled,
+    ],
+  );
   const { updateStatus } = usePresence(channelName, presencePayload);
   const { presenceData } = usePresenceListener<PresenceMemberData>(channelName);
   presentClientIdsRef.current = new Set(presenceData.map((p) => p.clientId));
@@ -623,15 +637,7 @@ export default function RoomWithSync({
 
   useEffect(() => {
     updateStatus(presencePayload);
-  }, [
-    updateStatus,
-    effectiveDisplayName,
-    participatesInSelection,
-    userTextColor,
-    userStatus,
-    jpAiUnlockEnabled,
-    presencePayload.joinedAtMs,
-  ]);
+  }, [updateStatus, presencePayload]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -2379,7 +2385,7 @@ export default function RoomWithSync({
       }
     }, 10000);
     return () => clearInterval(t);
-  }, [touchActivity, addAiMessage, userStatus]);
+  }, [touchActivity, addAiMessage, userStatus, roomId]);
 
   useEffect(() => {
     try {
@@ -2387,10 +2393,6 @@ export default function RoomWithSync({
       if (saved && /^#[0-9a-fA-F]{6}$/.test(saved)) setUserTextColor(saved);
     } catch {}
   }, []);
-
-  const SEC_AFTER_END_BEFORE_PROMPT = 30;
-  const DEFAULT_DURATION_WHEN_UNKNOWN_SEC = 240;
-  const FIVE_MIN_MS = 5 * 60 * 1000;
 
   /** 複数人・5分制限ON・再生中で、開始から5分未満なら次曲はキューのみ（オーナー含む全員。即時切替しない） */
   const shouldDeferMultiSongPost = useCallback(() => {
@@ -2404,7 +2406,7 @@ export default function RoomWithSync({
     const started = currentTrackStartedAtMsRef.current;
     if (!started) return false;
     return Date.now() - started < FIVE_MIN_MS;
-  }, [FIVE_MIN_MS]);
+  }, []);
 
   const clearPendingFreeCommentTimers = useCallback(() => {
     if (freeCommentTimeoutsRef.current.length > 0) {
@@ -2625,7 +2627,7 @@ export default function RoomWithSync({
         })
         .catch(() => {});
     },
-    [addAiMessage, touchActivity, effectiveDisplayName, promptNextTurn, roomId]
+    [addAiMessage, addSystemMessage, touchActivity, effectiveDisplayName, promptNextTurn, roomId]
   );
 
   const fetchCommentaryAndPublish = useCallback(

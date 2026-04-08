@@ -386,7 +386,7 @@ export default function RoomPlaybackHistory({
       tabArtist: normalizeArtistNameForMusic8Lookup(fallbackArtist),
       tabSong: t,
     };
-  }, [currentRowForTabs?.video_id, currentRowForTabs?.title, currentRowForTabs?.artist_name]);
+  }, [currentRowForTabs]);
 
   useEffect(() => {
     fetch('/api/style-admin-check', { credentials: 'include' })

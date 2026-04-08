@@ -95,6 +95,8 @@ export default function MainArtistTabPanel({ artistName, songTitle }: MainArtist
     <div className="flex h-full flex-col gap-3 overflow-auto p-4 text-sm">
       <div className="flex flex-shrink-0 gap-4">
         {lines.imageUrl && (
+          // Music8 の外部 URL は next.config に remotePatterns が無いため img のまま
+          // eslint-disable-next-line @next/next/no-img-element -- 動的外部ドメイン
           <img
             src={lines.imageUrl}
             alt=""

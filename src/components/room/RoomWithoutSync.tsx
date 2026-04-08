@@ -305,20 +305,6 @@ export default function RoomWithoutSync({
     setPlaying(state === 'play');
   }, []);
 
-  const handleSkipCurrentTrack = useCallback(() => {
-    const vid = videoIdRef.current;
-    if (!vid) return;
-    setSkipUsedForVideoId(vid);
-    try {
-      playerRef.current?.pauseVideo();
-    } catch {
-      // noop
-    }
-    setVideoId(null);
-    setPlaying(false);
-    addAiMessage('次の曲をどうぞ', { bypassJpDomesticSilence: true });
-  }, []);
-
   const addAiMessage = useCallback(
     (
       body: string,
@@ -351,6 +337,20 @@ export default function RoomWithoutSync({
     },
     []
   );
+
+  const handleSkipCurrentTrack = useCallback(() => {
+    const vid = videoIdRef.current;
+    if (!vid) return;
+    setSkipUsedForVideoId(vid);
+    try {
+      playerRef.current?.pauseVideo();
+    } catch {
+      // noop
+    }
+    setVideoId(null);
+    setPlaying(false);
+    addAiMessage('次の曲をどうぞ', { bypassJpDomesticSilence: true });
+  }, [addAiMessage]);
 
   const addSystemMessage = useCallback((body: string, searchQueryOrOpts?: SystemMessageOptions) => {
     const opts =
@@ -463,7 +463,7 @@ export default function RoomWithoutSync({
       }
     }, 10000);
     return () => clearInterval(t);
-  }, [touchActivity, addAiMessage]);
+  }, [touchActivity, addAiMessage, roomId]);
 
   const videoEndedAtRef = useRef<number | null>(null);
   useEffect(() => {
@@ -594,7 +594,7 @@ export default function RoomWithoutSync({
           addSystemMessage(SYSTEM_MESSAGE_COMMENTARY_FETCH_FAILED);
         });
     },
-    [addAiMessage, addSystemMessage, touchActivity]
+    [addAiMessage, addSystemMessage, touchActivity, roomId]
   );
 
   const schedulePlaybackHistory = useCallback(
@@ -1036,6 +1036,7 @@ export default function RoomWithoutSync({
       isGuest,
       displayNameProp,
       authUserId,
+      onLeave,
     ]
   );
 
