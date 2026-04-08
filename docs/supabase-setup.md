@@ -327,3 +327,36 @@ alter table public.site_feedback enable row level security;
 ```
 
 anon には `insert` / `select` ポリシーを付けません（クライアント直叩き不可）。API のみサービスロールで挿入し、管理 API のみ読み取ります。
+
+---
+
+## 13. アーティスト／曲名スナップショット報告（`artist_title_parse_reports`）
+
+**STYLE_ADMIN**（`STYLE_ADMIN_USER_IDS` に含まれるログインユーザー）だけが、部屋チャットの曲紹介・曲解説メッセージから「表記メタを記録」でき、oEmbed・YouTube snippet・`resolveArtistSongForPackAsync` 結果などを **JSON** で保存します。開発時にスワップ等を後から検証する用途です。
+
+- **書き込み**: `POST /api/admin/artist-title-parse-report`（ログイン＋STYLE_ADMIN、**`SUPABASE_SERVICE_ROLE_KEY` 必須**）
+- **一覧**: 管理画面 `/admin/artist-title-parse-reports` または `GET /api/admin/artist-title-parse-reports`
+
+```sql
+create table if not exists public.artist_title_parse_reports (
+  id uuid primary key default gen_random_uuid(),
+  created_at timestamptz not null default now(),
+  reporter_user_id uuid not null references auth.users (id) on delete cascade,
+  room_id text,
+  message_kind text not null check (message_kind in ('announce_song', 'song_commentary')),
+  video_id text not null,
+  chat_message_body text,
+  reporter_note text,
+  snapshot jsonb not null
+);
+
+create index if not exists artist_title_parse_reports_created_idx
+  on public.artist_title_parse_reports (created_at desc);
+
+create index if not exists artist_title_parse_reports_video_idx
+  on public.artist_title_parse_reports (video_id);
+
+alter table public.artist_title_parse_reports enable row level security;
+```
+
+anon にはポリシーを付けません。挿入・読み取りは API がサービスロールで行います。

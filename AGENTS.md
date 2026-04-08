@@ -14,6 +14,8 @@
 | Gemini プロンプト | `src/lib/gemini.ts` | チャット返答、tidbit、選曲クエリ抽出、曲解説、スタイル分類 |
 | 生成文ポリシー | `src/lib/ai-output-policy.ts` | 根拠なしチャート/バズ等の**再生成判定**（変更時は単体テスト必須） |
 | 曲解説パック API | `src/app/api/ai/comment-pack/route.ts` | 基本1本＋自由3本。上記ポリシーを利用。開発で基本1本のみ＋選曲直後の announce 非表示は `.env.local` に `NEXT_PUBLIC_DEV_MINIMAL_SONG_AI=1` |
+| アーティスト／曲名スナップショット（STYLE_ADMIN） | `POST /api/admin/artist-title-parse-report`・`/admin/artist-title-parse-reports` | チャットの曲紹介・`[NEW]`/`[DB]` 曲解説に「表記メタを記録」ボタン（`STYLE_ADMIN_USER_IDS` かつ `SUPABASE_SERVICE_ROLE_KEY`）。テーブル SQL は `docs/supabase-setup.md` セクション 13 |
+| 選曲時のアーティスト／曲名（検証用切替） | `src/lib/youtube-artist-song-for-pack.ts` | 既定は `resolveArtistSongForPackAsync`（概要欄・MusicBrainz 等）。**マイリスト編集と同系の oEmbed 簡易分割だけ**に一時切替するには `.env.local` に `YT_ARTIST_TITLE_MODE=mylist_oembed`（視聴履歴 POST・announce-song・comment-pack・commentary）。比較検証時は `DEBUG_YT_ARTIST=1` でサーバーログに解決結果が出る |
 | 「@」音楽関連の二次判定 | `src/app/api/ai/question-guard-classify/route.ts` ＋ `src/lib/ai-question-guard-prompt.ts` | クライアントでキーワード落ちしたときだけ Gemini。無効化は `AI_QUESTION_GUARD_GEMINI=0`。異議データの活用手順は `docs/supabase-setup.md` 11.1 |
 | AI 質問ガード（退場のみ免除） | `src/lib/ai-question-guard-exempt-user-ids.ts` | 指定した登録ユーザーは警告・カードは通常どおり。累積後の自動退場・入室禁止だけスキップ（`RoomWithSync` / `RoomWithoutSync`） |
 

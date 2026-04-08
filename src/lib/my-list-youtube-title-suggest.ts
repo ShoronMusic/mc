@@ -5,6 +5,8 @@
  * 複数アーティストは「A, B, C - 曲名」のようにカンマ+空白区切り（曲名内のハイフンは最初の「 - 」のみで分割）。
  */
 
+import { getMainArtist } from '@/lib/format-song-display';
+
 /** 「左（アーティスト側）|右（曲名側）」の最初の境界（曲名内の Non-Film 等は分割しない） */
 const FIRST_SPACED_DASH = /\s+[-\u2013\u2014\u2015]\s+/;
 
@@ -146,4 +148,23 @@ export function suggestMyListArtistTitleFromYoutubeStyle(
 /** フォーム配列 → DB の単一 artist 列（カンマ+空白区切り） */
 export function joinMyListArtistsForStorage(artists: string[]): string {
   return artists.map((s) => s.trim()).filter(Boolean).join(', ');
+}
+
+/** `YT_ARTIST_TITLE_MODE=mylist_oembed` 用: oEmbed の author_name + title をマイリスト編集と同じ規則で pack 形にする */
+export function resolveOEmbedToMyListStylePack(
+  oembedTitle: string,
+  channelAuthorName: string | null | undefined,
+): { artist: string | null; artistDisplay: string | null; song: string } {
+  const rawTitle = (oembedTitle ?? '').trim();
+  const suggested = suggestMyListArtistTitleFromYoutubeStyle(channelAuthorName, rawTitle || null);
+  const displayBlob = joinMyListArtistsForStorage(suggested.artists).trim();
+  let song = (suggested.title ?? '').trim();
+  if (!song && rawTitle) song = cleanMyListSongTitle(rawTitle);
+  if (!song) song = rawTitle;
+
+  const artistDisplay = displayBlob.length > 0 ? displayBlob : null;
+  const artist =
+    artistDisplay && artistDisplay.length > 0 ? getMainArtist(artistDisplay) || artistDisplay : null;
+
+  return { artist, artistDisplay, song };
 }

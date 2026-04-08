@@ -3,6 +3,7 @@ import {
   isLikelyYoutubeChannelUploader,
   joinMyListArtistsForStorage,
   parseCommaSeparatedArtists,
+  resolveOEmbedToMyListStylePack,
   splitTitleAtFirstSpacedDash,
   suggestMyListArtistTitleFromYoutubeStyle,
 } from './my-list-youtube-title-suggest';
@@ -69,5 +70,22 @@ const r5 = suggestMyListArtistTitleFromYoutubeStyle(
 );
 assertArraysEqual(r5.artists, ['Bryan Adams', 'Rod Stewart', 'Sting'], 'r5 round-trip');
 assert(r5.title === 'All For Love', `r5 title: ${r5.title}`);
+
+const p1 = resolveOEmbedToMyListStylePack(
+  'The Police - Every Breath You Take (Official Music Video)',
+  'ThePoliceVEVO',
+);
+assert(p1.artistDisplay === 'The Police', `p1 artistDisplay: ${p1.artistDisplay}`);
+assert(p1.song === 'Every Breath You Take', `p1 song: ${p1.song}`);
+
+const p2 = resolveOEmbedToMyListStylePack(
+  'Bryan Adams, Rod Stewart, Sting - All For Love (Non-Film Version)',
+  'BryanAdamsVEVO',
+);
+assert(
+  p2.artistDisplay === 'Bryan Adams, Rod Stewart, Sting',
+  `p2 artistDisplay: ${p2.artistDisplay}`,
+);
+assert(p2.song === 'All For Love', `p2 song: ${p2.song}`);
 
 console.log('my-list-youtube-title-suggest unit tests: OK');

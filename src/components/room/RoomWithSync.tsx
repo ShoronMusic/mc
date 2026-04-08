@@ -315,6 +315,26 @@ export default function RoomWithSync({
   useEffect(() => {
     setRoomDisplayTitleCurrent(roomDisplayTitle);
   }, [roomDisplayTitle]);
+
+  useEffect(() => {
+    if (isGuest) {
+      setChatStyleAdminTools(false);
+      return;
+    }
+    let cancelled = false;
+    void fetch('/api/session/chat-style-admin', { credentials: 'include' })
+      .then((r) => r.json())
+      .then((d: { chatStyleAdmin?: boolean }) => {
+        if (cancelled) return;
+        setChatStyleAdminTools(d?.chatStyleAdmin === true);
+      })
+      .catch(() => {
+        if (!cancelled) setChatStyleAdminTools(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isGuest]);
   const [chatSummary, setChatSummary] = useState<{
     summaryText: string;
     sessionWindowLabel: string;
@@ -385,6 +405,7 @@ export default function RoomWithSync({
     setQueuedSongPublisherClientIds(q.map((e) => e.publisherClientId));
   }, []);
   const [favoritedVideoIds, setFavoritedVideoIds] = useState<string[]>([]);
+  const [chatStyleAdminTools, setChatStyleAdminTools] = useState(false);
   const recentlyUsedTidbitIdsRef = useRef<string[]>([]);
   const tidbitCountSinceUserMessageRef = useRef(0);
   const lastEndedVideoIdForTidbitRef = useRef<string | null>(null);
@@ -1413,6 +1434,7 @@ export default function RoomWithSync({
               allowWhenAiStopped: true,
               bypassJpDomesticSilence: true,
               localOnly: true,
+              videoId: targetVid,
             });
           })
           .catch(() => {});
@@ -3951,6 +3973,7 @@ export default function RoomWithSync({
             jpAiUnlockEnabled={jpAiUnlockEnabled}
             roomId={roomId ?? undefined}
             myClientId={myClientId || undefined}
+            styleAdminChatTools={chatStyleAdminTools}
           />
         }
         rightTop={

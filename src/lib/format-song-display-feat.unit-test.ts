@@ -165,6 +165,26 @@ assert.equal(cleanTitle('Foo © 1999 Some Label LLC'), 'Foo');
   assert.equal(r.artistDisplay, 'David Bowie, Pat Metheny Group');
   assert.equal(r.song, 'This Is Not America');
 }
+
+// 左が「A, B, C」カンマ共演かつ曲名が短いときも、誤 performing（曲・アーティスト逆）を無視する（ofA3URC1wyk 系）
+{
+  const title = 'Bryan Adams, Rod Stewart, Sting - All For Love (Non-Film Version)';
+  const desc =
+    'Music video by All For Love performing Bryan Adams, Rod Stewart, Sting.\n© 1993';
+  const r = getArtistAndSong(title, 'BryanAdamsVEVO', { videoDescription: desc });
+  assert.match(r.artistDisplay, /Bryan Adams/);
+  assert.match(r.artistDisplay, /Sting/);
+  assert.ok(r.song.includes('All For Love'));
+}
+// 正しい performing 行はそのまま採用（カンマ共演タイトルでも誤って捨てない）
+{
+  const title = 'Bryan Adams, Rod Stewart, Sting - All For Love (Non-Film Version)';
+  const desc =
+    'Music video by Bryan Adams, Rod Stewart, Sting performing All For Love.\n© 1993';
+  const r = getArtistAndSong(title, 'BryanAdamsVEVO', { videoDescription: desc });
+  assert.match(r.artistDisplay, /Bryan Adams/);
+  assert.ok(r.song.includes('All For Love'));
+}
 {
   const desc = 'Music video by Maneater performing Daryl Hall & John Oates\n\nMore';
   const r = resolveArtistSongForPack('Daryl Hall & John Oates - Maneater (Official Video)', 'Unrelated', {

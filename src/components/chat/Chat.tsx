@@ -87,6 +87,8 @@ interface ChatProps {
   roomId?: string;
   /** 自分の Ably clientId（ガード警告の対象者のみ異議ボタンを出す） */
   myClientId?: string;
+  /** STYLE_ADMIN のみ true（表記メタ記録ボタン） */
+  styleAdminChatTools?: boolean;
 }
 
 function formatTime(createdAt: string): string {
@@ -271,6 +273,7 @@ export default function Chat({
   jpAiUnlockEnabled = false,
   roomId,
   myClientId,
+  styleAdminChatTools = false,
 }: ChatProps) {
   const pathname = usePathname();
   const pathSegs = pathname?.split('/').filter(Boolean) ?? [];
@@ -291,6 +294,7 @@ export default function Chat({
   const [detailChecks, setDetailChecks] = useState({ duplicate: false, dubious: false, ambiguous: false });
   const [detailComment, setDetailComment] = useState('');
   const [tidbitRejectingId, setTidbitRejectingId] = useState<string | null>(null);
+  const [artistTitleReportingId, setArtistTitleReportingId] = useState<string | null>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -337,6 +341,53 @@ export default function Chat({
     setDetailChecks({ duplicate: false, dubious: false, ambiguous: false });
     setDetailComment('');
     setFeedbackModal({ open: true, message });
+  }
+
+  function canSaveArtistTitleMeta(m: ChatMessageType): boolean {
+    if (m.messageType !== 'ai' || !m.videoId?.trim()) return false;
+    if (m.body.includes('再生が終了したら次の曲をどうぞ')) return false;
+    return (
+      getSelectorNameFromBody(m.body) != null ||
+      m.body.startsWith('[NEW]') ||
+      m.body.startsWith('[DB]')
+    );
+  }
+
+  function artistTitleReportMessageKind(m: ChatMessageType): 'announce_song' | 'song_commentary' {
+    return getSelectorNameFromBody(m.body) != null ? 'announce_song' : 'song_commentary';
+  }
+
+  async function submitArtistTitleReport(m: ChatMessageType) {
+    if (!styleAdminChatTools || !canSaveArtistTitleMeta(m)) return;
+    const vid = m.videoId!.trim();
+    const note = window.prompt('メモ（任意・不具合の気づきなど）', '') ?? '';
+    setArtistTitleReportingId(m.id);
+    try {
+      const res = await fetch('/api/admin/artist-title-parse-report', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          roomId: roomId?.trim() || undefined,
+          videoId: vid,
+          messageKind: artistTitleReportMessageKind(m),
+          chatBody: m.body.slice(0, 12000),
+          reporterNote: note.trim() || undefined,
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string; hint?: string };
+      if (!res.ok) {
+        window.alert(
+          data.error
+            ? `${data.error}${data.hint ? `\n\n${data.hint}` : ''}`
+            : '保存に失敗しました。',
+        );
+        return;
+      }
+      window.alert('管理画面に保存しました。\n/admin/artist-title-parse-reports');
+    } finally {
+      setArtistTitleReportingId((cur) => (cur === m.id ? null : cur));
+    }
   }
 
   async function sendDetailFeedback() {
@@ -732,6 +783,23 @@ export default function Chat({
                     )}
                   </div>
                 )}
+                {m.messageType === 'ai' &&
+                  styleAdminChatTools &&
+                  canSaveArtistTitleMeta(m) && (
+                    <div className="mt-1">
+                      <button
+                        type="button"
+                        disabled={artistTitleReportingId === m.id}
+                        className="rounded border border-amber-700/80 bg-amber-950/40 px-2 py-0.5 text-[11px] font-medium text-amber-200/95 hover:bg-amber-900/50 disabled:opacity-50"
+                        title="oEmbed・snippet・resolve 結果を DB に保存（開発検証用）"
+                        onClick={() => void submitArtistTitleReport(m)}
+                      >
+                        {artistTitleReportingId === m.id
+                          ? '保存中…'
+                          : '表記メタを記録（STYLE_ADMIN）'}
+                      </button>
+                    </div>
+                  )}
               </li>
               );
             })}

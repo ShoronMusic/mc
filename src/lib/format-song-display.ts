@@ -680,6 +680,9 @@ export function parseSongPerformedByFromDescription(description: string): { arti
  * A が曲名側・B がアーティスト側に入れ替わっているとき true。
  * 左側に「A & B」共演がある公式タイトルで、誤った performing 行が先にマッチすると
  * 履歴・AI が「曲名 - アーティスト」になることがある（例: Bowie & Metheny / This Is Not America）。
+ * 同様に「Bryan Adams, Rod Stewart, Sting - All For Love」のように **カンマ共演** だけのタイトルでも
+ * 誤 performing（曲名とアーティストが逆）を検出する。短い曲名は compact 後 12 未満になりがちなため、
+ * カンマ共演時は最小長を下げる（All For Love → allforlove が 10 文字）。
  */
 function officialPerformingLineContradictsHyphenTitle(
   title: string,
@@ -702,7 +705,9 @@ function officialPerformingLineContradictsHyphenTitle(
   if (!parsed) return false;
   const left = parsed.artist.trim();
   const right = parsed.song.trim();
-  if (!/\s&\s/.test(left)) return false;
+  /** 公式タイトル左が「A, B, C - 曲」型（& 無しのトリオ・共演で多い） */
+  const leftHasCommaCollaborationArtistList = /,\s+[A-Za-z]/.test(left);
+  if (!/\s&\s/.test(left) && !leftHasCommaCollaborationArtistList) return false;
 
   const compact = (s: string) =>
     s
@@ -710,12 +715,21 @@ function officialPerformingLineContradictsHyphenTitle(
       .replace(/\s+/g, ' ')
       .trim()
       .replace(/[^a-z0-9]/g, '');
-  const MIN = 12;
+  const MIN_DEFAULT = 12;
+  /** カンマ共演タイトルでは曲名側が短くても矛盾検出する（12 だと allforlove で落ちる） */
+  const minRequired = leftHasCommaCollaborationArtistList ? 8 : MIN_DEFAULT;
   const pArt = compact(performing.artist);
   const pSong = compact(performing.song);
   const tL = compact(left);
   const tR = compact(right);
-  if (pArt.length < MIN || pSong.length < MIN || tL.length < MIN || tR.length < MIN) return false;
+  if (
+    pArt.length < minRequired ||
+    pSong.length < minRequired ||
+    tL.length < minRequired ||
+    tR.length < minRequired
+  ) {
+    return false;
+  }
 
   const overlap = (a: string, b: string) =>
     a.startsWith(b) || b.startsWith(a) || a.includes(b) || b.includes(a);
@@ -972,6 +986,13 @@ export function getArtistAndSong(
      */
     const artistDuoFormLeftOnly = multiArtistOnLeft && !multiArtistOnRight;
 
+    /**
+     * 左が「A, B, C - 曲名」のカンマ共演（& / and / × 無し）のとき、曲名が複語で looksLikeArtistName を通すと
+     * branch 2（左の方が長い→逆順）で誤スワップする（例: Bryan Adams, Rod Stewart, Sting - All For Love）。
+     */
+    const artistCommaListFormLeftOnly =
+      /,\s+[A-Za-z]/.test(left.trim()) && !multiArtistOnRight;
+
     // swap条件:
     // 1) チャンネル名が右側に含まれる（強い根拠）
     // 2) もしくは、右がアーティストっぽく左が曲名っぽい（Linkin Park等の公式MVで多い）
@@ -987,7 +1008,8 @@ export function getArtistAndSong(
         !leftLooksLikeStrongArtistCandidate &&
         !bothSingleWordLatinArtistLike &&
         !artistFirstLikelySingleLeftMultiWordRight &&
-        !artistDuoFormLeftOnly) ||
+        !artistDuoFormLeftOnly &&
+        !artistCommaListFormLeftOnly) ||
       shouldSwapTitleArtistOrder ||
       songFirstLeadingTheOnRight ||
       songFirstMultiWordLeftSingleWordRightLonger;

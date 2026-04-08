@@ -14,3 +14,14 @@ export function isStyleAdminUserId(userId: string | null | undefined): boolean {
   if (ids.length === 0) return true;
   return ids.includes(userId);
 }
+
+/**
+ * 部屋チャットの開発者向けツール（表記スナップショット保存など）。
+ * STYLE_ADMIN_USER_IDS が未設定のときは付与しない（/admin と同じ前提）。
+ */
+export function isChatStyleAdminUserId(userId: string | null | undefined): boolean {
+  if (!userId) return false;
+  const ids = getStyleAdminUserIds();
+  if (ids.length === 0) return false;
+  return ids.includes(userId);
+}

@@ -11,6 +11,12 @@ import {
 } from '@/lib/format-song-display';
 import { resolveTitleOrderWithMusicBrainz } from '@/lib/musicbrainz-title-order';
 import { resolveFamousPvArtistSongPack } from '@/lib/youtube-famous-pv-override';
+import { resolveOEmbedToMyListStylePack } from '@/lib/my-list-youtube-title-suggest';
+
+/** 開発・検証用: 選曲まわりを oEmbed + マイリスト系の簡易分割だけにする（MusicBrainz / getArtistAndSong は使わない） */
+function useMyListOembedArtistTitleMode(): boolean {
+  return process.env.YT_ARTIST_TITLE_MODE === 'mylist_oembed';
+}
 
 function enrichArtistSongFromSnippet(
   result: { artist: string | null; artistDisplay: string | null; song: string },
@@ -77,6 +83,10 @@ export function resolveArtistSongForPack(
       snippet?.description,
     );
   }
+  if (useMyListOembedArtistTitleMode()) {
+    const r = resolveOEmbedToMyListStylePack(title, authorName);
+    return finalizePackArtistSong(r, snippet?.description);
+  }
   const base = getArtistAndSong(title, authorName, {
     videoDescription: snippet?.description ?? null,
   });
@@ -131,6 +141,16 @@ export async function resolveArtistSongForPackAsync(
         },
         snippet?.description,
       ),
+    );
+  }
+
+  if (useMyListOembedArtistTitleMode()) {
+    const r = resolveOEmbedToMyListStylePack(title, authorName);
+    return logArtistPackResolution(
+      'mylist_oembed',
+      title,
+      authorName,
+      finalizePackArtistSong(r, snippet?.description),
     );
   }
 

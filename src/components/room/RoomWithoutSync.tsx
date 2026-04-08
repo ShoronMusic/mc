@@ -115,6 +115,28 @@ export default function RoomWithoutSync({
   useEffect(() => {
     setRoomDisplayTitleCurrent(roomDisplayTitle);
   }, [roomDisplayTitle]);
+
+  const [chatStyleAdminTools, setChatStyleAdminTools] = useState(false);
+  useEffect(() => {
+    if (isGuest) {
+      setChatStyleAdminTools(false);
+      return;
+    }
+    let cancelled = false;
+    void fetch('/api/session/chat-style-admin', { credentials: 'include' })
+      .then((r) => r.json())
+      .then((d: { chatStyleAdmin?: boolean }) => {
+        if (cancelled) return;
+        setChatStyleAdminTools(d?.chatStyleAdmin === true);
+      })
+      .catch(() => {
+        if (!cancelled) setChatStyleAdminTools(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isGuest]);
+
   const [chatSummary, setChatSummary] = useState<{
     summaryText: string;
     sessionWindowLabel: string;
@@ -302,6 +324,8 @@ export default function RoomWithoutSync({
       body: string,
       options?: {
         bypassJpDomesticSilence?: boolean;
+        videoId?: string | null;
+        aiSource?: ChatMessage['aiSource'];
       }
     ) => {
       const jpS = jpDomesticSilenceVideoIdRef.current;
@@ -320,6 +344,8 @@ export default function RoomWithoutSync({
         displayName: AI_DISPLAY_NAME,
         messageType: 'ai',
         createdAt: new Date().toISOString(),
+        ...(options?.videoId != null ? { videoId: options.videoId } : {}),
+        ...(options?.aiSource ? { aiSource: options.aiSource } : {}),
       };
       setMessages((prev) => [...prev, msg]);
     },
@@ -481,7 +507,7 @@ export default function RoomWithoutSync({
             if (jpSilence) {
               jpDomesticSilenceVideoIdRef.current = vid;
             }
-            addAiMessage(data.text, { bypassJpDomesticSilence: true });
+            addAiMessage(data.text, { bypassJpDomesticSilence: true, videoId: vid });
             touchActivity();
           }
           const durationSec =
@@ -501,7 +527,7 @@ export default function RoomWithoutSync({
         })
         .catch(() => {});
     },
-    [addAiMessage, touchActivity, displayNameProp]
+    [addAiMessage, touchActivity, displayNameProp, roomId]
   );
 
   const fetchCommentaryAndPublish = useCallback(
@@ -527,7 +553,7 @@ export default function RoomWithoutSync({
             if (pack?.baseComment) {
               commentPackVideoIdRef.current = vid;
               const packPrefix = pack?.source === 'library' ? '[DB] ' : '[NEW] ';
-              addAiMessage(packPrefix + pack.baseComment);
+              addAiMessage(packPrefix + pack.baseComment, { videoId: vid });
               touchActivity();
               tidbitPreferMainArtistLeftRef.current = 2;
               return;
@@ -559,7 +585,7 @@ export default function RoomWithoutSync({
           }
           if (data?.text) {
             const prefix = data.source === 'library' ? '[DB] ' : '[NEW] ';
-            addAiMessage(prefix + data.text);
+            addAiMessage(prefix + data.text, { videoId: vid });
             touchActivity();
             tidbitPreferMainArtistLeftRef.current = 2;
           } else addSystemMessage(SYSTEM_MESSAGE_COMMENTARY_FETCH_FAILED);
@@ -1173,6 +1199,7 @@ export default function RoomWithoutSync({
             onChatSummaryClick={roomId ? openChatSummaryModal : undefined}
             roomId={roomId ?? 'local'}
             myClientId="local-client"
+            styleAdminChatTools={chatStyleAdminTools}
           />
         }
         rightTop={

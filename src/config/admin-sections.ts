@@ -32,6 +32,12 @@ export const ADMIN_SECTIONS: AdminSection[] = [
     description: '部屋画面から送信されたサイト評価（-2〜2）と自由コメントの一覧',
   },
   {
+    href: '/admin/artist-title-parse-reports',
+    title: '曲名表記スナップショット',
+    description:
+      'STYLE_ADMIN がチャットから保存した YouTube メタ＋アーティスト／曲名解析結果（スワップ検証用）',
+  },
+  {
     href: '/admin/ai-question-guard-objections',
     title: 'AI質問ガード異議',
     description:
