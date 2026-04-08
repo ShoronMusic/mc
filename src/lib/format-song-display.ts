@@ -226,6 +226,28 @@ export function stripAppleMusicBrandPrefixFromTitleIfPresent(title: string): {
   return { rest: hadAppleMusicBrandPrefix ? rest : raw, hadAppleMusicBrandPrefix };
 }
 
+/**
+ * 先頭がアップローダー名（authorName）で、その後に「Artist - Song」が続く 3 セグメント型を救済。
+ * 例: "Queen Official - Queen and David Bowie - Under Pressure"
+ *   -> "Queen and David Bowie - Under Pressure"
+ */
+function stripLeadingAuthorPrefixFromTripleHyphenTitleIfPresent(
+  title: string,
+  authorName: string | null | undefined,
+): string {
+  const raw = title.trim();
+  const authorRaw = (authorName ?? '').trim();
+  const normRaw = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
+  const authorRawNorm = normRaw(authorRaw);
+  if (!raw || !authorRawNorm) return raw;
+  const parts = raw.split(/\s*[-–—]\s*/).map((p) => p.trim()).filter(Boolean);
+  if (parts.length < 3) return raw;
+  const headRaw = (parts[0] ?? '').trim();
+  if (!headRaw) return raw;
+  if (normRaw(headRaw) !== authorRawNorm) return raw;
+  return parts.slice(1).join(' - ').trim() || raw;
+}
+
 function normForArtistCompare(s: string): string {
   return s.toLowerCase().replace(/\s+/g, ' ').trim();
 }
@@ -332,6 +354,7 @@ const FEAT_WORDS = /^(?:ft\.?|feat\.?|fet\.?|featuring|with|w\/?)$/i;
 export function getMainArtist(artistPart: string): string {
   let main = artistPart.trim();
   if (!main) return main;
+  main = cleanAuthor(main);
   main = main.replace(FEAT_BLOCK, ' ').replace(/\s+/g, ' ').trim();
   const compound = compoundArtistCanonicalIfKnown(main);
   if (compound) return compound;
@@ -353,6 +376,7 @@ export function getMainArtist(artistPart: string): string {
 export function getArtistDisplayString(artistPart: string): string {
   let s = artistPart.replace(FEAT_BLOCK, ' ').replace(/\s+/g, ' ').trim();
   if (!s) return artistPart.trim();
+  s = cleanAuthor(s);
   const compound = compoundArtistCanonicalIfKnown(s);
   if (compound) return compound;
   const parts = s
@@ -361,7 +385,7 @@ export function getArtistDisplayString(artistPart: string): string {
     .flatMap((p) => p.split(/\s+and\s+/i))
     .flatMap((p) => p.split(/\s+x\s+/))
     .flatMap((p) => p.split(',').map((x) => x.trim()).filter(Boolean))
-    .map((p) => p.trim())
+    .map((p) => cleanAuthor(p.trim()))
     .filter((p) => Boolean(p) && !FEAT_WORDS.test(p));
   const seen = new Set<string>();
   const uniq = parts.filter((p) => {
@@ -627,6 +651,50 @@ function titleHasExplicitLeadingArtistQuotedSongForSwapGuard(titleForParse: stri
   return false;
 }
 
+/** repair 用（segmentLooksLikeLatinArtistNameForMb と同基準・定義位置の都合で別名） */
+function songSegmentLooksLikeLatinArtistNameForPackRepair(sg: string): boolean {
+  const x = stripTrailingOfficialStyleParensFromSegment(sg).trim();
+  if (x.length < 4 || x.length > 60) return false;
+  if (/\b(19\d{2}|20\d{2})\b/.test(x)) return false;
+  if (/(official|music video|lyric|lyrics|hd|4k|remaster|live|cover)\b/i.test(x)) return false;
+  if (!/^[A-Za-z0-9 '&.\-!?]+$/.test(x)) return false;
+  return true;
+}
+
+/**
+ * 「artistDisplay = 二重引用の曲名、song = バンド名」に誤パックされた行を直す（履歴DB・過去 announce と表示の整合）。
+ */
+export function repairQuotedSongArtistPackInversion(r: {
+  artist: string | null;
+  artistDisplay: string | null;
+  song: string;
+}): { artist: string | null; artistDisplay: string | null; song: string } {
+  const ad = r.artistDisplay?.trim() ?? '';
+  const sg = r.song.trim();
+  if (!ad || !sg) return r;
+  if (!/^"[^"]{2,200}"$/.test(ad)) return r;
+  if (/^["']/.test(sg.trim())) return r;
+  const inner = ad.slice(1, -1).trim();
+  if (inner.length < 2) return r;
+  const sgCore = stripTrailingOfficialStyleParensFromSegment(sg);
+  if (
+    !/\s&\s/.test(sgCore) &&
+    !/^The\s+/i.test(sgCore.trim()) &&
+    !songSegmentLooksLikeLatinArtistNameForPackRepair(sgCore)
+  ) {
+    return r;
+  }
+  const newArtist = getMainArtist(sg) || sg;
+  const newDisplay = getArtistDisplayString(sg) || sg;
+  const newSong = cleanTitle(inner);
+  if (!newSong) return r;
+  return {
+    artist: newArtist,
+    artistDisplay: newDisplay,
+    song: newSong,
+  };
+}
+
 /**
  * タイトルから取った曲名に、客演っぽい語（with / and / & / feat）が含まれる可能性があるか。
  * このとき概要欄の単独曲名と突き合わせる（「Be With You」の with を誤爆しやすい）。
@@ -834,6 +902,7 @@ export function getArtistAndSong(
     titleForParse = apple.rest;
     hadAppleMusicBrandPrefix = apple.hadAppleMusicBrandPrefix;
   }
+  titleForParse = stripLeadingAuthorPrefixFromTripleHyphenTitleIfPresent(titleForParse, authorName ?? null);
   const allowQuotedTail =
     hadGeniusBrandPrefix || isGeniusChannelAuthor(authorName);
   const allowColonQuoted =

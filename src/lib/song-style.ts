@@ -7,6 +7,32 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { getSongStyle, type SongStyle } from '@/lib/gemini';
 import { trySongStyleFromMusic8 } from '@/lib/music8-style-to-app';
 
+function isSongStyleTableMissingError(error: { code?: string } | null | undefined): boolean {
+  const code = (error?.code ?? '').trim();
+  // 42P01: relation does not exist, PGRST205: schema cache miss (table not exposed)
+  return code === '42P01' || code === 'PGRST205';
+}
+
+async function getStyleFromRoomPlaybackHistory(
+  supabase: SupabaseClient,
+  videoId: string,
+): Promise<SongStyle | null> {
+  const { data, error } = await supabase
+    .from('room_playback_history')
+    .select('style, played_at')
+    .eq('video_id', videoId.trim())
+    .not('style', 'is', null)
+    .order('played_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) {
+    console.error('[song-style] fallback get(room_playback_history)', error);
+    return null;
+  }
+  const style = data?.style;
+  return typeof style === 'string' && style.trim() ? (style.trim() as SongStyle) : null;
+}
+
 export async function getStyleFromDb(
   supabase: SupabaseClient | null,
   videoId: string
@@ -21,7 +47,9 @@ export async function getStyleFromDb(
     .maybeSingle();
 
   if (error) {
-    if (error.code === '42P01') return null;
+    if (isSongStyleTableMissingError(error)) {
+      return getStyleFromRoomPlaybackHistory(supabase, videoId);
+    }
     console.error('[song-style] get', error);
     return null;
   }
@@ -41,8 +69,17 @@ export async function setStyleInDb(
     { onConflict: 'video_id' }
   );
   if (error) {
-    if (error.code === '42P01') {
-      console.error('[song-style] setStyleInDb: song_style テーブルがありません。docs/supabase-song-style-table.md の SQL を実行してください。');
+    if (isSongStyleTableMissingError(error)) {
+      // song_style テーブルが無い環境でも、履歴行に反映して次回以降の推定に使えるようにする。
+      const { error: upHistErr } = await supabase
+        .from('room_playback_history')
+        .update({ style })
+        .eq('video_id', videoId.trim());
+      if (upHistErr) {
+        console.error('[song-style] set fallback(room_playback_history) failed', upHistErr.code, upHistErr.message);
+        return false;
+      }
+      return true;
     } else {
       console.error('[song-style] setStyleInDb failed', error.code, error.message);
     }

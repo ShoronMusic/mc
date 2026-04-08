@@ -10,9 +10,12 @@ import {
   getArtistDisplayString,
   getMainArtist,
   parsePerformingFromDescription,
+  repairQuotedSongArtistPackInversion,
 } from './format-song-display';
 import { reapplyCommentaryLibraryBodyPrefix } from './commentary-library';
 import { compoundArtistCanonicalIfKnown } from './artist-compound-names';
+import { getMusic8ArtistJsonUrl } from './music8-artist-display';
+import { isSupergroupByManualHints } from './supergroup-artist';
 import { resolveArtistSongForPack } from './youtube-artist-song-for-pack';
 
 assert.equal(compoundArtistCanonicalIfKnown('Hall & Oates'), 'Daryl Hall & John Oates');
@@ -45,6 +48,21 @@ assert.equal(getArtistDisplayString('Drake ft. Rihanna'), 'Drake, Rihanna');
   const r = getArtistAndSong('John Lennon - Imagine', null);
   assert.equal(r.artistDisplay, 'John Lennon');
   assert.equal(r.song, 'Imagine');
+}
+
+// タイトル由来のチャンネル風サフィックス "Official" はアーティスト表示に残さない
+{
+  assert.equal(getMainArtist('Queen Official'), 'Queen');
+  assert.equal(getArtistDisplayString('Queen Official'), 'Queen');
+}
+// 3セグメント「チャンネル名 - アーティスト - 曲名」は先頭だけ落として解釈する
+{
+  const r = getArtistAndSong(
+    'Queen Official - Queen and David Bowie - Under Pressure',
+    'Queen Official',
+  );
+  assert.equal(r.artistDisplay, 'Queen, David Bowie');
+  assert.equal(r.song, 'Under Pressure');
 }
 
 {
@@ -88,6 +106,21 @@ assert.equal(cleanTitle('Foo © 1999 Some Label LLC'), 'Foo');
   assert.equal(r.artistDisplay, 'Howard Jones');
   assert.equal(r.song, 'What Is Love');
 }
+
+{
+  const r = getArtistAndSong('Echo & The Bunnymen - The Killing Moon', null);
+  assert.equal(r.artistDisplay, 'Echo & The Bunnymen');
+  assert.equal(r.song, 'The Killing Moon');
+}
+{
+  const url = getMusic8ArtistJsonUrl('Echo & The Bunnymen');
+  assert.ok(url.endsWith('/echo-the-bunnymen.json'), `music8 url: ${url}`);
+}
+{
+  const url = getMusic8ArtistJsonUrl("KISSIN' DYNAMITE");
+  assert.ok(url.endsWith('/kissin-dynamite.json'), `music8 url: ${url}`);
+}
+assert.equal(isSupergroupByManualHints('The Power Station'), true);
 
 {
   const r = getArtistAndSong('a - ha - Take On Me', null);
@@ -203,6 +236,17 @@ assert.equal(cleanTitle('Foo © 1999 Some Label LLC'), 'Foo');
   assert.ok(/Joan Jett/i.test(r.artistDisplay ?? ''));
   assert.ok(/Blackhearts/i.test(r.artistDisplay ?? ''));
   assert.ok(/\bI Love Rock/.test(r.song));
+}
+
+// 履歴DBに誤パック「"曲" / バンド名」で残っている行の表示用 repair
+{
+  const fixed = repairQuotedSongArtistPackInversion({
+    artist: '"I Love Rock \'n\' Roll"',
+    artistDisplay: '"I Love Rock \'n\' Roll"',
+    song: 'Joan Jett & the Blackhearts',
+  });
+  assert.ok(/Joan Jett/i.test(fixed.artistDisplay ?? ''));
+  assert.ok(/\bI Love Rock/i.test(fixed.song));
 }
 
 // 公式MVで多い「曲名 - Linkin Park X Steve Aoki」（X コラボは & / and と同様に逆順の手がかり）

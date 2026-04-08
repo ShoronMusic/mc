@@ -18,6 +18,7 @@ import { getVideoSnippet } from '@/lib/youtube-search';
 import { resolveJapaneseEconomyWithMusicBrainz } from '@/lib/resolve-japanese-economy';
 import { isJpDomesticOfficialChannelAiException } from '@/lib/jp-official-channel-exception';
 import { isRoomJpAiUnlockEnabled } from '@/lib/room-jp-ai-unlock-server';
+import { buildSupergroupPromptBlock } from '@/lib/supergroup-artist';
 
 export const dynamic = 'force-dynamic';
 
@@ -119,9 +120,15 @@ export async function POST(request: Request) {
       }
     }
 
-    const text = await generateCommentary(song ?? title, artistDisplay ?? artist ?? authorName ?? undefined, {
+    const artistLabel = artistDisplay ?? artist ?? authorName ?? undefined;
+    const supergroupHint =
+      artistLabel && artistLabel.trim().length > 0
+        ? await buildSupergroupPromptBlock(artistLabel)
+        : '';
+    const text = await generateCommentary(song ?? title, artistLabel, {
       videoId,
       rawYouTubeTitle,
+      supergroupHintText: supergroupHint || null,
     });
     if (!text) {
       return NextResponse.json({ error: 'AI is not configured or failed.' }, { status: 503 });

@@ -68,6 +68,8 @@ export type GeminiUsageLogMeta = {
   rawYouTubeTitle?: string | null;
   /** MusicBrainz 検索で得た事実のみアルバム名・年を述べてよいときの箇条書き本文 */
   groundedFactsBlock?: string | null;
+  /** スーパーグループ文脈（手動マスタ + 外部データ補完） */
+  supergroupHintText?: string | null;
 };
 
 /** チャット文脈の上限（長い会話・長文貼り付けでのトークン膨張を抑える） */
@@ -420,6 +422,7 @@ export async function generateCommentary(
       : '';
 
   const rawTitle = usageMeta?.rawYouTubeTitle?.trim();
+  const supergroupHint = usageMeta?.supergroupHintText?.trim() ?? '';
   const metaLock =
     rawTitle && rawTitle.length > 0
       ? `\nYouTube動画タイトル（原文）: ${rawTitle}\n・アーティスト名と曲名の上下関係を入れ替えたり、別作品として語らないこと。\n・曲名に含まれる英単語「With」はタイトルの一部であり、共演者名の区切りではない（例: Die With A Smile 全体が曲名）。曲名を勝手に短縮したり、With 以降を別アーティストとして扱わないこと。\n・タイトルと矛盾する架空のリリース年・アルバム名・未来の年号は書かない。不確実なら省くか弱い表現にとどめる。\n`
@@ -443,6 +446,7 @@ export async function generateCommentary(
   const prompt = `選曲アナウンス（〇〇さんの選曲です！）の直後に表示する「曲の基本情報」を、80文字以上150文字以内で書いてください。現在は${currentYear}年です。自分を指すときは「私」を使ってください。
 ${input}${metaLock}
 ${artistSongOrderLock}
+${supergroupHint ? `${supergroupHint}\n` : ''}
 ${mbFactsSection}
 ・アーティスト名は必ず出すこと。
 ・アーティスト欄やタイトルに複数名（共演・feat. 等）が関わる場合は、**それぞれの役割や対比**（例：歌とラップの掛け合い）に一言触れてください。裏付けのない「出会いの経緯」は書かないこと。

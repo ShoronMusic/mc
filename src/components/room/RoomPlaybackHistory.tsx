@@ -8,7 +8,7 @@
 import { CalendarDaysIcon, ChartBarIcon } from '@heroicons/react/24/outline';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { RoomPlaybackHistoryRow } from '@/app/api/room-playback-history/route';
-import { getArtistAndSong, getMainArtist } from '@/lib/format-song-display';
+import { getArtistAndSong, getMainArtist, repairQuotedSongArtistPackInversion } from '@/lib/format-song-display';
 import { resolveFamousPvArtistSongPack } from '@/lib/youtube-famous-pv-override';
 import { getMusic8ArtistJsonUrl } from '@/lib/music8-artist-display';
 import { fetchMusic8SongDataForPlaybackRow } from '@/lib/music8-song-lookup';
@@ -247,7 +247,9 @@ function resolvedPlaybackArtistSong(row: RoomPlaybackHistoryRow): {
   const t = row.title?.trim();
   if (!t) return null;
   /** DB の artist_name は POST 時に概要欄等で取れたアーティスト。無いと逆順タイトルのスワップ判定が弱い */
-  const r = getArtistAndSong(t, row.artist_name ?? null);
+  const r0 = getArtistAndSong(t, row.artist_name ?? null);
+  /** DB に誤パック「"曲名" / バンド名」で保存された行を表示だけ正す（クライアントに概要欄が無い場合の救済） */
+  const r = repairQuotedSongArtistPackInversion(r0);
   if (!r.artistDisplay || !r.song) return null;
   const artistRaw = (r.artist ?? r.artistDisplay).trim();
   const looksLikeSongPhrase =

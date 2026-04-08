@@ -41,6 +41,7 @@ import {
   isCommentPackFullyOff,
   normalizeCommentPackSlotsFromRequestBody,
 } from '@/lib/comment-pack-slots';
+import { buildSupergroupPromptBlock } from '@/lib/supergroup-artist';
 
 export const dynamic = 'force-dynamic';
 
@@ -104,6 +105,12 @@ function isSimilarToExistingComment(candidate: string, existing: string[]): bool
     if (ratio >= 0.68) return true;
   }
   return false;
+}
+
+function hasSupergroupContext(text: string): boolean {
+  const t = (text ?? '').trim();
+  if (!t) return false;
+  return /スーパーグループ|結成|メンバー|元メンバー|参加/.test(t);
 }
 
 function isPublishedWithinLastDays(publishedAtIso: string | undefined, days: number): boolean {
@@ -265,12 +272,19 @@ export async function POST(request: Request) {
       });
     }
 
+    const artistLabelPre = artistDisplay || artist || authorName || 'Unknown Artist';
+    const supergroupBlockPre = await buildSupergroupPromptBlock(artistLabelPre);
+    const isSupergroupArtist = supergroupBlockPre.trim().length > 0;
+
     const skipCache =
       process.env.COMMENT_PACK_SKIP_CACHE === '1' || skipCommentPackCacheRequested;
     if (!skipCache) {
       if (isNewRelease) {
         const nrCached = await getStoredNewReleaseCommentPack(reader, videoId);
         if (nrCached) {
+          if (isSupergroupArtist && !hasSupergroupContext(nrCached.baseComment)) {
+            // 旧キャッシュでスーパーグループ背景が欠ける場合は再生成を優先
+          } else {
           return NextResponse.json({
             songId,
             videoId,
@@ -280,10 +294,14 @@ export async function POST(request: Request) {
             newReleaseOnly: true,
             ...(nrCached.tidbitIds?.length ? { tidbitIds: nrCached.tidbitIds } : {}),
           });
+          }
         }
       } else {
         const cached = await getStoredCommentPackByVideoId(reader, videoId);
         if (cached) {
+          if (isSupergroupArtist && !hasSupergroupContext(cached.baseComment)) {
+            // 旧キャッシュでスーパーグループ背景が欠ける場合は再生成を優先
+          } else {
           const filtered = applySlotsToPackBodies(cached.baseComment, [...cached.freeComments], slots);
           const tidbitIdsFull = cached.tidbitIds ?? [];
           const freeCommentTidbitIds = tidbitIdsFull.length > 1 ? tidbitIdsFull.slice(1) : [];
@@ -296,6 +314,7 @@ export async function POST(request: Request) {
             ...(tidbitIdsFull.length ? { tidbitIds: tidbitIdsFull } : {}),
             ...(freeCommentTidbitIds.length > 0 ? { freeCommentTidbitIds } : {}),
           });
+          }
         }
       }
     }
@@ -309,7 +328,7 @@ export async function POST(request: Request) {
     }
 
     const currentYear = new Date().getFullYear();
-    const artistLabel = artistDisplay || artist || authorName || 'Unknown Artist';
+    const artistLabel = artistLabelPre;
     const songLabel = song || title;
     const rawYouTubeTitle = rawYouTubeTitleForPrompt;
 
@@ -326,6 +345,7 @@ export async function POST(request: Request) {
       : '';
 
     const collaborationBlock = buildCollaborationPromptBlock(artist, artistLabel);
+    const supergroupBlock = supergroupBlockPre;
 
     const adminTitleHint = displayOverride
       ? `・**アーティスト名・曲名の正**: 視聴履歴の管理者修正（DB）の表記「${title}」を前提に分解した【アーティスト】【曲名】を使っています。YouTube 原文と異なる場合は必ずこちらに従うこと。\n`
@@ -336,6 +356,7 @@ ${adminTitleHint}・YouTube 動画タイトル（原文）: ${rawYouTubeTitle}
 ・【曲名】= 「${songLabel}」のみ。これは楽曲のタイトルです。
 ・重要：曲名に含まれる英単語「With」は**共演者をつなぐ語ではなくタイトルの一部**です（例: 『Die With A Smile』全体が曲名）。【曲名】を短くした別名にしたり、「With」以降を別人名として新たな共演者にしたりしないこと。架空のアルバム名・プロジェクト名を作らないこと。
 ${colorsOfficialLock}${geniusOfficialLock}${appleMusicOfficialLock}
+${supergroupBlock}
 ・YouTube タイトルに「 • 」「 · 」のあとに続く語（TopPop、番組名など）が付いていても、それは**曲名の一部ではない**。【曲名】は「${songLabel}」のみとし、番組名を曲名や『』の中に含めないこと。
 ・絶対禁止: 「${songLabel}」をアーティスト名のように扱い、「${artistLabel}」を曲名のように扱うこと（例:「${songLabel}の代表曲『${artistLabel}』」は誤り。正しくは「${artistLabel}の『${songLabel}』」）。
 ・「〜の代表曲」は必ず アーティスト → 曲 の順で書く（${artistLabel} の代表曲として『${songLabel}』、など）。
@@ -389,11 +410,17 @@ ${basePromptTail}`;
     }
 
     // 2. 自由コメント3本（基本情報のあと。1本目＝栄誉・チャート、2＝歌詞、3＝サウンド）
-    const topics = [
-      '商業的成功と社会的な話題性（このスロット専用。**必ず**次のいずれかを含めること：①主要チャートでの**定性的**な成功（西暦の年を明記。**1位・9位・33位など順位の数字は書かない**。例：1983年頃に全英シングルチャートで大きなヒット、翌年には米ビルボードでもチャート入り）②グラミー等の主要ノミネート・受賞（分かる場合のみ。**Rap/Sung Collaboration 等、共演枠の賞がある場合はその性質に触れてよい**）③複数国で広く再生・話題となったことなど、年とともに触れられる事実。④**タイトル等からリミックス版と分かる曲**では、オリジナルよりこのミックスの方が後からヒット・定着した、といった文脈を**定性・年**で触れてよい（断定できないときは弱い表現）。**禁止**：○位・最高○位・第○位・「〜週1位」など順位や週数の具体数字、作詞者の私人話、伝聞だけの表現、歌詞の読み下し。マイナー曲はライブ定番やカバーの多さにとどめる）',
-      '歌詞テーマやメッセージ（共演・フィーチャリングでは**客演側のパートが担う役割**（例：ラップ対メインヴォーカル）を必ず含め、双方の対比を1〜2文で。パートの長い列挙は禁止）',
-      'サウンドの特徴（メロディ・リズム・アレンジの**うち1点**に絞って具体化。共演がある場合は**声質やパートの違いがサウンドに与える効果**を一言入れてよい。「耳に残るフック」など抽象語の積み重ねだけは禁止）',
-    ] as const;
+    const topics = isSupergroupArtist
+      ? ([
+          'ユニットの結成経緯・参加メンバーの文脈（このスロットを最優先。どの人気バンド／アーティストのメンバーが参加したプロジェクトか、広く知られた事実の範囲で簡潔に述べる。チャート順位や売上の話はここでは書かない。不確実な人名・関係性は断定しない）',
+          '歌詞テーマやメッセージ（共演・フィーチャリングでは**客演側のパートが担う役割**（例：ラップ対メインヴォーカル）を必ず含め、双方の対比を1〜2文で。パートの長い列挙は禁止）',
+          'サウンドの特徴（メロディ・リズム・アレンジの**うち1点**に絞って具体化。共演がある場合は**声質やパートの違いがサウンドに与える効果**を一言入れてよい。「耳に残るフック」など抽象語の積み重ねだけは禁止）',
+        ] as const)
+      : ([
+          '商業的成功と社会的な話題性（このスロット専用。**必ず**次のいずれかを含めること：①主要チャートでの**定性的**な成功（西暦の年を明記。**1位・9位・33位など順位の数字は書かない**。例：1983年頃に全英シングルチャートで大きなヒット、翌年には米ビルボードでもチャート入り）②グラミー等の主要ノミネート・受賞（分かる場合のみ。**Rap/Sung Collaboration 等、共演枠の賞がある場合はその性質に触れてよい**）③複数国で広く再生・話題となったことなど、年とともに触れられる事実。④**タイトル等からリミックス版と分かる曲**では、オリジナルよりこのミックスの方が後からヒット・定着した、といった文脈を**定性・年**で触れてよい（断定できないときは弱い表現）。**禁止**：○位・最高○位・第○位・「〜週1位」など順位や週数の具体数字、作詞者の私人話、伝聞だけの表現、歌詞の読み下し。マイナー曲はライブ定番やカバーの多さにとどめる）',
+          '歌詞テーマやメッセージ（共演・フィーチャリングでは**客演側のパートが担う役割**（例：ラップ対メインヴォーカル）を必ず含め、双方の対比を1〜2文で。パートの長い列挙は禁止）',
+          'サウンドの特徴（メロディ・リズム・アレンジの**うち1点**に絞って具体化。共演がある場合は**声質やパートの違いがサウンドに与える効果**を一言入れてよい。「耳に残るフック」など抽象語の積み重ねだけは禁止）',
+        ] as const);
     if (topics.length !== COMMENT_PACK_MAX_FREE_COMMENTS) {
       console.warn(
         '[comment-pack] topics length must match COMMENT_PACK_MAX_FREE_COMMENTS',
@@ -406,7 +433,7 @@ ${basePromptTail}`;
     if (!baseOnlyPack) {
       for (let i = 0; i < COMMENT_PACK_MAX_FREE_COMMENTS; i++) {
       const topic = topics[i];
-      const isHonorsTopic = i === 0; // 1本目＝栄誉・チャート
+      const isHonorsTopic = i === 0 && !isSupergroupArtist; // supergroup 時は 1本目を結成背景へ
       const used = [baseText, ...freeComments].filter(Boolean).join('\n---\n');
 
       const banBlockStandard = `・禁止事項（断定・根拠薄い内容の回避）:

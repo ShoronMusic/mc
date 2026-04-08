@@ -76,7 +76,15 @@ export function artistNameToMusic8Slug(artistName: string): string {
     s = s.slice(0, commaIndex).trim();
   }
   s = s.replace(/^\s*(?:The|A|An)\s+/i, '').trim();
-  s = s.replace(/\s+/g, '-').toLowerCase();
+  s = s
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/['’`]/g, '')
+    .replace(/[^A-Za-z0-9\s-]/g, ' ')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .toLowerCase();
   return s;
 }
 
