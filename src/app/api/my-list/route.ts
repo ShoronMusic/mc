@@ -262,8 +262,8 @@ export async function PATCH(request: Request) {
   if (typeof body.note === 'string') patch.note = clampStr(body.note, 4000);
   const wantsStyle = typeof body.style === 'string';
   const wantsEra = typeof body.era === 'string';
-  const style = wantsStyle ? body.style.trim() : '';
-  const era = wantsEra ? body.era.trim() : '';
+  const style = typeof body.style === 'string' ? body.style.trim() : '';
+  const era = typeof body.era === 'string' ? body.era.trim() : '';
   console.info('[my-list PATCH] request', {
     userId: session.user.id,
     id,

@@ -172,8 +172,8 @@ assert.equal(cleanTitle('Foo © 1999 Some Label LLC'), 'Foo');
   const desc =
     'Music video by All For Love performing Bryan Adams, Rod Stewart, Sting.\n© 1993';
   const r = getArtistAndSong(title, 'BryanAdamsVEVO', { videoDescription: desc });
-  assert.match(r.artistDisplay, /Bryan Adams/);
-  assert.match(r.artistDisplay, /Sting/);
+  assert.match(r.artistDisplay ?? '', /Bryan Adams/);
+  assert.match(r.artistDisplay ?? '', /Sting/);
   assert.ok(r.song.includes('All For Love'));
 }
 // 正しい performing 行はそのまま採用（カンマ共演タイトルでも誤って捨てない）
@@ -182,7 +182,7 @@ assert.equal(cleanTitle('Foo © 1999 Some Label LLC'), 'Foo');
   const desc =
     'Music video by Bryan Adams, Rod Stewart, Sting performing All For Love.\n© 1993';
   const r = getArtistAndSong(title, 'BryanAdamsVEVO', { videoDescription: desc });
-  assert.match(r.artistDisplay, /Bryan Adams/);
+  assert.match(r.artistDisplay ?? '', /Bryan Adams/);
   assert.ok(r.song.includes('All For Love'));
 }
 {

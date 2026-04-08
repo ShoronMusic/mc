@@ -872,6 +872,10 @@ export default function MyPage({
           setFavorites([]);
           return;
         }
+        if (!supabase) {
+          setFavorites(baseRows);
+          return;
+        }
         const videoIds = Array.from(new Set(baseRows.map((r) => r.video_id).filter(Boolean)));
         const [styleRes, eraRes, playbackStyleRes] = await Promise.all([
           supabase.from('song_style').select('video_id, style').in('video_id', videoIds),
@@ -967,6 +971,8 @@ export default function MyPage({
         }));
         if (!baseItems.length) {
           setMyListItems([]);
+        } else if (!supabase) {
+          setMyListItems(baseItems);
         } else {
           const videoIds = Array.from(new Set(baseItems.map((r) => r.video_id).filter(Boolean)));
           const [styleRes, eraRes, playbackStyleRes] = await Promise.all([
