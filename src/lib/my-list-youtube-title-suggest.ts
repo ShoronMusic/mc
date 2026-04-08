@@ -86,8 +86,10 @@ function looksLikeArtistNameInParen(s: string): boolean {
   const t = s.trim();
   if (t.length < 2 || t.length > 80) return false;
   if (/\b(official|video|audio|lyric|lyrics|hd|4k|8k|uhd|remaster(?:ed)?|live)\b/i.test(t)) return false;
-  if (!/[\p{L}]/u.test(t)) return false;
-  if (!/^[\p{L}\p{N} '&.,!+\-/]+$/u.test(t)) return false;
+  // TS target 差で \p{L} がビルドエラーになる環境があるため、Unicodeプロパティ正規表現は使わない。
+  // ASCII 英字が1文字以上あり、許容記号のみで構成される場合を artist 候補とみなす。
+  if (!/[A-Za-z]/.test(t)) return false;
+  if (!/^[A-Za-z0-9 '&.,!+\-/]+$/.test(t)) return false;
   return true;
 }
 
