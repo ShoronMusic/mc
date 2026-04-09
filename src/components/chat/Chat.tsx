@@ -13,9 +13,13 @@ import {
   HandThumbUpIcon,
   HandThumbDownIcon,
   ChatBubbleLeftRightIcon,
+  AtSymbolIcon,
 } from '@heroicons/react/24/outline';
 import type { ChatMessage as ChatMessageType } from '@/types/chat';
-import { getAiChatDisclaimerForDisplay } from '@/lib/chat-system-copy';
+import {
+  getAiChatDisclaimerForDisplay,
+  getAiConversationGuideForDisplay,
+} from '@/lib/chat-system-copy';
 import { AI_GUARD_OBJECTION_REASON_OPTIONS } from '@/lib/ai-guard-objection';
 import {
   buildChatConversationSnapshotForAnchor,
@@ -617,6 +621,7 @@ export default function Chat({
   }
 
   const [disclaimerOpen, setDisclaimerOpen] = useState(false);
+  const [conversationGuideOpen, setConversationGuideOpen] = useState(false);
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden rounded-lg border border-gray-700 bg-gray-900/50">
@@ -643,6 +648,18 @@ export default function Chat({
           ) : null}
           <button
             type="button"
+            onClick={() => setConversationGuideOpen(true)}
+            className="inline-flex items-center gap-1 text-xs text-amber-200/90 hover:text-amber-100"
+            aria-haspopup="dialog"
+            aria-expanded={conversationGuideOpen}
+            aria-label="AIとの会話のしかた（説明を表示）"
+            title="AIとの会話"
+          >
+            <AtSymbolIcon className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            <span className="underline decoration-dotted underline-offset-2">AIとの会話…</span>
+          </button>
+          <button
+            type="button"
             onClick={() => setDisclaimerOpen(true)}
             className="inline-flex items-center gap-1 text-xs text-amber-200/90 hover:text-amber-100"
             aria-haspopup="dialog"
@@ -654,18 +671,6 @@ export default function Chat({
             <span className="underline decoration-dotted underline-offset-2">AIのコメント…</span>
           </button>
         </div>
-      </div>
-      <div className="border-b border-gray-800/80 px-3 py-1.5">
-        <p className="text-[11px] leading-snug text-gray-400">
-          AIへの質問は <span className="text-gray-300">@ 質問内容</span>（音楽関連）で送信してください。詳細は
-          <Link
-            href={guideAiHref}
-            className="text-amber-200/90 underline underline-offset-2 hover:text-amber-100"
-          >
-            ご利用上の注意（AIについて）
-          </Link>
-          。
-        </p>
       </div>
       <div className="flex-1 overflow-y-auto p-2">
         {messages.length === 0 ? (
@@ -1218,6 +1223,45 @@ export default function Chat({
                 type="button"
                 className="rounded border border-gray-600 bg-gray-800 px-4 py-2 text-sm text-gray-200 hover:bg-gray-700"
                 onClick={() => setDisclaimerOpen(false)}
+              >
+                閉じる
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {conversationGuideOpen && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="ai-conversation-guide-title"
+          onClick={() => setConversationGuideOpen(false)}
+        >
+          <div
+            className="max-h-[min(80vh,28rem)] w-full max-w-md overflow-y-auto rounded-lg border border-gray-600 bg-gray-900 p-4 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="ai-conversation-guide-title" className="mb-3 text-sm font-semibold text-white">
+              AIとの会話
+            </h2>
+            <p className="whitespace-pre-line text-sm leading-relaxed text-gray-300">
+              {getAiConversationGuideForDisplay()}
+            </p>
+            <p className="mt-3 text-sm">
+              <Link
+                href={guideAiHref}
+                className="text-amber-200/90 underline underline-offset-2 hover:text-amber-100"
+              >
+                ご利用上の注意（AIについて）を開く
+              </Link>
+            </p>
+            <div className="mt-4 flex justify-end">
+              <button
+                type="button"
+                className="rounded border border-gray-600 bg-gray-800 px-4 py-2 text-sm text-gray-200 hover:bg-gray-700"
+                onClick={() => setConversationGuideOpen(false)}
               >
                 閉じる
               </button>

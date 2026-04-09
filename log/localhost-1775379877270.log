@@ -1,9 +1,0 @@
-RoomWithSync.tsx:127 [mc:join-leave-chime] scan batch {prevLen: 5, n: 6, newCount: 1, ids: Array(1)}
-RoomWithSync.tsx:127 [mc:join-leave-chime] branch JOIN {index: 5, id: 'msg-1775379824062-zwodgfz', playJoinChime: true, playLeaveChime: undefined, firstLinePreview: '３号さん入室'}
-RoomWithSync.tsx:127 [mc:join-leave-chime] ▶ play JOIN {src: '/audio/success-chime.mp3'}src: "/audio/success-chime.mp3"[[Prototype]]: Object
-RoomWithSync.tsx:127 [mc:join-leave-chime] scan batch {prevLen: 6, n: 7, newCount: 1, ids: Array(1)}
-RoomWithSync.tsx:127 [mc:join-leave-chime] branch LEAVE {index: 6, id: 'msg-1775379846611-dx09um1', playJoinChime: undefined, playLeaveChime: true, leaveByBody: true, …}firstLinePreview: "３号さん退出"id: "msg-1775379846611-dx09um1"index: 6leaveByBody: trueplayJoinChime: undefinedplayLeaveChime: true[[Prototype]]: Object
-RoomWithSync.tsx:127 [mc:join-leave-chime] ▶ play LEAVE {src: '/audio/close.mp3'}src: "/audio/close.mp3"[[Prototype]]: Object
-RoomWithSync.tsx:127 [mc:join-leave-chime] scan batch {prevLen: 7, n: 8, newCount: 1, ids: Array(1)}ids: ['msg-1775379846654-epp9gz2']n: 8newCount: 1prevLen: 7[[Prototype]]: Object
-RoomWithSync.tsx:127 [mc:join-leave-chime] branch JOIN {index: 7, id: 'msg-1775379846654-epp9gz2', playJoinChime: true, playLeaveChime: undefined, firstLinePreview: '３号さん入室'}
-RoomWithSync.tsx:127 [mc:join-leave-chime] ▶ play JOIN {src: '/audio/success-chime.mp3'}src: "/audio/success-chime.mp3"[[Prototype]]: Object

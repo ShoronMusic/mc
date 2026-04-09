@@ -25,6 +25,27 @@ export function getAiChatDisclaimerForDisplay(): string {
   return isAiQuestionGuardDisabledClient() ? AI_CHAT_DISCLAIMER_WHEN_GUARD_OFF : AI_CHAT_DISCLAIMER;
 }
 
+/** チャット欄「AIとの会話…」モーダル本文 */
+export const AI_CONVERSATION_GUIDE = [
+  'AIに質問するときは、発言の先頭に「@」を付けて送信してください（例: @ おすすめの洋楽を1つ教えて）。',
+  '質問は音楽（洋楽）関連を前提にしています。音楽以外の質問や会話は控えてください。',
+  '「@」で始まる質問について、音楽に関係なさそうだと自動判定した場合は、チャット内に控えめな案内が表示されることがあります。イエローカードや強制退場は行いません。誤判定のときはメッセージ下の「異議」からお知らせください。',
+  '詳細は「ご利用上の注意」の「AI について」をご確認ください。',
+].join('\n\n');
+
+export const AI_CONVERSATION_GUIDE_WHEN_GUARD_OFF = [
+  'AIに質問するときは、発言の先頭に「@」を付けて送信してください（例: @ おすすめの洋楽を1つ教えて）。',
+  '質問は音楽（洋楽）関連を前提にしています。音楽以外の質問や会話は控えてください。',
+  '現在の設定では、「@」質問に対する自動の音楽関連チェックやイエローカードによる段階的制限は行っていません。',
+  '詳細は「ご利用上の注意」の「AI について」をご確認ください。',
+].join('\n\n');
+
+export function getAiConversationGuideForDisplay(): string {
+  return isAiQuestionGuardDisabledClient()
+    ? AI_CONVERSATION_GUIDE_WHEN_GUARD_OFF
+    : AI_CONVERSATION_GUIDE;
+}
+
 /** 「@」が音楽関連でないと判定したときの案内（イエローカード・退場は伴わない） */
 export function buildAiQuestionGuardSoftDeclineMessage(displayName: string): string {
   const name = displayName.trim() || 'その方';

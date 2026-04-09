@@ -19,6 +19,7 @@ import { NON_YOUTUBE_URL_SYSTEM_MESSAGE } from '@/lib/chat-non-youtube-url';
 import { extractVideoId, isStandaloneNonYouTubeUrl } from '@/lib/youtube';
 import type { SystemMessageOptions } from '@/types/chat';
 import { isAiQuestionGuardDisabledClient } from '@/lib/chat-system-copy';
+import { QuestionMarkCircleIcon } from '@heroicons/react/24/outline';
 
 type SearchResultRow = {
   videoId: string;
@@ -528,39 +529,32 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
 
       {usageGuideOpen && (
         <div
-          className="fixed inset-0 z-[90] flex items-center justify-center bg-black/70 p-4 lg:hidden"
+          className="fixed inset-0 z-[90] flex items-center justify-center bg-black/70 p-4"
           role="dialog"
           aria-modal="true"
-          aria-label="発言欄の使い方"
+          aria-labelledby="chat-input-usage-guide-title"
           onClick={() => setUsageGuideOpen(false)}
         >
           <div
-            className="w-full max-w-md rounded border border-amber-900/40 bg-gray-900 p-4 text-sm text-gray-200"
+            className="max-h-[min(80vh,28rem)] w-full max-w-md overflow-y-auto rounded-lg border border-gray-600 bg-gray-900 p-4 shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="mb-3 flex items-center justify-between gap-2">
-              <div className="text-sm font-semibold text-amber-200">発言欄の使い方（送信／検索の2通り）</div>
-              <button
-                type="button"
-                className="rounded border border-gray-700 bg-gray-800 px-3 py-1.5 text-xs text-gray-200 hover:bg-gray-700"
-                onClick={() => setUsageGuideOpen(false)}
-              >
-                閉じる
-              </button>
-            </div>
-            <ul className="list-disc space-y-2 pl-4 text-xs leading-relaxed text-gray-300">
+            <h2 id="chat-input-usage-guide-title" className="mb-3 text-sm font-semibold text-white">
+              発言欄の使い方
+            </h2>
+            <ul className="list-disc space-y-2 pl-4 text-sm leading-relaxed text-gray-300">
               <li>
-                <span className="font-medium text-gray-100">送信</span>
-                ：<span className="text-gray-100">YouTube のURL</span>
+                <span className="font-medium text-gray-200">送信</span>
+                ：<span className="text-gray-200">YouTube のURL</span>
                 を入れて押すと、部屋のプレイヤーにその動画が表示されます。URL
-                <span className="text-gray-100">以外</span>（感想・会話など）はチャットに表示されます。
+                <span className="text-gray-200">以外</span>（感想・会話など）はチャットに表示されます。
               </li>
               <li>
-                <span className="font-medium text-gray-100">AIに質問</span>
+                <span className="font-medium text-gray-200">AIに質問</span>
                 ：文頭に
-                <span className="text-gray-100">@</span>
+                <span className="text-gray-200">@</span>
                 を付けるとAIが返答します（例:
-                <span className="text-gray-100">@ おすすめの洋楽を1つ教えて</span>）。
+                <span className="text-gray-200">@ おすすめの洋楽を1つ教えて</span>）。
                 {isAiQuestionGuardDisabledClient() ? (
                   <>
                     現在の設定では自動の音楽関連チェックやイエローカードによる制限は行っていません（詳細は「AI
@@ -574,14 +568,14 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                 )}
               </li>
               <li>
-                <span className="font-medium text-gray-100">検索</span>
+                <span className="font-medium text-gray-200">検索</span>
                 ：アーティスト名・曲名などの
-                <span className="text-gray-100">キーワード</span>
+                <span className="text-gray-200">キーワード</span>
                 を入れて押すと、候補動画の一覧が開きます（別タブではなくこの画面の上に表示されます）。
               </li>
             </ul>
             {onClearLocalAiQuestionGuard && (
-              <div className="mt-3 border-t border-amber-900/30 pt-3">
+              <div className="mt-4 border-t border-gray-700 pt-3">
                 <button
                   type="button"
                   className="w-full rounded border border-gray-600 bg-gray-800 px-3 py-2 text-xs text-gray-200 hover:bg-gray-700"
@@ -597,60 +591,23 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                 </p>
               </div>
             )}
+            <div className="mt-4 flex justify-end">
+              <button
+                type="button"
+                className="rounded border border-gray-600 bg-gray-800 px-4 py-2 text-sm text-gray-200 hover:bg-gray-700"
+                onClick={() => setUsageGuideOpen(false)}
+              >
+                閉じる
+              </button>
+            </div>
           </div>
         </div>
       )}
 
       <div className="rounded-lg border border-gray-700 bg-gray-900/50 p-2">
-        {/* モバイル1段目 / PCでも上段フル幅: 使い方 */}
-        <details className="mb-2 hidden rounded border border-gray-700/80 bg-gray-900/80 px-2 py-1.5 text-[11px] leading-snug text-gray-400 open:border-amber-900/40 open:bg-amber-950/20 lg:block">
-          <summary className="cursor-pointer select-none text-amber-200/90 marker:text-gray-500 hover:text-amber-100">
-            発言欄の使い方（送信／検索の2通り）
-          </summary>
-          <ul className="mt-2 list-disc space-y-1.5 pl-4 text-gray-400">
-            <li>
-              <span className="font-medium text-gray-300">送信</span>
-              ：<span className="text-gray-300">YouTube のURL</span>
-              を入れて押すと、部屋のプレイヤーにその動画が表示されます。URL
-              <span className="text-gray-300">以外</span>（感想・会話など）はチャットに表示されます。
-            </li>
-            <li>
-              <span className="font-medium text-gray-300">AIに質問</span>
-              ：文頭に
-              <span className="text-gray-300">@</span>
-              を付けるとAIが返答します（例:
-              <span className="text-gray-300">@ おすすめの洋楽を1つ教えて</span>）。
-              {isAiQuestionGuardDisabledClient() ? (
-                <>現在の設定では自動チェック・イエローカード制限は行っていません（詳細は「AI について」）。</>
-              ) : (
-                <>
-                  質問は音楽関連にしてください。音楽以外と判断された場合は控えめな案内が出ることがあります（イエローカード・退場は行いません。詳細はご利用上の注意「AI
-                  について」）。
-                </>
-              )}
-            </li>
-            <li>
-              <span className="font-medium text-gray-300">検索</span>
-              ：アーティスト名・曲名などの
-              <span className="text-gray-300">キーワード</span>
-              を入れて押すと、候補動画の一覧が開きます（別タブではなくこの画面の上に表示されます）。
-            </li>
-          </ul>
-          {onClearLocalAiQuestionGuard && (
-            <div className="mt-2 border-t border-gray-700/80 pt-2">
-              <button
-                type="button"
-                className="rounded border border-gray-600 bg-gray-800/90 px-2 py-1 text-[10px] text-gray-300 hover:bg-gray-700"
-                onClick={onClearLocalAiQuestionGuard}
-              >
-                この端末の AI 質問関連のローカル記録・入室制限をリセット
-              </button>
-            </div>
-          )}
-        </details>
-        {/* モバイル: 2段目=入力 / 3段目=送信・検索・trailing 横並び。PC: 入力とボタン1行 */}
-        <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:gap-2">
-          <div className="flex min-w-0 items-center gap-2 lg:flex-1">
+        {/* モバイル: 入力 → 使い方リンク → ボタン列。PC: 入力と（使い方＋ボタン列）を横並び */}
+        <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:gap-2">
+          <div className="min-w-0 lg:flex-1">
             <input
               ref={inputRef}
               type="text"
@@ -667,17 +624,21 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
               className="min-h-[3.75rem] w-full min-w-0 rounded border border-gray-300 bg-gray-100 px-3 py-2 text-sm text-gray-900 placeholder-gray-500 outline-none focus:border-blue-500"
               aria-label="チャット入力"
             />
+          </div>
+          <div className="flex w-full min-w-0 flex-col gap-2 lg:w-auto lg:shrink-0">
             <button
               type="button"
               onClick={() => setUsageGuideOpen(true)}
-              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded border border-gray-600 bg-gray-800 text-base text-amber-200 hover:bg-gray-700 lg:hidden"
-              aria-label="発言欄の使い方を開く"
+              className="inline-flex items-center gap-0.5 self-end text-[10px] leading-tight text-amber-200/90 hover:text-amber-100"
+              aria-haspopup="dialog"
+              aria-expanded={usageGuideOpen}
+              aria-label="発言欄の使い方（説明を表示）"
               title="発言欄の使い方"
             >
-              ?
+              <QuestionMarkCircleIcon className="h-3 w-3 shrink-0" aria-hidden />
+              <span className="underline decoration-dotted underline-offset-2">発言欄の使い方</span>
             </button>
-          </div>
-          <div className="flex w-full min-w-0 gap-2 lg:w-auto lg:shrink-0">
+            <div className="flex w-full min-w-0 gap-2">
             <button
               type="button"
               onClick={handleSubmit}
@@ -702,6 +663,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
             {trailingSlot != null && trailingSlot !== false ? (
               <div className="min-w-0 flex-1 lg:flex-none">{trailingSlot}</div>
             ) : null}
+            </div>
           </div>
         </div>
       </div>
