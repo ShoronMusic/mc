@@ -58,5 +58,14 @@ assert.equal(
   isMusicRelatedAiQuestion('Machine Gun Kellyの来日歴は分かりますか？'),
   true,
 );
+assert.equal(
+  isMusicRelatedAiQuestion('曲名が思い出せなくて、ドラマで流れてたやつ'),
+  true,
+);
+assert.equal(
+  isMusicRelatedAiQuestion('サビでナナナって言ってるだけのやつ当てて'),
+  true,
+);
+assert.equal(isMusicRelatedAiQuestion('What song was that in the ad?'), true);
 
 console.log('is-music-related-ai-question unit tests: OK');
