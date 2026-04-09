@@ -96,6 +96,9 @@ import {
   setKicked,
   incrementAiQuestionWarnCount,
   setKickedSitewide,
+  clearAiQuestionWarnStorage,
+  clearKickedStorageForRoom,
+  clearKickedSitewideStorage,
   OWNER_ABSENCE_MS,
   getOwnerStateFromStorage,
   setOwnerStateToStorage,
@@ -2143,6 +2146,19 @@ export default function RoomWithSync({
     });
   }, []);
 
+  const clearLocalAiQuestionGuardState = useCallback(() => {
+    const rid = roomId || 'unknown-room';
+    clearAiQuestionWarnStorage(rid);
+    clearKickedStorageForRoom(rid);
+    clearKickedSitewideStorage();
+    if (myClientId) {
+      setYellowCardByClientId((prev) => ({ ...prev, [myClientId]: 0 }));
+    }
+    addSystemMessage(
+      'この端末に保存されていた「@」質問の警告カウントと退場・入室制限の記録を消しました。',
+    );
+  }, [roomId, myClientId, addSystemMessage]);
+
   const previousParticipantsRef = useRef<Map<string, string> | null>(null);
   useEffect(() => {
     /**
@@ -3292,8 +3308,8 @@ export default function RoomWithSync({
         return;
       }
       const trimmed = text.trim();
-      const aiMentioned = trimmed.startsWith('@');
-      const aiPromptText = aiMentioned ? trimmed.replace(/^@\s*/, '').trim() : '';
+      const aiMentioned = /^[@\uFF20]/.test(trimmed);
+      const aiPromptText = aiMentioned ? trimmed.replace(/^[@\uFF20]\s*/, '').trim() : '';
       if (aiMentioned && aiPromptText && isAiTurnOrderClarificationText(aiPromptText)) {
         if (!jpUiBlocked) {
           const reply = buildTurnOrderClarificationReply(
@@ -4013,6 +4029,7 @@ export default function RoomWithSync({
           onAddCandidate={handleAddCandidateFromSearch}
           onPreviewStart={handlePreviewStart}
           onPreviewStop={handlePreviewStop}
+          onClearLocalAiQuestionGuard={clearLocalAiQuestionGuardState}
           trailingSlot={
             <button
               type="button"

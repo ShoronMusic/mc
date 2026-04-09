@@ -75,11 +75,14 @@ export type GeminiUsageLogMeta = {
 /** チャット文脈の上限（長い会話・長文貼り付けでのトークン膨張を抑える） */
 const CHAT_CONTEXT_MAX_MESSAGES = 8;
 const CHAT_CONTEXT_MAX_BODY_CHARS = 480;
+/** 「@」明示呼び出し時はロープレ・フォロー質問が続くため文脈を広げる */
+const CHAT_CONTEXT_MAX_MESSAGES_FORCE = 14;
+const CHAT_CONTEXT_MAX_BODY_CHARS_FORCE = 620;
 
-function truncateChatContextBody(body: string): string {
+function truncateChatContextBody(body: string, maxChars: number = CHAT_CONTEXT_MAX_BODY_CHARS): string {
   const t = body.replace(/\r\n/g, '\n');
-  if (t.length <= CHAT_CONTEXT_MAX_BODY_CHARS) return t;
-  return `${t.slice(0, CHAT_CONTEXT_MAX_BODY_CHARS - 1)}…`;
+  if (t.length <= maxChars) return t;
+  return `${t.slice(0, maxChars - 1)}…`;
 }
 
 /** 直近のチャット履歴から AI の返答を生成（相槌・感想、または曲の事実質問への回答） */
@@ -87,16 +90,21 @@ export async function generateChatReply(
   recentMessages: { displayName?: string; body: string; messageType?: string }[],
   currentSong?: string | null,
   currentSongStyle?: string | null,
-  usageMeta?: GeminiUsageLogMeta
+  usageMeta?: GeminiUsageLogMeta,
+  options?: { forceReply?: boolean }
 ): Promise<string | null> {
   const model = getGeminiModel();
   if (!model) return null;
 
+  const forceReply = options?.forceReply === true;
+  const maxMsgs = forceReply ? CHAT_CONTEXT_MAX_MESSAGES_FORCE : CHAT_CONTEXT_MAX_MESSAGES;
+  const maxBody = forceReply ? CHAT_CONTEXT_MAX_BODY_CHARS_FORCE : CHAT_CONTEXT_MAX_BODY_CHARS;
+
   const lines = recentMessages
-    .slice(-CHAT_CONTEXT_MAX_MESSAGES)
+    .slice(-maxMsgs)
     .map((m) => {
       const who = m.messageType === 'ai' ? 'AI' : (m.displayName ?? 'ユーザー');
-      return `${who}: ${truncateChatContextBody(typeof m.body === 'string' ? m.body : '')}`;
+      return `${who}: ${truncateChatContextBody(typeof m.body === 'string' ? m.body : '', maxBody)}`;
     })
     .join('\n');
 
@@ -125,6 +133,9 @@ export async function generateChatReply(
         '・この曲についてはすでに何本も解説と豆知識が出ています。今回の返答では新しい長い解説は避け、1〜2文の短い相槌や共感コメントにとどめてください。同じ事実やエピソードを繰り返さず、「この曲が好きな理由」「雰囲気の一言コメント」など軽いリアクションにしてください。\n';
     }
   }
+  if (forceReply) {
+    topicHint = '';
+  }
 
   let songContext = '';
   if (currentSong && currentSong.trim()) {
@@ -141,14 +152,40 @@ export async function generateChatReply(
       songContext += `・現在の曲のジャンルは「${currentSongStyle.trim()}」です。このジャンルと無関係なジャンルのアーティスト名を出さないこと。\n`;
     }
     songContext +=
-      '・曲やアーティストについての質問には、知っている範囲で事実に基づいて簡潔に答えてください。ただし**どのアルバムに収録か・チャート順位**などは手元で照合できないため断定しないこと。活動状況（解散・休止・ソロ・再結成など）を聞かれた場合は、知っている範囲で答えてください。\n';
+      forceReply
+        ? '・曲やアーティストについての質問には、知っている範囲で答えてください。**代表的なアルバム名・シングルとアルバムの関係**など、広く知られたディスコグラフィーは述べてよい。各国チャートの**具体順位（何位）**だけは手元で照合できないため数字は避け、「大ヒット」「代表曲」程度にとどめてください。活動状況（解散・休止・ソロ・再結成など）を聞かれた場合は、知っている範囲で答えてください。\n'
+        : '・曲やアーティストについての質問には、知っている範囲で事実に基づいて簡潔に答えてください。ただし**どのアルバムに収録か・チャート順位**などは手元で照合できないため断定しないこと。活動状況（解散・休止・ソロ・再結成など）を聞かれた場合は、知っている範囲で答えてください。\n';
     songContext +=
       '・カバー曲とはっきり分かる場合（タイトル・アーティストから明らかな場合）は、必ずオリジナルやネタ元の曲・アーティストの話を探して触れること。カバーであることを示したうえで、原曲や原作者の情報を優先して話すこと。\n';
+    if (forceReply) {
+      songContext +=
+        '・（@ 質問）会話でユーザーが別の曲・別アーティストについて話しているときは、【現在流れている曲】よりその会話の話題を優先してかまいません。\n';
+    }
   }
+
+  const atMentionBlock = forceReply
+    ? `・ユーザーは「@」であなたに直接話しかけています。外部の音楽アシスタントに近い**自然なキャッチボール**を心がけてください（**おおよそ2〜5文・120〜450字程度**まで）。感謝や誉め言葉には**必ず先に一言応じてから**補足や豆知識を続けてください。
+・代表アルバム名・シングルとアルバムの関係・和訳タイトルが広く定着している場合の括弧書き・有名な楽器パートの話など、**広く知られたディスコグラフィー**は積極的に含めてよいです。各国チャートの**順位の数字**だけは手元で検証できないため避け、「大ヒット」「代表曲」程度に留めてください。
+・「どのアルバムに入っているか」などの質問には、一般的なスタジオアルバム名を挙げて答えてよいです。自信がないときだけ控えめにしてください。
+・（最優先）ユーザーが会話でアーティスト名・曲名を出しているときは、その話題に答えることを、下記の「再生中の曲のジャンルと無関係なアーティストは出さない」より優先してください。
+・ユーザーの発言が**同意や賛同を求めていない**ときは、返答の冒頭を「そう思います」だけにしないでください（質問には直接答えてください）。
+・**曲・シングル・アルバム・アーティストを紹介したり、曲名やアルバム名を答えたりする内容**のときは、本文のあとに**改行して「検索用ブロック」**を付けます（YouTube検索用・英語表記）。ラベルは**全角コロン「：」**、その直後に**半角スペース1つ**、続けて「Artist Name - 曲名またはアルバム名」。感謝だけなど検索用が不要なときは付けません。
+・**デビュー曲・デビューシングル・初のシングル**について答えているときは、検索用ブロックを次のようにします。（1）**必ず1行目**に「参考アルバム： Artist - StudioAlbumTitle」（そのデビュー曲が収録されている代表的なスタジオ・アルバム。例：参考アルバム： Avril Lavigne - Let Go）。（2）**ファーストシングルが分かるときは必ず2行目**に「シングル： Avril Lavigne - SongTitle」（例：シングル： Avril Lavigne - Complicated）。（3）ファーストシングルがはっきり分からないが、代わりに代表的な楽曲を示せるときは2行目を「代表曲： Avril Lavigne - SongTitle」とする。（4）シングルも代表曲も特定できないときは、本文で分からない旨を述べ、検索用ブロックではアルバム行のみにするか、2行目を「シングル： 手元では特定できません」または「代表曲： 手元では特定できません」のいずれかにする。
+・デビュー以外で**アルバム紹介が主**のときは「参考アルバム：」の1行のみ。**特定の1曲が主**でシングル名が明確なときは「シングル： Artist - Song」の1行。**アルバムより曲の提示が適切だが公式のファーストシングルまでは断定できない**ときは「代表曲： Artist - Song」の1行。旧形式の「参考：」だけの1行は使わない。
+`
+    : '';
+
+  const defaultLengthRule = forceReply
+    ? ''
+    : '・通常は相槌や短い感想を1〜2文で（40文字以上120文字以内）。\n';
+
+  const albumVerificationRule = forceReply
+    ? ''
+    : '・**どのアルバムに収録か・デビュー作か・各国チャートの順位**などディスコグラフィーの細部を聞かれたとき、またはユーザーがその種の事実を述べて確認してきたときは、**検証できないまま「はい、そのとおりです」と肯定しない**こと。確認できない場合は「すみません、手元では照合できません。公式ディスコグラフィーや信頼できる音楽データベースでのご確認をおすすめします」のように案内する。\n';
 
   const prompt = `あなたは洋楽を聴きながら参加者とチャットしている「音楽仲間」のAIです。自分は「私」と呼んでください。性別を聞かれたら「性別はありません」と答えてください。
 以下の直近の会話に対して返してください。${songContext}
-・通常は相槌や短い感想を1〜2文で（40文字以上120文字以内）。
+${atMentionBlock}${defaultLengthRule}
 ・同意するときは「はい、そうですね」ではなく「そう思います」を使うこと。
 ・PV・ミュージックビデオ・映像の内容について言及されたときは、あなたは動画を見られないので「私はPVを見ることができません」と正直に伝えること。曲やアーティストの情報には触れてよい。
 ・直近の曲（現在かかっている曲・さっき流れた曲）の話題は、同じ曲について2回までにすること。3回目以降は短い相槌に留めるか、別の話題に移ること。
@@ -159,7 +196,7 @@ export async function generateChatReply(
 ・話の流れを大切にし、なるべく前の会話に出たアーティスト・ジャンル・時代に関連した話題にしてください。ただし曲再生中は上記のとおり「現在の曲・アーティスト・ジャンル・サントラの映画」に限定し、そのジャンルと無関係なアーティストは出さないこと。話が大きく飛ぶときは上記の前置きのどれかで関連付けを入れてください。
 ・ユーザーが「曲を紹介して」「おすすめのアーティストある？」など紹介・推薦を求めた場合は、必ず最初に「1つだけ紹介しますね。」と明示したうえで、候補は**1つだけ**出すこと。複数候補（2件以上）の列挙は禁止。
 ・曲の事実を聞かれたら（何年リリース？など）、**確信が持てる範囲だけ**簡潔に答える。曖昧なら「すみません、こちらでは確かめられません」と断る。
-・**どのアルバムに収録か・デビュー作か・各国チャートの順位**などディスコグラフィーの細部を聞かれたとき、またはユーザーがその種の事実を述べて確認してきたときは、**検証できないまま「はい、そのとおりです」と肯定しない**こと。確認できない場合は「すみません、手元では照合できません。公式ディスコグラフィーや信頼できる音楽データベースでのご確認をおすすめします」のように案内する。
+${albumVerificationRule}
 ・直前の AI 発言（曲解説・豆知識）の内容を、ユーザーが「本当？」と聞いたからといって、そのまま真実として繰り返さないこと。
 ・アーティストの現在の活動状況を聞かれたら、知っている範囲で事実に基づいて簡潔に答えてください。
 ・ユーザーがアーティスト名らしき言葉を言ったとき：表記ゆれ・略称で有名な洋楽アーティストに該当しそうなら、正しい名前で確認すること。例：「ブラ」→「Blur（ブラー）のことでしょうか？」「オアシス」→そのまま理解してよい。該当するアーティストが思いつく場合は必ず確認してから会話を続ける。
@@ -192,18 +229,16 @@ ${lines || '(まだ発言なし)'}
       logGeminiUsage('chat_reply', result.response);
       await persistGeminiUsageLog('chat_reply', result.response.usageMetadata, usageMeta);
       const text = result.response.text()?.trim() ?? '';
-      if (
-        text &&
-        !isRejectedChatOrTidbitOutput(text) &&
-        !containsUnreliableCommentaryDiscographyClaim(text)
-      ) {
+      const discographyPolicyOk = forceReply || !containsUnreliableCommentaryDiscographyClaim(text);
+      if (text && !isRejectedChatOrTidbitOutput(text) && discographyPolicyOk) {
         return text;
       }
       if (attempt >= 2) return text || null;
-      // 2回目：根拠なしのバズ/チャート/受賞/制作・アルバム収録/順位の断定を避ける
       prompt2 =
         prompt +
-        '（追加指示）根拠がない断定、アルバム名・収録作・チャート順位の断定的な記述を避け、歌詞テーマの要点とサウンドの特徴（印象）だけで短く書いてください。';
+        (forceReply
+          ? '（追加指示）会話の流れと感謝への応答を維持し、一般常識のアルバム名・楽曲の位置づけは残しつつ、チャートの具体順位の数字だけ削る。文末の検索用ブロックは「参考アルバム：」「シングル：」「代表曲：」の形式を維持。冒頭だけ「そう思います」にしない。'
+          : '（追加指示）根拠がない断定、アルバム名・収録作・チャート順位の断定的な記述を避け、歌詞テーマの要点とサウンドの特徴（印象）だけで短く書いてください。');
     }
     return null;
   } catch (e) {

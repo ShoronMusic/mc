@@ -229,3 +229,27 @@ export function incrementAiQuestionWarnCount(roomId: string, clientId: string): 
     return 0;
   }
 }
+
+/** このブラウザに保存された当該部屋の「@」質問ガード警告カウントを消す */
+export function clearAiQuestionWarnStorage(roomId: string): void {
+  if (typeof window === 'undefined' || !roomId) return;
+  try {
+    localStorage.removeItem(getAiQuestionWarnStorageKey(roomId));
+  } catch {}
+}
+
+/** 当該部屋の強制退室（入室禁止）記録をこのブラウザから消す */
+export function clearKickedStorageForRoom(roomId: string): void {
+  if (typeof window === 'undefined' || !roomId) return;
+  try {
+    localStorage.removeItem(getKickedStorageKey(roomId));
+  } catch {}
+}
+
+/** サイト全体の入室禁止記録をこのブラウザから消す（AI質問ガード退場時に併用される） */
+export function clearKickedSitewideStorage(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem(SITEWIDE_KICK_KEY);
+  } catch {}
+}

@@ -19,9 +19,10 @@
     "test:yt-search-rate": "tsx src/lib/youtube-search-rate-limit.unit-test.ts",
     "test:mb-facts": "tsx src/lib/musicbrainz-commentary-facts.unit-test.ts",
     "test:ai-guard-objection": "tsx src/lib/ai-guard-objection.unit-test.ts",
+    "test:chat-conversation-snapshot": "tsx src/lib/chat-conversation-snapshot.unit-test.ts",
     "test:selection-round": "tsx src/lib/room-selection-round.unit-test.ts",
     "test:my-list-suggest": "tsx src/lib/my-list-youtube-title-suggest.unit-test.ts",
-    "test": "npm run test:mb && npm run test:policy && npm run test:format && npm run test:ai-question-guard && npm run test:turn-order-clarification && npm run test:question-guard-classify && npm run test:comment-pack-slots && npm run test:youtube-pv && npm run test:chat-rate && npm run test:yt-search-rate && npm run test:mb-facts && npm run test:ai-guard-objection && npm run test:selection-round && npm run test:my-list-suggest",
+    "test": "npm run test:mb && npm run test:policy && npm run test:format && npm run test:ai-question-guard && npm run test:turn-order-clarification && npm run test:question-guard-classify && npm run test:comment-pack-slots && npm run test:youtube-pv && npm run test:chat-rate && npm run test:yt-search-rate && npm run test:mb-facts && npm run test:ai-guard-objection && npm run test:chat-conversation-snapshot && npm run test:selection-round && npm run test:my-list-suggest",
     "verify:utf8": "node scripts/verify-source-utf8.mjs",
     "verify:utf8:fix": "node scripts/verify-source-utf8.mjs --fix",
     "validate": "npm run verify:utf8 && npm run lint && npx tsc --noEmit && npm run test"

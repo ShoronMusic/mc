@@ -171,6 +171,7 @@ SQL: `docs/supabase-setup.md` 第 9 章
 |------|------|
 | サイト評価・コメント | `site_feedback` — `docs/supabase-setup.md` |
 | 質問ガードへの異議 | `ai_question_guard_objections` — 同 |
+| AI チャットチューニング報告（モデレーター） | `ai_chat_conversation_tuning_reports` — `docs/supabase-setup.md` 11.2 |
 | 部屋チャットログ（管理用） | `room_chat_log` — `docs/supabase-room-chat-log-table.md` |
 | 会（ギャザリング） | `room_gatherings` 等 — `docs/room-live-session-spec.md` |
 | YouTube / Gemini 利用ログ | `docs/supabase-youtube-api-usage-logs-table.md`, `docs/supabase-gemini-usage-logs-table.md` |

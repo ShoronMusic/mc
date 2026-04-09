@@ -41,7 +41,15 @@ import { useIsLgViewport } from '@/hooks/useLgViewport';
 import { useRoomChatLogPersistence } from '@/hooks/useRoomChatLogPersistence';
 import { useSupabaseAuthUserId } from '@/hooks/useSupabaseAuthUserId';
 import { isAiQuestionGuardKickExemptUserId } from '@/lib/ai-question-guard-exempt-user-ids';
-import { incrementAiQuestionWarnCount, setKicked, setKickedSitewide } from '@/lib/room-owner';
+import { createClient } from '@/lib/supabase/client';
+import {
+  incrementAiQuestionWarnCount,
+  setKicked,
+  setKickedSitewide,
+  clearAiQuestionWarnStorage,
+  clearKickedStorageForRoom,
+  clearKickedSitewideStorage,
+} from '@/lib/room-owner';
 
 const AI_DISPLAY_NAME = 'AI';
 const SILENCE_TIDBIT_SEC = 30;
@@ -117,6 +125,8 @@ export default function RoomWithoutSync({
   }, [roomDisplayTitle]);
 
   const [chatStyleAdminTools, setChatStyleAdminTools] = useState(false);
+  /** AI_TIDBIT_MODERATOR_USER_IDS（tidbit NG・チューニング報告ボタン） */
+  const [canRejectTidbit, setCanRejectTidbit] = useState(false);
   useEffect(() => {
     if (isGuest) {
       setChatStyleAdminTools(false);
@@ -134,6 +144,41 @@ export default function RoomWithoutSync({
       });
     return () => {
       cancelled = true;
+    };
+  }, [isGuest]);
+
+  useEffect(() => {
+    if (isGuest) {
+      setCanRejectTidbit(false);
+      return;
+    }
+    let cancelled = false;
+    const loadModerator = () => {
+      fetch('/api/tidbit-moderator-check', { credentials: 'include' })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => {
+          if (cancelled) return;
+          if (d && typeof d.canRejectTidbit === 'boolean') setCanRejectTidbit(d.canRejectTidbit);
+        })
+        .catch(() => {
+          if (!cancelled) setCanRejectTidbit(false);
+        });
+    };
+    loadModerator();
+    const onVis = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') loadModerator();
+    };
+    document.addEventListener('visibilitychange', onVis);
+    const sb = createClient();
+    const { data: authSub } = sb
+      ? sb.auth.onAuthStateChange(() => {
+          if (!cancelled) loadModerator();
+        })
+      : { data: { subscription: { unsubscribe: () => {} } } };
+    return () => {
+      cancelled = true;
+      document.removeEventListener('visibilitychange', onVis);
+      authSub?.subscription.unsubscribe();
     };
   }, [isGuest]);
 
@@ -377,6 +422,17 @@ export default function RoomWithoutSync({
       return [...prev, msg];
     });
   }, []);
+
+  const clearLocalAiQuestionGuardState = useCallback(() => {
+    const rid = roomId || 'local';
+    clearAiQuestionWarnStorage(rid);
+    clearKickedStorageForRoom(rid);
+    clearKickedSitewideStorage();
+    setYellowCards(0);
+    addSystemMessage(
+      'この端末に保存されていた「@」質問の警告カウントと退場・入室制限の記録を消しました。',
+    );
+  }, [roomId, addSystemMessage]);
 
   useEffect(() => {
     if (initialGreetingDoneRef.current || messages.length > 0) return;
@@ -806,8 +862,8 @@ export default function RoomWithoutSync({
         return;
       }
       const trimmed = text.trim();
-      const aiMentioned = trimmed.startsWith('@');
-      const aiPromptText = aiMentioned ? trimmed.replace(/^@\s*/, '').trim() : '';
+      const aiMentioned = /^[@\uFF20]/.test(trimmed);
+      const aiPromptText = aiMentioned ? trimmed.replace(/^[@\uFF20]\s*/, '').trim() : '';
       if (aiMentioned && aiPromptText) {
         const recentForGuard = [
           ...messages.map((m) => ({
@@ -1201,6 +1257,7 @@ export default function RoomWithoutSync({
             roomId={roomId ?? 'local'}
             myClientId="local-client"
             styleAdminChatTools={chatStyleAdminTools}
+            canRejectTidbit={canRejectTidbit && !isGuest}
           />
         }
         rightTop={
@@ -1236,6 +1293,7 @@ export default function RoomWithoutSync({
           onSystemMessage={addSystemMessage}
           onPreviewStart={handlePreviewStart}
           onPreviewStop={handlePreviewStop}
+          onClearLocalAiQuestionGuard={clearLocalAiQuestionGuardState}
         />
       </section>
     </main>

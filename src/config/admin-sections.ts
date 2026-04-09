@@ -44,6 +44,12 @@ export const ADMIN_SECTIONS: AdminSection[] = [
       '「@」質問の音楽関連チェック警告に対する異議申立て一覧（会話スナップショット・理由・運営メモ）',
   },
   {
+    href: '/admin/ai-chat-tuning-reports',
+    title: 'AIチャットチューニング報告',
+    description:
+      'AI_TIDBIT_MODERATOR がチャットから送った会話スナップショット・メモ（プロンプト調整用）',
+  },
+  {
     href: '/admin/room-chat-log',
     title: '部屋の会話ログ',
     description: '日付（JST）×部屋別の保存件数、テキスト表示・ダウンロードへのリンク',

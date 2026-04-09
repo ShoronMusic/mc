@@ -302,6 +302,38 @@ create policy "ai_question_guard_objections_insert_own"
 5. **Gemini を分類に使わない**ときは `.env.local` に `AI_QUESTION_GUARD_GEMINI=0`（キーがあっても API はスキップし、従来どおりクライアント判定のみ）。
 6. **レート制限**（IP・60 秒窓）: 登録ユーザー `QUESTION_GUARD_CLASSIFY_PER_MINUTE`（既定 60）、ゲスト `QUESTION_GUARD_CLASSIFY_PER_MINUTE_GUEST`（既定 30）。
 
+### 11.2 AI チャットチューニング報告（モデレーター）
+
+`AI_TIDBIT_MODERATOR_USER_IDS`（または `AI_TIDBIT_MODERATOR_EMAILS`）に含まれるログインユーザーだけが、部屋チャットから「基準メッセージ前後の会話スナップショット＋メモ」を DB に保存できます（`POST /api/ai-chat-tuning-report`）。挿入は API が **サービスロール**（`SUPABASE_SERVICE_ROLE_KEY`）で行います。一覧・エクスポートは **STYLE_ADMIN**（`/admin/ai-chat-tuning-reports` または `GET /api/admin/ai-chat-tuning-reports`、エクスポートは `.../export?format=json|csv`）。
+
+```sql
+create table if not exists public.ai_chat_conversation_tuning_reports (
+  id uuid primary key default gen_random_uuid(),
+  created_at timestamptz not null default now(),
+  reporter_user_id uuid not null references auth.users (id) on delete cascade,
+  reporter_email text,
+  room_id text not null,
+  anchor_message_id text not null,
+  anchor_message_type text not null check (anchor_message_type in ('user', 'ai', 'system')),
+  current_video_id text,
+  moderator_note text not null,
+  conversation_snapshot jsonb not null,
+  reviewed_at timestamptz,
+  reviewed_by uuid references auth.users (id) on delete set null,
+  admin_note text
+);
+
+create index if not exists ai_chat_tuning_reports_created_idx
+  on public.ai_chat_conversation_tuning_reports (created_at desc);
+
+create index if not exists ai_chat_tuning_reports_room_idx
+  on public.ai_chat_conversation_tuning_reports (room_id);
+
+alter table public.ai_chat_conversation_tuning_reports enable row level security;
+```
+
+anon / authenticated には `insert`・`select` ポリシーを付けません（クライアント直叩き不可）。
+
 ---
 
 ## 12. サイト全体ご意見（`site_feedback`）

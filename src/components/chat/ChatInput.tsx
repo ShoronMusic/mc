@@ -18,6 +18,7 @@ import { MUSICAI_EXTENSION_SET_CHAT_TEXT_EVENT } from '@/lib/musicai-extension-e
 import { NON_YOUTUBE_URL_SYSTEM_MESSAGE } from '@/lib/chat-non-youtube-url';
 import { extractVideoId, isStandaloneNonYouTubeUrl } from '@/lib/youtube';
 import type { SystemMessageOptions } from '@/types/chat';
+import { isAiQuestionGuardDisabledClient } from '@/lib/chat-system-copy';
 
 type SearchResultRow = {
   videoId: string;
@@ -47,10 +48,22 @@ interface ChatInputProps {
   onPreviewStop?: () => void;
   /** 送信・検索と同じ行の右側（モバイルは3段目の横並び）。例: 候補リスト */
   trailingSlot?: ReactNode;
+  /** この端末の AI 質問ガード警告・入室制限ストレージを消す（親で room 連動の state も直す） */
+  onClearLocalAiQuestionGuard?: () => void;
 }
 
 const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput(
-  { onSendMessage, onVideoUrl, isGuest = false, onSystemMessage, onAddCandidate, onPreviewStart, onPreviewStop, trailingSlot },
+  {
+    onSendMessage,
+    onVideoUrl,
+    isGuest = false,
+    onSystemMessage,
+    onAddCandidate,
+    onPreviewStart,
+    onPreviewStop,
+    trailingSlot,
+    onClearLocalAiQuestionGuard,
+  },
   ref
 ) {
   const [value, setValue] = useState('');
@@ -547,7 +560,18 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                 ：文頭に
                 <span className="text-gray-100">@</span>
                 を付けるとAIが返答します（例:
-                <span className="text-gray-100">@ おすすめの洋楽を1つ教えて</span>）。質問は音楽関連にしてください。音楽以外と判断された場合は警告・イエローカード・退場まで段階的に制限されることがあります（詳細はご利用上の注意「AI について」）。
+                <span className="text-gray-100">@ おすすめの洋楽を1つ教えて</span>）。
+                {isAiQuestionGuardDisabledClient() ? (
+                  <>
+                    現在の設定では自動の音楽関連チェックやイエローカードによる制限は行っていません（詳細は「AI
+                    について」）。
+                  </>
+                ) : (
+                  <>
+                    質問は音楽関連にしてください。音楽以外と判断された場合は警告・イエローカード・退場まで段階的に制限されることがあります（詳細はご利用上の注意「AI
+                    について」）。
+                  </>
+                )}
               </li>
               <li>
                 <span className="font-medium text-gray-100">検索</span>
@@ -556,6 +580,23 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                 を入れて押すと、候補動画の一覧が開きます（別タブではなくこの画面の上に表示されます）。
               </li>
             </ul>
+            {onClearLocalAiQuestionGuard && (
+              <div className="mt-3 border-t border-amber-900/30 pt-3">
+                <button
+                  type="button"
+                  className="w-full rounded border border-gray-600 bg-gray-800 px-3 py-2 text-xs text-gray-200 hover:bg-gray-700"
+                  onClick={() => {
+                    onClearLocalAiQuestionGuard();
+                    setUsageGuideOpen(false);
+                  }}
+                >
+                  この端末の AI 質問警告・入室制限をリセット
+                </button>
+                <p className="mt-1.5 text-[10px] leading-snug text-gray-500">
+                  このブラウザに保存された警告カウントと退場記録を消します。他の参加者の画面に出ているイエローカードはそのままのことがあります。
+                </p>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -578,7 +619,12 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
               ：文頭に
               <span className="text-gray-300">@</span>
               を付けるとAIが返答します（例:
-              <span className="text-gray-300">@ おすすめの洋楽を1つ教えて</span>）。質問は音楽関連にしてください。違反時は警告から退場まで段階的に制限されます（詳細はご利用上の注意「AI について」）。
+              <span className="text-gray-300">@ おすすめの洋楽を1つ教えて</span>）。
+              {isAiQuestionGuardDisabledClient() ? (
+                <>現在の設定では自動チェック・イエローカード制限は行っていません（詳細は「AI について」）。</>
+              ) : (
+                <>質問は音楽関連にしてください。違反時は警告から退場まで段階的に制限されます（詳細はご利用上の注意「AI について」）。</>
+              )}
             </li>
             <li>
               <span className="font-medium text-gray-300">検索</span>
@@ -587,6 +633,17 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
               を入れて押すと、候補動画の一覧が開きます（別タブではなくこの画面の上に表示されます）。
             </li>
           </ul>
+          {onClearLocalAiQuestionGuard && (
+            <div className="mt-2 border-t border-gray-700/80 pt-2">
+              <button
+                type="button"
+                className="rounded border border-gray-600 bg-gray-800/90 px-2 py-1 text-[10px] text-gray-300 hover:bg-gray-700"
+                onClick={onClearLocalAiQuestionGuard}
+              >
+                この端末の AI 質問警告・入室制限をリセット
+              </button>
+            </div>
+          )}
         </details>
         {/* モバイル: 2段目=入力 / 3段目=送信・検索・trailing 横並び。PC: 入力とボタン1行 */}
         <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:gap-2">

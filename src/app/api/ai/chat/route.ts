@@ -306,10 +306,16 @@ export async function POST(request: Request) {
       }
     }
 
-    const text = await generateChatReply(list, currentSong, currentSongStyle, {
-      roomId: roomId || undefined,
-      videoId: videoId || undefined,
-    });
+    const text = await generateChatReply(
+      list,
+      currentSong,
+      currentSongStyle,
+      {
+        roomId: roomId || undefined,
+        videoId: videoId || undefined,
+      },
+      { forceReply },
+    );
     console.log('[ai/chat] gemini_result', {
       hasText: text != null && String(text).trim().length > 0,
       roomId,

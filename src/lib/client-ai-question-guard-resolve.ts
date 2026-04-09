@@ -3,6 +3,7 @@
  */
 
 import { isAiTurnOrderClarificationText } from '@/lib/ai-turn-order-clarification';
+import { isAiQuestionGuardDisabledClient } from '@/lib/chat-system-copy';
 import { isMusicRelatedAiQuestion } from '@/lib/is-music-related-ai-question';
 
 export type GuardRecentMessage = {
@@ -30,6 +31,9 @@ export async function resolveAiQuestionMusicRelated(
     timeoutMs?: number;
   } = {}
 ): Promise<ResolveAiQuestionMusicRelatedResult> {
+  if (isAiQuestionGuardDisabledClient()) {
+    return { outcome: 'allow' };
+  }
   const q = aiPromptText.trim();
   if (!q) return { outcome: 'allow' };
   if (isAiTurnOrderClarificationText(q)) return { outcome: 'allow' };

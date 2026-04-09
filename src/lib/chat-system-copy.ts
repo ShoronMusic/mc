@@ -8,6 +8,23 @@ export const AI_CHAT_DISCLAIMER = [
   '改善のため、各コメントの「良い／悪い」ボタンや、コメントアイコンから詳細フィードバックを送っていただけると助かります。',
 ].join('\n\n');
 
+/** `NEXT_PUBLIC_AI_QUESTION_GUARD_DISABLED=1` のときの注意文（自動チェック・イエローカード運用なし） */
+export const AI_CHAT_DISCLAIMER_WHEN_GUARD_OFF = [
+  'AIのコメントは事実と異なる場合があります。また参加者のご意見やご質問に対して肯定的に答える傾向があります。あくまで参考情報としてお楽しみいただき、内容の正確性はご自身でもご確認ください。',
+  'AIに質問したいときは、発言の先頭に「@」を付けてください（例: @ おすすめの洋楽を1つ教えて）。',
+  '現在の設定では、「@」質問に対する自動の音楽関連チェックやイエローカードによる段階的制限は行っていません。部屋の雰囲気を損なう使い方はチャットオーナーや運営の判断で対応することがあります。',
+  'なお、AIによる曲の解説ではアーティスト名と曲名が逆になって表示されることがあります。的はずれな内容や、真偽が怪しいコメントも含まれることがあります。',
+  '改善のため、各コメントの「良い／悪い」ボタンや、コメントアイコンから詳細フィードバックを送っていただけると助かります。',
+].join('\n\n');
+
+export function isAiQuestionGuardDisabledClient(): boolean {
+  return process.env.NEXT_PUBLIC_AI_QUESTION_GUARD_DISABLED === '1';
+}
+
+export function getAiChatDisclaimerForDisplay(): string {
+  return isAiQuestionGuardDisabledClient() ? AI_CHAT_DISCLAIMER_WHEN_GUARD_OFF : AI_CHAT_DISCLAIMER;
+}
+
 /** 邦楽と判定し AI 曲解説を出さないときのシステムメッセージ */
 export const SYSTEM_MESSAGE_JP_NO_COMMENTARY = '邦楽のため曲解説を取得できませんでした。';
 

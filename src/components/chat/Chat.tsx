@@ -15,8 +15,13 @@ import {
   ChatBubbleLeftRightIcon,
 } from '@heroicons/react/24/outline';
 import type { ChatMessage as ChatMessageType } from '@/types/chat';
-import { AI_CHAT_DISCLAIMER } from '@/lib/chat-system-copy';
+import { getAiChatDisclaimerForDisplay } from '@/lib/chat-system-copy';
 import { AI_GUARD_OBJECTION_REASON_OPTIONS } from '@/lib/ai-guard-objection';
+import {
+  buildChatConversationSnapshotForAnchor,
+  CHAT_CONVERSATION_SNAPSHOT_AFTER,
+  CHAT_CONVERSATION_SNAPSHOT_BEFORE,
+} from '@/lib/chat-conversation-snapshot';
 
 /** 詳細フィードバック用モーダルの状態 */
 type FeedbackModalState =
@@ -41,28 +46,15 @@ type ObjectionModalState =
       errorText?: string;
     };
 
-const OBJECTION_SNAPSHOT_BEFORE = 18;
-const OBJECTION_SNAPSHOT_AFTER = 4;
-
-function buildAiGuardObjectionSnapshot(
-  allMessages: ChatMessageType[],
-  systemMessageId: string,
-): { displayName?: string; messageType: string; body: string; createdAt: string }[] {
-  const idx = allMessages.findIndex((m) => m.id === systemMessageId);
-  if (idx < 0) return [];
-  const start = Math.max(0, idx - OBJECTION_SNAPSHOT_BEFORE);
-  const end = Math.min(allMessages.length, idx + OBJECTION_SNAPSHOT_AFTER + 1);
-  let slice = allMessages.slice(start, end);
-  if (slice.length > 40) {
-    slice = slice.slice(-40);
-  }
-  return slice.map((m) => ({
-    displayName: m.displayName,
-    messageType: m.messageType,
-    body: m.body,
-    createdAt: m.createdAt,
-  }));
-}
+type TuningReportModalState =
+  | { open: false }
+  | {
+      open: true;
+      message: ChatMessageType;
+      sending?: boolean;
+      done?: boolean;
+      errorText?: string;
+    };
 
 interface ChatProps {
   messages: ChatMessageType[];
@@ -291,6 +283,8 @@ export default function Chat({
     Object.fromEntries(AI_GUARD_OBJECTION_REASON_OPTIONS.map((o) => [o.id, false])),
   );
   const [objectionComment, setObjectionComment] = useState('');
+  const [tuningReportModal, setTuningReportModal] = useState<TuningReportModalState>({ open: false });
+  const [tuningReportNote, setTuningReportNote] = useState('');
   const [detailChecks, setDetailChecks] = useState({ duplicate: false, dubious: false, ambiguous: false });
   const [detailComment, setDetailComment] = useState('');
   const [tidbitRejectingId, setTidbitRejectingId] = useState<string | null>(null);
@@ -454,6 +448,77 @@ export default function Chat({
     setObjectionModal({ open: false });
   }
 
+  function openTuningReportModal(message: ChatMessageType) {
+    setTuningReportNote('');
+    setTuningReportModal({ open: true, message });
+  }
+
+  function closeTuningReportModal() {
+    setTuningReportModal({ open: false });
+  }
+
+  async function sendTuningReport() {
+    if (!tuningReportModal.open || tuningReportModal.done || tuningReportModal.sending) return;
+    const message = tuningReportModal.message;
+    if (!roomId?.trim()) {
+      setTuningReportModal((prev) =>
+        prev.open ? { ...prev, errorText: '部屋情報が取得できません。ページを再読み込みしてください。' } : prev,
+      );
+      return;
+    }
+    const note = tuningReportNote.trim();
+    if (!note) {
+      setTuningReportModal((prev) =>
+        prev.open ? { ...prev, errorText: 'メモを入力してください（改善したい点・検討事項など）。' } : prev,
+      );
+      return;
+    }
+    const snapshot = buildChatConversationSnapshotForAnchor(messages, message.id);
+    if (snapshot.length === 0) {
+      setTuningReportModal((prev) =>
+        prev.open ? { ...prev, errorText: '会話の取得に失敗しました。' } : prev,
+      );
+      return;
+    }
+    setTuningReportModal((prev) => (prev.open ? { ...prev, sending: true, errorText: undefined } : prev));
+    try {
+      const res = await fetch('/api/ai-chat-tuning-report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          roomId: roomId.trim(),
+          anchorMessageId: message.id,
+          anchorMessageType: message.messageType,
+          moderatorNote: note,
+          conversationSnapshot: snapshot,
+          currentVideoId: currentVideoId ?? null,
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        setTuningReportModal((prev) =>
+          prev.open
+            ? {
+                ...prev,
+                sending: false,
+                errorText: typeof data.error === 'string' ? data.error : '送信に失敗しました。',
+              }
+            : prev,
+        );
+        return;
+      }
+      setTuningReportModal((prev) =>
+        prev.open ? { ...prev, sending: false, done: true, errorText: undefined } : prev,
+      );
+    } catch {
+      setTuningReportModal((prev) =>
+        prev.open
+          ? { ...prev, sending: false, errorText: '送信に失敗しました。ネットワークを確認してください。' }
+          : prev,
+      );
+    }
+  }
+
   function objectionAlreadySent(messageId: string): boolean {
     if (typeof window === 'undefined') return false;
     try {
@@ -480,7 +545,7 @@ export default function Chat({
       );
       return;
     }
-    const snapshot = buildAiGuardObjectionSnapshot(messages, message.id);
+    const snapshot = buildChatConversationSnapshotForAnchor(messages, message.id);
     if (snapshot.length === 0) {
       setObjectionModal((prev) =>
         prev.open ? { ...prev, errorText: '会話の取得に失敗しました。' } : prev,
@@ -712,6 +777,18 @@ export default function Chat({
                           )}
                         </div>
                       )}
+                    {canRejectTidbit && roomId?.trim() && (
+                      <div className="mt-1.5 flex justify-end">
+                        <button
+                          type="button"
+                          onClick={() => openTuningReportModal(m)}
+                          className="text-[10px] text-cyan-400/85 underline decoration-dotted underline-offset-2 hover:text-cyan-300"
+                          title="AI_TIDBIT_MODERATOR のみ。前後の会話を DB に保存してプロンプト等の調整に使います。"
+                        >
+                          DBに報告（チューニング）
+                        </button>
+                      </div>
+                    )}
                   </>
                 )}
                 {m.searchQuery && (
@@ -781,6 +858,16 @@ export default function Chat({
                     {m.tidbitLibraryRejected && (
                       <span className="text-amber-200/80">※ライブラリから削除済</span>
                     )}
+                    {canRejectTidbit && roomId?.trim() && (
+                      <button
+                        type="button"
+                        onClick={() => openTuningReportModal(m)}
+                        className="rounded border border-cyan-800/70 bg-cyan-950/35 px-2 py-0.5 text-[10px] font-medium text-cyan-200/90 hover:bg-cyan-900/45"
+                        title="モデレーター専用: 前後の会話を DB に報告"
+                      >
+                        DB報告
+                      </button>
+                    )}
                   </div>
                 )}
                 {m.messageType === 'ai' &&
@@ -797,6 +884,20 @@ export default function Chat({
                         {artistTitleReportingId === m.id
                           ? '保存中…'
                           : '表記メタを記録（STYLE_ADMIN）'}
+                      </button>
+                    </div>
+                  )}
+                {m.messageType === 'ai' &&
+                  canRejectTidbit &&
+                  roomId?.trim() &&
+                  !(m.body.startsWith('[NEW]') || m.body.startsWith('[DB]')) && (
+                    <div className="mt-1 flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => openTuningReportModal(m)}
+                        className="text-[10px] text-cyan-400/85 underline decoration-dotted underline-offset-2 hover:text-cyan-300"
+                      >
+                        DBに報告（チューニング）
                       </button>
                     </div>
                   )}
@@ -1007,6 +1108,93 @@ export default function Chat({
         </div>
       )}
 
+      {/* AI チューニング報告（AI_TIDBIT_MODERATOR のみ API で許可） */}
+      {tuningReportModal.open && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onClick={(e) => e.target === e.currentTarget && !tuningReportModal.done && closeTuningReportModal()}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="tuning-report-modal-title"
+        >
+          <div
+            className="max-h-[min(88vh,36rem)] w-full max-w-lg overflow-y-auto rounded-lg border border-gray-600 bg-gray-800 p-4 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {tuningReportModal.done ? (
+              <>
+                <p id="tuning-report-modal-title" className="mb-3 text-sm text-gray-200">
+                  報告を保存しました。プロンプト・ポリシーの調整に参照します。
+                </p>
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    className="rounded border border-gray-500 bg-gray-700 px-4 py-2 text-sm text-gray-200 hover:bg-gray-600"
+                    onClick={closeTuningReportModal}
+                  >
+                    閉じる
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <h3 id="tuning-report-modal-title" className="mb-2 text-sm font-medium text-cyan-100">
+                  会話を DB に報告（チューニング用）
+                </h3>
+                <p className="mb-3 text-xs leading-relaxed text-gray-400">
+                  基準メッセージの前後（最大約{' '}
+                  {CHAT_CONVERSATION_SNAPSHOT_BEFORE + CHAT_CONVERSATION_SNAPSHOT_AFTER + 1}
+                  件分）がスナップショットとして保存されます。修正したい点・検討したい観点をメモに書いて送信してください。（モデレーター専用）
+                </p>
+                {tuningReportModal.errorText ? (
+                  <p className="mb-2 text-xs text-rose-300">{tuningReportModal.errorText}</p>
+                ) : null}
+                <div className="mb-2 rounded border border-gray-600 bg-gray-900/60 p-2 text-[11px] text-gray-400">
+                  <span className="font-medium text-gray-300">基準: </span>
+                  <span className="text-gray-500">
+                    [{tuningReportModal.message.messageType}] {tuningReportModal.message.displayName ?? ''}:{' '}
+                  </span>
+                  <span className="whitespace-pre-wrap text-gray-400">
+                    {tuningReportModal.message.body.slice(0, 200)}
+                    {tuningReportModal.message.body.length > 200 ? '…' : ''}
+                  </span>
+                </div>
+                <div className="mb-3">
+                  <label htmlFor="tuning-report-note" className="mb-1 block text-xs text-gray-400">
+                    メモ（必須）
+                  </label>
+                  <textarea
+                    id="tuning-report-note"
+                    value={tuningReportNote}
+                    onChange={(e) => setTuningReportNote(e.target.value)}
+                    placeholder="例: この @ 発言は音楽関連だが弾かれた／この AI 返答は根拠が弱い／プロンプトでこう誘導したい など"
+                    rows={5}
+                    className="w-full rounded border border-gray-600 bg-gray-700 px-2 py-1.5 text-sm text-gray-200 placeholder-gray-500"
+                  />
+                </div>
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    className="rounded border border-gray-500 px-3 py-1.5 text-sm text-gray-300 hover:bg-gray-700"
+                    onClick={closeTuningReportModal}
+                  >
+                    キャンセル
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded bg-cyan-700/90 px-3 py-1.5 text-sm text-white hover:bg-cyan-600 disabled:opacity-50"
+                    onClick={() => void sendTuningReport()}
+                    disabled={tuningReportModal.sending}
+                  >
+                    {tuningReportModal.sending ? '送信中…' : 'DB に保存'}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       {disclaimerOpen && (
         <div
           className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4"
@@ -1022,7 +1210,9 @@ export default function Chat({
             <h2 id="ai-disclaimer-title" className="mb-3 text-sm font-semibold text-white">
               AIコメントについて
             </h2>
-            <p className="whitespace-pre-line text-sm leading-relaxed text-gray-300">{AI_CHAT_DISCLAIMER}</p>
+            <p className="whitespace-pre-line text-sm leading-relaxed text-gray-300">
+              {getAiChatDisclaimerForDisplay()}
+            </p>
             <div className="mt-4 flex justify-end">
               <button
                 type="button"
