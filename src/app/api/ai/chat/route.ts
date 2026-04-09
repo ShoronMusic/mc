@@ -7,7 +7,7 @@ import { getStyleFromDb } from '@/lib/song-style';
 import { upsertSongAndVideo } from '@/lib/song-entities';
 import { insertTidbit } from '../../../../lib/song-tidbits';
 import { checkChatAiRateLimit, getChatAiClientIp } from '@/lib/chat-ai-rate-limit';
-import { fetchUserAiTasteSummaryForChat } from '@/lib/user-ai-taste-summary';
+import { fetchUserTasteContextForChat } from '@/lib/user-ai-taste-context';
 
 export const dynamic = 'force-dynamic';
 
@@ -315,7 +315,7 @@ export async function POST(request: Request) {
           data: { user },
         } = await supaAuth.auth.getUser();
         if (user?.id) {
-          userTasteSummary = await fetchUserAiTasteSummaryForChat(supaAuth, user.id);
+          userTasteSummary = await fetchUserTasteContextForChat(supaAuth, user.id);
         }
       }
     }

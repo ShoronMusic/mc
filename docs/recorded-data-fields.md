@@ -100,6 +100,32 @@ API: `GET` / `PUT` → `/api/user/ai-taste-summary`
 利用: 「@」付きチャット応答の参考（`src/app/api/ai/chat` → `generateChatReply`）  
 SQL: `docs/supabase-setup.md` 第 14 章
 
+### `user_ai_taste_auto_profile`（AI向け趣向・自動要約・1 ユーザー 1 行）
+
+| 項目 | 説明 |
+|------|------|
+| `user_id` | ログインユーザー（主キー） |
+| `profile_text` | `room_chat_log`（当該ユーザーの `user_id` 付き user 発言）・`user_song_history`・`user_favorites`・`user_my_list_items` を集約し Gemini で生成した短文 |
+| `updated_at` | 最終更新（`POST /api/user/ai-taste-auto-refresh`） |
+
+API: `POST` → `/api/user/ai-taste-auto-refresh`（約45分に1回まで）・`GET` → `/api/user/ai-taste-auto-profile`（本人の `profile_text` 表示用）  
+利用: `fetchUserTasteContextForChat` が手動メモと合算し `@` チャットに注入。マイページに自動要約の読み取り専用プレビューあり。  
+SQL: `docs/supabase-setup.md` 第 15 章
+
+### `user_public_profile`（他ユーザー向け自己紹介・オプトイン）
+
+| 項目 | 説明 |
+|------|------|
+| `user_id` | ログインユーザー（主キー） |
+| `visible_in_rooms` | 他ユーザーに公開するか |
+| `tagline` | 一言（最大約200文字） |
+| `favorite_artists` | JSON 配列（最大5・各約80文字） |
+| `listening_note` | 補足（最近の傾向など・最大約300文字） |
+| `updated_at` | 最終更新 |
+
+API: `GET` / `PUT` → `/api/user/public-profile`  
+SQL: `docs/supabase-setup.md` 第 16 章
+
 ---
 
 ## 部屋単位（視聴履歴・プロフィール）

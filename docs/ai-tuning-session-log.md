@@ -15,6 +15,7 @@
 | 3 | 上記のようなケースで **イエローカードは重すぎる**。非音楽判定時は柔らかく「音楽の話題ではなさそうなので控えて」と出す程度にしたい。 | `src/lib/chat-system-copy.ts`（`buildAiQuestionGuardSoftDeclineMessage` ほか）<br>`RoomWithoutSync.tsx` / `RoomWithSync.tsx`<br>`GuideFullNotice.tsx` / `app/guide/ai/page.tsx`<br>`ChatInput.tsx`<br>`ai-question-guard-exempt-user-ids.ts`（コメント） | ブロック時 **警告カウント増加・イエローカード・強制退場を廃止**。統一の軽い案内文＋異議導線。利用案内・モーダル文言を現仕様に合わせて更新。`applyAiQuestionGuardEvent` の `ban` は互換のため残置（現行ガードからは未送信）。 |
 | 4 | 会話→選曲→曲解説が **別プロンプト**でつながっていない。DB 再利用 `[DB]` も文脈なし。 | `src/lib/comment-pack-session-context.ts`<br>`src/app/api/ai/comment-pack/route.ts`<br>`RoomWithSync.tsx` / `RoomWithoutSync.tsx`（`recentMessages` 送信）<br>`AGENTS.md` | `recentMessages`（直近 user/ai 最大18件）を **新規生成の基本・自由スロット**に注入。**ライブラリ返却時**は固定本文の前に **つなぎ 1 呼び出し**（`comment_pack_session_bridge`）。`COMMENT_PACK_SESSION_CONTEXT=0` でオフ。 |
 | 5 | ログインユーザー別に **趣向の要約**を持ち、AI をパーソナライズしたい。 | `user_ai_taste_summary`（SQL: `docs/supabase-setup.md` 14）<br>`/api/user/ai-taste-summary`<br>`src/lib/user-ai-taste-summary.ts`<br>`gemini.ts`（`@` 時のみ注入）<br>マイページ「AI向けの趣向メモ」<br>`recorded-data-fields.md` | マイページで編集→**「@」チャット**の `generateChatReply` に短いブロックで注入。`/api/ai/chat` は `credentials: 'include'`。 |
+| 6 | 会話ログ・選曲・お気に入り・マイリストを **縦断**して自動要約し、参加直後から AI が読めるようにしたい。 | `user_ai_taste_auto_profile`（SQL: 15）<br>`POST /api/user/ai-taste-auto-refresh`<br>`gather-user-taste-signals.ts`<br>`user-ai-taste-context.ts`<br>マイページ「履歴から自動要約を更新」 | 複数テーブルをテキスト化→Gemini で短文→手動メモと合算して `@` に注入。**入室定型あいさつ**には未注入（将来 tidbit / 入室 API で拡張可）。 |
 
 **検証メモ（後で埋める）**
 

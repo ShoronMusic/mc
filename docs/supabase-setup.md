@@ -435,3 +435,93 @@ create policy "user_ai_taste_summary_delete_own"
 ```
 
 テーブルが無い状態では API は 503 と案内文を返します。
+
+---
+
+## 15. AI向け趣向の自動要約（`user_ai_taste_auto_profile`）
+
+`room_chat_log`（当該ユーザーの `user_id` 付き発言）、`user_song_history`、`user_favorites`、`user_my_list_items` を集め、Gemini で短い要約を生成して保存します。**マイページの手動メモ**（第14章）と併せ、`@` 付き AI チャット（`/api/ai/chat`）のプロンプトに載ります。
+
+- **更新**: `POST /api/user/ai-taste-auto-refresh`（ログイン必須・約45分に1回まで）
+- **RLS**: 本人の行のみ SELECT / INSERT / UPDATE / DELETE
+
+```sql
+create table if not exists public.user_ai_taste_auto_profile (
+  user_id uuid primary key references auth.users (id) on delete cascade,
+  profile_text text not null default '',
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists user_ai_taste_auto_profile_updated_idx
+  on public.user_ai_taste_auto_profile (updated_at desc);
+
+alter table public.user_ai_taste_auto_profile enable row level security;
+
+create policy "user_ai_taste_auto_profile_select_own"
+  on public.user_ai_taste_auto_profile for select
+  using (auth.uid() = user_id);
+
+create policy "user_ai_taste_auto_profile_insert_own"
+  on public.user_ai_taste_auto_profile for insert
+  with check (auth.uid() = user_id);
+
+create policy "user_ai_taste_auto_profile_update_own"
+  on public.user_ai_taste_auto_profile for update
+  using (auth.uid() = user_id);
+
+create policy "user_ai_taste_auto_profile_delete_own"
+  on public.user_ai_taste_auto_profile for delete
+  using (auth.uid() = user_id);
+```
+
+未作成の環境では `ai-taste-auto-refresh` と `fetchUserTasteContextForChat` は自動要約を無視し、手動メモのみ従来どおり動きます。
+
+---
+
+## 16. 他ユーザー向け自己紹介（`user_public_profile`）
+
+マイページで編集する**公開用プロフィール**（オプトイン）。`visible_in_rooms = true` のとき、ログイン済みユーザーは RLS で当該行を読み取れます（部屋 UI への表示は別途実装）。
+
+- **API**: `GET` / `PUT` → `/api/user/public-profile`
+- **バリデーション**: `src/lib/user-public-profile.ts`
+
+```sql
+create table if not exists public.user_public_profile (
+  user_id uuid primary key references auth.users (id) on delete cascade,
+  visible_in_rooms boolean not null default false,
+  tagline text not null default '',
+  favorite_artists jsonb not null default '[]'::jsonb,
+  listening_note text not null default '',
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists user_public_profile_visible_idx
+  on public.user_public_profile (visible_in_rooms)
+  where visible_in_rooms = true;
+
+alter table public.user_public_profile enable row level security;
+
+-- 本人: すべて
+create policy "user_public_profile_select_own"
+  on public.user_public_profile for select
+  using (auth.uid() = user_id);
+
+create policy "user_public_profile_insert_own"
+  on public.user_public_profile for insert
+  with check (auth.uid() = user_id);
+
+create policy "user_public_profile_update_own"
+  on public.user_public_profile for update
+  using (auth.uid() = user_id);
+
+create policy "user_public_profile_delete_own"
+  on public.user_public_profile for delete
+  using (auth.uid() = user_id);
+
+-- 公開設定オン: 他のログインユーザーが閲覧可能
+create policy "user_public_profile_select_visible"
+  on public.user_public_profile for select
+  using (visible_in_rooms = true);
+```
+
+`favorite_artists` は JSON 配列（文字列のリスト）。アプリ側で最大5件・各80文字程度に制限します。

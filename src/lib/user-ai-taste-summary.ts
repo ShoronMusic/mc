@@ -12,7 +12,12 @@ export const USER_AI_TASTE_PROMPT_MAX_CHARS = 1200;
 export async function fetchUserAiTasteSummaryForChat(
   supabase: SupabaseClient,
   userId: string,
+  options?: { maxChars?: number },
 ): Promise<string | null> {
+  const cap = Math.min(
+    Math.max(1, options?.maxChars ?? USER_AI_TASTE_PROMPT_MAX_CHARS),
+    USER_AI_TASTE_SUMMARY_MAX_CHARS,
+  );
   const { data, error } = await supabase
     .from('user_ai_taste_summary')
     .select('summary_text')
@@ -24,7 +29,5 @@ export async function fetchUserAiTasteSummaryForChat(
   }
   const t = typeof data?.summary_text === 'string' ? data.summary_text.trim() : '';
   if (!t) return null;
-  return t.length > USER_AI_TASTE_PROMPT_MAX_CHARS
-    ? t.slice(0, USER_AI_TASTE_PROMPT_MAX_CHARS)
-    : t;
+  return t.length > cap ? t.slice(0, cap) : t;
 }

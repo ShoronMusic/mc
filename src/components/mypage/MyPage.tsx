@@ -33,6 +33,12 @@ import MainArtistTabPanel from '@/components/room/MainArtistTabPanel';
 import { SONG_STYLE_OPTIONS } from '@/lib/song-styles';
 import { SONG_ERA_OPTIONS } from '@/lib/song-era-options';
 import { USER_AI_TASTE_SUMMARY_MAX_CHARS } from '@/lib/user-ai-taste-summary';
+import {
+  USER_PUBLIC_PROFILE_ARTIST_EACH_MAX,
+  USER_PUBLIC_PROFILE_ARTIST_SLOTS,
+  USER_PUBLIC_PROFILE_LISTENING_MAX,
+  USER_PUBLIC_PROFILE_TAGLINE_MAX,
+} from '@/lib/user-public-profile';
 
 const MY_LIST_LIB_INDEX_HASH = '#';
 const MY_LIST_LIB_INDEX_OTHER = 'その他';
@@ -721,7 +727,19 @@ export default function MyPage({
   const [aiTasteSummary, setAiTasteSummary] = useState('');
   const [aiTasteLoading, setAiTasteLoading] = useState(false);
   const [aiTasteSaving, setAiTasteSaving] = useState(false);
+  const [aiTasteAutoRefreshing, setAiTasteAutoRefreshing] = useState(false);
+  const [aiTasteAutoProfileText, setAiTasteAutoProfileText] = useState('');
+  const [aiTasteAutoUpdatedAt, setAiTasteAutoUpdatedAt] = useState<string | null>(null);
   const [aiTasteMessage, setAiTasteMessage] = useState<string | null>(null);
+  const [publicProfileLoading, setPublicProfileLoading] = useState(false);
+  const [publicProfileSaving, setPublicProfileSaving] = useState(false);
+  const [publicVisible, setPublicVisible] = useState(false);
+  const [publicTagline, setPublicTagline] = useState('');
+  const [publicArtistSlots, setPublicArtistSlots] = useState<string[]>(() =>
+    Array.from({ length: USER_PUBLIC_PROFILE_ARTIST_SLOTS }, () => ''),
+  );
+  const [publicListening, setPublicListening] = useState('');
+  const [publicProfileMessage, setPublicProfileMessage] = useState<string | null>(null);
   const [mainTab, setMainTab] = useState<'owner' | 'user' | 'music' | 'mylist'>('user');
 
   const supabase = createClient();
@@ -763,18 +781,25 @@ export default function MyPage({
   useEffect(() => {
     if (isGuest || !user?.id) {
       setAiTasteSummary('');
+      setAiTasteAutoProfileText('');
+      setAiTasteAutoUpdatedAt(null);
       setAiTasteLoading(false);
       return;
     }
     let cancelled = false;
     setAiTasteLoading(true);
     setAiTasteMessage(null);
-    void fetch('/api/user/ai-taste-summary', { credentials: 'include' })
-      .then((r) => r.json().catch(() => null))
-      .then((data) => {
+    void Promise.all([
+      fetch('/api/user/ai-taste-summary', { credentials: 'include' }).then((r) => r.json().catch(() => null)),
+      fetch('/api/user/ai-taste-auto-profile', { credentials: 'include' }).then((r) => r.json().catch(() => null)),
+    ])
+      .then(([sumData, autoData]) => {
         if (cancelled) return;
-        if (typeof data?.summaryText === 'string') setAiTasteSummary(data.summaryText);
+        if (typeof sumData?.summaryText === 'string') setAiTasteSummary(sumData.summaryText);
         else setAiTasteSummary('');
+        if (typeof autoData?.profileText === 'string') setAiTasteAutoProfileText(autoData.profileText);
+        else setAiTasteAutoProfileText('');
+        setAiTasteAutoUpdatedAt(typeof autoData?.updatedAt === 'string' ? autoData.updatedAt : null);
       })
       .catch(() => {
         if (!cancelled) setAiTasteMessage('趣向メモの読み込みに失敗しました。');
@@ -786,6 +811,79 @@ export default function MyPage({
       cancelled = true;
     };
   }, [isGuest, user?.id]);
+
+  useEffect(() => {
+    if (isGuest || !user?.id) {
+      setPublicVisible(false);
+      setPublicTagline('');
+      setPublicArtistSlots(Array.from({ length: USER_PUBLIC_PROFILE_ARTIST_SLOTS }, () => ''));
+      setPublicListening('');
+      setPublicProfileLoading(false);
+      setPublicProfileMessage(null);
+      return;
+    }
+    let cancelled = false;
+    setPublicProfileLoading(true);
+    setPublicProfileMessage(null);
+    void fetch('/api/user/public-profile', { credentials: 'include' })
+      .then((r) => r.json().catch(() => null))
+      .then((data) => {
+        if (cancelled) return;
+        if (data?.error && typeof data.error === 'string') {
+          setPublicProfileMessage(data.error.includes('テーブル') ? data.error : null);
+          return;
+        }
+        setPublicVisible(data?.visibleInRooms === true);
+        setPublicTagline(typeof data?.tagline === 'string' ? data.tagline : '');
+        const raw = Array.isArray(data?.favoriteArtists) ? data.favoriteArtists : [];
+        const names = raw.filter((x: unknown): x is string => typeof x === 'string').slice(0, USER_PUBLIC_PROFILE_ARTIST_SLOTS);
+        const slots = [...names];
+        while (slots.length < USER_PUBLIC_PROFILE_ARTIST_SLOTS) slots.push('');
+        setPublicArtistSlots(slots.slice(0, USER_PUBLIC_PROFILE_ARTIST_SLOTS));
+        setPublicListening(typeof data?.listeningNote === 'string' ? data.listeningNote : '');
+      })
+      .catch(() => {
+        if (!cancelled) setPublicProfileMessage('自己紹介の読み込みに失敗しました。');
+      })
+      .finally(() => {
+        if (!cancelled) setPublicProfileLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isGuest, user?.id]);
+
+  const handleSavePublicProfile = useCallback(async () => {
+    setPublicProfileSaving(true);
+    setPublicProfileMessage(null);
+    const favoriteArtists = publicArtistSlots
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .map((s) => s.slice(0, USER_PUBLIC_PROFILE_ARTIST_EACH_MAX));
+    try {
+      const r = await fetch('/api/user/public-profile', {
+        method: 'PUT',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          visibleInRooms: publicVisible,
+          tagline: publicTagline.trim(),
+          favoriteArtists,
+          listeningNote: publicListening.trim(),
+        }),
+      });
+      const data = (await r.json().catch(() => null)) as { error?: string } | null;
+      if (!r.ok) {
+        setPublicProfileMessage(typeof data?.error === 'string' ? data.error : '保存に失敗しました。');
+        return;
+      }
+      setPublicProfileMessage('保存しました。公開をオンにした場合、ログイン中の他ユーザーが閲覧できます。');
+    } catch {
+      setPublicProfileMessage('保存に失敗しました。');
+    } finally {
+      setPublicProfileSaving(false);
+    }
+  }, [publicVisible, publicTagline, publicArtistSlots, publicListening]);
 
   const handleSaveAiTasteSummary = useCallback(async () => {
     setAiTasteSaving(true);
@@ -809,6 +907,53 @@ export default function MyPage({
       setAiTasteSaving(false);
     }
   }, [aiTasteSummary]);
+
+  const handleRefreshAiTasteAuto = useCallback(async () => {
+    setAiTasteAutoRefreshing(true);
+    setAiTasteMessage(null);
+    try {
+      const r = await fetch('/api/user/ai-taste-auto-refresh', {
+        method: 'POST',
+        credentials: 'include',
+      });
+      const data = (await r.json().catch(() => null)) as {
+        error?: string;
+        message?: string;
+        skipped?: boolean;
+        reason?: string;
+      } | null;
+      if (r.status === 429) {
+        setAiTasteMessage(
+          typeof data?.message === 'string' ? data.message : '更新はしばらく空けてからお試しください。',
+        );
+        return;
+      }
+      if (!r.ok) {
+        setAiTasteMessage(typeof data?.error === 'string' ? data.error : '自動要約の更新に失敗しました。');
+        return;
+      }
+      if (data?.skipped && data.reason === 'insufficient_signals') {
+        setAiTasteMessage(
+          '集計できるチャット・選曲・お気に入り・マイリストがまだ少ないようです。しばらく利用してから再度お試しください。',
+        );
+        return;
+      }
+      setAiTasteMessage(
+        '自動要約を更新しました。「@」で AI に話しかけたとき、手動メモと合わせて参考にされます。',
+      );
+      void fetch('/api/user/ai-taste-auto-profile', { credentials: 'include' })
+        .then((r) => r.json().catch(() => null))
+        .then((d) => {
+          if (typeof d?.profileText === 'string') setAiTasteAutoProfileText(d.profileText);
+          if (typeof d?.updatedAt === 'string') setAiTasteAutoUpdatedAt(d.updatedAt);
+        })
+        .catch(() => {});
+    } catch {
+      setAiTasteMessage('自動要約の更新に失敗しました。');
+    } finally {
+      setAiTasteAutoRefreshing(false);
+    }
+  }, []);
 
   const loadSongHistory = useCallback(() => {
     if (!supabase || !user) return;
@@ -2059,6 +2204,121 @@ export default function MyPage({
           )}
         </div>
 
+        {/* 他ユーザー向け自己紹介（公開はオプトイン） */}
+        {!isGuest ? (
+          <div className="rounded border border-gray-700 bg-gray-800/50 p-3">
+            <label className="block text-xs text-gray-500">他ユーザー向け自己紹介（任意）</label>
+            <p className="mt-1 text-xs text-gray-400">
+              一言・好きなアーティスト・補足を登録できます。「他の参加者に公開」をオンにすると、ログイン済みのユーザーが
+              Supabase 経由で閲覧できる行になります（部屋の参加者欄への表示は今後の実装で接続できます）。
+            </p>
+            {publicProfileLoading ? (
+              <p className="mt-2 text-sm text-gray-500">読み込み中…</p>
+            ) : (
+              <>
+                <label className="mt-3 flex cursor-pointer items-start gap-2 text-sm text-gray-300">
+                  <input
+                    type="checkbox"
+                    checked={publicVisible}
+                    onChange={(e) => setPublicVisible(e.target.checked)}
+                    className="mt-1"
+                  />
+                  <span>他の参加者にこの内容を公開する</span>
+                </label>
+                <label className="mt-3 block text-xs text-gray-500">一言</label>
+                <textarea
+                  value={publicTagline}
+                  onChange={(e) => setPublicTagline(e.target.value.slice(0, USER_PUBLIC_PROFILE_TAGLINE_MAX))}
+                  maxLength={USER_PUBLIC_PROFILE_TAGLINE_MAX}
+                  rows={2}
+                  className="mt-1 w-full rounded border border-gray-600 bg-gray-800 px-3 py-2 text-sm text-white placeholder-gray-500"
+                  placeholder="例：00年代洋楽ロック中心で、たまにポップパンクも聴きます"
+                  aria-label="自己紹介の一言"
+                />
+                <p className="mt-0.5 text-xs text-gray-500">
+                  {publicTagline.length} / {USER_PUBLIC_PROFILE_TAGLINE_MAX} 文字
+                </p>
+                <p className="mt-3 text-xs text-gray-500">好きなアーティスト（最大{USER_PUBLIC_PROFILE_ARTIST_SLOTS}人・各{USER_PUBLIC_PROFILE_ARTIST_EACH_MAX}文字）</p>
+                <div className="mt-1 flex flex-col gap-1.5">
+                  {publicArtistSlots.map((val, idx) => (
+                    <input
+                      key={idx}
+                      type="text"
+                      value={val}
+                      onChange={(e) => {
+                        const t = e.target.value.slice(0, USER_PUBLIC_PROFILE_ARTIST_EACH_MAX);
+                        setPublicArtistSlots((prev) => {
+                          const next = [...prev];
+                          next[idx] = t;
+                          return next;
+                        });
+                      }}
+                      maxLength={USER_PUBLIC_PROFILE_ARTIST_EACH_MAX}
+                      className="w-full rounded border border-gray-600 bg-gray-800 px-3 py-1.5 text-sm text-white placeholder-gray-500"
+                      placeholder={`アーティスト ${idx + 1}`}
+                      aria-label={`好きなアーティスト ${idx + 1}`}
+                    />
+                  ))}
+                </div>
+                <label className="mt-3 block text-xs text-gray-500">補足（最近ハマっている・部屋での立ち位置など）</label>
+                <textarea
+                  value={publicListening}
+                  onChange={(e) => setPublicListening(e.target.value.slice(0, USER_PUBLIC_PROFILE_LISTENING_MAX))}
+                  maxLength={USER_PUBLIC_PROFILE_LISTENING_MAX}
+                  rows={2}
+                  className="mt-1 w-full rounded border border-gray-600 bg-gray-800 px-3 py-2 text-sm text-white placeholder-gray-500"
+                  placeholder="任意。空でも保存できます。"
+                  aria-label="自己紹介の補足"
+                />
+                <p className="mt-0.5 text-xs text-gray-500">
+                  {publicListening.length} / {USER_PUBLIC_PROFILE_LISTENING_MAX} 文字
+                </p>
+                <div className="mt-3 rounded border border-dashed border-gray-600 bg-gray-900/50 p-2">
+                  <p className="text-xs font-medium text-gray-400">プレビュー</p>
+                  <p className="mt-1 text-sm text-gray-200 whitespace-pre-wrap">
+                    {publicTagline.trim() || '（一言なし）'}
+                  </p>
+                  <ul className="mt-1 list-inside list-disc text-sm text-gray-300">
+                    {publicArtistSlots.map((s) => s.trim()).filter(Boolean).length === 0 ? (
+                      <li className="list-none text-gray-500">（アーティスト未入力）</li>
+                    ) : (
+                      publicArtistSlots
+                        .map((s) => s.trim())
+                        .filter(Boolean)
+                        .map((name, i) => <li key={`${name}-${i}`}>{name}</li>)
+                    )}
+                  </ul>
+                  {publicListening.trim() ? (
+                    <p className="mt-1 text-xs text-gray-400 whitespace-pre-wrap">{publicListening.trim()}</p>
+                  ) : null}
+                  {!publicVisible ? (
+                    <p className="mt-2 text-xs text-amber-300/90">※ 現在は非公開です。公開するには上のチェックをオンに保存してください。</p>
+                  ) : null}
+                </div>
+                <div className="mt-2 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => void handleSavePublicProfile()}
+                    disabled={publicProfileSaving}
+                    className="rounded bg-blue-600 px-3 py-1.5 text-sm text-white hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    {publicProfileSaving ? '保存中…' : '自己紹介を保存'}
+                  </button>
+                </div>
+              </>
+            )}
+            {publicProfileMessage ? (
+              <p
+                className={`mt-2 text-xs ${
+                  publicProfileMessage.startsWith('保存しました') ? 'text-emerald-400' : 'text-amber-300'
+                }`}
+              >
+                {publicProfileMessage}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+
         {/* AI向けの趣向メモ（「@」応答のパーソナライズ・登録ユーザーのみ） */}
         {!isGuest ? (
         <div className="rounded border border-gray-700 bg-gray-800/50 p-3">
@@ -2066,6 +2326,7 @@ export default function MyPage({
           <p className="mt-1 text-xs text-gray-400">
             好きなジャンル・よく聴くアーティスト・年代の傾向など、短く書いておくと、部屋で「@」から AI
             に話しかけたときの返答の参考にされます。他の参加者には表示されません。空にして保存すると消えます。
+            下のボタンで、チャット（保存されている発言）・選曲履歴・お気に入り・マイリストから自動要約を作れます（手動メモに追加で載ります）。
           </p>
           {aiTasteLoading ? (
             <p className="mt-2 text-sm text-gray-500">読み込み中…</p>
@@ -2084,14 +2345,43 @@ export default function MyPage({
                 <span>
                   {aiTasteSummary.length} / {USER_AI_TASTE_SUMMARY_MAX_CHARS} 文字
                 </span>
-                <button
-                  type="button"
-                  onClick={() => void handleSaveAiTasteSummary()}
-                  disabled={aiTasteSaving}
-                  className="rounded bg-blue-600 px-3 py-1.5 text-sm text-white hover:bg-blue-700 disabled:opacity-50"
-                >
-                  {aiTasteSaving ? '保存中…' : '保存'}
-                </button>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void handleRefreshAiTasteAuto()}
+                    disabled={aiTasteSaving || aiTasteAutoRefreshing}
+                    className="rounded border border-gray-500 bg-gray-700 px-3 py-1.5 text-sm text-gray-100 hover:bg-gray-600 disabled:opacity-50"
+                  >
+                    {aiTasteAutoRefreshing ? '自動要約を生成中…' : '履歴から自動要約を更新'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleSaveAiTasteSummary()}
+                    disabled={aiTasteSaving || aiTasteAutoRefreshing}
+                    className="rounded bg-blue-600 px-3 py-1.5 text-sm text-white hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    {aiTasteSaving ? '保存中…' : '保存'}
+                  </button>
+                </div>
+              </div>
+              <div className="mt-3 rounded border border-gray-600/80 bg-gray-900/40 p-2">
+                <p className="text-xs font-medium text-gray-400">自動要約の内容（読み取り専用）</p>
+                <p className="mt-0.5 text-xs text-gray-500">
+                  「@」応答のプロンプトに載るテキストです。未更新のときは空です。
+                  {aiTasteAutoUpdatedAt ? (
+                    <>
+                      {' '}
+                      最終更新:{' '}
+                      {new Date(aiTasteAutoUpdatedAt).toLocaleString('ja-JP', {
+                        dateStyle: 'short',
+                        timeStyle: 'short',
+                      })}
+                    </>
+                  ) : null}
+                </p>
+                <pre className="mt-2 max-h-40 overflow-y-auto whitespace-pre-wrap break-words text-xs text-gray-300">
+                  {aiTasteAutoProfileText.trim() ? aiTasteAutoProfileText : '（まだありません。「履歴から自動要約を更新」を実行してください）'}
+                </pre>
               </div>
             </>
           )}

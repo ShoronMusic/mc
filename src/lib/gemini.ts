@@ -100,7 +100,7 @@ export async function generateChatReply(
   const userTasteRaw = typeof options?.userTasteSummary === 'string' ? options.userTasteSummary.trim() : '';
   const userTasteBlock =
     forceReply && userTasteRaw.length > 0
-      ? `【この発言ユーザーについて（本人がマイページに保存した趣向メモ。参考程度。会話や確かな音楽事実と食い違う場合は会話・事実を優先。メモの逐語繰り返しはしない）】\n${userTasteRaw}\n\n`
+      ? `【この発言ユーザーについて（マイページの本人メモと、あれば履歴・マイリスト等からの自動要約。参考程度。会話や確かな音楽事実と食い違う場合は会話・事実を優先。逐語繰り返しはしない）】\n${userTasteRaw}\n\n`
       : '';
   const maxMsgs = forceReply ? CHAT_CONTEXT_MAX_MESSAGES_FORCE : CHAT_CONTEXT_MAX_MESSAGES;
   const maxBody = forceReply ? CHAT_CONTEXT_MAX_BODY_CHARS_FORCE : CHAT_CONTEXT_MAX_BODY_CHARS;
@@ -642,5 +642,57 @@ ${input}
   } catch (e) {
     console.error('[gemini] getSongEra:', e);
     return 'Other';
+  }
+}
+
+const USER_TASTE_AUTO_PROFILE_OUTPUT_MAX = 520;
+
+/**
+ * チャット・選曲履歴・お気に入り・マイリスト等の抜粋テキストから、洋楽趣向の短い要約を1本生成する。
+ */
+export async function generateUserTasteAutoProfile(
+  signalsMarkdown: string,
+  usageMeta?: GeminiUsageLogMeta,
+): Promise<string | null> {
+  const model = getGeminiModel();
+  if (!model) return null;
+  const input = signalsMarkdown.trim().slice(0, 14_000);
+  if (input.length < 40) return null;
+
+  const prompt = `あなたは洋楽チャット利用者の「聴取趣向・関心の傾向」を短くまとめるアシスタントです。
+以下は同一ユーザーの複数ソースから集めた抜粋です（個人を特定する記述は出力に含めないこと）。
+
+【入力】
+${input}
+
+【出力】
+- 日本語で、箇条書き3〜6行程度、合計${USER_TASTE_AUTO_PROFILE_OUTPUT_MAX}文字以内。
+- 好むジャンル・時代・アーティスト傾向、チャットで繰り返し出る話題があれば簡潔に。
+- 断定しすぎず「〜の傾向」「〜が多い」などにとどめる。
+- マークダウン見出し・コードブロックは使わない。`;
+
+  try {
+    const result = await model.generateContent({
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      generationConfig: {
+        temperature: 0.2,
+        maxOutputTokens: 512,
+      },
+    });
+    logGeminiUsage('user_taste_auto_profile', result.response);
+    await persistGeminiUsageLog('user_taste_auto_profile', result.response.usageMetadata, {
+      roomId: usageMeta?.roomId ?? null,
+      videoId: usageMeta?.videoId ?? null,
+    });
+    let text = result.response.text()?.trim() ?? '';
+    if (!text) return null;
+    text = text.replace(/\r\n/g, '\n');
+    if (text.length > USER_TASTE_AUTO_PROFILE_OUTPUT_MAX) {
+      text = text.slice(0, USER_TASTE_AUTO_PROFILE_OUTPUT_MAX - 1) + '…';
+    }
+    return text;
+  } catch (e) {
+    console.error('[gemini] generateUserTasteAutoProfile:', e);
+    return null;
   }
 }
