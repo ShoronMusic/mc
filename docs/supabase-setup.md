@@ -392,3 +392,46 @@ alter table public.artist_title_parse_reports enable row level security;
 ```
 
 anon にはポリシーを付けません。挿入・読み取りは API がサービスロールで行います。
+
+---
+
+## 14. AI向けユーザー趣向メモ（`user_ai_taste_summary`）
+
+ログインユーザーがマイページで保存する**短文メモ**を格納し、部屋で「@」付きで AI に話しかけたときのプロンプトに**参考として**載せます（他参加者には非表示）。
+
+- **マイページ**: 「マイページ」→「ユーザー」タブの「AI向けの趣向メモ」
+- **API**: `GET` / `PUT` → `/api/user/ai-taste-summary`（セッション必須）
+- **RLS**: 本人の行のみ SELECT / INSERT / UPDATE / DELETE
+
+Supabase の **SQL Editor** で実行:
+
+```sql
+create table if not exists public.user_ai_taste_summary (
+  user_id uuid primary key references auth.users (id) on delete cascade,
+  summary_text text not null default '',
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists user_ai_taste_summary_updated_idx
+  on public.user_ai_taste_summary (updated_at desc);
+
+alter table public.user_ai_taste_summary enable row level security;
+
+create policy "user_ai_taste_summary_select_own"
+  on public.user_ai_taste_summary for select
+  using (auth.uid() = user_id);
+
+create policy "user_ai_taste_summary_insert_own"
+  on public.user_ai_taste_summary for insert
+  with check (auth.uid() = user_id);
+
+create policy "user_ai_taste_summary_update_own"
+  on public.user_ai_taste_summary for update
+  using (auth.uid() = user_id);
+
+create policy "user_ai_taste_summary_delete_own"
+  on public.user_ai_taste_summary for delete
+  using (auth.uid() = user_id);
+```
+
+テーブルが無い状態では API は 503 と案内文を返します。

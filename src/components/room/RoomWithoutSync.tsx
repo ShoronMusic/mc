@@ -30,6 +30,7 @@ import { NON_YOUTUBE_URL_SYSTEM_MESSAGE } from '@/lib/chat-non-youtube-url';
 import {
   SYSTEM_MESSAGE_COMMENTARY_FETCH_FAILED,
   SYSTEM_MESSAGE_JP_NO_COMMENTARY,
+  buildAiQuestionGuardSoftDeclineMessage,
 } from '@/lib/chat-system-copy';
 import { resolveAiQuestionMusicRelated } from '@/lib/client-ai-question-guard-resolve';
 import { isDevMinimalSongAi } from '@/lib/dev-minimal-song-ai';
@@ -39,17 +40,13 @@ import { extractVideoId, isStandaloneNonYouTubeUrl } from '@/lib/youtube';
 import type { ChatMessage, SystemMessageOptions } from '@/types/chat';
 import { useIsLgViewport } from '@/hooks/useLgViewport';
 import { useRoomChatLogPersistence } from '@/hooks/useRoomChatLogPersistence';
-import { useSupabaseAuthUserId } from '@/hooks/useSupabaseAuthUserId';
-import { isAiQuestionGuardKickExemptUserId } from '@/lib/ai-question-guard-exempt-user-ids';
 import { createClient } from '@/lib/supabase/client';
 import {
-  incrementAiQuestionWarnCount,
-  setKicked,
-  setKickedSitewide,
   clearAiQuestionWarnStorage,
   clearKickedStorageForRoom,
   clearKickedSitewideStorage,
 } from '@/lib/room-owner';
+import { lineFromJoinGreetingApi } from '@/lib/join-greeting-logic';
 
 const AI_DISPLAY_NAME = 'AI';
 const SILENCE_TIDBIT_SEC = 30;
@@ -193,7 +190,6 @@ export default function RoomWithoutSync({
     popularTracks?: { artist: string; title: string; count: number }[];
   } | null>(null);
   const isLg = useIsLgViewport();
-  const authUserId = useSupabaseAuthUserId(isGuest);
   const [userTextColor, setUserTextColor] = useState(DEFAULT_CHAT_TEXT_COLOR);
   const lastActivityAtRef = useRef(Date.now());
   const lastTidbitAtRef = useRef(0);
@@ -437,35 +433,63 @@ export default function RoomWithoutSync({
   useEffect(() => {
     if (initialGreetingDoneRef.current || messages.length > 0) return;
     initialGreetingDoneRef.current = true;
-    let greeting: string;
-    let isWelcomeBack = false;
-    try {
-      // 同一部屋の退室記録だけ参照（他部屋では「おかえりなさい」にしない）
-      const key = roomId ? getLastExitStorageKey(roomId) : null;
-      const raw = key && typeof window !== 'undefined' ? sessionStorage.getItem(key) : null;
-      if (raw) {
-        const data = JSON.parse(raw) as { timestamp?: number; displayName?: string };
-        const sameUser = data.displayName === displayNameProp && typeof data.timestamp === 'number';
-        const awayMs = sameUser && typeof data.timestamp === 'number' ? Date.now() - data.timestamp : 0;
-        const minAwayMs = 1 * 1000;
-        const maxAwayMs = 6 * 60 * 60 * 1000;
-        if (sameUser && awayMs >= minAwayMs && awayMs <= maxAwayMs) {
-          greeting = `${displayNameProp}さん、おかえりなさい！`;
-          isWelcomeBack = true;
-          sessionStorage.removeItem(key!);
+    let cancelled = false;
+
+    void (async () => {
+      const timeGreeting = getTimeBasedGreeting();
+      let greeting: string;
+      let isWelcomeBack = false;
+      try {
+        // 同一部屋の退室記録だけ参照（他部屋では「おかえりなさい」にしない）
+        const key = roomId ? getLastExitStorageKey(roomId) : null;
+        const raw = key && typeof window !== 'undefined' ? sessionStorage.getItem(key) : null;
+        if (raw) {
+          const data = JSON.parse(raw) as { timestamp?: number; displayName?: string };
+          const sameUser = data.displayName === displayNameProp && typeof data.timestamp === 'number';
+          const awayMs = sameUser && typeof data.timestamp === 'number' ? Date.now() - data.timestamp : 0;
+          const minAwayMs = 1 * 1000;
+          const maxAwayMs = 6 * 60 * 60 * 1000;
+          if (sameUser && awayMs >= minAwayMs && awayMs <= maxAwayMs) {
+            greeting = `${displayNameProp}さん、おかえりなさい！`;
+            isWelcomeBack = true;
+            sessionStorage.removeItem(key!);
+          } else {
+            greeting = `${displayNameProp}さん、${timeGreeting}`;
+          }
         } else {
-          greeting = `${displayNameProp}さん、${getTimeBasedGreeting()}`;
+          greeting = `${displayNameProp}さん、${timeGreeting}`;
         }
-      } else {
-        greeting = `${displayNameProp}さん、${getTimeBasedGreeting()}`;
+      } catch {
+        greeting = `${displayNameProp}さん、${timeGreeting}`;
       }
-    } catch {
-      greeting = `${displayNameProp}さん、${getTimeBasedGreeting()}`;
-    }
-    addAiMessage(greeting);
-    if (!isWelcomeBack) addAiMessage(AI_FIRST_VOICE);
-    touchActivity();
-  }, [messages.length, displayNameProp, roomId, addAiMessage, touchActivity]);
+
+      if (!cancelled && !isWelcomeBack && !isGuest && roomId?.trim()) {
+        try {
+          const r = await fetch(
+            `/api/user/join-greeting?roomId=${encodeURIComponent(roomId.trim())}`,
+            { credentials: 'include' },
+          );
+          const d = (await r.json().catch(() => null)) as {
+            variant?: string;
+            daysSinceLastVisit?: number | null;
+          } | null;
+          const line = lineFromJoinGreetingApi(displayNameProp, timeGreeting, d);
+          if (line) greeting = line;
+        } catch {
+          /* 時間帯挨拶のまま */
+        }
+      }
+
+      if (cancelled) return;
+      addAiMessage(greeting);
+      if (!isWelcomeBack) addAiMessage(AI_FIRST_VOICE);
+      touchActivity();
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [messages.length, displayNameProp, roomId, addAiMessage, touchActivity, isGuest]);
 
   useEffect(() => {
     const t = setInterval(() => {
@@ -592,7 +616,15 @@ export default function RoomWithoutSync({
         fetch('/api/ai/comment-pack', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ videoId: vid, roomId }),
+          body: JSON.stringify({
+            videoId: vid,
+            roomId,
+            recentMessages: messages.slice(-18).map((m) => ({
+              displayName: m.displayName,
+              body: typeof m.body === 'string' ? m.body : '',
+              messageType: m.messageType ?? 'user',
+            })),
+          }),
         })
           .then((r) => (r.ok ? r.json() : null))
           .then((pack) => {
@@ -650,7 +682,7 @@ export default function RoomWithoutSync({
           addSystemMessage(SYSTEM_MESSAGE_COMMENTARY_FETCH_FAILED);
         });
     },
-    [addAiMessage, addSystemMessage, touchActivity, roomId]
+    [addAiMessage, addSystemMessage, touchActivity, roomId, messages]
   );
 
   const schedulePlaybackHistory = useCallback(
@@ -887,36 +919,17 @@ export default function RoomWithoutSync({
           return;
         }
         if (guardRes.outcome === 'block') {
-          const warningCount = incrementAiQuestionWarnCount(roomId || 'local', 'local-client');
-          const nextCards = warningCount <= 1 ? 0 : Math.min(3, warningCount - 1);
-          setYellowCards(nextCards);
-          const kickExempt = !isGuest && isAiQuestionGuardKickExemptUserId(authUserId);
-          const message =
-            warningCount === 1
-              ? `システム警告: ${displayNameProp}さんの質問は音楽に関係ない内容と判断しました。次回からお気をつけください。`
-              : warningCount === 2
-                ? `システム警告: ${displayNameProp}さんにイエローカード1枚を付与しました（AI質問は音楽関連のみ）。`
-                : warningCount === 3
-                  ? `システム警告: ${displayNameProp}さんにイエローカード2枚目を付与しました。次のカードで退場となります。`
-                  : kickExempt
-                    ? `システム警告: ${displayNameProp}さんの「@」質問に関する警告が継続しています。管理者アカウントのため、退場および入室禁止は行いません。`
-                    : `システム警告: ${displayNameProp}さんに3枚目のカードを付与したため、強制退場と一定期間の入室禁止を実行しました。`;
-          const action: 'warn' | 'yellow' | 'ban' =
-            warningCount >= 4 ? 'ban' : warningCount === 1 ? 'warn' : 'yellow';
+          setYellowCards(0);
+          const message = buildAiQuestionGuardSoftDeclineMessage(displayNameProp);
           addSystemMessage(message, {
             systemKind: 'ai_question_guard',
             aiGuardMeta: {
               targetClientId: 'local-client',
-              warningCount,
-              yellowCards: nextCards,
-              action,
+              warningCount: 1,
+              yellowCards: 0,
+              action: 'warn',
             },
           });
-          if (warningCount >= 4 && onLeave && !kickExempt) {
-            setKicked(roomId || 'local', 'local-client');
-            setKickedSitewide();
-            onLeave();
-          }
           touchActivity();
           return;
         }
@@ -937,6 +950,7 @@ export default function RoomWithoutSync({
           'AI が応答できませんでした。.env.local に GEMINI_API_KEY を設定し、開発サーバーを再起動してください。';
         fetch('/api/ai/chat', {
           method: 'POST',
+          credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             messages: listForAi,
@@ -1091,8 +1105,6 @@ export default function RoomWithoutSync({
       scheduleLocalAutoPlayAfterLoad,
       isGuest,
       displayNameProp,
-      authUserId,
-      onLeave,
     ]
   );
 

@@ -64,6 +64,7 @@
 
 ## 参考ドキュメント
 
+- **チューニングの時系列ログ**（会話→修正→検証メモ）: `docs/ai-tuning-session-log.md`
 - 詳細FB用 DB カラム: `docs/supabase-comment-feedback-detail-columns.md`
 - 管理の曲詳細仕様（関連）: `docs/admin-song-dashboard-spec.md`
 

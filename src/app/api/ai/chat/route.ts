@@ -7,6 +7,7 @@ import { getStyleFromDb } from '@/lib/song-style';
 import { upsertSongAndVideo } from '@/lib/song-entities';
 import { insertTidbit } from '../../../../lib/song-tidbits';
 import { checkChatAiRateLimit, getChatAiClientIp } from '@/lib/chat-ai-rate-limit';
+import { fetchUserAiTasteSummaryForChat } from '@/lib/user-ai-taste-summary';
 
 export const dynamic = 'force-dynamic';
 
@@ -306,6 +307,19 @@ export async function POST(request: Request) {
       }
     }
 
+    let userTasteSummary: string | null = null;
+    if (forceReply) {
+      const supaAuth = await createClient();
+      if (supaAuth) {
+        const {
+          data: { user },
+        } = await supaAuth.auth.getUser();
+        if (user?.id) {
+          userTasteSummary = await fetchUserAiTasteSummaryForChat(supaAuth, user.id);
+        }
+      }
+    }
+
     const text = await generateChatReply(
       list,
       currentSong,
@@ -314,7 +328,7 @@ export async function POST(request: Request) {
         roomId: roomId || undefined,
         videoId: videoId || undefined,
       },
-      { forceReply },
+      { forceReply, userTasteSummary },
     );
     console.log('[ai/chat] gemini_result', {
       hasText: text != null && String(text).trim().length > 0,

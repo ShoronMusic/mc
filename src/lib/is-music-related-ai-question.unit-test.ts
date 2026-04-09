@@ -31,5 +31,32 @@ assert.equal(isMusicRelatedAiQuestion('What was the #1 hit that year?'), true);
 assert.equal(isMusicRelatedAiQuestion('オリジナルは誰ですか？'), true);
 assert.equal(isMusicRelatedAiQuestion('原曲は誰が歌ってますか？'), true);
 assert.equal(isMusicRelatedAiQuestion('Who did the original version?'), true);
+assert.equal(
+  isMusicRelatedAiQuestion('デビュー当時はブリトニーとよく比較されなかった？'),
+  true,
+);
+assert.equal(
+  isMusicRelatedAiQuestion('デビュー当時はブリトニー・スピアーズとよく比較されなかった？'),
+  true,
+);
+assert.equal(
+  isMusicRelatedAiQuestion('でもこの頃彼女は大きな病気になったとか？'),
+  true,
+);
+assert.equal(isMusicRelatedAiQuestion('この頃活動休止してた時期ありましたよね？'), true);
+assert.equal(isMusicRelatedAiQuestion('頭痛が続くんですが何科に行けばいいですか？'), false);
+assert.equal(
+  isMusicRelatedAiQuestion('Avril LavigneはMGKとのコラボもあったね？'),
+  true,
+);
+assert.equal(isMusicRelatedAiQuestion('この曲のfeat.は誰？'), true);
+assert.equal(
+  isMusicRelatedAiQuestion('Avril Lavigneの来日歴は分かりますか？'),
+  true,
+);
+assert.equal(
+  isMusicRelatedAiQuestion('Machine Gun Kellyの来日歴は分かりますか？'),
+  true,
+);
 
 console.log('is-music-related-ai-question unit tests: OK');

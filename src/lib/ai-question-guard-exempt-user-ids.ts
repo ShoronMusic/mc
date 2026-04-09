@@ -1,7 +1,6 @@
 /**
- * AI 質問ガードで「警告・イエローカード」は通常どおり付与しつつ、
- * 累積後の自動強制退場・入室禁止（ban 処理）だけスキップする登録ユーザーの Supabase user.id。
- * クライアントで参照する（バンドルに含まれる）。
+ * @ 質問ガードからの強制退場（ban）をクライアントでスキップする登録ユーザーの Supabase user.id。
+ * 現状のガードは退場しないが、ペイロード action === 'ban' の互換・将来用に参照が残る。
  */
 const KICK_EXEMPT_AI_QUESTION_GUARD_USER_IDS = new Set<string>([
   'd100d24d-9a70-447e-84ac-e519ada7af8c',

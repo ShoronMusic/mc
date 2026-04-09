@@ -42,6 +42,12 @@ import {
   normalizeCommentPackSlotsFromRequestBody,
 } from '@/lib/comment-pack-slots';
 import { buildSupergroupPromptBlock } from '@/lib/supergroup-artist';
+import {
+  buildCommentPackSessionContextBlock,
+  generateCommentPackSessionBridge,
+  isCommentPackSessionContextEnabled,
+  normalizeCommentPackRecentMessages,
+} from '@/lib/comment-pack-session-context';
 
 export const dynamic = 'force-dynamic';
 
@@ -113,6 +119,35 @@ function hasSupergroupContext(text: string): boolean {
   return /スーパーグループ|結成|メンバー|元メンバー|参加/.test(t);
 }
 
+/** [DB] 返却時のみ。固定本文の前に会話つなぎを付ける（失敗時は元の本文）。 */
+async function prependLibrarySessionBridge(
+  baseComment: string,
+  ctx: {
+    sessionBlock: string;
+    artistLabel: string;
+    songLabel: string;
+    videoId: string;
+    roomId: string;
+  },
+): Promise<string> {
+  const trimmed = baseComment.trim();
+  if (!ctx.sessionBlock.trim() || !trimmed) return baseComment;
+  const model = getGeminiModel();
+  if (!model) return baseComment;
+  const br = await generateCommentPackSessionBridge(
+    model,
+    {
+      sessionBlock: ctx.sessionBlock,
+      artistLabel: ctx.artistLabel,
+      songLabel: ctx.songLabel,
+      fixedCommentary: trimmed,
+    },
+    { videoId: ctx.videoId, roomId: ctx.roomId || null },
+  );
+  if (!br?.trim()) return baseComment;
+  return `${br.trim()}\n\n${trimmed}`;
+}
+
 function isPublishedWithinLastDays(publishedAtIso: string | undefined, days: number): boolean {
   if (!publishedAtIso || typeof publishedAtIso !== 'string') return false;
   const d = new Date(publishedAtIso.trim());
@@ -173,6 +208,15 @@ export async function POST(request: Request) {
     if (!videoId) {
       return NextResponse.json({ error: 'videoId is required' }, { status: 400 });
     }
+
+    const sessionMsgs = isCommentPackSessionContextEnabled()
+      ? normalizeCommentPackRecentMessages(body?.recentMessages)
+      : [];
+    const sessionBlock = buildCommentPackSessionContextBlock(sessionMsgs);
+    const sessionPromptBlock =
+      sessionBlock.length > 0
+        ? `【直近のチャット（参考。会話の逐語繰り返し禁止。【メタデータの前提】と矛盾する推測はしない）】\n${sessionBlock}\n\n`
+        : '';
 
     const skipCommentPackCacheRequested = body?.skipCommentPackCache === true;
     const adminPlaybackHintRaw = parseAdminPlaybackDisplayHint(body?.adminPlaybackDisplayHint);
@@ -285,15 +329,25 @@ export async function POST(request: Request) {
           if (isSupergroupArtist && !hasSupergroupContext(nrCached.baseComment)) {
             // 旧キャッシュでスーパーグループ背景が欠ける場合は再生成を優先
           } else {
-          return NextResponse.json({
-            songId,
-            videoId,
-            baseComment: nrCached.baseComment,
-            freeComments: [],
-            source: 'library',
-            newReleaseOnly: true,
-            ...(nrCached.tidbitIds?.length ? { tidbitIds: nrCached.tidbitIds } : {}),
-          });
+            let baseOut = nrCached.baseComment;
+            if (sessionBlock) {
+              baseOut = await prependLibrarySessionBridge(baseOut, {
+                sessionBlock,
+                artistLabel: artistLabelPre,
+                songLabel: song || title,
+                videoId,
+                roomId,
+              });
+            }
+            return NextResponse.json({
+              songId,
+              videoId,
+              baseComment: baseOut,
+              freeComments: [],
+              source: 'library',
+              newReleaseOnly: true,
+              ...(nrCached.tidbitIds?.length ? { tidbitIds: nrCached.tidbitIds } : {}),
+            });
           }
         }
       } else {
@@ -302,18 +356,28 @@ export async function POST(request: Request) {
           if (isSupergroupArtist && !hasSupergroupContext(cached.baseComment)) {
             // 旧キャッシュでスーパーグループ背景が欠ける場合は再生成を優先
           } else {
-          const filtered = applySlotsToPackBodies(cached.baseComment, [...cached.freeComments], slots);
-          const tidbitIdsFull = cached.tidbitIds ?? [];
-          const freeCommentTidbitIds = tidbitIdsFull.length > 1 ? tidbitIdsFull.slice(1) : [];
-          return NextResponse.json({
-            songId,
-            videoId,
-            baseComment: filtered.baseComment,
-            freeComments: filtered.freeComments,
-            source: 'library',
-            ...(tidbitIdsFull.length ? { tidbitIds: tidbitIdsFull } : {}),
-            ...(freeCommentTidbitIds.length > 0 ? { freeCommentTidbitIds } : {}),
-          });
+            const filtered = applySlotsToPackBodies(cached.baseComment, [...cached.freeComments], slots);
+            let baseOutLib = filtered.baseComment;
+            if (sessionBlock && baseOutLib.trim()) {
+              baseOutLib = await prependLibrarySessionBridge(baseOutLib, {
+                sessionBlock,
+                artistLabel: artistLabelPre,
+                songLabel: song || title,
+                videoId,
+                roomId,
+              });
+            }
+            const tidbitIdsFull = cached.tidbitIds ?? [];
+            const freeCommentTidbitIds = tidbitIdsFull.length > 1 ? tidbitIdsFull.slice(1) : [];
+            return NextResponse.json({
+              songId,
+              videoId,
+              baseComment: baseOutLib,
+              freeComments: filtered.freeComments,
+              source: 'library',
+              ...(tidbitIdsFull.length ? { tidbitIds: tidbitIdsFull } : {}),
+              ...(freeCommentTidbitIds.length > 0 ? { freeCommentTidbitIds } : {}),
+            });
           }
         }
       }
@@ -376,7 +440,7 @@ ${supergroupBlock}
     const basePrompt = `選曲アナウンスの直後に、最初にだけ表示する「曲の基本情報」を1本だけ書いてください。現在は${currentYear}年です。
 ${metaLockBlock}
 ${collaborationBlock}
-
+${sessionPromptBlock}
 【書き出しの型（必須）】
 ・本文の最初の文は、必ず「${artistLabel}の『${songLabel}』」で始めてください（全角かぎかっこ『』で曲名を囲む）。別の言い回しで始めないこと。
 ・続けてリリース年・アルバム・雰囲気を同じ段落内で述べてください。
@@ -458,7 +522,7 @@ ${basePromptTail}`;
 
 ${metaLockBlock}
 ${collaborationBlock}
-
+${sessionPromptBlock}
 【すでに出ているコメント（重複禁止）】
 ${used || 'まだありません'}
 

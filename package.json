@@ -14,6 +14,7 @@
     "test:turn-order-clarification": "tsx src/lib/ai-turn-order-clarification.unit-test.ts",
     "test:question-guard-classify": "tsx src/lib/gemini-question-guard-classify.unit-test.ts",
     "test:comment-pack-slots": "tsx src/lib/comment-pack-slots.unit-test.ts",
+    "test:comment-pack-session": "tsx src/lib/comment-pack-session-context.unit-test.ts",
     "test:youtube-pv": "tsx src/lib/youtube-famous-pv-override.unit-test.ts",
     "test:chat-rate": "tsx src/lib/chat-ai-rate-limit.unit-test.ts",
     "test:yt-search-rate": "tsx src/lib/youtube-search-rate-limit.unit-test.ts",
@@ -22,7 +23,8 @@
     "test:chat-conversation-snapshot": "tsx src/lib/chat-conversation-snapshot.unit-test.ts",
     "test:selection-round": "tsx src/lib/room-selection-round.unit-test.ts",
     "test:my-list-suggest": "tsx src/lib/my-list-youtube-title-suggest.unit-test.ts",
-    "test": "npm run test:mb && npm run test:policy && npm run test:format && npm run test:ai-question-guard && npm run test:turn-order-clarification && npm run test:question-guard-classify && npm run test:comment-pack-slots && npm run test:youtube-pv && npm run test:chat-rate && npm run test:yt-search-rate && npm run test:mb-facts && npm run test:ai-guard-objection && npm run test:chat-conversation-snapshot && npm run test:selection-round && npm run test:my-list-suggest",
+    "test:join-greeting": "tsx src/lib/join-greeting-logic.unit-test.ts",
+    "test": "npm run test:mb && npm run test:policy && npm run test:format && npm run test:ai-question-guard && npm run test:turn-order-clarification && npm run test:question-guard-classify && npm run test:comment-pack-slots && npm run test:comment-pack-session && npm run test:youtube-pv && npm run test:chat-rate && npm run test:yt-search-rate && npm run test:mb-facts && npm run test:ai-guard-objection && npm run test:chat-conversation-snapshot && npm run test:selection-round && npm run test:my-list-suggest && npm run test:join-greeting",
     "verify:utf8": "node scripts/verify-source-utf8.mjs",
     "verify:utf8:fix": "node scripts/verify-source-utf8.mjs --fix",
     "validate": "npm run verify:utf8 && npm run lint && npx tsc --noEmit && npm run test"

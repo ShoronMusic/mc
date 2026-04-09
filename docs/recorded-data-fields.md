@@ -88,6 +88,18 @@ API: `src/app/api/my-list/route.ts`
 記録 API: `POST /api/user-room-participation`  
 SQL: `docs/supabase-setup.md` 第 10 章
 
+### `user_ai_taste_summary`（AI向け趣向メモ・1 ユーザー 1 行）
+
+| 項目 | 説明 |
+|------|------|
+| `user_id` | ログインユーザー（主キー） |
+| `summary_text` | マイページで編集する短文（最大約 4000 文字。AI プロンプトには先頭約 1200 文字まで） |
+| `updated_at` | 最終更新 |
+
+API: `GET` / `PUT` → `/api/user/ai-taste-summary`  
+利用: 「@」付きチャット応答の参考（`src/app/api/ai/chat` → `generateChatReply`）  
+SQL: `docs/supabase-setup.md` 第 14 章
+
 ---
 
 ## 部屋単位（視聴履歴・プロフィール）

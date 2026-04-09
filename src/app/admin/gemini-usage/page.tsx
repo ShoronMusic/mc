@@ -53,6 +53,7 @@ const CONTEXT_HELP: Record<string, string> = {
   comment_pack_free_1: 'comment-pack 自由コメント1',
   comment_pack_free_2: 'comment-pack 自由コメント2',
   comment_pack_free_3: 'comment-pack 自由コメント3',
+  comment_pack_session_bridge: 'comment-pack ライブラリ返却時の会話つなぎ（直近チャットあり）',
 };
 
 function formatTime(iso: string): string {

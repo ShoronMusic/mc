@@ -568,7 +568,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                   </>
                 ) : (
                   <>
-                    質問は音楽関連にしてください。音楽以外と判断された場合は警告・イエローカード・退場まで段階的に制限されることがあります（詳細はご利用上の注意「AI
+                    質問は音楽関連にしてください。音楽以外と判断された場合は、チャット内に控えめな案内が出ることがあります（イエローカードや退場は行いません。詳細はご利用上の注意「AI
                     について」）。
                   </>
                 )}
@@ -590,10 +590,10 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                     setUsageGuideOpen(false);
                   }}
                 >
-                  この端末の AI 質問警告・入室制限をリセット
+                  この端末の AI 質問関連のローカル記録・入室制限をリセット
                 </button>
                 <p className="mt-1.5 text-[10px] leading-snug text-gray-500">
-                  このブラウザに保存された警告カウントと退場記録を消します。他の参加者の画面に出ているイエローカードはそのままのことがあります。
+                  このブラウザに保存された旧ガードの警告カウントや退場記録を消します。
                 </p>
               </div>
             )}
@@ -623,7 +623,10 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
               {isAiQuestionGuardDisabledClient() ? (
                 <>現在の設定では自動チェック・イエローカード制限は行っていません（詳細は「AI について」）。</>
               ) : (
-                <>質問は音楽関連にしてください。違反時は警告から退場まで段階的に制限されます（詳細はご利用上の注意「AI について」）。</>
+                <>
+                  質問は音楽関連にしてください。音楽以外と判断された場合は控えめな案内が出ることがあります（イエローカード・退場は行いません。詳細はご利用上の注意「AI
+                  について」）。
+                </>
               )}
             </li>
             <li>
@@ -640,7 +643,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                 className="rounded border border-gray-600 bg-gray-800/90 px-2 py-1 text-[10px] text-gray-300 hover:bg-gray-700"
                 onClick={onClearLocalAiQuestionGuard}
               >
-                この端末の AI 質問警告・入室制限をリセット
+                この端末の AI 質問関連のローカル記録・入室制限をリセット
               </button>
             </div>
           )}

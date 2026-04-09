@@ -32,6 +32,7 @@ import { MUSICAI_EXTENSION_SET_CHAT_TEXT_EVENT } from '@/lib/musicai-extension-e
 import MainArtistTabPanel from '@/components/room/MainArtistTabPanel';
 import { SONG_STYLE_OPTIONS } from '@/lib/song-styles';
 import { SONG_ERA_OPTIONS } from '@/lib/song-era-options';
+import { USER_AI_TASTE_SUMMARY_MAX_CHARS } from '@/lib/user-ai-taste-summary';
 
 const MY_LIST_LIB_INDEX_HASH = '#';
 const MY_LIST_LIB_INDEX_OTHER = 'その他';
@@ -717,6 +718,10 @@ export default function MyPage({
   const [myListArtistProfileName, setMyListArtistProfileName] = useState('');
   const [myListArtistProfileSlug, setMyListArtistProfileSlug] = useState<string | null>(null);
   const [textColorModalOpen, setTextColorModalOpen] = useState(false);
+  const [aiTasteSummary, setAiTasteSummary] = useState('');
+  const [aiTasteLoading, setAiTasteLoading] = useState(false);
+  const [aiTasteSaving, setAiTasteSaving] = useState(false);
+  const [aiTasteMessage, setAiTasteMessage] = useState<string | null>(null);
   const [mainTab, setMainTab] = useState<'owner' | 'user' | 'music' | 'mylist'>('user');
 
   const supabase = createClient();
@@ -754,6 +759,56 @@ export default function MyPage({
       setLoading(false);
     });
   }, [supabase, isGuest]);
+
+  useEffect(() => {
+    if (isGuest || !user?.id) {
+      setAiTasteSummary('');
+      setAiTasteLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setAiTasteLoading(true);
+    setAiTasteMessage(null);
+    void fetch('/api/user/ai-taste-summary', { credentials: 'include' })
+      .then((r) => r.json().catch(() => null))
+      .then((data) => {
+        if (cancelled) return;
+        if (typeof data?.summaryText === 'string') setAiTasteSummary(data.summaryText);
+        else setAiTasteSummary('');
+      })
+      .catch(() => {
+        if (!cancelled) setAiTasteMessage('趣向メモの読み込みに失敗しました。');
+      })
+      .finally(() => {
+        if (!cancelled) setAiTasteLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isGuest, user?.id]);
+
+  const handleSaveAiTasteSummary = useCallback(async () => {
+    setAiTasteSaving(true);
+    setAiTasteMessage(null);
+    try {
+      const r = await fetch('/api/user/ai-taste-summary', {
+        method: 'PUT',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ summaryText: aiTasteSummary }),
+      });
+      const data = (await r.json().catch(() => null)) as { error?: string } | null;
+      if (!r.ok) {
+        setAiTasteMessage(typeof data?.error === 'string' ? data.error : '保存に失敗しました。');
+        return;
+      }
+      setAiTasteMessage('保存しました。「@」で AI に話しかけたときに参考にされます。');
+    } catch {
+      setAiTasteMessage('保存に失敗しました。');
+    } finally {
+      setAiTasteSaving(false);
+    }
+  }, [aiTasteSummary]);
 
   const loadSongHistory = useCallback(() => {
     if (!supabase || !user) return;
@@ -2003,6 +2058,50 @@ export default function MyPage({
             </p>
           )}
         </div>
+
+        {/* AI向けの趣向メモ（「@」応答のパーソナライズ・登録ユーザーのみ） */}
+        {!isGuest ? (
+        <div className="rounded border border-gray-700 bg-gray-800/50 p-3">
+          <label className="block text-xs text-gray-500">AI向けの趣向メモ（任意）</label>
+          <p className="mt-1 text-xs text-gray-400">
+            好きなジャンル・よく聴くアーティスト・年代の傾向など、短く書いておくと、部屋で「@」から AI
+            に話しかけたときの返答の参考にされます。他の参加者には表示されません。空にして保存すると消えます。
+          </p>
+          {aiTasteLoading ? (
+            <p className="mt-2 text-sm text-gray-500">読み込み中…</p>
+          ) : (
+            <>
+              <textarea
+                value={aiTasteSummary}
+                onChange={(e) => setAiTasteSummary(e.target.value)}
+                maxLength={USER_AI_TASTE_SUMMARY_MAX_CHARS}
+                rows={5}
+                className="mt-2 w-full rounded border border-gray-600 bg-gray-800 px-3 py-2 text-sm text-white placeholder-gray-500"
+                placeholder="例：2000年代ポップパンク・アヴリル系が好き。バラードよりアップテンポ。英語詞のニュアンスも話したい。"
+                aria-label="AI向けの趣向メモ"
+              />
+              <div className="mt-1 flex flex-wrap items-center justify-between gap-2 text-xs text-gray-500">
+                <span>
+                  {aiTasteSummary.length} / {USER_AI_TASTE_SUMMARY_MAX_CHARS} 文字
+                </span>
+                <button
+                  type="button"
+                  onClick={() => void handleSaveAiTasteSummary()}
+                  disabled={aiTasteSaving}
+                  className="rounded bg-blue-600 px-3 py-1.5 text-sm text-white hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {aiTasteSaving ? '保存中…' : '保存'}
+                </button>
+              </div>
+            </>
+          )}
+          {aiTasteMessage ? (
+            <p className={`mt-2 text-xs ${aiTasteMessage.startsWith('保存しました') ? 'text-emerald-400' : 'text-amber-300'}`}>
+              {aiTasteMessage}
+            </p>
+          ) : null}
+        </div>
+        ) : null}
 
         {/* 選曲に参加する */}
         {onParticipatesInSelectionChange && (

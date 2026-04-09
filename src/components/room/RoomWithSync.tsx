@@ -34,6 +34,7 @@ import {
   SYSTEM_MESSAGE_COMMENTARY_FETCH_FAILED,
   SYSTEM_MESSAGE_JP_NO_COMMENTARY,
   SYSTEM_MESSAGE_QUEUE_SONG_DEFERRED,
+  buildAiQuestionGuardSoftDeclineMessage,
 } from '@/lib/chat-system-copy';
 import {
   buildTurnOrderClarificationReply,
@@ -94,7 +95,6 @@ import {
 } from '@/lib/room-selection-round';
 import {
   setKicked,
-  incrementAiQuestionWarnCount,
   setKickedSitewide,
   clearAiQuestionWarnStorage,
   clearKickedStorageForRoom,
@@ -111,6 +111,7 @@ import { useIsLgViewport } from '@/hooks/useLgViewport';
 import { useRoomChatLogPersistence } from '@/hooks/useRoomChatLogPersistence';
 import { useSupabaseAuthUserId } from '@/hooks/useSupabaseAuthUserId';
 import { isAiQuestionGuardKickExemptUserId } from '@/lib/ai-question-guard-exempt-user-ids';
+import { lineFromJoinGreetingApi } from '@/lib/join-greeting-logic';
 
 const AI_DISPLAY_NAME = 'AI';
 const SILENCE_TIDBIT_SEC = 30;
@@ -2283,49 +2284,77 @@ export default function RoomWithSync({
   useEffect(() => {
     if (initialGreetingDoneRef.current || messages.length > 0) return;
     initialGreetingDoneRef.current = true;
-    let greeting: string;
-    let isWelcomeBack = false;
-    try {
-      // 同一部屋の退室記録だけ参照（他部屋では「おかえりなさい」にしない）
-      const key = roomId ? getLastExitStorageKey(roomId) : null;
-      const raw = key && typeof window !== 'undefined' ? sessionStorage.getItem(key) : null;
-      if (raw) {
-        const data = JSON.parse(raw) as { timestamp?: number; displayName?: string };
-        const sameUser = data.displayName === effectiveDisplayName && typeof data.timestamp === 'number';
-        const awayMs = sameUser ? Date.now() - data.timestamp! : 0;
-        const minAwayMs = 1 * 1000;
-        const maxAwayMs = 6 * 60 * 60 * 1000;
-        const withinWelcomeBackRange = awayMs >= minAwayMs && awayMs <= maxAwayMs;
-        if (sameUser && withinWelcomeBackRange) {
-          greeting = `${effectiveDisplayName}さん、おかえりなさい！`;
-          isWelcomeBack = true;
-          sessionStorage.removeItem(key!);
+    let cancelled = false;
+
+    void (async () => {
+      const timeGreeting = getTimeBasedGreeting();
+      let greeting: string;
+      let isWelcomeBack = false;
+      try {
+        // 同一部屋の退室記録だけ参照（他部屋では「おかえりなさい」にしない）
+        const key = roomId ? getLastExitStorageKey(roomId) : null;
+        const raw = key && typeof window !== 'undefined' ? sessionStorage.getItem(key) : null;
+        if (raw) {
+          const data = JSON.parse(raw) as { timestamp?: number; displayName?: string };
+          const sameUser = data.displayName === effectiveDisplayName && typeof data.timestamp === 'number';
+          const awayMs = sameUser ? Date.now() - data.timestamp! : 0;
+          const minAwayMs = 1 * 1000;
+          const maxAwayMs = 6 * 60 * 60 * 1000;
+          const withinWelcomeBackRange = awayMs >= minAwayMs && awayMs <= maxAwayMs;
+          if (sameUser && withinWelcomeBackRange) {
+            greeting = `${effectiveDisplayName}さん、おかえりなさい！`;
+            isWelcomeBack = true;
+            sessionStorage.removeItem(key!);
+          } else {
+            greeting = `${effectiveDisplayName}さん、${timeGreeting}`;
+          }
         } else {
-          greeting = `${effectiveDisplayName}さん、${getTimeBasedGreeting()}`;
+          greeting = `${effectiveDisplayName}さん、${timeGreeting}`;
         }
-      } else {
-        greeting = `${effectiveDisplayName}さん、${getTimeBasedGreeting()}`;
+      } catch {
+        greeting = `${effectiveDisplayName}さん、${timeGreeting}`;
       }
-    } catch {
-      greeting = `${effectiveDisplayName}さん、${getTimeBasedGreeting()}`;
-    }
-    const localGuide = { allowWhenAiStopped: true, localOnly: true } as const;
-    addAiMessage(greeting, localGuide);
-    if (!isWelcomeBack) addAiMessage(AI_FIRST_VOICE, localGuide);
-    addAiMessage(TURN_ORDER_VOICE, localGuide);
-    if (participatingOrder.length > 0) {
-      const present = presentClientIdsRef.current;
-      const first =
-        participatingOrder.find(
-          (p) => present.has(p.clientId) && p.participatesInSelection !== false,
-        ) ?? participatingOrder[0];
-      setCurrentTurnClientId(first.clientId);
-      publishRef.current?.(TURN_STATE_EVENT, buildTurnStatePayload(first.clientId));
-      addAiMessage(`${first.displayName}さん、曲を貼ってください`, localGuide);
-    } else {
-      addAiMessage('どなたでもどうぞ貼ってください', localGuide);
-    }
-    touchActivity();
+
+      if (!cancelled && !isWelcomeBack && !isGuest && roomId?.trim()) {
+        try {
+          const r = await fetch(
+            `/api/user/join-greeting?roomId=${encodeURIComponent(roomId.trim())}`,
+            { credentials: 'include' },
+          );
+          const d = (await r.json().catch(() => null)) as {
+            variant?: string;
+            daysSinceLastVisit?: number | null;
+          } | null;
+          const line = lineFromJoinGreetingApi(effectiveDisplayName, timeGreeting, d);
+          if (line) greeting = line;
+        } catch {
+          /* 時間帯挨拶のまま */
+        }
+      }
+
+      if (cancelled) return;
+      const localGuide = { allowWhenAiStopped: true, localOnly: true } as const;
+      addAiMessage(greeting, localGuide);
+      if (!isWelcomeBack) addAiMessage(AI_FIRST_VOICE, localGuide);
+      addAiMessage(TURN_ORDER_VOICE, localGuide);
+      if (participatingOrder.length > 0) {
+        const present = presentClientIdsRef.current;
+        const first =
+          participatingOrder.find(
+            (p) => present.has(p.clientId) && p.participatesInSelection !== false,
+          ) ?? participatingOrder[0];
+        setCurrentTurnClientId(first.clientId);
+        publishRef.current?.(TURN_STATE_EVENT, buildTurnStatePayload(first.clientId));
+        addAiMessage(`${first.displayName}さん、曲を貼ってください`, localGuide);
+      } else {
+        addAiMessage('どなたでもどうぞ貼ってください', localGuide);
+      }
+      touchActivity();
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [
     messages.length,
     effectiveDisplayName,
@@ -2334,6 +2363,7 @@ export default function RoomWithSync({
     addAiMessage,
     touchActivity,
     buildTurnStatePayload,
+    isGuest,
   ]);
 
   useEffect(() => {
@@ -2676,6 +2706,11 @@ export default function RoomWithSync({
           slots,
           roomId,
           jpAiUnlockEnabled: jpAiUnlockEnabledRef.current,
+          recentMessages: messages.slice(-18).map((m) => ({
+            displayName: m.displayName,
+            body: typeof m.body === 'string' ? m.body : '',
+            messageType: m.messageType ?? 'user',
+          })),
           ...(skipPackCache ? { skipCommentPackCache: true } : {}),
           ...(packHint?.title?.trim()
             ? {
@@ -2816,7 +2851,7 @@ export default function RoomWithSync({
           addSystemMessage(SYSTEM_MESSAGE_COMMENTARY_FETCH_FAILED);
         });
     },
-    [addAiMessage, addSystemMessage, touchActivity, roomId]
+    [addAiMessage, addSystemMessage, touchActivity, roomId, messages]
   );
 
   const regenerateAiSongIntroAfterPlaybackTitleSave = useCallback(
@@ -3344,27 +3379,13 @@ export default function RoomWithSync({
           return;
         }
         if (guardRes.outcome === 'block') {
-          const warningCount = incrementAiQuestionWarnCount(roomId || 'unknown-room', myClientId || 'unknown-client');
-          const yellowCards = warningCount <= 1 ? 0 : Math.min(3, warningCount - 1);
-          const action: OwnerAiQuestionGuardPayload['action'] =
-            warningCount >= 4 ? 'ban' : warningCount === 1 ? 'warn' : 'yellow';
-          const kickExempt = !isGuest && isAiQuestionGuardKickExemptUserId(authUserId);
-          const message =
-            warningCount === 1
-              ? `システム警告: ${effectiveDisplayName}さんの質問は音楽に関係ない内容と判断しました。次回からお気をつけください。`
-              : warningCount === 2
-                ? `システム警告: ${effectiveDisplayName}さんにイエローカード1枚を付与しました（AI質問は音楽関連のみ）。`
-                : warningCount === 3
-                  ? `システム警告: ${effectiveDisplayName}さんにイエローカード2枚目を付与しました。次のカードで退場となります。`
-                  : kickExempt
-                    ? `システム警告: ${effectiveDisplayName}さんの「@」質問に関する警告が継続しています。管理者アカウントのため、退場および入室禁止は行いません。`
-                    : `システム警告: ${effectiveDisplayName}さんに3枚目のカードを付与したため、強制退場と一定期間の入室禁止を実行しました。`;
+          const message = buildAiQuestionGuardSoftDeclineMessage(effectiveDisplayName);
           const guardPayload: OwnerAiQuestionGuardPayload = {
-            targetClientId: myClientId,
+            targetClientId: myClientId || 'unknown-client',
             targetDisplayName: effectiveDisplayName,
-            warningCount,
-            yellowCards,
-            action,
+            warningCount: 1,
+            yellowCards: 0,
+            action: 'warn',
             message,
           };
           applyAiQuestionGuardEvent(guardPayload);
@@ -3389,6 +3410,7 @@ export default function RoomWithSync({
           'AI が応答できませんでした。.env.local に GEMINI_API_KEY を設定し、開発サーバーを再起動してください。';
         fetch('/api/ai/chat', {
           method: 'POST',
+          credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             messages: listForAi,
@@ -3555,7 +3577,6 @@ export default function RoomWithSync({
       applyAiQuestionGuardEvent,
       effectiveDisplayName,
       isGuest,
-      authUserId,
       shouldDeferMultiSongPost,
     ]
   );
