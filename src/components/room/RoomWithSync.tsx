@@ -230,6 +230,8 @@ interface PresenceMemberData {
   displayName?: string;
   /** ログイン済みのみ。公開プロフィール照会用（ゲストは送らない） */
   authUserId?: string;
+  /** マイページで公開オンなら true */
+  publicProfileVisible?: boolean;
   /** 選曲に参加するか。false なら視聴専用。デフォルト true */
   participatesInSelection?: boolean;
   /** チャットでの自分のテキスト色（参加者欄の名前色に反映） */
@@ -315,6 +317,7 @@ export default function RoomWithSync({
   const [roomDisplayTitleCurrent, setRoomDisplayTitleCurrent] = useState(roomDisplayTitle);
   useRoomChatLogPersistence(roomId, messages, { isGuest, myClientId });
   const [myPageOpen, setMyPageOpen] = useState(false);
+  const [publicProfileVisible, setPublicProfileVisible] = useState(false);
   const [participantPublicProfileModal, setParticipantPublicProfileModal] = useState<{
     userId: string;
     displayName: string;
@@ -470,6 +473,27 @@ export default function RoomWithSync({
   const [guestDisplayName, setGuestDisplayName] = useState(displayNameProp);
   const effectiveDisplayName = isGuest ? guestDisplayName : displayNameProp;
   const authUserId = useSupabaseAuthUserId(isGuest);
+
+  useEffect(() => {
+    if (isGuest || !authUserId) {
+      setPublicProfileVisible(false);
+      return;
+    }
+    let cancelled = false;
+    const loadPublicProfileVisibility = async () => {
+      try {
+        const r = await fetch('/api/user/public-profile', { credentials: 'include' });
+        const d = (await r.json().catch(() => null)) as { visibleInRooms?: boolean } | null;
+        if (!cancelled) setPublicProfileVisible(d?.visibleInRooms === true);
+      } catch {
+        if (!cancelled) setPublicProfileVisible(false);
+      }
+    };
+    void loadPublicProfileVisibility();
+    return () => {
+      cancelled = true;
+    };
+  }, [isGuest, authUserId, myPageOpen]);
   /** 選曲に参加するか。false なら視聴専用。デフォルト true */
   const [participatesInSelection, setParticipatesInSelection] = useState(true);
   const [joinEntryChimeEnabled, setJoinEntryChimeEnabled] = useState(true);
@@ -625,6 +649,7 @@ export default function RoomWithSync({
     () => ({
       displayName: effectiveDisplayName,
       ...(authUserId && authUserId.trim() ? { authUserId: authUserId.trim() } : {}),
+      ...(authUserId ? { publicProfileVisible } : {}),
       participatesInSelection,
       textColor: userTextColor,
       status: userStatus || undefined,
@@ -634,6 +659,7 @@ export default function RoomWithSync({
     [
       effectiveDisplayName,
       authUserId,
+      publicProfileVisible,
       participatesInSelection,
       userTextColor,
       userStatus,
@@ -813,6 +839,7 @@ export default function RoomWithSync({
           typeof d?.authUserId === 'string' && /^[0-9a-f-]{36}$/i.test(d.authUserId.trim())
             ? d.authUserId.trim()
             : undefined;
+        const visible = d?.publicProfileVisible === true;
         return {
           clientId: p.clientId,
           displayName: (d?.displayName ?? 'ゲスト').trim() || 'ゲスト',
@@ -826,7 +853,7 @@ export default function RoomWithSync({
             typeof d?.status === 'string' && d.status.trim() ? d.status.trim() : undefined,
           yellowCards: yellowCardByClientId[p.clientId] ?? 0,
           isAway: false,
-          ...(aid ? { authUserId: aid } : {}),
+          ...(aid ? { authUserId: aid, publicProfileVisible: visible } : {}),
         };
       });
 

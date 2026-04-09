@@ -31,6 +31,8 @@ export interface ParticipantItem {
   isAway?: boolean;
   /** ログイン済み参加者のみ（公開プロフィール用・presence で共有） */
   authUserId?: string;
+  /** マイページで公開オンのとき true */
+  publicProfileVisible?: boolean;
 }
 
 interface UserBarProps {
@@ -97,7 +99,9 @@ function ParticipantProfileIconButton({
   onAfterClick?: () => void;
 }) {
   const uid = participant.authUserId?.trim();
-  if (!uid || viewerIsGuest || !onParticipantPublicProfileClick) return null;
+  if (!uid || participant.publicProfileVisible !== true || viewerIsGuest || !onParticipantPublicProfileClick) {
+    return null;
+  }
   return (
     <button
       type="button"
