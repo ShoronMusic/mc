@@ -16,6 +16,7 @@ import {
   XMarkIcon,
   HeartIcon,
   DocumentTextIcon,
+  IdentificationIcon,
 } from '@heroicons/react/24/outline';
 import { useIsLgViewport } from '@/hooks/useLgViewport';
 import { SELECTION_ROUND_SESSION_MAX_GAP_MS } from '@/lib/room-selection-round';
@@ -28,6 +29,8 @@ export interface ParticipantItem {
   yellowCards?: number;
   /** 一時退席（presence オフ）で枠だけ残っている */
   isAway?: boolean;
+  /** ログイン済み参加者のみ（公開プロフィール用・presence で共有） */
+  authUserId?: string;
 }
 
 interface UserBarProps {
@@ -65,6 +68,10 @@ interface UserBarProps {
   /** 自分の選曲予約のみ取り消し（5分制限・キュー時） */
   onCancelSongReservation?: () => void;
   onParticipantClick?: (displayName: string) => void;
+  /** ログイン中の閲覧者のみ。ゲストのときはプロフィールアイコンを出さない */
+  viewerIsGuest?: boolean;
+  /** 参加者の公開プロフィール（authUserId がいる行のみ） */
+  onParticipantPublicProfileClick?: (params: { authUserId: string; displayName: string }) => void;
 }
 
 function participantDisplayName(
@@ -75,6 +82,38 @@ function participantDisplayName(
   return p.clientId === myClientId
     ? `${p.displayName}${isGuest ? '（ゲスト）' : ''} (自分)`
     : p.displayName;
+}
+
+function ParticipantProfileIconButton({
+  participant,
+  viewerIsGuest,
+  onParticipantPublicProfileClick,
+  onAfterClick,
+}: {
+  participant: ParticipantItem;
+  viewerIsGuest: boolean;
+  onParticipantPublicProfileClick?: (params: { authUserId: string; displayName: string }) => void;
+  /** モバイル一覧を閉じるなど */
+  onAfterClick?: () => void;
+}) {
+  const uid = participant.authUserId?.trim();
+  if (!uid || viewerIsGuest || !onParticipantPublicProfileClick) return null;
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onParticipantPublicProfileClick({ authUserId: uid, displayName: participant.displayName });
+        onAfterClick?.();
+      }}
+      className="inline-flex shrink-0 items-center justify-center rounded border border-emerald-800/60 bg-emerald-950/35 p-0.5 text-emerald-200/90 hover:bg-emerald-900/45"
+      title={`${participant.displayName}さんの自己紹介`}
+      aria-label={`${participant.displayName}さんの自己紹介`}
+    >
+      <IdentificationIcon className="h-3.5 w-3.5" aria-hidden />
+    </button>
+  );
 }
 
 export default function UserBar({
@@ -99,6 +138,8 @@ export default function UserBar({
   onSkipCurrentTrack,
   onCancelSongReservation,
   onParticipantClick,
+  viewerIsGuest = false,
+  onParticipantPublicProfileClick,
 }: UserBarProps) {
   const isLg = useIsLgViewport();
   const [listOpen, setListOpen] = useState(false);
@@ -343,6 +384,11 @@ export default function UserBar({
                 ) : (
                   <span style={{ color }}>{name}</span>
                 )}
+                <ParticipantProfileIconButton
+                  participant={p}
+                  viewerIsGuest={viewerIsGuest}
+                  onParticipantPublicProfileClick={onParticipantPublicProfileClick}
+                />
                 {p.status && (
                   <span className="ml-0.5 text-xs text-white" title={`ステータス: ${p.status}`}>
                     [{p.status}]
@@ -511,6 +557,11 @@ export default function UserBar({
           <span className="min-w-0 truncate text-sm font-medium text-amber-100">
             {participantDisplayName(poster, myClientId, isGuest)}
           </span>
+          <ParticipantProfileIconButton
+            participant={poster}
+            viewerIsGuest={viewerIsGuest}
+            onParticipantPublicProfileClick={onParticipantPublicProfileClick}
+          />
           {currentOwnerClientId && poster.clientId === currentOwnerClientId ? (
             <span className="shrink-0 text-amber-400" title="チャットオーナー" aria-label="チャットオーナー">
               👑
@@ -707,6 +758,12 @@ export default function UserBar({
                           {name}
                         </span>
                       )}
+                      <ParticipantProfileIconButton
+                        participant={p}
+                        viewerIsGuest={viewerIsGuest}
+                        onParticipantPublicProfileClick={onParticipantPublicProfileClick}
+                        onAfterClick={() => setListOpen(false)}
+                      />
                     </div>
                     {isCurrentSongPoster && (
                       <span className="pl-6 text-[11px] text-amber-200/80">再生中の選曲</span>

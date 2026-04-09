@@ -17,6 +17,7 @@ import RoomMainLayout from '@/components/room/RoomMainLayout';
 import RoomPlaybackHistory from '@/components/room/RoomPlaybackHistory';
 import { SiteFeedbackModal } from '@/components/room/SiteFeedbackModal';
 import UserBar from '@/components/room/UserBar';
+import ParticipantPublicProfileModal from '@/components/room/ParticipantPublicProfileModal';
 import { getLastExitStorageKey } from '@/components/providers/AblyProviderWrapper';
 import {
   checkSendLimit,
@@ -227,6 +228,8 @@ function parseTidbitIdFromPack(v: unknown): string | undefined {
 
 interface PresenceMemberData {
   displayName?: string;
+  /** ログイン済みのみ。公開プロフィール照会用（ゲストは送らない） */
+  authUserId?: string;
   /** 選曲に参加するか。false なら視聴専用。デフォルト true */
   participatesInSelection?: boolean;
   /** チャットでの自分のテキスト色（参加者欄の名前色に反映） */
@@ -312,6 +315,10 @@ export default function RoomWithSync({
   const [roomDisplayTitleCurrent, setRoomDisplayTitleCurrent] = useState(roomDisplayTitle);
   useRoomChatLogPersistence(roomId, messages, { isGuest, myClientId });
   const [myPageOpen, setMyPageOpen] = useState(false);
+  const [participantPublicProfileModal, setParticipantPublicProfileModal] = useState<{
+    userId: string;
+    displayName: string;
+  } | null>(null);
   const [guestRegisterModalOpen, setGuestRegisterModalOpen] = useState(false);
   const [playbackHistoryModalOpen, setPlaybackHistoryModalOpen] = useState(false);
   const [chatSummaryModalOpen, setChatSummaryModalOpen] = useState(false);
@@ -617,6 +624,7 @@ export default function RoomWithSync({
   const presencePayload: PresenceMemberData = useMemo(
     () => ({
       displayName: effectiveDisplayName,
+      ...(authUserId && authUserId.trim() ? { authUserId: authUserId.trim() } : {}),
       participatesInSelection,
       textColor: userTextColor,
       status: userStatus || undefined,
@@ -625,6 +633,7 @@ export default function RoomWithSync({
     }),
     [
       effectiveDisplayName,
+      authUserId,
       participatesInSelection,
       userTextColor,
       userStatus,
@@ -800,6 +809,10 @@ export default function RoomWithSync({
       .map((p) => {
         const d = p.data as PresenceMemberData | undefined;
         const sk = sortKeyForPresence(p);
+        const aid =
+          typeof d?.authUserId === 'string' && /^[0-9a-f-]{36}$/i.test(d.authUserId.trim())
+            ? d.authUserId.trim()
+            : undefined;
         return {
           clientId: p.clientId,
           displayName: (d?.displayName ?? 'ゲスト').trim() || 'ゲスト',
@@ -813,6 +826,7 @@ export default function RoomWithSync({
             typeof d?.status === 'string' && d.status.trim() ? d.status.trim() : undefined,
           yellowCards: yellowCardByClientId[p.clientId] ?? 0,
           isAway: false,
+          ...(aid ? { authUserId: aid } : {}),
         };
       });
 
@@ -3693,8 +3707,20 @@ export default function RoomWithSync({
           onSkipCurrentTrack={handleSkipCurrentTrack}
           onCancelSongReservation={handleRequestCancelSongReservation}
           onParticipantClick={(displayName) => chatInputRef.current?.insertText(` ${displayName}さん `)}
+          viewerIsGuest={isGuest}
+          onParticipantPublicProfileClick={({ authUserId, displayName: dn }) =>
+            setParticipantPublicProfileModal({ userId: authUserId, displayName: dn })
+          }
         />
       </section>
+
+      <ParticipantPublicProfileModal
+        open={participantPublicProfileModal != null}
+        onClose={() => setParticipantPublicProfileModal(null)}
+        targetUserId={participantPublicProfileModal?.userId ?? null}
+        displayName={participantPublicProfileModal?.displayName ?? ''}
+        viewerIsGuest={isGuest}
+      />
 
       {cancelReservationModalOpen && (
         <div

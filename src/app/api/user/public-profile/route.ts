@@ -4,11 +4,14 @@ import { normalizeUserPublicProfileBody } from '@/lib/user-public-profile';
 
 export const dynamic = 'force-dynamic';
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 /**
  * GET: 自分の公開プロフィール（未作成はデフォルト値）
+ * Query `forUserId` … 他ユーザーの行（RLS: 公開中のみ他人から可。本人は常に自分の行を読める）
  * PUT: 保存（upsert）
  */
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const supabase = await createClient();
     if (!supabase) {
@@ -22,10 +25,20 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const { searchParams } = new URL(request.url);
+    const forUserIdRaw = searchParams.get('forUserId')?.trim() ?? '';
+    let targetUserId = user.id;
+    if (forUserIdRaw.length > 0) {
+      if (!UUID_RE.test(forUserIdRaw)) {
+        return NextResponse.json({ error: 'forUserId が不正です。' }, { status: 400 });
+      }
+      targetUserId = forUserIdRaw;
+    }
+
     const { data, error } = await supabase
       .from('user_public_profile')
       .select('visible_in_rooms, tagline, favorite_artists, listening_note')
-      .eq('user_id', user.id)
+      .eq('user_id', targetUserId)
       .maybeSingle();
 
     if (error) {
@@ -50,6 +63,9 @@ export async function GET() {
       tagline: typeof data?.tagline === 'string' ? data.tagline : '',
       favoriteArtists: artists,
       listeningNote: typeof data?.listening_note === 'string' ? data.listening_note : '',
+      /** 他人照会時、行が無い＝非公開または未登録 */
+      hasRow: data != null,
+      isSelf: targetUserId === user.id,
     });
   } catch (e) {
     console.error('[api/user/public-profile GET]', e);

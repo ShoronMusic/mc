@@ -123,7 +123,8 @@ SQL: `docs/supabase-setup.md` 第 15 章
 | `listening_note` | 補足（最近の傾向など・最大約300文字） |
 | `updated_at` | 最終更新 |
 
-API: `GET` / `PUT` → `/api/user/public-profile`  
+API: `GET`（`?forUserId=` で他ユーザー参照・RLS により公開中のみ） / `PUT` → `/api/user/public-profile`  
+同期部屋では Ably presence に `authUserId`（ログイン時のみ）を載せ、参加者欄のプロフィールアイコンから照会できます。  
 SQL: `docs/supabase-setup.md` 第 16 章
 
 ---
