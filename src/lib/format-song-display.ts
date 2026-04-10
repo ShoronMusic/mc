@@ -1093,6 +1093,16 @@ export function getArtistAndSong(
       rightTheWords.length >= 2 &&
       rightTheWords.length <= 4 &&
       !/\b(will|come|again|you|me|my|your|our|this|that|to|for|of|in|on)\b/i.test(right);
+    /** 「The Prodigy - Breathe」「The Beatles - Hey Jude」型。左が The 始まりバンド名なのに branch 2 で誤スワップしない */
+    const leftTheWords = left
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+    const leftLooksLikeTheBandName =
+      /^The\s+/i.test(left.trim()) &&
+      leftTheWords.length >= 2 &&
+      leftTheWords.length <= 4 &&
+      !/\b(will|come|again|you|me|my|your|our|this|that|to|for|of|in|on)\b/i.test(left);
     const songFirstLeadingTheOnRight =
       !channelLooksLikeLeft &&
       looksLikeArtistName(right) &&
@@ -1138,6 +1148,7 @@ export function getArtistAndSong(
         looksLikeArtistName(right) &&
         looksLikeSongTitle(left) &&
         left.length >= right.length &&
+        !(leftLooksLikeTheBandName && left.length >= right.length) &&
         !leftLooksLikeStrongArtistCandidate &&
         !bothSingleWordLatinArtistLike &&
         !artistFirstLikelySingleLeftMultiWordRight &&

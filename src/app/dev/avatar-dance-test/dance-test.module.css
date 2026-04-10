@@ -1,0 +1,322 @@
+/* シンプル「棒人間」踊りテスト：頭は●、胴・四肢は棒＋肘・膝で曲がる */
+
+.stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 70vh;
+  gap: 1.5rem;
+}
+
+.caption {
+  font-size: 0.875rem;
+  color: rgba(237, 237, 237, 0.65);
+  text-align: center;
+  max-width: 28rem;
+  line-height: 1.5;
+}
+
+.character {
+  position: relative;
+  width: 100px;
+  height: 176px;
+  animation: bodyBounce 0.45s ease-in-out infinite;
+  transform-origin: center bottom;
+}
+
+.head {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 36px;
+  height: 36px;
+  margin-left: -18px;
+  border-radius: 50%;
+  background: #d8e4ef;
+  animation: headNod 0.45s ease-in-out infinite;
+}
+
+.torso {
+  position: absolute;
+  left: 50%;
+  top: 34px;
+  width: 4px;
+  height: 52px;
+  margin-left: -2px;
+  background: #9eb6cc;
+}
+
+/* 腕：肩（マウント）→ 上腕 → 前腕（肘） */
+.arm {
+  position: absolute;
+  top: 38px;
+  width: 4px;
+  transform-origin: top center;
+}
+
+.armLeft {
+  left: 50%;
+  margin-left: -18px;
+  animation: shoulderSwingLeft 0.45s ease-in-out infinite;
+}
+
+.armRight {
+  left: 50%;
+  margin-left: 14px;
+  animation: shoulderSwingRight 0.45s ease-in-out infinite;
+}
+
+.upperArm {
+  position: relative;
+  width: 4px;
+  height: 22px;
+  background: #9eb6cc;
+  transform-origin: top center;
+}
+
+.forearm {
+  position: absolute;
+  top: 22px;
+  left: 0;
+  width: 4px;
+  height: 22px;
+  background: #9eb6cc;
+  transform-origin: top center;
+}
+
+.armLeft .upperArm {
+  animation: humerusLeft 0.45s ease-in-out infinite;
+}
+
+.armLeft .forearm {
+  animation: elbowLeft 0.45s ease-in-out infinite;
+}
+
+.armRight .upperArm {
+  animation: humerusRight 0.45s ease-in-out infinite;
+}
+
+.armRight .forearm {
+  animation: elbowRight 0.45s ease-in-out infinite;
+}
+
+/* 脚：股（マウント）→ 太もも → すね（膝） */
+.leg {
+  position: absolute;
+  top: 86px;
+  width: 4px;
+  transform-origin: top center;
+}
+
+.legLeft {
+  left: 50%;
+  margin-left: -12px;
+  animation: hipSwingLeft 0.45s ease-in-out infinite;
+}
+
+.legRight {
+  left: 50%;
+  margin-left: 8px;
+  animation: hipSwingRight 0.45s ease-in-out infinite;
+}
+
+.thigh {
+  position: relative;
+  width: 4px;
+  height: 24px;
+  background: #7a96b0;
+  transform-origin: top center;
+}
+
+.calf {
+  position: absolute;
+  top: 24px;
+  left: 0;
+  width: 4px;
+  height: 24px;
+  background: #7a96b0;
+  transform-origin: top center;
+}
+
+.legLeft .thigh {
+  animation: femurLeft 0.45s ease-in-out infinite;
+}
+
+.legLeft .calf {
+  animation: kneeLeft 0.45s ease-in-out infinite;
+}
+
+.legRight .thigh {
+  animation: femurRight 0.45s ease-in-out infinite;
+}
+
+.legRight .calf {
+  animation: kneeRight 0.45s ease-in-out infinite;
+}
+
+.shadow {
+  width: 72px;
+  height: 12px;
+  margin-top: -4px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.35);
+  animation: shadowPulse 0.45s ease-in-out infinite;
+}
+
+@keyframes bodyBounce {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-2deg);
+  }
+  50% {
+    transform: translateY(-10px) rotate(2deg);
+  }
+}
+
+@keyframes headNod {
+  0%,
+  100% {
+    transform: rotate(-4deg);
+  }
+  50% {
+    transform: rotate(4deg);
+  }
+}
+
+/* 肩：腕ごと振り */
+@keyframes shoulderSwingLeft {
+  0%,
+  100% {
+    transform: rotate(22deg);
+  }
+  50% {
+    transform: rotate(-32deg);
+  }
+}
+
+@keyframes shoulderSwingRight {
+  0%,
+  100% {
+    transform: rotate(-22deg);
+  }
+  50% {
+    transform: rotate(32deg);
+  }
+}
+
+/* 上腕：肩からの追加の振れ */
+@keyframes humerusLeft {
+  0%,
+  100% {
+    transform: rotate(6deg);
+  }
+  50% {
+    transform: rotate(-10deg);
+  }
+}
+
+@keyframes humerusRight {
+  0%,
+  100% {
+    transform: rotate(-6deg);
+  }
+  50% {
+    transform: rotate(10deg);
+  }
+}
+
+/* 肘：前腕の折り曲げ（関節が見える動き） */
+@keyframes elbowLeft {
+  0%,
+  100% {
+    transform: rotate(38deg);
+  }
+  50% {
+    transform: rotate(12deg);
+  }
+}
+
+@keyframes elbowRight {
+  0%,
+  100% {
+    transform: rotate(-38deg);
+  }
+  50% {
+    transform: rotate(-12deg);
+  }
+}
+
+/* 股：脚の振り */
+@keyframes hipSwingLeft {
+  0%,
+  100% {
+    transform: rotate(-10deg);
+  }
+  50% {
+    transform: rotate(22deg);
+  }
+}
+
+@keyframes hipSwingRight {
+  0%,
+  100% {
+    transform: rotate(10deg);
+  }
+  50% {
+    transform: rotate(-22deg);
+  }
+}
+
+@keyframes femurLeft {
+  0%,
+  100% {
+    transform: rotate(-4deg);
+  }
+  50% {
+    transform: rotate(8deg);
+  }
+}
+
+@keyframes femurRight {
+  0%,
+  100% {
+    transform: rotate(4deg);
+  }
+  50% {
+    transform: rotate(-8deg);
+  }
+}
+
+/* 膝：すねの折り曲げ */
+@keyframes kneeLeft {
+  0%,
+  100% {
+    transform: rotate(-28deg);
+  }
+  50% {
+    transform: rotate(6deg);
+  }
+}
+
+@keyframes kneeRight {
+  0%,
+  100% {
+    transform: rotate(28deg);
+  }
+  50% {
+    transform: rotate(-6deg);
+  }
+}
+
+@keyframes shadowPulse {
+  0%,
+  100% {
+    transform: scaleX(1);
+    opacity: 0.45;
+  }
+  50% {
+    transform: scaleX(0.85);
+    opacity: 0.3;
+  }
+}

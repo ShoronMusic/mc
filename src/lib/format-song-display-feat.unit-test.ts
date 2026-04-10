@@ -43,6 +43,13 @@ assert.equal(getArtistDisplayString('Drake ft. Rihanna'), 'Drake, Rihanna');
   assert.equal(r.song, 'Too Shy');
 }
 
+// 「The バンド名 - 曲名」はチャンネルがレーベル（XL 等）でも誤スワップしない（rmHDhAohJlQ 型）
+{
+  const r = getArtistAndSong('The Prodigy - Breathe (Official Video)', 'XL Recordings');
+  assert.equal(r.artistDisplay, 'The Prodigy');
+  assert.equal(r.song, 'Breathe');
+}
+
 // 正しい「アーティスト - 曲名」はそのまま（各語4文字以上の複語アーティスト）
 {
   const r = getArtistAndSong('John Lennon - Imagine', null);
