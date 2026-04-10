@@ -272,7 +272,7 @@ export function FirstSongGuideArticle({
       </section>
 
       {!modal && mobileGuideHref ? (
-        <p>
+        <p className="hidden lg:block">
           <Link
             href={mobileGuideHref}
             className="text-base font-medium text-sky-400 underline-offset-2 hover:text-sky-300 hover:underline md:text-lg"
