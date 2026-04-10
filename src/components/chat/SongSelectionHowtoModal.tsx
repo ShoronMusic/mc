@@ -8,6 +8,20 @@ import { useIsLgViewport } from '@/hooks/useLgViewport';
 
 const BASE = '/images/first-time-song-selection';
 
+function ModalBottomClose({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="mt-6 border-t border-gray-700 pt-4">
+      <button
+        type="button"
+        onClick={onClose}
+        className="w-full rounded border border-gray-600 bg-gray-800 px-3 py-2.5 text-sm font-medium text-gray-200 hover:bg-gray-700"
+      >
+        閉じる
+      </button>
+    </div>
+  );
+}
+
 type Props = {
   open: boolean;
   onClose: () => void;
@@ -75,6 +89,7 @@ export function SongSelectionHowtoModal({ open, onClose }: Props) {
               ) : (
                 <FirstSongMobileGuideArticle variant="modal" />
               )}
+              <ModalBottomClose onClose={onClose} />
             </>
           ) : (
             <>
@@ -225,6 +240,7 @@ export function SongSelectionHowtoModal({ open, onClose }: Props) {
                   詳しい説明ページ
                 </button>
               </p>
+              <ModalBottomClose onClose={onClose} />
             </>
           )}
         </div>
