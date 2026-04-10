@@ -25,6 +25,12 @@ export const GUIDE_SECTIONS = [
     short: 'YouTube URL・検索',
   },
   {
+    href: '/guide/first-song-mobile',
+    slug: 'first-song-mobile',
+    title: '選曲のしかた（スマホ）',
+    short: '共有→コピー→送信',
+  },
+  {
     href: '/guide/music',
     slug: 'music',
     title: '曲・コメント',

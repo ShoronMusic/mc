@@ -36,3 +36,30 @@ export function getSafeInternalReturnPath(raw: string | null | undefined): strin
   if (!/^[a-zA-Z0-9_-]+$/.test(seg)) return null;
   return `/${seg}`;
 }
+
+/** ガイド閲覧後に「チャットへ戻る」用。参加中の部屋 ID のみ保存（オープンリダイレクト防止の検証は getSafeInternalReturnPath と同じ）。 */
+const GUIDE_RETURN_ROOM_STORAGE_KEY = 'musicai_last_guide_return_room';
+
+export function rememberRoomForGuideReturn(roomSegment: string | null | undefined): void {
+  if (typeof window === 'undefined') return;
+  const trimmed = typeof roomSegment === 'string' ? roomSegment.trim() : '';
+  if (!trimmed) return;
+  const path = getSafeInternalReturnPath(trimmed) ?? getSafeInternalReturnPath(`/${trimmed}`);
+  if (!path) return;
+  try {
+    sessionStorage.setItem(GUIDE_RETURN_ROOM_STORAGE_KEY, path.slice(1));
+  } catch {
+    /* private mode 等 */
+  }
+}
+
+/** クエリに returnTo が無いとき、直近に記録した部屋パス（例 `/05`）を返す。 */
+export function readRememberedGuideReturnPath(): string | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = sessionStorage.getItem(GUIDE_RETURN_ROOM_STORAGE_KEY);
+    return getSafeInternalReturnPath(raw ?? undefined);
+  } catch {
+    return null;
+  }
+}

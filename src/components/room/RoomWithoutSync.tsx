@@ -36,6 +36,7 @@ import { resolveAiQuestionMusicRelated } from '@/lib/client-ai-question-guard-re
 import { isDevMinimalSongAi } from '@/lib/dev-minimal-song-ai';
 import { USER_SONG_HISTORY_UPDATED_EVENT } from '@/lib/user-song-history-events';
 import { playbackLog } from '@/lib/playback-debug';
+import { rememberRoomForGuideReturn } from '@/lib/safe-return-path';
 import { extractVideoId, isStandaloneNonYouTubeUrl } from '@/lib/youtube';
 import type { ChatMessage, SystemMessageOptions } from '@/types/chat';
 import { useIsLgViewport } from '@/hooks/useLgViewport';
@@ -110,6 +111,9 @@ export default function RoomWithoutSync({
   const playingRef = useRef(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   useRoomChatLogPersistence(roomId, messages, { isGuest, myClientId: '' });
+  useEffect(() => {
+    rememberRoomForGuideReturn(roomId);
+  }, [roomId]);
   const [myPageOpen, setMyPageOpen] = useState(false);
   const [guestRegisterModalOpen, setGuestRegisterModalOpen] = useState(false);
   const [siteFeedbackOpen, setSiteFeedbackOpen] = useState(false);

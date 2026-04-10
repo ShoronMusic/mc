@@ -46,6 +46,7 @@ import { isDevMinimalSongAi } from '@/lib/dev-minimal-song-ai';
 import { COMMENT_PACK_MAX_FREE_COMMENTS } from '@/lib/song-tidbits';
 import { playbackLog } from '@/lib/playback-debug';
 import { useResumeYoutubeWhenTabVisible } from '@/hooks/useResumeYoutubeWhenTabVisible';
+import { rememberRoomForGuideReturn } from '@/lib/safe-return-path';
 import { extractVideoId, isStandaloneNonYouTubeUrl } from '@/lib/youtube';
 import {
   type PlaybackMessage,
@@ -316,6 +317,9 @@ export default function RoomWithSync({
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [roomDisplayTitleCurrent, setRoomDisplayTitleCurrent] = useState(roomDisplayTitle);
   useRoomChatLogPersistence(roomId, messages, { isGuest, myClientId });
+  useEffect(() => {
+    rememberRoomForGuideReturn(roomId);
+  }, [roomId]);
   const [myPageOpen, setMyPageOpen] = useState(false);
   const [publicProfileVisible, setPublicProfileVisible] = useState(false);
   const [participantPublicProfileModal, setParticipantPublicProfileModal] = useState<{
@@ -4036,7 +4040,11 @@ export default function RoomWithSync({
                   ? '/terms?modal=1'
                   : policyTab === 'privacy'
                     ? '/privacy?modal=1'
-                    : '/guide?modal=1'
+                    : `/guide?modal=1${
+                        roomId?.trim()
+                          ? `&returnTo=${encodeURIComponent(roomId.trim())}`
+                          : ''
+                      }`
               }
               title="ポリシー"
               className="h-[calc(85vh-46px)] w-full border-0 bg-gray-950"

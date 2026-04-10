@@ -2,11 +2,15 @@
 
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { getSafeInternalReturnPath } from '@/lib/safe-return-path';
+import {
+  getSafeInternalReturnPath,
+  readRememberedGuideReturnPath,
+} from '@/lib/safe-return-path';
 
 export function GuideLayoutHeader() {
   const searchParams = useSearchParams();
-  const returnTo = getSafeInternalReturnPath(searchParams.get('returnTo'));
+  const fromQuery = getSafeInternalReturnPath(searchParams.get('returnTo'));
+  const returnTo = fromQuery ?? readRememberedGuideReturnPath();
 
   return (
     <header className="border-b border-gray-800 bg-gray-900/50">
@@ -20,7 +24,7 @@ export function GuideLayoutHeader() {
               href={returnTo}
               className="shrink-0 text-amber-400/95 underline-offset-2 transition hover:text-amber-300 hover:underline"
             >
-              ← チャットの部屋に戻る
+              ← チャットページに戻る
             </Link>
           ) : null}
         </div>

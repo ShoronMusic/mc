@@ -4,7 +4,10 @@ import Link from 'next/link';
 import { Suspense } from 'react';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { GUIDE_SECTIONS } from '@/lib/guide-nav';
-import { getSafeInternalReturnPath } from '@/lib/safe-return-path';
+import {
+  getSafeInternalReturnPath,
+  readRememberedGuideReturnPath,
+} from '@/lib/safe-return-path';
 
 function guideLinkHref(href: string, returnSegment: string | null): string {
   if (!returnSegment || !href.startsWith('/guide')) return href;
@@ -56,8 +59,10 @@ function GuideSidebarInner({ returnSegment }: { returnSegment: string | null }) 
 
 function GuideSidebarWithSearchParams() {
   const searchParams = useSearchParams();
-  const back = getSafeInternalReturnPath(searchParams.get('returnTo'));
-  const returnSegment = back ? back.slice(1) : null;
+  const fromQuery = getSafeInternalReturnPath(searchParams.get('returnTo'));
+  const fromMemory = fromQuery ? null : readRememberedGuideReturnPath();
+  const effective = fromQuery ?? fromMemory;
+  const returnSegment = effective ? effective.slice(1) : null;
   return <GuideSidebarInner returnSegment={returnSegment} />;
 }
 

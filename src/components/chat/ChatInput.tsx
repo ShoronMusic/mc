@@ -19,7 +19,8 @@ import { NON_YOUTUBE_URL_SYSTEM_MESSAGE } from '@/lib/chat-non-youtube-url';
 import { extractVideoId, isStandaloneNonYouTubeUrl } from '@/lib/youtube';
 import type { SystemMessageOptions } from '@/types/chat';
 import { isAiQuestionGuardDisabledClient } from '@/lib/chat-system-copy';
-import { QuestionMarkCircleIcon } from '@heroicons/react/24/outline';
+import { MusicalNoteIcon, QuestionMarkCircleIcon } from '@heroicons/react/24/outline';
+import { SongSelectionHowtoModal } from '@/components/chat/SongSelectionHowtoModal';
 
 type SearchResultRow = {
   videoId: string;
@@ -71,6 +72,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
   const [searching, setSearching] = useState(false);
   const [searchResultsOpen, setSearchResultsOpen] = useState(false);
   const [usageGuideOpen, setUsageGuideOpen] = useState(false);
+  const [songHowtoOpen, setSongHowtoOpen] = useState(false);
   const [searchResults, setSearchResults] = useState<SearchResultRow[]>([]);
   const [previewVideoId, setPreviewVideoId] = useState<string | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -527,6 +529,8 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
         </div>
       )}
 
+      <SongSelectionHowtoModal open={songHowtoOpen} onClose={() => setSongHowtoOpen(false)} />
+
       {usageGuideOpen && (
         <div
           className="fixed inset-0 z-[90] flex items-center justify-center bg-black/70 p-4"
@@ -625,11 +629,24 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
               aria-label="チャット入力"
             />
           </div>
-          <div className="flex w-full min-w-0 flex-col gap-2 lg:w-auto lg:shrink-0">
+          <div className="grid w-full grid-cols-3 gap-x-2 gap-y-1 lg:w-auto lg:shrink-0">
+            <button
+              type="button"
+              onClick={() => setSongHowtoOpen(true)}
+              className="col-start-1 row-start-1 inline-flex items-center gap-0.5 justify-self-start text-[10px] leading-tight text-sky-200/90 hover:text-sky-100"
+              aria-haspopup="dialog"
+              aria-expanded={songHowtoOpen}
+              aria-label="選曲の仕方（説明を表示）"
+              title="選曲の仕方"
+            >
+              <MusicalNoteIcon className="h-3 w-3 shrink-0" aria-hidden />
+              <span className="underline decoration-dotted underline-offset-2">選曲の仕方</span>
+            </button>
+            <span className="col-start-2 row-start-1 hidden lg:block" aria-hidden />
             <button
               type="button"
               onClick={() => setUsageGuideOpen(true)}
-              className="inline-flex items-center gap-0.5 self-end text-[10px] leading-tight text-amber-200/90 hover:text-amber-100"
+              className="col-start-3 row-start-1 inline-flex items-center gap-0.5 justify-self-end text-[10px] leading-tight text-amber-200/90 hover:text-amber-100"
               aria-haspopup="dialog"
               aria-expanded={usageGuideOpen}
               aria-label="発言欄の使い方（説明を表示）"
@@ -638,31 +655,31 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
               <QuestionMarkCircleIcon className="h-3 w-3 shrink-0" aria-hidden />
               <span className="underline decoration-dotted underline-offset-2">発言欄の使い方</span>
             </button>
-            <div className="flex w-full min-w-0 gap-2">
             <button
               type="button"
               onClick={handleSubmit}
               title="YouTubeのURLならプレイヤーに反映。それ以外はチャットに表示"
-              className="min-h-[3.5rem] flex-1 rounded bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50 lg:min-h-0 lg:flex-none lg:px-4"
+              className="col-start-1 row-start-2 min-h-[3.5rem] w-full rounded bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50 lg:min-h-[38px] lg:w-auto lg:px-4"
               disabled={!value.trim()}
             >
               送信
             </button>
-            {onVideoUrl && (
+            {onVideoUrl ? (
               <button
                 type="button"
                 onClick={handleSearchAndPlay}
                 title="キーワードでYouTube検索し、結果一覧を表示（URLを入れた場合は送信と同じくプレイヤーへ）"
-                className="min-h-[3.5rem] flex-1 rounded border border-blue-500/60 bg-blue-900/20 px-3 py-2 text-sm font-medium text-blue-200 hover:bg-blue-900/35 disabled:opacity-50 lg:min-h-0 lg:flex-none lg:px-4"
+                className="col-start-2 row-start-2 min-h-[3.5rem] w-full rounded border border-blue-500/60 bg-blue-900/20 px-3 py-2 text-sm font-medium text-blue-200 hover:bg-blue-900/35 disabled:opacity-50 lg:min-h-[38px] lg:w-auto lg:px-4"
                 disabled={!value.trim() || searching}
                 aria-label="曲名・キーワードで検索"
               >
                 {searching ? '…' : '検索'}
               </button>
+            ) : (
+              <span className="col-start-2 row-start-2" aria-hidden />
             )}
-            {trailingSlot != null && trailingSlot !== false ? (
-              <div className="min-w-0 flex-1 lg:flex-none">{trailingSlot}</div>
-            ) : null}
+            <div className="col-start-3 row-start-2 min-w-0 self-end justify-self-stretch lg:justify-self-end lg:w-auto">
+              {trailingSlot != null && trailingSlot !== false ? trailingSlot : null}
             </div>
           </div>
         </div>
