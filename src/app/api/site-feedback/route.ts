@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { sendSiteFeedbackEmail } from '@/lib/send-feedback-email';
 
 export const dynamic = 'force-dynamic';
 
@@ -81,5 +82,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ ok: true });
+  const emailResult = await sendSiteFeedbackEmail({
+    rating,
+    comment,
+    roomId,
+    displayName,
+    isGuest: !userId,
+    userId,
+  });
+  if (!emailResult.ok) {
+    console.error('[site-feedback] Email send failed:', emailResult.error);
+  }
+
+  return NextResponse.json({
+    ok: true,
+    emailSent: emailResult.ok,
+    ...(emailResult.ok ? {} : { emailFailCode: emailResult.code }),
+  });
 }

@@ -92,7 +92,7 @@ export default function ParticipantPublicProfileModal({
 
   if (!open) return null;
 
-  const title = `${displayName}さんの自己紹介`;
+  const title = `${displayName}さんのプロフィール`;
 
   return (
     <div
@@ -126,7 +126,7 @@ export default function ParticipantPublicProfileModal({
             <>
               {!state.isSelf && !state.hasRow && (
                 <p className="text-gray-400">
-                  このユーザーは自己紹介を公開していないか、まだ登録していません。
+                  このユーザーはプロフィールを公開していないか、まだ登録していません。
                 </p>
               )}
               {state.isSelf && !state.visibleInRooms && (
@@ -163,7 +163,7 @@ export default function ParticipantPublicProfileModal({
                 !state.tagline.trim() &&
                 state.favoriteArtists.length === 0 &&
                 !state.listeningNote.trim() && (
-                  <p className="text-gray-400">まだ未入力です。マイページの「他ユーザー向け自己紹介」から登録できます。</p>
+                  <p className="text-gray-400">まだ未入力です。マイページの「他ユーザー向けプロフィール」から登録できます。</p>
                 )}
             </>
           )}

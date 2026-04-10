@@ -35,7 +35,7 @@
 | email | text | △ | 簡易登録時は必須。Google は取得できれば保存 |
 | display_name | text | ○ | 表示名 |
 | avatar_url | text | - | アイコンURL（Google の画像など） |
-| profile_bio | text | - | 自己紹介（ユーザー館用） |
+| profile_bio | text | - | プロフィール（ユーザー館用） |
 | profile_favorite_genres | text[] | - | 好きなジャンル（タグ） |
 | is_public_profile | boolean | ○ | ユーザー館に公開するか。デフォルト false |
 | created_at | timestamptz | ○ | 登録日時 |

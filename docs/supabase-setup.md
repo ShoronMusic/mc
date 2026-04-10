@@ -478,7 +478,7 @@ create policy "user_ai_taste_auto_profile_delete_own"
 
 ---
 
-## 16. 他ユーザー向け自己紹介（`user_public_profile`）
+## 16. 他ユーザー向けプロフィール（`user_public_profile`）
 
 マイページで編集する**公開用プロフィール**（オプトイン）。`visible_in_rooms = true` のとき、ログイン済みユーザーは RLS で当該行を読み取れます（部屋 UI への表示は別途実装）。
 

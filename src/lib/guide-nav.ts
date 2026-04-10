@@ -19,6 +19,12 @@ export const GUIDE_SECTIONS = [
     short: 'AI 参加時の注意',
   },
   {
+    href: '/guide/first-song',
+    slug: 'first-song',
+    title: '選曲のしかた',
+    short: 'YouTube URL・検索',
+  },
+  {
     href: '/guide/music',
     slug: 'music',
     title: '曲・コメント',

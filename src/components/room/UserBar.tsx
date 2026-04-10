@@ -112,8 +112,8 @@ function ParticipantProfileIconButton({
         onAfterClick?.();
       }}
       className="inline-flex shrink-0 items-center justify-center rounded border border-emerald-800/60 bg-emerald-950/35 p-0.5 text-emerald-200/90 hover:bg-emerald-900/45"
-      title={`${participant.displayName}さんの自己紹介`}
-      aria-label={`${participant.displayName}さんの自己紹介`}
+      title={`${participant.displayName}さんのプロフィール`}
+      aria-label={`${participant.displayName}さんのプロフィール`}
     >
       <IdentificationIcon className="h-3.5 w-3.5" aria-hidden />
     </button>

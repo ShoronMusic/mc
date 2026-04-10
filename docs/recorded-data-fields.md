@@ -112,7 +112,7 @@ API: `POST` → `/api/user/ai-taste-auto-refresh`（約45分に1回まで）・`
 利用: `fetchUserTasteContextForChat` が手動メモと合算し `@` チャットに注入。マイページに自動要約の読み取り専用プレビューあり。  
 SQL: `docs/supabase-setup.md` 第 15 章
 
-### `user_public_profile`（他ユーザー向け自己紹介・オプトイン）
+### `user_public_profile`（他ユーザー向けプロフィール・オプトイン）
 
 | 項目 | 説明 |
 |------|------|

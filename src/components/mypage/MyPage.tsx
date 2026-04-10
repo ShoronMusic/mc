@@ -843,7 +843,7 @@ export default function MyPage({
         setPublicListening(typeof data?.listeningNote === 'string' ? data.listeningNote : '');
       })
       .catch(() => {
-        if (!cancelled) setPublicProfileMessage('自己紹介の読み込みに失敗しました。');
+        if (!cancelled) setPublicProfileMessage('プロフィールの読み込みに失敗しました。');
       })
       .finally(() => {
         if (!cancelled) setPublicProfileLoading(false);
@@ -2204,10 +2204,10 @@ export default function MyPage({
           )}
         </div>
 
-        {/* 他ユーザー向け自己紹介（公開はオプトイン） */}
+        {/* 他ユーザー向けプロフィール（公開はオプトイン） */}
         {!isGuest ? (
           <div className="rounded border border-gray-700 bg-gray-800/50 p-3">
-            <label className="block text-xs text-gray-500">他ユーザー向け自己紹介（任意）</label>
+            <label className="block text-xs text-gray-500">他ユーザー向けプロフィール（任意）</label>
             <p className="mt-1 text-xs text-gray-400">
               一言・好きなアーティスト・補足を登録できます。「他の参加者に公開」をオンにすると、ログイン済みのユーザーが
               Supabase 経由で閲覧できる行になります（部屋の参加者欄への表示は今後の実装で接続できます）。
@@ -2233,7 +2233,7 @@ export default function MyPage({
                   rows={2}
                   className="mt-1 w-full rounded border border-gray-600 bg-gray-800 px-3 py-2 text-sm text-white placeholder-gray-500"
                   placeholder="例：00年代洋楽ロック中心で、たまにポップパンクも聴きます"
-                  aria-label="自己紹介の一言"
+                  aria-label="プロフィールの一言"
                 />
                 <p className="mt-0.5 text-xs text-gray-500">
                   {publicTagline.length} / {USER_PUBLIC_PROFILE_TAGLINE_MAX} 文字
@@ -2268,7 +2268,7 @@ export default function MyPage({
                   rows={2}
                   className="mt-1 w-full rounded border border-gray-600 bg-gray-800 px-3 py-2 text-sm text-white placeholder-gray-500"
                   placeholder="任意。空でも保存できます。"
-                  aria-label="自己紹介の補足"
+                  aria-label="プロフィールの補足"
                 />
                 <p className="mt-0.5 text-xs text-gray-500">
                   {publicListening.length} / {USER_PUBLIC_PROFILE_LISTENING_MAX} 文字
@@ -2302,7 +2302,7 @@ export default function MyPage({
                     disabled={publicProfileSaving}
                     className="rounded bg-blue-600 px-3 py-1.5 text-sm text-white hover:bg-blue-700 disabled:opacity-50"
                   >
-                    {publicProfileSaving ? '保存中…' : '自己紹介を保存'}
+                    {publicProfileSaving ? '保存中…' : 'プロフィールを保存'}
                   </button>
                 </div>
               </>
