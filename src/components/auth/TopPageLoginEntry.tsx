@@ -34,10 +34,42 @@ function GoogleBrandIcon({ className }: { className?: string }) {
   );
 }
 
+export type TopPageLoginEntryIntent = 'new-room' | 'resume-host';
+
+function EntryLeadCopy({ intent }: { intent?: TopPageLoginEntryIntent }) {
+  if (intent === 'new-room') {
+    return (
+      <p className="mb-2 text-center text-xs leading-relaxed text-gray-400">
+        新しい部屋を主催するには、ログインまたはゲスト参加を選んでください。
+      </p>
+    );
+  }
+  if (intent === 'resume-host') {
+    return (
+      <>
+        <p className="mb-1.5 text-center text-xs leading-relaxed text-gray-400">
+          過去に主催した部屋を再開するにはログインしてください。
+        </p>
+        <p className="mb-2 text-center text-[11px] leading-relaxed text-gray-500">
+          ログイン後、主催者メニューから再開・終了ができます。※ゲストはお試し部屋への入室のみです。
+        </p>
+      </>
+    );
+  }
+  return (
+    <p className="mb-2 text-center text-xs text-gray-400">主催者機能の利用にはログインが必要です</p>
+  );
+}
+
 /**
  * 会が未開催でもトップからログインできる最小導線。
  */
-export function TopPageLoginEntry() {
+export function TopPageLoginEntry({
+  entryIntent,
+}: {
+  /** トップの二段階導線から渡すと、見出し文言を切り替える */
+  entryIntent?: TopPageLoginEntryIntent;
+} = {}) {
   const supabase = createClient();
   const hasSupabase = isSupabaseConfigured() && !!supabase;
   const [showSimpleForm, setShowSimpleForm] = useState(false);
@@ -134,7 +166,7 @@ export function TopPageLoginEntry() {
   return (
     <>
       <div className="mb-4 rounded-lg border border-gray-700 bg-gray-800/80 p-3">
-        <p className="mb-2 text-center text-xs text-gray-400">主催者機能の利用にはログインが必要です</p>
+        <EntryLeadCopy intent={entryIntent} />
         <div className="flex flex-col gap-2">
           {hasSupabase && (
             <button

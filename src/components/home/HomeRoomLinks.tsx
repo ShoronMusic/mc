@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 
 const POLL_MS = 20_000;
 const NAME_PREVIEW_MAX = 8;
@@ -102,7 +102,12 @@ function RoomRow({
   );
 }
 
-export function HomeRoomLinks() {
+export function HomeRoomLinks({
+  onActivePresenceKnown,
+}: {
+  /** 初回取得完了後、参加者がいる開催中部屋の有無が変わったときに通知（並び順用） */
+  onActivePresenceKnown?: (hasActive: boolean) => void;
+} = {}) {
   const [configured, setConfigured] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
   const [liveRooms, setLiveRooms] = useState<LiveRoom[]>([]);
@@ -153,13 +158,26 @@ export function HomeRoomLinks() {
     return () => clearInterval(t);
   }, [load]);
 
-  const activeRooms =
-    configured === true
-      ? liveRooms.filter((room) => {
-          const payload = byId[room.roomId];
-          return !!payload && !payload.error && payload.count > 0;
-        })
-      : [];
+  const activeRooms = useMemo(
+    () =>
+      configured === true
+        ? liveRooms.filter((room) => {
+            const payload = byId[room.roomId];
+            return !!payload && !payload.error && payload.count > 0;
+          })
+        : [],
+    [configured, liveRooms, byId],
+  );
+
+  useEffect(() => {
+    if (!onActivePresenceKnown) return;
+    if (configured === false) {
+      onActivePresenceKnown(false);
+      return;
+    }
+    if (configured !== true || loading) return;
+    onActivePresenceKnown(activeRooms.length > 0);
+  }, [configured, loading, activeRooms.length, onActivePresenceKnown]);
 
   return (
     <div className="flex flex-col gap-3">
@@ -208,6 +226,11 @@ export function HomeRoomLinks() {
           </ul>
           <p className="mt-3 text-center text-[11px] text-emerald-200/50">
             参加人数・表示名は約{POLL_MS / 1000}秒ごとに更新されます
+          </p>
+          <p className="mt-3 text-center text-[11px] leading-relaxed text-amber-300/90">
+            既に参加者がいる部屋に入ると、再生中の音楽がすぐ流れる場合があります。
+            <br />
+            音量にご注意ください。
           </p>
         </section>
       )}
