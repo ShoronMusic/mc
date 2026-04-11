@@ -314,7 +314,12 @@ export async function POST(request: Request) {
   const titleForDb =
     artistDisplay && song
       ? `${artistDisplay} - ${song}`
-      : formatArtistTitle(title ?? videoId, authorName ?? undefined, snippetDescription) ||
+      : formatArtistTitle(
+          title ?? videoId,
+          authorName ?? undefined,
+          snippetDescription,
+          snippet?.channelTitle ?? null,
+        ) ||
         (title ?? videoId);
 
   let style: string | null = null;

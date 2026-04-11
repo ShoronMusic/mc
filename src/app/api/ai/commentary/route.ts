@@ -100,7 +100,7 @@ export async function POST(request: Request) {
           source: 'library',
           songId: typeof data?.song_id === 'string' ? data.song_id : null,
           songTidbitId: typeof data?.id === 'string' ? data.id : null,
-          artistTitle: formatArtistTitle(title, authorName, snippet?.description),
+          artistTitle: formatArtistTitle(title, authorName, snippet?.description, snippet?.channelTitle ?? null),
         });
       }
     }
@@ -157,7 +157,7 @@ export async function POST(request: Request) {
       artistTitle:
         artistDisplay && song
           ? `${artistDisplay} - ${song}`
-          : formatArtistTitle(title, authorName, snippet?.description),
+          : formatArtistTitle(title, authorName, snippet?.description, snippet?.channelTitle ?? null),
     });
   } catch (e) {
     console.error('[api/ai/commentary]', e);

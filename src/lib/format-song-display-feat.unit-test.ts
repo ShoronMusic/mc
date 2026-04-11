@@ -50,6 +50,15 @@ assert.equal(getArtistDisplayString('Drake ft. Rihanna'), 'Drake, Rihanna');
   assert.equal(r.song, 'Breathe');
 }
 
+// snippet 由来の3段タイトル「レーベル - アーティスト - 曲」＋ DB の artist_name がアーティストだけのときも正規化
+{
+  const r = getArtistAndSong('XL Recordings - The Prodigy - Breathe', 'The Prodigy', {
+    youtubeChannelTitle: 'XL Recordings',
+  });
+  assert.equal(r.artistDisplay, 'The Prodigy');
+  assert.equal(r.song, 'Breathe');
+}
+
 // 正しい「アーティスト - 曲名」はそのまま（各語4文字以上の複語アーティスト）
 {
   const r = getArtistAndSong('John Lennon - Imagine', null);

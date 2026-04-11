@@ -82,9 +82,14 @@ export async function buildArtistTitleParseReportSnapshot(
   const artistTitleLineFromPack =
     resolvedPack.artistDisplay && resolvedPack.song
       ? `${resolvedPack.artistDisplay} - ${resolvedPack.song}`
-      : formatArtistTitle(title, authorName, snippet?.description ?? null);
+      : formatArtistTitle(title, authorName, snippet?.description ?? null, snippet?.channelTitle ?? null);
 
-  const formattedFallbackLine = formatArtistTitle(title, authorName, snippet?.description ?? null);
+  const formattedFallbackLine = formatArtistTitle(
+    title,
+    authorName,
+    snippet?.description ?? null,
+    snippet?.channelTitle ?? null,
+  );
 
   return {
     collectedAt: new Date().toISOString(),

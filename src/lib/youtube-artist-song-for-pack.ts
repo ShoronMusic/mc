@@ -89,6 +89,7 @@ export function resolveArtistSongForPack(
   }
   const base = getArtistAndSong(title, authorName, {
     videoDescription: snippet?.description ?? null,
+    youtubeChannelTitle: snippet?.channelTitle ?? null,
   });
   return finalizePackArtistSong(enrichArtistSongFromSnippet(base, snippet), snippet?.description);
 }
@@ -155,7 +156,12 @@ export async function resolveArtistSongForPackAsync(
   }
 
   const desc = snippet?.description ?? null;
-  const amb = getAmbiguousTitleSegmentsForMusicBrainz(title, authorName, desc);
+  const amb = getAmbiguousTitleSegmentsForMusicBrainz(
+    title,
+    authorName,
+    desc,
+    snippet?.channelTitle ?? null,
+  );
   if (amb) {
     const hint = await resolveTitleOrderWithMusicBrainz(amb.left, amb.right);
     if (hint === 'left_is_artist') {

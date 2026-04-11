@@ -160,4 +160,57 @@ const p11 = resolveOEmbedToMyListStylePack(
 assert(p11.artistDisplay === "KISSIN' DYNAMITE", `p11 artistDisplay: ${p11.artistDisplay}`);
 assert(p11.song === 'Money, Sex & Power', `p11 song: ${p11.song}`);
 
+// YT_ARTIST_TITLE_MODE=mylist_oembed: ダッシュ前後にスペースが無いと従来 split が死んで XL Recordings がアーティストになる（rmHDhAohJlQ）
+const p12 = resolveOEmbedToMyListStylePack('The Prodigy-Breathe (Official Video)', 'XL Recordings');
+assert(p12.artistDisplay === 'The Prodigy', `p12 artistDisplay: ${p12.artistDisplay}`);
+assert(p12.song === 'Breathe', `p12 song: ${p12.song}`);
+
+const p13 = resolveOEmbedToMyListStylePack('The Prodigy - Breathe (Official Video)', 'XL Recordings');
+assert(p13.artistDisplay === 'The Prodigy', `p13 artistDisplay: ${p13.artistDisplay}`);
+assert(p13.song === 'Breathe', `p13 song: ${p13.song}`);
+
+// 末尾 (… Mix) はアーティストではなく曲バージョン。Topic チャンネル名をアーティストにする（fXfh65sFvMQ）
+const p14 = resolveOEmbedToMyListStylePack('Planet Rock (Swordfish Mix)', 'Paul Oakenfold - Topic');
+assert(
+  p14.artistDisplay === 'Paul Oakenfold',
+  `p14 artistDisplay: ${p14.artistDisplay}`,
+);
+assert(
+  p14.song.includes('Planet Rock') && p14.song.includes('Swordfish'),
+  `p14 song: ${p14.song}`,
+);
+
+// 個人アップローダー（チャンネル風でない）＋「アーティスト - 曲」→ タイトル優先（D2Vtnf7rr1Q 型）
+const p15 = resolveOEmbedToMyListStylePack('Parov Stelar - Diamonds', 'nikos791');
+assert(p15.artistDisplay === 'Parov Stelar', `p15 artistDisplay: ${p15.artistDisplay}`);
+assert(p15.song === 'Diamonds', `p15 song: ${p15.song}`);
+
+// 曲名 [Official …] - 共演アーティスト（公式が曲先・共演後のとき逆順）
+const p16 = resolveOEmbedToMyListStylePack(
+  'A Light That Never Comes [Official Music Video] - Linkin Park X Steve Aoki',
+  'Linkin Park',
+);
+assert(
+  p16.artistDisplay === 'Linkin Park X Steve Aoki',
+  `p16 artistDisplay: ${p16.artistDisplay}`,
+);
+assert(
+  p16.song === 'A Light That Never Comes',
+  `p16 song: ${p16.song}`,
+);
+
+// HYBE 公式: ハイフン無し・「アーティスト '曲' Official MV」（kTlv5_Bs8aw）
+const p17 = resolveOEmbedToMyListStylePack(
+  "BTS (방탄소년단) 'MIC Drop (Steve Aoki Remix)' Official MV",
+  'HYBE LABELS',
+);
+assert(
+  p17.artistDisplay === 'BTS (방탄소년단)',
+  `p17 artistDisplay: ${p17.artistDisplay}`,
+);
+assert(
+  p17.song.includes('MIC Drop') && p17.song.includes('Steve Aoki'),
+  `p17 song: ${p17.song}`,
+);
+
 console.log('my-list-youtube-title-suggest unit tests: OK');

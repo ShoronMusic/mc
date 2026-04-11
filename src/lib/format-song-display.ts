@@ -248,6 +248,30 @@ function stripLeadingAuthorPrefixFromTripleHyphenTitleIfPresent(
   return parts.slice(1).join(' - ').trim() || raw;
 }
 
+/**
+ * 3段「アップローダー - アーティスト - 曲」で先頭がいずれかの候補と一致するときだけ落とす。
+ * displayOverride の artist_name がレーベルと一致しないときも、snippet.channelTitle で救う。
+ */
+function stripLeadingUploaderPrefixFromTripleHyphenTitleIfPresent(
+  title: string,
+  ...candidates: (string | null | undefined)[]
+): string {
+  let t = title.trim();
+  if (!t) return title;
+  const normKey = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
+  const tried = new Set<string>();
+  for (const cand of candidates) {
+    const authorRaw = (cand ?? '').trim();
+    if (!authorRaw) continue;
+    const k = normKey(authorRaw);
+    if (!k || tried.has(k)) continue;
+    tried.add(k);
+    const next = stripLeadingAuthorPrefixFromTripleHyphenTitleIfPresent(t, authorRaw);
+    if (next !== t) return next;
+  }
+  return t;
+}
+
 function normForArtistCompare(s: string): string {
   return s.toLowerCase().replace(/\s+/g, ' ').trim();
 }
@@ -758,6 +782,11 @@ export function refineSongTitleWithDescription(
 export type GetArtistAndSongOptions = {
   /** YouTube Data API の snippet.description（取れるときだけ） */
   videoDescription?: string | null;
+  /**
+   * YouTube Data API の snippet.channelTitle。3段タイトル先頭がレーベルチャンネルと一致するとき、
+   * authorName が別名（アーティスト確定値）でも先頭を落とすために渡す。
+   */
+  youtubeChannelTitle?: string | null;
 };
 
 /**
@@ -902,7 +931,11 @@ export function getArtistAndSong(
     titleForParse = apple.rest;
     hadAppleMusicBrandPrefix = apple.hadAppleMusicBrandPrefix;
   }
-  titleForParse = stripLeadingAuthorPrefixFromTripleHyphenTitleIfPresent(titleForParse, authorName ?? null);
+  titleForParse = stripLeadingUploaderPrefixFromTripleHyphenTitleIfPresent(
+    titleForParse,
+    authorName,
+    options?.youtubeChannelTitle,
+  );
   const allowQuotedTail =
     hadGeniusBrandPrefix || isGeniusChannelAuthor(authorName);
   const allowColonQuoted =
@@ -1231,6 +1264,7 @@ export function getAmbiguousTitleSegmentsForMusicBrainz(
   title: string,
   authorName: string | null | undefined,
   videoDescription: string | null | undefined,
+  youtubeChannelTitle?: string | null,
 ): { left: string; right: string } | null {
   if (process.env.MUSICBRAINZ_TITLE_ORDER === '0') return null;
   if (colorsStudiosTrustsOembedArtistFirst(authorName, title)) return null;
@@ -1245,7 +1279,12 @@ export function getAmbiguousTitleSegmentsForMusicBrainz(
       return null;
     }
   }
-  const parsed = parseArtistTitle(title);
+  const titleForMb = stripLeadingUploaderPrefixFromTripleHyphenTitleIfPresent(
+    title,
+    authorName,
+    youtubeChannelTitle,
+  );
+  const parsed = parseArtistTitle(titleForMb);
   if (!parsed) return null;
   const left = parsed.artist.trim();
   const right = parsed.song.trim();
@@ -1327,9 +1366,16 @@ export function formatArtistTitle(
   title: string,
   authorName?: string | null,
   videoDescription?: string | null,
+  youtubeChannelTitle?: string | null,
 ): string {
   const cleaned = cleanTitle(title);
-  const opts = videoDescription?.trim() ? { videoDescription } : undefined;
+  const optsBase = {
+    ...(videoDescription?.trim() ? { videoDescription } : {}),
+    ...(youtubeChannelTitle != null && String(youtubeChannelTitle).trim()
+      ? { youtubeChannelTitle: String(youtubeChannelTitle).trim() }
+      : {}),
+  };
+  const opts = Object.keys(optsBase).length > 0 ? optsBase : undefined;
 
   if (!authorName) {
     if (opts) {
@@ -1355,7 +1401,7 @@ export function formatArtistTitle(
 
   // 既に区切りがある場合でも、「曲名 - アーティスト」逆パターンを正規化して表示する
   if (ARTIST_TITLE_SEPARATOR.test(cleaned)) {
-    const { artistDisplay, song } = getArtistAndSong(cleaned, author, undefined);
+    const { artistDisplay, song } = getArtistAndSong(cleaned, author, opts);
     if (artistDisplay && song) return `${artistDisplay} - ${song}`;
     return cleaned;
   }

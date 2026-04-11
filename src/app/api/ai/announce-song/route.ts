@@ -98,7 +98,7 @@ export async function POST(request: Request) {
     const artistTitleBase =
       artistDisplay && song
         ? `${artistDisplay} - ${song}`
-        : formatArtistTitle(title, authorName, snippet?.description);
+        : formatArtistTitle(title, authorName, snippet?.description, snippet?.channelTitle ?? null);
     const isJapaneseDomestic = await resolveJapaneseEconomyWithMusicBrainz({
       title,
       artistDisplay,
