@@ -67,10 +67,10 @@ function formatReleaseYearMonth(value: string): string {
 export function isMusicaichatFactsBoilerplateLine(line: string): boolean {
   const t = (line ?? '').trim();
   if (!t) return false;
-  if (/Music8\s*に\s*掲載/u.test(t) && /楽曲/u.test(t)) return true;
-  if (/に掲載されている楽曲/u.test(t)) return true;
-  if (/文脈で分類されています/u.test(t)) return true;
-  if (/などの文脈で/u.test(t) && /分類/u.test(t)) return true;
+  if (/Music8\s*に\s*掲載/.test(t) && /楽曲/.test(t)) return true;
+  if (/に掲載されている楽曲/.test(t)) return true;
+  if (/文脈で分類されています/.test(t)) return true;
+  if (/などの文脈で/.test(t) && /分類/.test(t)) return true;
   if (/\blisted on Music8\b/i.test(t)) return true;
   if (/categorized in contexts such as/i.test(t)) return true;
   return false;

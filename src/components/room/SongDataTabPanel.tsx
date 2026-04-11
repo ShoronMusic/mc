@@ -23,7 +23,7 @@ function escapeHtmlText(s: string): string {
 
 /** musicaichat のプレーン行（ジャンル： … 等）の項目名をリリース行と同じグレーにする */
 const ITEM_LABEL_LINE =
-  /^(\s*(?:ジャンル|スタイル|ボーカル|Genre|Style|Vocals?)(?:\s*\([^)]*\))?\s*[:：]\s*)([\s\S]*)$/u;
+  /^(\s*(?:ジャンル|スタイル|ボーカル|Genre|Style|Vocals?)(?:\s*\([^)]*\))?\s*[:：]\s*)([\s\S]*)$/;
 
 function formatSongDataDescriptionMarkup(raw: string): string {
   const t = (raw ?? '').replace(/\r\n/g, '\n');
@@ -48,8 +48,8 @@ function descriptionImpliesStructuredGenreOrStyle(description: string): boolean 
   const t = description.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
   if (!t) return false;
   // 「ジャンル (Genre):」のように括弧が挟まる表記も拾う
-  const jpGenre = /ジャンル\s*(?:\([^)]*\))?\s*[:：]/u.test(t);
-  const jpStyle = /スタイル\s*(?:\([^)]*\))?\s*[:：]/u.test(t);
+  const jpGenre = /ジャンル\s*(?:\([^)]*\))?\s*[:：]/.test(t);
+  const jpStyle = /スタイル\s*(?:\([^)]*\))?\s*[:：]/.test(t);
   return jpGenre || jpStyle || /\bGenre\s*:/i.test(t) || /\bStyle\s*:/i.test(t);
 }
 
