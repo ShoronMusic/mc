@@ -61,11 +61,101 @@ function formatReleaseYearMonth(value: string): string {
 }
 
 /**
- * 曲 JSON / アーティスト JSON の songs[].1 件 のどちらでも渡せる。
+ * facts_for_ai の定型文（「Music8 に掲載…」「文脈で分類されています」等）。
+ * ソングデータ UI と AI 注入の両方で除外する。
+ */
+export function isMusicaichatFactsBoilerplateLine(line: string): boolean {
+  const t = (line ?? '').trim();
+  if (!t) return false;
+  if (/Music8\s*に\s*掲載/u.test(t) && /楽曲/u.test(t)) return true;
+  if (/に掲載されている楽曲/u.test(t)) return true;
+  if (/文脈で分類されています/u.test(t)) return true;
+  if (/などの文脈で/u.test(t) && /分類/u.test(t)) return true;
+  if (/\blisted on Music8\b/i.test(t)) return true;
+  if (/categorized in contexts such as/i.test(t)) return true;
+  return false;
+}
+
+export function filterMusicaichatFactsBoilerplateLines(lines: string[]): string[] {
+  return lines.filter((l) => !isMusicaichatFactsBoilerplateLine(l));
+}
+
+/**
+ * musicaichat/v1 の曲 JSON（stable_key・facts_for_ai・classification 等）
+ */
+function extractMusicaichatV1SongFields(data: unknown): Music8SongExtract | null {
+  const obj = asObj(data);
+  if (!obj) return null;
+  const sk = asObj(obj.stable_key as unknown);
+  if (!sk || typeof sk.artist_slug !== 'string' || typeof sk.song_slug !== 'string') return null;
+
+  const lines: string[] = [];
+  const facts = asObj(obj.facts_for_ai as unknown);
+  if (facts) {
+    const ol = facts.opening_lines;
+    if (Array.isArray(ol)) {
+      for (const x of ol) {
+        if (typeof x === 'string' && x.trim()) lines.push(x.trim());
+      }
+    }
+    const bl = facts.bullets;
+    if (Array.isArray(bl)) {
+      for (const x of bl) {
+        if (typeof x === 'string' && x.trim()) lines.push(x.trim());
+      }
+    }
+  }
+  const descFromFacts = filterMusicaichatFactsBoilerplateLines(lines).join('\n').trim();
+  const display = asObj(obj.display as unknown);
+  const creditLine = display ? asStr(display.credit_line ?? '') : '';
+
+  const genres: string[] = [];
+  const cls = obj.classification;
+  if (Array.isArray(cls)) {
+    for (const x of cls) {
+      if (typeof x === 'string' && x.trim()) genres.push(x.trim());
+    }
+  }
+
+  const releases = asObj(obj.releases as unknown);
+  const dateSrc = releases
+    ? asStr(releases.original_release_date ?? releases.this_release_date ?? '')
+    : '';
+
+  const styleIds: number[] = [];
+  const styleNames: string[] = [];
+  const stylesSrc = obj.styles;
+  if (Array.isArray(stylesSrc)) {
+    for (const id of stylesSrc) {
+      const n = typeof id === 'number' ? id : Number(id);
+      if (!Number.isNaN(n)) {
+        styleIds.push(n);
+        styleNames.push(MUSIC8_STYLE_ID_TO_NAME[String(n)] ?? String(n));
+      }
+    }
+  }
+  if (styleNames.length === 0 && genres.length > 0) {
+    for (const g of genres) styleNames.push(g);
+  }
+
+  return {
+    description: (descFromFacts || creditLine).trim().replace(/(\r?\n){2,}/g, '\n'),
+    genres,
+    releaseDate: dateSrc ? formatReleaseYearMonth(dateSrc) : '',
+    styleIds,
+    styleNames,
+  };
+}
+
+/**
+ * 曲 JSON / アーティスト JSON の songs[].1 件 / musicaichat v1 曲 JSON のいずれでも渡せる。
  * - 曲 JSON: content, genres[], releaseDate, styles[]
  * - アーティストページ曲: content, genre_data[] or genres[], date / date_gmt, style[] or styles[]
  */
 export function extractMusic8SongFields(data: unknown): Music8SongExtract {
+  const mc = extractMusicaichatV1SongFields(data);
+  if (mc) return mc;
+
   const obj = asObj(data);
   const result: Music8SongExtract = {
     description: '',

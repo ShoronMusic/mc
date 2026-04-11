@@ -94,6 +94,21 @@ export function getMusic8ArtistJsonUrl(artistName: string): string {
   return slug ? `${MUSIC8_ARTISTS_BASE}/${slug}.json` : '';
 }
 
+/** `data/data/artists/{slug}.json` が存在するか（HEAD → 非 OK なら GET で再試行） */
+export async function checkMusic8ArtistJsonUrlExists(artistName: string): Promise<boolean> {
+  const url = getMusic8ArtistJsonUrl(artistName);
+  if (!url) return false;
+  try {
+    let res = await fetch(url, { method: 'HEAD', cache: 'no-store' });
+    if (!res.ok) {
+      res = await fetch(url, { method: 'GET', cache: 'no-store' });
+    }
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * アーティスト表示名（The を付与）。ref: display_artist_name_with_the_prefix
  * thePrefix が "The" などなら "The " + name、否则 name のみ。

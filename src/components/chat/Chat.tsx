@@ -85,6 +85,8 @@ interface ChatProps {
   myClientId?: string;
   /** STYLE_ADMIN のみ true（表記メタ記録ボタン） */
   styleAdminChatTools?: boolean;
+  /** AI 検索用ブロック行の「検索」から発言欄の YouTube 検索モーダルを開く */
+  onYoutubeSearchFromAi?: (query: string) => void;
 }
 
 function formatTime(createdAt: string): string {
@@ -107,7 +109,14 @@ const DEFAULT_MESSAGE_COLOR = '#e5e7eb';
 /** AI 曲解説・comment-pack：固有名っぽい箇所を黄色（[NEW]・接続の「の」・括弧の外側は本文色） */
 const AI_ARTIST_SONG_HIGHLIGHT_CLASS = 'font-semibold text-yellow-300';
 
+/** モデレータ向け Music8 ヒット行（[Music8 …]）を黄緑で示す */
+const AI_MUSIC8_HIT_LINE_CLASS = 'font-semibold text-lime-300';
+
 const PACK_PREFIX_RE = /^(\[(?:NEW|DB)\]\s*)/;
+/** `[Music8 アーチストJSON_Hit ソングJSON_Hit]` など先頭の1行 */
+const MUSIC8_MODERATOR_LINE_RE = /^(\[Music8[^\]]+\]\s*(?:\n|$))/;
+/** 本文末尾の YouTube 検索用ブロック（全角コロン＋ラベル。プロンプト `gemini.ts` と揃える） */
+const AI_YT_SEARCH_TAIL_LINE_RE = /^(参考アルバム|シングル|代表曲)：\s*.+$/;
 /** 映画「タイトル」／映画『タイトル』（括弧内のみ黄色） */
 const MOVIE_QUOTED_RE = /映画(「([^」]{1,200})」|『([^』]{1,200})』)/g;
 /** アルバム「タイトル」／アルバム『タイトル』 */
@@ -212,21 +221,60 @@ function highlightPlainSegment(rest: string, key: () => string): ReactNode[] {
   return out;
 }
 
-function renderAiBodyWithArtistSongHighlight(body: string): ReactNode {
+/** 末尾から連続する「参考アルバム：／シングル：／代表曲：」行だけを切り出す（空行で打ち切り） */
+function extractTrailingAiYoutubeSearchLines(rest: string): { mainRest: string; tailLines: string[] } {
+  const lines = rest.split('\n');
+  while (lines.length > 0 && lines[lines.length - 1] === '') {
+    lines.pop();
+  }
+  const tailLines: string[] = [];
+  while (lines.length > 0) {
+    const raw = lines[lines.length - 1];
+    const trimmed = raw.trim();
+    if (trimmed === '') break;
+    if (!AI_YT_SEARCH_TAIL_LINE_RE.test(trimmed)) break;
+    tailLines.unshift(lines.pop()!);
+  }
+  return { mainRest: lines.join('\n'), tailLines };
+}
+
+/** 検索モーダル用のクエリ。特定不可の定型文のときは null */
+function parseAiYoutubeSearchQuery(line: string): string | null {
+  const t = line.trim();
+  const m = t.match(/^(参考アルバム|シングル|代表曲)：\s*(.+)$/);
+  if (!m) return null;
+  const q = m[2].trim();
+  if (!q || /特定できません/.test(q)) return null;
+  return q;
+}
+
+function renderAiBodyWithArtistSongHighlight(
+  body: string,
+  opts?: { keyPrefix?: string; onYoutubeSearch?: (query: string) => void },
+): ReactNode {
   const pm = body.match(PACK_PREFIX_RE);
   const prefix = pm?.[1] ?? '';
-  const rest = pm ? body.slice(pm[0].length) : body;
+  const afterPackPrefix = pm ? body.slice(pm[0].length) : body;
+
+  const mm = afterPackPrefix.match(MUSIC8_MODERATOR_LINE_RE);
+  const music8Line = mm?.[1] ?? '';
+  const rest = mm ? afterPackPrefix.slice(mm[0].length) : afterPackPrefix;
+
+  const { mainRest, tailLines } = opts?.onYoutubeSearch
+    ? extractTrailingAiYoutubeSearchLines(rest)
+    : { mainRest: rest, tailLines: [] as string[] };
+  const hasSearchTailRows = tailLines.length > 0;
 
   let k = 0;
-  const key = () => `ai-hl-${k++}`;
+  const key = () => `${opts?.keyPrefix ?? 'ai'}-hl-${k++}`;
 
   const out: ReactNode[] = [];
   let last = 0;
   let m: RegExpExecArray | null;
   const primary = new RegExp(ARTIST_NO_TITLE_RE.source, ARTIST_NO_TITLE_RE.flags);
-  while ((m = primary.exec(rest)) !== null) {
+  while ((m = primary.exec(mainRest)) !== null) {
     if (m.index > last) {
-      out.push(...highlightPlainSegment(rest.slice(last, m.index), key));
+      out.push(...highlightPlainSegment(mainRest.slice(last, m.index), key));
     }
     const artist = m[1];
     const song = (m[3] ?? m[4] ?? '').trim();
@@ -241,17 +289,55 @@ function renderAiBodyWithArtistSongHighlight(body: string): ReactNode {
     last = m.index + m[0].length;
   }
 
-  if (last < rest.length) {
-    out.push(...highlightPlainSegment(rest.slice(last), key));
+  if (last < mainRest.length) {
+    out.push(...highlightPlainSegment(mainRest.slice(last), key));
   }
 
-  if (!prefix && out.length === 0) return body;
-  if (!prefix && out.length === 1 && typeof out[0] === 'string') return out[0] as string;
+  if (!hasSearchTailRows) {
+    if (!prefix && !music8Line && out.length === 0) return body;
+    if (!prefix && !music8Line && out.length === 1 && typeof out[0] === 'string') return out[0] as string;
+
+    return (
+      <>
+        {prefix}
+        {music8Line ? (
+          <span className={AI_MUSIC8_HIT_LINE_CLASS}>{music8Line}</span>
+        ) : null}
+        {out.length > 0 ? out : mainRest}
+      </>
+    );
+  }
 
   return (
     <>
       {prefix}
-      {out.length > 0 ? out : rest}
+      {music8Line ? (
+        <span className={AI_MUSIC8_HIT_LINE_CLASS}>{music8Line}</span>
+      ) : null}
+      <span className="whitespace-pre-wrap">{out.length > 0 ? out : mainRest}</span>
+      {tailLines.map((line, idx) => {
+        const q = parseAiYoutubeSearchQuery(line);
+        return (
+          <span
+            key={`${opts?.keyPrefix ?? 'ai'}-yt-tail-${idx}`}
+            className={`block ${idx === 0 ? 'mt-1' : 'mt-0.5'}`}
+          >
+            <span className="whitespace-pre-wrap align-baseline">{highlightPlainSegment(line, key)}</span>
+            {q && opts?.onYoutubeSearch ? (
+              <button
+                type="button"
+                className="ml-2 inline-flex align-baseline rounded border border-blue-500/60 bg-blue-900/25 px-2 py-0.5 text-[11px] font-medium text-blue-200 hover:bg-blue-900/45"
+                onClick={() => {
+                  const fn = opts.onYoutubeSearch;
+                  if (fn) fn(q);
+                }}
+              >
+                検索
+              </button>
+            ) : null}
+          </span>
+        );
+      })}
     </>
   );
 }
@@ -270,6 +356,7 @@ export default function Chat({
   roomId,
   myClientId,
   styleAdminChatTools = false,
+  onYoutubeSearchFromAi,
 }: ChatProps) {
   const pathname = usePathname();
   const pathSegs = pathname?.split('/').filter(Boolean) ?? [];
@@ -696,7 +783,10 @@ export default function Chat({
               const feedback = feedbackState[m.id];
               const bodyContent: ReactNode =
                 m.messageType === 'ai'
-                  ? renderAiBodyWithArtistSongHighlight(m.body)
+                  ? renderAiBodyWithArtistSongHighlight(m.body, {
+                      keyPrefix: m.id,
+                      onYoutubeSearch: onYoutubeSearchFromAi,
+                    })
                   : m.body;
 
               return (
@@ -712,8 +802,8 @@ export default function Chat({
               >
                 {m.messageType === 'ai' ? (
                   <div className="flex items-baseline justify-between gap-2">
-                    <p
-                      className={`min-w-0 flex-1 break-words text-gray-200 ${isSelectionAnnounce || isNextPromptMessage ? 'font-bold' : ''}`}
+                    <div
+                      className={`min-w-0 flex-1 break-words whitespace-pre-wrap text-gray-200 ${isSelectionAnnounce || isNextPromptMessage ? 'font-bold' : ''}`}
                       style={
                         isSelectionAnnounce && selectionAnnounceColor
                           ? { color: selectionAnnounceColor }
@@ -721,11 +811,11 @@ export default function Chat({
                       }
                     >
                       <span className="mr-2 font-medium text-gray-300">{m.displayName ?? 'ユーザー'}</span>
-                      <span className="whitespace-pre-wrap">{bodyContent}</span>
+                      {bodyContent}
                       <span className="ml-1 inline text-[11px] text-gray-500 sm:hidden">
                         {formatTime(m.createdAt)}
                       </span>
-                    </p>
+                    </div>
                     <span className="hidden shrink-0 text-xs text-gray-500 sm:inline">
                       {formatTime(m.createdAt)}
                     </span>

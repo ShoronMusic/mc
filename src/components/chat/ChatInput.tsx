@@ -34,6 +34,11 @@ type SearchResultRow = {
 export interface ChatInputHandle {
   /** 入力欄の末尾に文字列を追加する（参加者名クリック用） */
   insertText: (text: string) => void;
+  /**
+   * 発言欄にキーワードを入れたうえで、既存の YouTube 検索モーダルと同じ API 検索を実行する
+   * （AI メッセージの「シングル：」行などから呼ぶ）
+   */
+  searchYoutubeWithQuery: (query: string) => void;
 }
 
 interface ChatInputProps {
@@ -120,12 +125,92 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
     }
   }, []);
 
-  useImperativeHandle(ref, () => ({
-    insertText(text: string) {
-      setValue((v) => v + text);
-      inputRef.current?.focus();
+  const runYoutubeKeywordSearch = useCallback(
+    async (trimmed: string) => {
+      if (!trimmed || !onVideoUrl) return;
+      const asVideoId = extractVideoId(trimmed);
+      if (asVideoId) {
+        onVideoUrl(trimmed);
+        setValue('');
+        return;
+      }
+      if (isStandaloneNonYouTubeUrl(trimmed)) {
+        onSystemMessage?.(NON_YOUTUBE_URL_SYSTEM_MESSAGE);
+        return;
+      }
+      try {
+        setSearching(true);
+        const res = await fetch('/api/ai/search-youtube', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query: trimmed, maxResults: 5, isGuest }),
+        });
+        const data = res.ok || res.status === 429 ? await res.json().catch(() => null) : null;
+        if (res.status === 429 && data && typeof data === 'object' && data.error === 'rate_limit') {
+          onSystemMessage?.(
+            typeof data.message === 'string' && data.message.trim()
+              ? data.message
+              : 'YouTube検索の操作が短時間に集中しています。しばらく待ってから再度お試しください。',
+          );
+          return;
+        }
+        if (!res.ok) {
+          onSystemMessage?.('検索に失敗しました。しばらくしてから再度お試しください。');
+          return;
+        }
+        if (data?.reason === 'youtube_not_configured') {
+          onSystemMessage?.(
+            '曲名検索を使うには、サーバーに YOUTUBE_API_KEY の設定が必要です。管理者が設定後、開発サーバー再起動で有効になります。',
+          );
+        } else {
+          const list: SearchResultRow[] = Array.isArray(data?.results)
+            ? data.results
+                .filter((r: any) => r && typeof r.videoId === 'string')
+                .map((r: any) => ({
+                  videoId: r.videoId,
+                  title: r.title ?? '',
+                  channelTitle: r.channelTitle ?? '',
+                  artistTitle: r.artistTitle ?? '',
+                  publishedAt: typeof r.publishedAt === 'string' ? r.publishedAt : undefined,
+                  thumbnailUrl: typeof r.thumbnailUrl === 'string' ? r.thumbnailUrl : undefined,
+                }))
+            : [];
+          if (list.length === 0) {
+            onSystemMessage?.('曲が見つかりませんでした。別のキーワードでもう一度お試しください。');
+            return;
+          }
+          setSearchResults(list);
+          setWatchedVideoIds([]);
+          setAddedCandidateVideoIds([]);
+          setYoutubeSearchQueryForModal(trimmed);
+          setSearchResultsOpen(true);
+        }
+      } catch {
+        onSystemMessage?.('検索に失敗しました。しばらくしてから再度お試しください。');
+      } finally {
+        setSearching(false);
+      }
     },
-  }), []);
+    [onVideoUrl, onSystemMessage, isGuest],
+  );
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      insertText(text: string) {
+        setValue((v) => v + text);
+        inputRef.current?.focus();
+      },
+      searchYoutubeWithQuery(query: string) {
+        const q = query.trim().slice(0, MAX_MESSAGE_LENGTH);
+        if (!q) return;
+        setValue(q);
+        requestAnimationFrame(() => inputRef.current?.focus());
+        void runYoutubeKeywordSearch(q);
+      },
+    }),
+    [runYoutubeKeywordSearch],
+  );
 
   useEffect(() => {
     const onExtensionSetText = (e: Event) => {
@@ -161,69 +246,8 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
     setValue('');
   };
 
-  const handleSearchAndPlay = async () => {
-    const trimmed = value.trim();
-    if (!trimmed || !onVideoUrl) return;
-    // URLなら通常送信に任せる
-    const asVideoId = extractVideoId(trimmed);
-    if (asVideoId) {
-      handleSubmit();
-      return;
-    }
-    if (isStandaloneNonYouTubeUrl(trimmed)) {
-      onSystemMessage?.(NON_YOUTUBE_URL_SYSTEM_MESSAGE);
-      return;
-    }
-    try {
-      setSearching(true);
-      const res = await fetch('/api/ai/search-youtube', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: trimmed, maxResults: 5, isGuest }),
-      });
-      const data = res.ok || res.status === 429 ? await res.json().catch(() => null) : null;
-      if (res.status === 429 && data && typeof data === 'object' && data.error === 'rate_limit') {
-        onSystemMessage?.(
-          typeof data.message === 'string' && data.message.trim()
-            ? data.message
-            : 'YouTube検索の操作が短時間に集中しています。しばらく待ってから再度お試しください。',
-        );
-        return;
-      }
-      if (!res.ok) {
-        onSystemMessage?.('検索に失敗しました。しばらくしてから再度お試しください。');
-        return;
-      }
-      if (data?.reason === 'youtube_not_configured') {
-        onSystemMessage?.('曲名検索を使うには、サーバーに YOUTUBE_API_KEY の設定が必要です。管理者が設定後、開発サーバー再起動で有効になります。');
-      } else {
-        const list: SearchResultRow[] = Array.isArray(data?.results)
-          ? data.results
-              .filter((r: any) => r && typeof r.videoId === 'string')
-              .map((r: any) => ({
-                videoId: r.videoId,
-                title: r.title ?? '',
-                channelTitle: r.channelTitle ?? '',
-                artistTitle: r.artistTitle ?? '',
-                publishedAt: typeof r.publishedAt === 'string' ? r.publishedAt : undefined,
-                thumbnailUrl: typeof r.thumbnailUrl === 'string' ? r.thumbnailUrl : undefined,
-              }))
-          : [];
-        if (list.length === 0) {
-          onSystemMessage?.('曲が見つかりませんでした。別のキーワードでもう一度お試しください。');
-          return;
-        }
-        setSearchResults(list);
-        setWatchedVideoIds([]);
-        setAddedCandidateVideoIds([]);
-        setYoutubeSearchQueryForModal(trimmed);
-        setSearchResultsOpen(true);
-      }
-    } catch {
-      onSystemMessage?.('検索に失敗しました。しばらくしてから再度お試しください。');
-    } finally {
-      setSearching(false);
-    }
+  const handleSearchAndPlay = () => {
+    void runYoutubeKeywordSearch(value.trim());
   };
 
   const stopPreview = () => {

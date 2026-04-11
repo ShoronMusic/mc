@@ -1,0 +1,9 @@
+Music8 musicaichat v1 — 本番のサンプル URL（仕様: docs/music8-musicaichat-json-spec.md）
+
+https://xs867261.xsrv.jp/data/data/musicaichat/v1/manifest.json
+
+https://xs867261.xsrv.jp/data/data/musicaichat/v1/index/artist_index.json
+
+https://xs867261.xsrv.jp/data/data/musicaichat/v1/index/youtube_to_song.json
+
+https://xs867261.xsrv.jp/data/data/musicaichat/v1/songs/police_every-breath-you-take.json

@@ -13,12 +13,58 @@ import {
 import { extractMusic8SongFields, type Music8SongExtract } from '@/lib/music8-song-fields';
 import { ReferencedMusicDataDisclaimer } from '@/components/room/ReferencedMusicDataDisclaimer';
 
+function escapeHtmlText(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+/** musicaichat のプレーン行（ジャンル： … 等）の項目名をリリース行と同じグレーにする */
+const ITEM_LABEL_LINE =
+  /^(\s*(?:ジャンル|スタイル|ボーカル|Genre|Style|Vocals?)(?:\s*\([^)]*\))?\s*[:：]\s*)([\s\S]*)$/u;
+
+function formatSongDataDescriptionMarkup(raw: string): string {
+  const t = (raw ?? '').replace(/\r\n/g, '\n');
+  if (!t.trim()) return '';
+  if (/<[a-zA-Z!?/]/.test(t)) {
+    return t;
+  }
+  return t
+    .split('\n')
+    .map((line) => {
+      const m = line.match(ITEM_LABEL_LINE);
+      if (m) {
+        return `<span class="text-gray-500">${escapeHtmlText(m[1])}</span>${escapeHtmlText(m[2])}`;
+      }
+      return escapeHtmlText(line);
+    })
+    .join('\n');
+}
+
+/** 説明文内に個別のジャンル／スタイル行があるときは、上部の「スタイル：…」「ジャンル：…」集約と重複するため非表示にする */
+function descriptionImpliesStructuredGenreOrStyle(description: string): boolean {
+  const t = description.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!t) return false;
+  // 「ジャンル (Genre):」のように括弧が挟まる表記も拾う
+  const jpGenre = /ジャンル\s*(?:\([^)]*\))?\s*[:：]/u.test(t);
+  const jpStyle = /スタイル\s*(?:\([^)]*\))?\s*[:：]/u.test(t);
+  return jpGenre || jpStyle || /\bGenre\s*:/i.test(t) || /\bStyle\s*:/i.test(t);
+}
+
 interface SongDataTabPanelProps {
   artistName: string;
   songTitle: string | null;
+  /** 指定時は musicaichat/v1（YouTube ID）で先に曲 JSON を取り、従来 songs/ より優先 */
+  videoId?: string | null;
 }
 
-export default function SongDataTabPanel({ artistName, songTitle }: SongDataTabPanelProps) {
+export default function SongDataTabPanel({
+  artistName,
+  songTitle,
+  videoId = null,
+}: SongDataTabPanelProps) {
   const [fields, setFields] = useState<Music8SongExtract | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -32,8 +78,22 @@ export default function SongDataTabPanel({ artistName, songTitle }: SongDataTabP
     }
     setLoading(true);
     setError(false);
-    fetchMusic8SongDataForPlaybackRow(artistName, songTitle ?? '')
-      .then((data) => {
+    const vid = (videoId ?? '').trim();
+    (async () => {
+      try {
+        if (vid) {
+          const mr = await fetch(
+            `/api/music8/musicaichat-by-video?videoId=${encodeURIComponent(vid)}`,
+            { credentials: 'include' },
+          );
+          const mj = (await mr.json().catch(() => ({}))) as { song?: unknown };
+          if (mj?.song && typeof mj.song === 'object') {
+            setFields(extractMusic8SongFields(mj.song));
+            setError(false);
+            return;
+          }
+        }
+        const data = await fetchMusic8SongDataForPlaybackRow(artistName, songTitle ?? '');
         if (data) {
           setFields(extractMusic8SongFields(data));
           setError(false);
@@ -41,13 +101,14 @@ export default function SongDataTabPanel({ artistName, songTitle }: SongDataTabP
           setFields(null);
           setError(true);
         }
-      })
-      .catch(() => {
+      } catch {
         setFields(null);
         setError(true);
-      })
-      .finally(() => setLoading(false));
-  }, [artistName, songTitle]);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [artistName, songTitle, videoId]);
 
   if (!artistName?.trim()) {
     return (
@@ -149,6 +210,8 @@ export default function SongDataTabPanel({ artistName, songTitle }: SongDataTabP
     );
   }
 
+  const hideAggregatedStyleGenre = descriptionImpliesStructuredGenreOrStyle(fields.description);
+
   return (
     <div className="flex h-full flex-col gap-3 overflow-auto p-4 text-sm">
       {fields.releaseDate && (
@@ -157,13 +220,13 @@ export default function SongDataTabPanel({ artistName, songTitle }: SongDataTabP
           {fields.releaseDate}
         </p>
       )}
-      {fields.styleNames.length > 0 && (
+      {!hideAggregatedStyleGenre && fields.styleNames.length > 0 && (
         <p className="text-gray-200">
           <span className="text-gray-500">スタイル：</span>
           {fields.styleNames.join(', ')}
         </p>
       )}
-      {fields.genres.length > 0 && (
+      {!hideAggregatedStyleGenre && fields.genres.length > 0 && (
         <p className="text-gray-200">
           <span className="text-gray-500">ジャンル：</span>
           {fields.genres.join(', ')}
@@ -171,8 +234,8 @@ export default function SongDataTabPanel({ artistName, songTitle }: SongDataTabP
       )}
       {fields.description && (
         <div
-          className="prose prose-invert max-w-none whitespace-pre-wrap text-gray-300 prose-p:my-1 prose-p:leading-relaxed prose-a:text-blue-400"
-          dangerouslySetInnerHTML={{ __html: fields.description }}
+          className="prose prose-invert max-w-none whitespace-pre-wrap text-gray-300 prose-strong:text-gray-500 prose-p:my-1 prose-p:leading-relaxed prose-a:text-blue-400"
+          dangerouslySetInnerHTML={{ __html: formatSongDataDescriptionMarkup(fields.description) }}
         />
       )}
       <ReferencedMusicDataDisclaimer />

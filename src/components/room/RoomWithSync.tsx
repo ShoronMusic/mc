@@ -88,6 +88,7 @@ import {
   isCommentPackFullyOff,
   normalizeCommentPackSlotsFromRequestBody,
 } from '@/lib/comment-pack-slots';
+import { formatMusic8ModeratorIntroPrefix } from '@/lib/music8-moderator-chat-prefix';
 import {
   computeNextSelectionRound,
   getSelectablePresentRing,
@@ -2800,7 +2801,11 @@ export default function RoomWithSync({
               : [];
             const tid0 = parseTidbitIdFromPack(ids[0]);
             if (hasBase) {
-              addAiMessage(packPrefix + baseStr, {
+              const modIntro = formatMusic8ModeratorIntroPrefix(
+                canRejectTidbit,
+                pack.music8ModeratorHints,
+              );
+              addAiMessage(packPrefix + modIntro + baseStr, {
                 allowWhenAiStopped: true,
                 tidbitId: tid0,
                 songId: pack.songId ?? null,
@@ -2896,7 +2901,7 @@ export default function RoomWithSync({
           addSystemMessage(SYSTEM_MESSAGE_COMMENTARY_FETCH_FAILED);
         });
     },
-    [addAiMessage, addSystemMessage, touchActivity, roomId, messages]
+    [addAiMessage, addSystemMessage, touchActivity, roomId, messages, canRejectTidbit]
   );
 
   const regenerateAiSongIntroAfterPlaybackTitleSave = useCallback(
@@ -4074,6 +4079,7 @@ export default function RoomWithSync({
             roomId={roomId ?? undefined}
             myClientId={myClientId || undefined}
             styleAdminChatTools={chatStyleAdminTools}
+            onYoutubeSearchFromAi={(q) => chatInputRef.current?.searchYoutubeWithQuery(q)}
           />
         }
         rightTop={

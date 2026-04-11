@@ -19,6 +19,12 @@ import { resolveJapaneseEconomyWithMusicBrainz } from '@/lib/resolve-japanese-ec
 import { isJpDomesticOfficialChannelAiException } from '@/lib/jp-official-channel-exception';
 import { isRoomJpAiUnlockEnabled } from '@/lib/room-jp-ai-unlock-server';
 import { buildSupergroupPromptBlock } from '@/lib/supergroup-artist';
+import {
+  buildMusicaichatFactsForAiPromptBlock,
+  resolveMusic8ContextForCommentPack,
+  shouldRegenerateLibraryWhenMusicaichatSong,
+  skipMusic8FactInjectEnv,
+} from '@/lib/music8-musicaichat';
 
 export const dynamic = 'force-dynamic';
 
@@ -83,6 +89,20 @@ export async function POST(request: Request) {
       });
     }
 
+    const artistLookupForMusic8 =
+      (artistDisplay && artistDisplay.trim()) ||
+      (artist && artist.trim()) ||
+      (authorName && authorName.trim()) ||
+      '';
+    const music8Ctx = await resolveMusic8ContextForCommentPack(videoId, artistLookupForMusic8);
+    const { musicaichatSong } = music8Ctx;
+    const skipMusic8FactInject = skipMusic8FactInjectEnv();
+    const music8FactsBlock =
+      !skipMusic8FactInject && musicaichatSong != null
+        ? buildMusicaichatFactsForAiPromptBlock(musicaichatSong).trim()
+        : '';
+
+    let cachedCommentaryBody: string | null = null;
     if (reader) {
       const { data } = await reader
         .from('song_tidbits')
@@ -95,13 +115,23 @@ export async function POST(request: Request) {
         .maybeSingle();
       const bodyText = typeof data?.body === 'string' ? data.body.trim() : '';
       if (bodyText) {
-        return NextResponse.json({
-          text: bodyText,
-          source: 'library',
-          songId: typeof data?.song_id === 'string' ? data.song_id : null,
-          songTidbitId: typeof data?.id === 'string' ? data.id : null,
-          artistTitle: formatArtistTitle(title, authorName, snippet?.description, snippet?.channelTitle ?? null),
-        });
+        if (
+          !shouldRegenerateLibraryWhenMusicaichatSong(musicaichatSong, skipMusic8FactInject)
+        ) {
+          return NextResponse.json({
+            text: bodyText,
+            source: 'library',
+            songId: typeof data?.song_id === 'string' ? data.song_id : null,
+            songTidbitId: typeof data?.id === 'string' ? data.id : null,
+            artistTitle: formatArtistTitle(
+              title,
+              authorName,
+              snippet?.description,
+              snippet?.channelTitle ?? null,
+            ),
+          });
+        }
+        cachedCommentaryBody = bodyText;
       }
     }
 
@@ -129,6 +159,7 @@ export async function POST(request: Request) {
       videoId,
       rawYouTubeTitle,
       supergroupHintText: supergroupHint || null,
+      music8FactsBlock: music8FactsBlock.length > 0 ? music8FactsBlock : null,
     });
     if (!text) {
       return NextResponse.json({ error: 'AI is not configured or failed.' }, { status: 503 });
@@ -137,7 +168,18 @@ export async function POST(request: Request) {
     let songTidbitId: string | null = null;
     if (supabase && songId) {
       try {
-        const row = await insertTidbit(supabase, {
+        const dbWrite = createAdminClient() ?? supabase;
+        if (cachedCommentaryBody) {
+          const { error: delErr } = await dbWrite
+            .from('song_tidbits')
+            .delete()
+            .eq('video_id', videoId)
+            .eq('source', 'ai_commentary');
+          if (delErr) {
+            console.warn('[api/ai/commentary] delete old ai_commentary', delErr.message);
+          }
+        }
+        const row = await insertTidbit(dbWrite, {
           songId,
           videoId,
           body: text,

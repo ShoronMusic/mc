@@ -68,6 +68,8 @@ export type GeminiUsageLogMeta = {
   rawYouTubeTitle?: string | null;
   /** MusicBrainz 検索で得た事実のみアルバム名・年を述べてよいときの箇条書き本文 */
   groundedFactsBlock?: string | null;
+  /** musicaichat 曲 JSON の buildMusicaichatFactsForAiPromptBlock 出力 */
+  music8FactsBlock?: string | null;
   /** スーパーグループ文脈（手動マスタ + 外部データ補完） */
   supergroupHintText?: string | null;
 };
@@ -454,6 +456,9 @@ export async function generateCommentary(
 
   const groundedFactsBlock = usageMeta?.groundedFactsBlock?.trim() ?? '';
   const hasMbFacts = groundedFactsBlock.length > 0;
+  const music8FactsRaw = usageMeta?.music8FactsBlock?.trim() ?? '';
+  const hasMusic8Facts = music8FactsRaw.length > 0;
+  const hasReferenceFacts = hasMbFacts || hasMusic8Facts;
 
   const input =
     authorName && authorName !== title
@@ -478,10 +483,11 @@ export async function generateCommentary(
   const mbFactsSection = hasMbFacts
     ? `\n【MusicBrainz から取得した事実（この範囲だけアルバム名・年・シングル／アルバム区分を述べてよい）】\n${groundedFactsBlock}\n`
     : '';
+  const music8FactsSection = hasMusic8Facts ? `\n${music8FactsRaw}\n` : '';
 
-  const discographyRules = hasMbFacts
-    ? `・アルバム名・収録作・リリース年については、**直前の【MusicBrainz…】の箇条書きに書かれた内容に限って**触れてよい。それ以外の盤名・「デビュー／セカンド作」などの**補完・推測は禁止**。
-・各国チャートの**具体順位**（○位・トップ10 等）は、事実ブロックに無い限り**禁止**（MusicBrainz の検索結果にチャートは含めていない）。
+  const discographyRules = hasReferenceFacts
+    ? `・アルバム名・収録作・リリース年については、**直前の事実ブロック（MusicBrainz または Music8 参照事実）に書かれた内容に限って**触れてよい。それ以外の盤名・「デビュー／セカンド作」などの**補完・推測は禁止**。
+・各国チャートの**具体順位**（○位・トップ10 等）は、事実ブロックに無い限り**禁止**。
 `
     : `・リリース時期は**西暦1年だけ**書いてよいが、自信がなければ「1980年代」など幅のある表現にするか**年は省略**してよい。
 ・**検証済みディスコグラフィーがこのプロンプトに無い**ため、次を**禁止**：アルバム名（『○○』）の列挙、「デビューアルバム／セカンドアルバムに収録」「サントラ『○○』に収録」などの**収録作の断定**、各国チャートの**具体順位**。取り違えで虚偽になりやすい。
@@ -492,7 +498,7 @@ export async function generateCommentary(
 ${input}${metaLock}
 ${artistSongOrderLock}
 ${supergroupHint ? `${supergroupHint}\n` : ''}
-${mbFactsSection}
+${mbFactsSection}${music8FactsSection}
 ・アーティスト名は必ず出すこと。
 ・アーティスト欄やタイトルに複数名（共演・feat. 等）が関わる場合は、**それぞれの役割や対比**（例：歌とラップの掛け合い）に一言触れてください。裏付けのない「出会いの経緯」は書かないこと。
 ${discographyRules}
@@ -508,8 +514,8 @@ ${discographyRules}
 ・日本語で、です・ます調で。
 解説文だけを出力してください。`;
 
-  const regenHint = hasMbFacts
-    ? '\n（追加指示）前回は【MusicBrainz】に無いアルバム・チャート・収録の断定が混ざりました。**箇条書きの事実と、ジャンル・サウンド・雰囲気だけ**で80〜150字に書き直してください。'
+  const regenHint = hasReferenceFacts
+    ? '\n（追加指示）前回は事実ブロックに無いアルバム・チャート・収録の断定が混ざりました。**箇条書きの事実と、ジャンル・サウンド・雰囲気だけ**で80〜150字に書き直してください。'
     : '\n（追加指示）前回の案は検証不能なディスコグラフィー（アルバム名・収録作・チャート順位）を含んでいました。**アルバム名・収録アルバム・チャート順位は一切書かず**、アーティスト名＋年代感・ジャンル・サウンド・歌詞の雰囲気だけで80〜150字に書き直してください。';
 
   try {
@@ -522,7 +528,7 @@ ${discographyRules}
       await persistGeminiUsageLog('commentary', result.response.usageMetadata, usageMeta);
       const text = result.response.text()?.trim() ?? '';
       if (!text) return null;
-      if (hasMbFacts || !containsUnreliableCommentaryDiscographyClaim(text)) return text;
+      if (hasReferenceFacts || !containsUnreliableCommentaryDiscographyClaim(text)) return text;
       if (attempt >= 2) return text;
       promptUse = prompt + regenHint;
     }

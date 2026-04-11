@@ -431,10 +431,27 @@ export default function RoomPlaybackHistory({
       }
 
       // 2) ソングデータ（曲JSON）の存在チェック
+      // 従来 data/data/songs/ のスラッグ一致に加え、musicaichat/v1（youtube_to_song）を優先試行（コラボ曲など）
       try {
-        const d = await fetchMusic8SongDataForPlaybackRow(artistName, songTitle);
+        const vid = currentRowForTabs?.video_id?.trim();
+        let songOk = false;
+        if (vid) {
+          try {
+            const mr = await fetch(
+              `/api/music8/musicaichat-by-video?videoId=${encodeURIComponent(vid)}`,
+              { signal: controller.signal, credentials: 'include' },
+            );
+            const mj = (await mr.json().catch(() => ({}))) as { song?: unknown };
+            if (mj?.song && typeof mj.song === 'object') songOk = true;
+          } catch {
+            /* フォールバックへ */
+          }
+        }
+        if (!songOk) {
+          const d = await fetchMusic8SongDataForPlaybackRow(artistName, songTitle);
+          songOk = !!d;
+        }
         if (cancelled) return;
-        const songOk = !!d;
         setHasSongData(songOk);
         setActiveTab((t) => {
           if (t === 'songdata' && !songOk) return artistOk ? 'artist' : 'history';
@@ -782,6 +799,7 @@ export default function RoomPlaybackHistory({
           <SongDataTabPanel
             artistName={playbackTabsResolve.tabArtist}
             songTitle={playbackTabsResolve.tabSong}
+            videoId={currentRowForTabs?.video_id ?? null}
           />
         ) : (
         <table className="w-full table-fixed border-collapse text-left text-sm">

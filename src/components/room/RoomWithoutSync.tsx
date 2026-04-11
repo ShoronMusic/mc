@@ -4,7 +4,7 @@ import Image from 'next/image';
 import { EnvelopeIcon } from '@heroicons/react/24/outline';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Chat from '@/components/chat/Chat';
-import ChatInput from '@/components/chat/ChatInput';
+import ChatInput, { type ChatInputHandle } from '@/components/chat/ChatInput';
 import YouTubePlayer, {
   type YouTubePlayerHandle,
 } from '@/components/player/YouTubePlayer';
@@ -34,6 +34,7 @@ import {
 } from '@/lib/chat-system-copy';
 import { resolveAiQuestionMusicRelated } from '@/lib/client-ai-question-guard-resolve';
 import { isDevMinimalSongAi } from '@/lib/dev-minimal-song-ai';
+import { formatMusic8ModeratorIntroPrefix } from '@/lib/music8-moderator-chat-prefix';
 import { USER_SONG_HISTORY_UPDATED_EVENT } from '@/lib/user-song-history-events';
 import { playbackLog } from '@/lib/playback-debug';
 import { rememberRoomForGuideReturn } from '@/lib/safe-return-path';
@@ -105,6 +106,7 @@ export default function RoomWithoutSync({
   onLeave,
 }: RoomWithoutSyncProps) {
   const playerRef = useRef<YouTubePlayerHandle>(null);
+  const chatInputRef = useRef<ChatInputHandle>(null);
   const [roomDisplayTitleCurrent, setRoomDisplayTitleCurrent] = useState(roomDisplayTitle);
   const [videoId, setVideoId] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
@@ -645,7 +647,11 @@ export default function RoomWithoutSync({
             if (pack?.baseComment) {
               commentPackVideoIdRef.current = vid;
               const packPrefix = pack?.source === 'library' ? '[DB] ' : '[NEW] ';
-              addAiMessage(packPrefix + pack.baseComment, { videoId: vid });
+              const modIntro = formatMusic8ModeratorIntroPrefix(
+                canRejectTidbit,
+                pack.music8ModeratorHints,
+              );
+              addAiMessage(packPrefix + modIntro + pack.baseComment, { videoId: vid });
               touchActivity();
               tidbitPreferMainArtistLeftRef.current = 2;
               return;
@@ -686,7 +692,7 @@ export default function RoomWithoutSync({
           addSystemMessage(SYSTEM_MESSAGE_COMMENTARY_FETCH_FAILED);
         });
     },
-    [addAiMessage, addSystemMessage, touchActivity, roomId, messages]
+    [addAiMessage, addSystemMessage, touchActivity, roomId, messages, canRejectTidbit]
   );
 
   const schedulePlaybackHistory = useCallback(
@@ -1274,6 +1280,7 @@ export default function RoomWithoutSync({
             myClientId="local-client"
             styleAdminChatTools={chatStyleAdminTools}
             canRejectTidbit={canRejectTidbit && !isGuest}
+            onYoutubeSearchFromAi={(q) => chatInputRef.current?.searchYoutubeWithQuery(q)}
           />
         }
         rightTop={
@@ -1303,6 +1310,7 @@ export default function RoomWithoutSync({
 
       <section className="mt-2 shrink-0">
         <ChatInput
+          ref={chatInputRef}
           onSendMessage={handleSendMessage}
           onVideoUrl={handleVideoUrlFromChat}
           isGuest={isGuest}
