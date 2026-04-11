@@ -236,5 +236,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  /** トップ「主催者メニュー」は room_gatherings.title を参照するため、開催中の主催者が名前を保存したら会タイトルも揃える */
+  if (userId && displayTitle.length > 0 && (await isLiveGatheringOrganizer(admin, roomId, userId))) {
+    const { error: gErr } = await admin
+      .from('room_gatherings')
+      .update({ title: displayTitle })
+      .eq('room_id', roomId)
+      .eq('status', 'live')
+      .eq('created_by', userId);
+    if (gErr) {
+      console.error('[room-lobby-message POST] sync room_gatherings.title', gErr);
+    }
+  }
+
   return NextResponse.json({ ok: true as const });
 }

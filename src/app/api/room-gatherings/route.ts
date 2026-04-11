@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { ROOM_DISPLAY_TITLE_MAX_CHARS } from '@/lib/room-lobby-message';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,6 +17,33 @@ function safeRoomId(raw: string): string | null {
   if (!t || t.length > 48) return null;
   if (!/^[a-zA-Z0-9_-]+$/.test(t)) return null;
   return t;
+}
+
+async function lobbyDisplayTitleByRoomIds(
+  supabase: NonNullable<Awaited<ReturnType<typeof createClient>>>,
+  roomIds: string[],
+): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  if (roomIds.length === 0) return map;
+  const { data, error } = await supabase
+    .from('room_lobby_message')
+    .select('room_id, display_title')
+    .in('room_id', roomIds);
+  if (error) {
+    if (error.code === '42P01') return map;
+    if (error.message?.includes('display_title') || error.code === '42703') return map;
+    console.error('[room-gatherings GET] room_lobby_message', error);
+    return map;
+  }
+  for (const row of data ?? []) {
+    const rid = typeof (row as { room_id?: string }).room_id === 'string' ? (row as { room_id: string }).room_id : '';
+    const dt =
+      row && typeof (row as { display_title?: unknown }).display_title === 'string'
+        ? String((row as { display_title: string }).display_title).trim()
+        : '';
+    if (rid) map.set(rid, dt);
+  }
+  return map;
 }
 
 /**
@@ -204,6 +233,28 @@ export async function POST(request: Request) {
     if (!updated?.length) {
       return NextResponse.json({ error: '開催中の会がありません。' }, { status: 404 });
     }
+    const admin = createAdminClient();
+    if (admin) {
+      const lobbyTitle = title.slice(0, ROOM_DISPLAY_TITLE_MAX_CHARS);
+      const { data: existingLobby } = await admin
+        .from('room_lobby_message')
+        .select('message')
+        .eq('room_id', roomId)
+        .maybeSingle();
+      const existingMsg = typeof existingLobby?.message === 'string' ? existingLobby.message : '';
+      const { error: lobbyErr } = await admin.from('room_lobby_message').upsert(
+        {
+          room_id: roomId,
+          display_title: lobbyTitle,
+          message: existingMsg,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'room_id' },
+      );
+      if (lobbyErr) {
+        console.error('[room-gatherings rename] lobby sync', lobbyErr);
+      }
+    }
     return NextResponse.json({ ok: true, gathering: updated[0] });
   }
 
@@ -261,6 +312,14 @@ export async function GET() {
       isLive: prev.isLive || isLive,
       lastStartedAt: prev.lastStartedAt ?? startedAt,
     });
+  }
+
+  const lobbyMap = await lobbyDisplayTitleByRoomIds(supabase, Array.from(map.keys()));
+  for (const [roomId, v] of map) {
+    const dt = lobbyMap.get(roomId)?.trim() ?? '';
+    if (dt) {
+      map.set(roomId, { ...v, title: dt });
+    }
   }
 
   const rooms = Array.from(map.values());
