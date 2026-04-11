@@ -108,13 +108,9 @@ export function SongSelectionHowtoModal({ open, onClose }: Props) {
 
               {isLg ? (
                 <>
-                  <p className="mb-4 text-xs text-gray-400">
-                    YouTube で URL をコピー → 下の欄に貼って <span className="text-gray-300">送信</span>。
-                  </p>
-
                   <section className="mb-4 space-y-2">
-                    <h3 className="text-xs font-semibold text-gray-300">YouTube（どちらか）</h3>
-                    <p className="text-[11px] text-gray-500">方法1 アドレスバー</p>
+                    <h3 className="text-sm font-semibold text-white">YouTube（どちらか）</h3>
+                    <p className="text-sm leading-relaxed text-white">方法1 アドレスバーのURLをコピー</p>
                     <div className="overflow-hidden rounded border border-gray-700 bg-black/30">
                       <Image
                         src={`${BASE}/sc-01.png`}
@@ -125,7 +121,7 @@ export function SongSelectionHowtoModal({ open, onClose }: Props) {
                         sizes="(max-width: 448px) 100vw, 448px"
                       />
                     </div>
-                    <p className="text-[11px] text-gray-500">方法2 共有</p>
+                    <p className="text-sm leading-relaxed text-white">方法2 共有ボタン～コピーボタンを押す</p>
                     <div className="overflow-hidden rounded border border-gray-700 bg-black/30">
                       <Image
                         src={`${BASE}/sc-02.png`}
@@ -149,11 +145,13 @@ export function SongSelectionHowtoModal({ open, onClose }: Props) {
                   </section>
 
                   <section className="mb-4 space-y-2">
-                    <h3 className="text-xs font-semibold text-gray-300">MusicAi</h3>
+                    <h3 className="text-sm font-semibold leading-snug text-white">
+                      MusicAiの下の発言欄に貼り付け（ペースト）～送信ボタンを押す
+                    </h3>
                     <div className="overflow-hidden rounded border border-gray-700 bg-black/30">
                       <Image
                         src={`${BASE}/sc-04.png`}
-                        alt="発言欄に URL を貼って送信"
+                        alt="MusicAi の下の発言欄に貼り付けて送信"
                         width={720}
                         height={405}
                         className="h-auto w-full"
@@ -174,16 +172,13 @@ export function SongSelectionHowtoModal({ open, onClose }: Props) {
                 </>
               ) : (
                 <>
-                  <p className="mb-4 text-xs text-gray-400">
-                    YouTube アプリで<strong className="text-gray-300">共有</strong>→
-                    <strong className="text-gray-300">コピー</strong>→ 発言欄に
-                    <strong className="text-gray-300">貼り付け</strong>→
-                    <strong className="text-gray-300">送信</strong>。
+                  <p className="mb-4 text-sm leading-relaxed text-white">
+                    YouTube アプリで共有ボタン～コピーを押し、MusicAiの下の発言欄に貼り付け（ペースト）～送信ボタンを押してください。
                   </p>
 
                   <section className="mb-4 space-y-2">
-                    <h3 className="text-xs font-semibold text-gray-300">YouTubeアプリの場合</h3>
-                    <p className="text-[11px] text-gray-500">1 共有</p>
+                    <h3 className="text-sm font-semibold text-white">YouTubeアプリの場合</h3>
+                    <p className="text-sm text-white">1 共有</p>
                     <div className="overflow-hidden rounded border border-gray-700 bg-black/30">
                       <Image
                         src={`${BASE}/m01.png`}
@@ -194,7 +189,7 @@ export function SongSelectionHowtoModal({ open, onClose }: Props) {
                         sizes="(max-width: 448px) 100vw, 448px"
                       />
                     </div>
-                    <p className="text-[11px] text-gray-500">2 コピー</p>
+                    <p className="text-sm text-white">2 コピー</p>
                     <div className="overflow-hidden rounded border border-gray-700 bg-black/30">
                       <Image
                         src={`${BASE}/m02.png`}
@@ -205,7 +200,7 @@ export function SongSelectionHowtoModal({ open, onClose }: Props) {
                         sizes="(max-width: 448px) 100vw, 448px"
                       />
                     </div>
-                    <p className="text-[11px] text-gray-500">3 貼り付け → 送信</p>
+                    <p className="text-sm text-white">3 貼り付け（ペースト）～送信</p>
                     <div className="overflow-hidden rounded border border-gray-700 bg-black/30">
                       <Image
                         src={`${BASE}/m03.png`}
@@ -216,7 +211,7 @@ export function SongSelectionHowtoModal({ open, onClose }: Props) {
                         sizes="(max-width: 448px) 100vw, 448px"
                       />
                     </div>
-                    <p className="text-[11px] text-gray-500">4 再生と AI 解説</p>
+                    <p className="text-sm text-white">4 再生と AI 解説</p>
                     <div className="overflow-hidden rounded border border-gray-700 bg-black/30">
                       <Image
                         src={`${BASE}/m04.png`}

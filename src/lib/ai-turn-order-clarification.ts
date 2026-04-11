@@ -45,5 +45,5 @@ export function buildTurnOrderClarificationReply(
   const nextLabel = next
     ? `${(next.displayName ?? '').trim() || '不明'}さん`
     : '（表示を更新中です）';
-  return `ご指摘ありがとうございます。選曲の順番（入室順ベース）は次のとおりです。\n${listed}\n\nいま次に選曲をお願いしているのは${nextLabel}です。私の案内が前後していたら失礼しました。`;
+  return `ご指摘ありがとうございます。選曲の順番（入室順・選曲に参加している方のみ。視聴専用は含みません）は次のとおりです。\n${listed}\n\nいま次に選曲をお願いしているのは${nextLabel}です。私の案内が前後していたら失礼しました。`;
 }

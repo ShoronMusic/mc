@@ -63,6 +63,7 @@ import {
 } from '@/types/chat';
 import {
   OWNER_FORCE_EXIT_EVENT,
+  OWNER_SET_PARTICIPANT_SELECTION_EVENT,
   OWNER_AI_FREE_SPEECH_STOP_EVENT,
   OWNER_COMMENT_PACK_MODE_EVENT,
   OWNER_JP_AI_UNLOCK_EVENT,
@@ -71,6 +72,7 @@ import {
   TURN_STATE_EVENT,
   OWNER_5MIN_LIMIT_EVENT,
   type OwnerForceExitPayload,
+  type OwnerSetParticipantSelectionPayload,
   type OwnerAiFreeSpeechStopPayload,
   type OwnerCommentPackModePayload,
   type OwnerJpAiUnlockPayload,
@@ -124,6 +126,8 @@ const AUTO_PLAY_POLL_MS = 50;
 const AUTO_PLAY_GIVE_UP_MS = 8000;
 const JOIN_CHIME_AUDIO_PATH = '/audio/success-chime.mp3';
 const LEAVE_CHIME_AUDIO_PATH = '/audio/close.mp3';
+/** 入室・退室チャイムの再生音量（0〜1）。従来 0.85 は大きめだったため控えめに */
+const JOIN_LEAVE_CHIME_VOLUME = 0.32;
 
 /** 入室・退室 SE の検証用。本番で使うときは .env.local に NEXT_PUBLIC_DEBUG_JOIN_LEAVE_CHIME=1 */
 const JOIN_LEAVE_CHIME_DEBUG =
@@ -140,7 +144,7 @@ function playJoinChimeClip(): void {
   chimeDebug('▶ play JOIN', { src: JOIN_CHIME_AUDIO_PATH });
   try {
     const audio = new Audio(JOIN_CHIME_AUDIO_PATH);
-    audio.volume = 0.85;
+    audio.volume = JOIN_LEAVE_CHIME_VOLUME;
     void audio.play().catch((e) => {
       chimeDebug('JOIN play() rejected', e);
     });
@@ -153,7 +157,7 @@ function playLeaveChimeClip(): void {
   chimeDebug('▶ play LEAVE', { src: LEAVE_CHIME_AUDIO_PATH });
   try {
     const audio = new Audio(LEAVE_CHIME_AUDIO_PATH);
-    audio.volume = 0.85;
+    audio.volume = JOIN_LEAVE_CHIME_VOLUME;
     void audio.play().catch((e) => {
       chimeDebug('LEAVE play() rejected', e);
     });
@@ -208,7 +212,7 @@ const AI_FIRST_VOICE =
   '洋楽好きで一緒に楽しむチャットの部屋です。参加者が順番にYouTubeから曲を貼って一緒に鑑賞します。投稿する動画は洋楽の曲・MV・ライブ映像など音楽コンテンツに限ってください（洋楽以外の動画は控えてください）。洋楽ならジャンルや時代は自由です。よろしくお願いします！';
 /** 選曲順の説明 */
 const TURN_ORDER_VOICE =
-  '入室した順（参加者欄の左から）で曲を貼っていきます。退席から30分以内は枠と選曲順を維持し、ターン案内は在室の方へ進みます（予約曲は順番どおり再生されます）。';
+  '入室した順で、選曲に参加している方から曲を貼っていきます（視聴専用の方は順番に含めず案内も飛ばします）。退席から30分以内は枠と選曲順を維持し、ターン案内は在室の方へ進みます（予約曲は順番どおり再生されます）。';
 const TIDBIT_COOLDOWN_SEC = 60;
 /** presence から落ちた直後も、入室順の枠を残す時間（選曲順・表示順の土台を維持） */
 const VACANT_SLOT_RETENTION_MS = 30 * 60 * 1000;
@@ -454,6 +458,10 @@ export default function RoomWithSync({
   const currentTurnClientIdRef = useRef('');
   const participatingOrderRef = useRef<
     { clientId: string; displayName: string; participatesInSelection: boolean }[]
+  >([]);
+  /** ターン計算用の入室順一覧（視聴専用が輪にいないときの次候補に使う） */
+  const participantsForTurnRef = useRef<
+    { clientId: string; participatesInSelection: boolean; isAway?: boolean }[]
   >([]);
   /** ターン案内・changeVideo: リング上で次の「在室かつ選曲参加」の clientId */
   const resolveNextPresentTurnRef = useRef<(afterClientId: string) => string>(() => '');
@@ -888,17 +896,40 @@ export default function RoomWithSync({
   );
   currentTurnClientIdRef.current = currentTurnClientId;
   participatingOrderRef.current = participatingOrder;
+  participantsForTurnRef.current = participants;
   resolveNextPresentTurnRef.current = (afterClientId: string) => {
     const order = participatingOrderRef.current;
     const present = presentClientIdsRef.current;
+    const all = participantsForTurnRef.current;
     if (order.length === 0) return '';
-    const i = order.findIndex((p) => p.clientId === afterClientId);
-    const start = i < 0 ? 0 : i;
-    for (let step = 1; step <= order.length; step++) {
-      const idx = (start + step) % order.length;
-      const p = order[idx];
-      if (p && present.has(p.clientId) && p.participatesInSelection !== false) {
-        return p.clientId;
+    const iRing = order.findIndex((p) => p.clientId === afterClientId);
+    if (iRing >= 0) {
+      for (let step = 1; step <= order.length; step++) {
+        const idx = (iRing + step) % order.length;
+        const p = order[idx];
+        if (p && present.has(p.clientId) && p.participatesInSelection !== false) {
+          return p.clientId;
+        }
+      }
+      return '';
+    }
+    /** 選曲輪にいない ID（視聴専用など）: 入室順でその後ろの最初の「在室・選曲参加」へ */
+    const jAll = all.findIndex((p) => p.clientId === afterClientId);
+    if (jAll < 0) {
+      for (const p of order) {
+        if (present.has(p.clientId) && p.participatesInSelection !== false) return p.clientId;
+      }
+      return '';
+    }
+    for (let step = 1; step <= all.length; step++) {
+      const idx = (jAll + step) % all.length;
+      const cand = all[idx];
+      if (
+        cand.participatesInSelection !== false &&
+        present.has(cand.clientId) &&
+        cand.isAway !== true
+      ) {
+        return cand.clientId;
       }
     }
     return '';
@@ -1159,6 +1190,33 @@ export default function RoomWithSync({
       if (d.targetClientId === myClientId && roomId) {
         setKicked(roomId, myClientId);
         onLeave?.();
+      }
+      return;
+    }
+    if (message.name === OWNER_SET_PARTICIPANT_SELECTION_EVENT) {
+      const d = message.data as OwnerSetParticipantSelectionPayload;
+      if (
+        !d?.targetClientId ||
+        typeof d.targetDisplayName !== 'string' ||
+        typeof d.participatesInSelection !== 'boolean'
+      ) {
+        return;
+      }
+      const participating = d.participatesInSelection;
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: createMessageId(),
+          body: participating
+            ? `オーナーにより${d.targetDisplayName}さんを選曲参加に切り替えました`
+            : `オーナーにより${d.targetDisplayName}さんを視聴専用に切り替えました`,
+          displayName: 'システム',
+          messageType: 'system',
+          createdAt: new Date().toISOString(),
+        },
+      ]);
+      if (d.targetClientId === myClientId) {
+        setParticipatesInSelection(participating);
       }
       return;
     }
@@ -2520,13 +2578,7 @@ export default function RoomWithSync({
     while (cur) {
       const p = participantsMap.get(cur);
       if (p?.participatesInSelection === false) {
-        const displayName = order.find((o) => o.clientId === cur)?.displayName ?? cur;
-        addAiMessage(`${displayName}さんは視聴専用です（選曲する場合はマイページで切り替えてください）`, {
-          allowWhenAiStopped: true,
-        });
-        const i = order.findIndex((o) => o.clientId === cur);
-        const nextIndex = order.length === 0 ? 0 : (i < 0 ? 0 : i + 1) % order.length;
-        cur = order[nextIndex]?.clientId ?? '';
+        cur = resolveNextPresentTurnRef.current(cur);
         setCurrentTurnClientId(cur);
         publishRef.current?.(TURN_STATE_EVENT, buildTurnStatePayload(cur));
         continue;
@@ -3891,6 +3943,17 @@ export default function RoomWithSync({
                     }
                   : undefined
               }
+              onOwnerSetParticipantSelection={
+                canUseOwnerControls
+                  ? (targetClientId, targetDisplayName, nextParticipates) => {
+                      safePublish(OWNER_SET_PARTICIPANT_SELECTION_EVENT, {
+                        targetClientId,
+                        targetDisplayName,
+                        participatesInSelection: nextParticipates,
+                      } as OwnerSetParticipantSelectionPayload);
+                    }
+                  : undefined
+              }
               roomId={roomId}
               onRoomProfileSaved={({ displayTitle }) => setRoomDisplayTitleCurrent(displayTitle)}
               commentPackSlots={commentPackSlots}
@@ -4117,7 +4180,9 @@ export default function RoomWithSync({
           onAddCandidate={handleAddCandidateFromSearch}
           onPreviewStart={handlePreviewStart}
           onPreviewStop={handlePreviewStop}
-          onClearLocalAiQuestionGuard={clearLocalAiQuestionGuardState}
+          onClearLocalAiQuestionGuard={
+            chatStyleAdminTools ? clearLocalAiQuestionGuardState : undefined
+          }
           trailingSlot={
             <button
               type="button"

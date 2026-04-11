@@ -290,6 +290,8 @@ interface MyListLibraryArtistRow {
 export interface ParticipantForTransfer {
   clientId: string;
   displayName: string;
+  /** false なら視聴専用（オーナー切替 UI 用。省略時は参加扱い） */
+  participatesInSelection?: boolean;
 }
 
 const LOBBY_SAVE_FETCH_MS = 25_000;
@@ -525,6 +527,12 @@ interface MyPageProps {
   onJpAiUnlockToggle?: () => void;
   /** オーナー時のみ。参加者を強制退出 */
   onForceExit?: (targetClientId: string, targetDisplayName: string) => void;
+  /** オーナー時のみ。他参加者の選曲参加／視聴専用を切り替え（相手はマイページで変更可） */
+  onOwnerSetParticipantSelection?: (
+    targetClientId: string,
+    targetDisplayName: string,
+    participatesInSelection: boolean,
+  ) => void;
   /** 入室前メッセージ用。同期する部屋の roomId（例: 01） */
   roomId?: string;
   /** 部屋の名前・PR保存後の即時反映用 */
@@ -605,6 +613,7 @@ export default function MyPage({
   jpAiUnlockEnabled = false,
   onJpAiUnlockToggle,
   onForceExit,
+  onOwnerSetParticipantSelection,
   roomId = '',
   onRoomProfileSaved,
   joinEntryChimeEnabled,
@@ -676,6 +685,7 @@ export default function MyPage({
         onCommentPackSlotsChange ||
         onJpAiUnlockToggle ||
         onForceExit ||
+        onOwnerSetParticipantSelection ||
         onSongLimit5MinToggle,
     );
   const showRoomManagementPanel = showOrganizerRoomEditor || showOwnerOnlyControls;
@@ -1774,7 +1784,7 @@ export default function MyPage({
               <button
                 type="button"
                 onClick={() => onParticipatesInSelectionChange?.(false)}
-                className={`rounded px-3 py-1.5 text-sm ${!participatesInSelection ? 'bg-gray-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                className={`rounded px-3 py-1.5 text-sm ${!participatesInSelection ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
               >
                 視聴専用
               </button>
@@ -2065,9 +2075,9 @@ export default function MyPage({
 
           {onTransferOwner && (
             <div className="rounded border border-amber-700/50 bg-amber-900/20 p-3">
-              <h4 className="mb-2 text-xs font-medium text-gray-300">チャットオーナーを譲る・参加者の退出</h4>
+              <h4 className="mb-2 text-xs font-medium text-gray-300">チャットオーナーを譲る・参加者の退出・選曲モード</h4>
               <p className="mb-2 text-xs text-gray-400">
-                現在在室している参加者のみ対象です。譲渡するとその人がオーナーになります。
+                現在在室している参加者のみ対象です。譲渡するとその人がオーナーになります。視聴専用にした相手はマイページからいつでも選曲参加に戻せます。オーナーも再度切り替えできます。
               </p>
               {chatOwnerTransferParticipants.length === 0 ? (
                 <p className="text-xs text-gray-500">ほかに在室している参加者がいません。</p>
@@ -2084,6 +2094,31 @@ export default function MyPage({
                         >
                           オーナーを譲る
                         </button>
+                        {onOwnerSetParticipantSelection ? (
+                          p.participatesInSelection === false ? (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                onOwnerSetParticipantSelection(p.clientId, p.displayName, true)
+                              }
+                              className="rounded border border-sky-600 bg-sky-900/30 px-2 py-1 text-xs text-sky-200 hover:bg-sky-800/45"
+                              title={`${p.displayName}さんを選曲参加に戻す`}
+                            >
+                              選曲参加に戻す
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                onOwnerSetParticipantSelection(p.clientId, p.displayName, false)
+                              }
+                              className="rounded border border-gray-600 bg-gray-800/80 px-2 py-1 text-xs text-gray-200 hover:bg-gray-700"
+                              title={`${p.displayName}さんを視聴専用にする`}
+                            >
+                              視聴専用にする
+                            </button>
+                          )
+                        ) : null}
                         {onForceExit && (
                           <button
                             type="button"
@@ -2409,7 +2444,7 @@ export default function MyPage({
               <button
                 type="button"
                 onClick={() => onParticipatesInSelectionChange(false)}
-                className={`rounded px-3 py-1.5 text-sm ${!participatesInSelection ? 'bg-gray-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                className={`rounded px-3 py-1.5 text-sm ${!participatesInSelection ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
               >
                 視聴専用
               </button>

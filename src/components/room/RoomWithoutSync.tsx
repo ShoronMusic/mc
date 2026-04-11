@@ -1317,7 +1317,9 @@ export default function RoomWithoutSync({
           onSystemMessage={addSystemMessage}
           onPreviewStart={handlePreviewStart}
           onPreviewStop={handlePreviewStop}
-          onClearLocalAiQuestionGuard={clearLocalAiQuestionGuardState}
+          onClearLocalAiQuestionGuard={
+            chatStyleAdminTools ? clearLocalAiQuestionGuardState : undefined
+          }
         />
       </section>
     </main>

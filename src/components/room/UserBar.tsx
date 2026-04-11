@@ -33,6 +33,8 @@ export interface ParticipantItem {
   authUserId?: string;
   /** マイページで公開オンのとき true */
   publicProfileVisible?: boolean;
+  /** false のとき選曲順に含まれない（視聴専用） */
+  participatesInSelection?: boolean;
 }
 
 interface UserBarProps {
@@ -399,6 +401,11 @@ export default function UserBar({
                   </span>
                 )}
               </span>
+              {p.participatesInSelection === false ? (
+                <span className="pl-5 text-[10px] leading-tight text-gray-400" title="選曲順に含まれません">
+                  視聴専用
+                </span>
+              ) : null}
               {isQueuedSongPoster &&
                 (isMyQueuedSong && onCancelSongReservation ? (
                   <button
@@ -769,6 +776,11 @@ export default function UserBar({
                         onAfterClick={() => setListOpen(false)}
                       />
                     </div>
+                    {p.participatesInSelection === false ? (
+                      <span className="pl-6 text-[11px] text-gray-400" title="選曲順に含まれません">
+                        視聴専用
+                      </span>
+                    ) : null}
                     {isCurrentSongPoster && (
                       <span className="pl-6 text-[11px] text-amber-200/80">再生中の選曲</span>
                     )}

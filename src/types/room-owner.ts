@@ -5,12 +5,21 @@
 import type { CommentPackSlotSelection } from '@/lib/comment-pack-slots';
 
 export const OWNER_FORCE_EXIT_EVENT = 'owner:forceExit';
+/** オーナーが他参加者の選曲参加／視聴専用を切り替え（対象クライアントのみ状態を反映） */
+export const OWNER_SET_PARTICIPANT_SELECTION_EVENT = 'owner:setParticipantSelection';
 export const OWNER_AI_FREE_SPEECH_STOP_EVENT = 'owner:aiFreeSpeechStop';
 export const OWNER_STATE_EVENT = 'owner:state';
 
 export interface OwnerForceExitPayload {
   targetClientId: string;
   targetDisplayName: string;
+}
+
+export interface OwnerSetParticipantSelectionPayload {
+  targetClientId: string;
+  targetDisplayName: string;
+  /** true: 選曲に参加 / false: 視聴専用 */
+  participatesInSelection: boolean;
 }
 
 export interface OwnerAiFreeSpeechStopPayload {

@@ -578,6 +578,11 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                 <span className="text-gray-200">以外</span>（感想・会話など）はチャットに表示されます。
               </li>
               <li>
+                自分の順番が回ってきて選曲をパスする場合は、発言欄に
+                <span className="text-gray-200"> パス </span>
+                と入力してください。
+              </li>
+              <li>
                 <span className="font-medium text-gray-200">AIに質問</span>
                 ：文頭に
                 <span className="text-gray-200">@</span>
