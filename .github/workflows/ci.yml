@@ -1,4 +1,5 @@
-# push / PR でビルド可否を GitHub 上で確認（Vercel の赤×の原因切り分け用）
+# push / PR: lint・型・単体テストのみ（高速・OOM 回避）
+# 本番相当の next build は Vercel が実行するため、ここでは二重に回さない
 name: CI
 on:
   push:
@@ -7,7 +8,7 @@ on:
     branches: [main]
 
 jobs:
-  build:
+  quality:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -19,8 +20,3 @@ jobs:
       - run: npm run lint
       - run: npx tsc --noEmit
       - run: npm run test
-      - name: Build
-        run: npm run build
-        env:
-          NODE_OPTIONS: '--max-old-space-size=6144'
-          NEXT_TELEMETRY_DISABLED: '1'
