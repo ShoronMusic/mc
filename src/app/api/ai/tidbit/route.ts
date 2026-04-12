@@ -1,8 +1,15 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { cleanAuthor, cleanTitle, formatArtistTitle, getArtistAndSong } from '@/lib/format-song-display';
+import {
+  cleanAuthor,
+  cleanTitle,
+  formatArtistTitle,
+  getArtistAndSong,
+  shouldSkipAiCommentaryForPromotionalOrProseMetadata,
+} from '@/lib/format-song-display';
 import { generateTidbit } from '@/lib/gemini';
 import { fetchOEmbed } from '@/lib/youtube-oembed';
+import { getVideoSnippet } from '@/lib/youtube-search';
 import { getStyleFromDb } from '@/lib/song-style';
 import {
   searchTidbitFromLibrary,
@@ -47,7 +54,10 @@ export async function POST(request: Request) {
     let currentSong: string | null = null;
 
     if (videoId && !preferGeneralTidbit) {
-      const oembed = await fetchOEmbed(videoId);
+      const [oembed, snippet] = await Promise.all([
+        fetchOEmbed(videoId),
+        getVideoSnippet(videoId),
+      ]);
       const title = oembed?.title ?? videoId;
       const rawAuthor = oembed?.author_name ?? null;
       artistName = rawAuthor ? (cleanAuthor(rawAuthor) || null) : null;
@@ -55,6 +65,16 @@ export async function POST(request: Request) {
       const authorForParse = rawAuthor ? cleanAuthor(rawAuthor) : null;
       const cleaned = cleanTitle(title);
       const parsed = getArtistAndSong(cleaned, authorForParse);
+      const songForPromoCheck = (parsed.song ?? title).trim();
+      if (
+        shouldSkipAiCommentaryForPromotionalOrProseMetadata({
+          rawYouTubeTitle: title,
+          song: songForPromoCheck,
+          snippetDescription: snippet?.description ?? null,
+        })
+      ) {
+        return NextResponse.json({ skipped: true, reason: 'promotional_metadata' });
+      }
       currentSong =
         parsed.artistDisplay && parsed.song
           ? `${parsed.artistDisplay} - ${parsed.song}`

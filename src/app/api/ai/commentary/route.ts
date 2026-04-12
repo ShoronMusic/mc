@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { fetchOEmbed } from '@/lib/youtube-oembed';
 import {
   formatArtistTitle,
+  shouldSkipAiCommentaryForPromotionalOrProseMetadata,
   shouldSkipAiCommentaryForUncertainArtistResolution,
 } from '@/lib/format-song-display';
 import { generateCommentary } from '@/lib/gemini';
@@ -71,7 +72,7 @@ export async function POST(request: Request) {
     const roomJpAiUnlock = roomId ? await isRoomJpAiUnlockEnabled(roomId) : false;
     const jpAiUnlockEnabled = roomJpAiUnlock;
     if (isJpEconomy && !isJpDomesticOfficialChannelAiException(snippet?.channelId) && !jpAiUnlockEnabled) {
-      return NextResponse.json({ skipAiCommentary: true, videoId });
+      return NextResponse.json({ skipAiCommentary: true, videoId, skipReason: 'jp_economy' });
     }
     if (
       shouldSkipAiCommentaryForUncertainArtistResolution({
@@ -86,6 +87,22 @@ export async function POST(request: Request) {
         skipAiCommentary: true,
         videoId,
         skipReason: 'uncertain_artist',
+      });
+    }
+
+    const hasTrustedDisplayTitle = Boolean(displayOverride?.title?.trim());
+    if (
+      !hasTrustedDisplayTitle &&
+      shouldSkipAiCommentaryForPromotionalOrProseMetadata({
+        rawYouTubeTitle,
+        song,
+        snippetDescription: snippet?.description ?? null,
+      })
+    ) {
+      return NextResponse.json({
+        skipAiCommentary: true,
+        videoId,
+        skipReason: 'promotional_metadata',
       });
     }
 

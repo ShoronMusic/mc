@@ -652,7 +652,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
               placeholder={
                 isYoutubeKeywordSearchEnabled()
                   ? '会話・URL・アーティスト・曲名のどれでも入力…'
-                  : '会話・YouTubeのURL…（キーワード検索は現在オフ）'
+                  : '会話・YouTubeのURL・AIへの質問は、@質問内容…を入力して送信ボタン'
               }
               value={value}
               onChange={(e) => setValue(e.target.value)}

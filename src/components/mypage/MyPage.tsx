@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
@@ -431,7 +432,11 @@ function LobbyMessageOwnerBlock({
     <div className="mb-4 border-b border-amber-800/30 pb-4">
       <h4 className="mb-1 text-xs font-medium text-gray-300">主催者向け（部屋の名前・PR文）</h4>
       <p className="mb-3 text-[11px] leading-relaxed text-gray-500">
-        開催中の会の主催者、またはチャットオーナーが編集できます。トップの開催中一覧・部屋上部の見出しに部屋の名前が使われます（未入力時は保存されている名称が表示されます）。PR文はトップのカード内の紹介文です。
+        開催中の会の主催者、またはチャットオーナーが編集できます。トップの開催中一覧・部屋上部の見出しに部屋の名前が使われます（未入力時は保存されている名称が表示されます）。PR文はトップのカード内の紹介文です。会の終了はトップの主催者メニューから行います（全員退室だけではすぐには終わらず、一定時間で自動終了する場合があります。目安は
+        <Link href="/guide/service" className="text-amber-400/90 underline-offset-2 hover:underline">
+          ご利用上の注意・サービス全般
+        </Link>
+        ）。
       </p>
       {loading ? (
         <p className="text-xs text-gray-500">読み込み中…</p>

@@ -1,11 +1,18 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
+import { guideInternalHref } from '@/lib/policy-modal-link';
 
 export const metadata: Metadata = {
   title: 'アカウントと安全 | ご利用上の注意',
   description: 'ゲスト・登録・個人情報など、安全に使うための注意です。',
 };
 
-export default function GuideSafetyPage() {
+type GuideSafetyPageProps = {
+  searchParams?: { modal?: string | string[]; returnTo?: string | string[] };
+};
+
+export default function GuideSafetyPage({ searchParams }: GuideSafetyPageProps) {
+  const serviceHref = guideInternalHref('/guide/service', searchParams);
   return (
     <article className="space-y-6 text-sm leading-relaxed text-gray-300">
       <h1 className="text-2xl font-bold text-white">アカウントと安全</h1>
@@ -25,8 +32,32 @@ export default function GuideSafetyPage() {
       <section className="space-y-3">
         <h2 className="text-base font-semibold text-white">部屋の指定</h2>
         <p className="text-gray-400">
-          トップから 01〜03 に入るほか、URL で <code className="rounded bg-gray-800 px-1.5 py-0.5 text-gray-200">/04</code>、
-          <code className="rounded bg-gray-800 px-1.5 py-0.5 text-gray-200">/05</code> のように部屋番号を指定できます。知らないリンクからの入室には注意してください。
+          トップには、開催中で参加者がいる部屋へのリンクが表示されることがあります。表示がない場合や、部屋を直接指定したい場合は、サイトのアドレスの後ろに{' '}
+          <code className="rounded bg-gray-800 px-1.5 py-0.5 text-gray-200">/01</code> や{' '}
+          <code className="rounded bg-gray-800 px-1.5 py-0.5 text-gray-200">/05</code> のように部屋 ID を付けて開けます。知らないリンクからの入室には注意してください。
+        </p>
+      </section>
+      <section className="space-y-3">
+        <h2 className="text-base font-semibold text-white">主催と部屋の使い分け（ログイン時）</h2>
+        <p className="text-gray-400">
+          ログインして会を主催する場合、<strong className="text-gray-300">同時に開催中にできるのは最大2部屋</strong>
+          までです。
+        </p>
+        <p className="text-gray-400">
+          補足として、<strong className="text-gray-300">1部屋を個人専用</strong>（試聴・整理など）、
+          <strong className="text-gray-300">もう1部屋を招待できるオープンルーム</strong>
+          に分けると運用しやすい、というおすすめの一例です（必須ではありません）。詳しくは
+          <Link href={serviceHref} className="text-amber-400 underline-offset-2 hover:underline">
+            サービス全般
+          </Link>
+          も参照してください。
+        </p>
+        <p className="text-gray-400">
+          会がいつ終了するか（全員が退室してもすぐには終わらないこと、在室ゼロが続いた場合の自動終了の目安など）は、
+          <Link href={serviceHref} className="text-amber-400 underline-offset-2 hover:underline">
+            サービス全般
+          </Link>
+          の「会の主催（ログイン時）」を参照してください。
         </p>
       </section>
       <section className="space-y-3">

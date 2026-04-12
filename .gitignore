@@ -29,6 +29,7 @@ yarn-error.log*
 
 # サーバー/API の生キーを貼ったメモ（誤コミット防止）
 NUsic_Chat_サーバー関連.secrets.txt
+NUsic_Chat_サーバー関連.txt
 
 # Google Cloud / OAuth クライアント JSON（client_secret を含むため絶対にコミットしない）
 client_secret*.json

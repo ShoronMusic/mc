@@ -161,6 +161,24 @@ create policy "room_lobby_message_select_anon"
 
 入室前メッセージは `/api/room-presence` では**在室がいる部屋にだけ**付与されます（在室 0 のときは応答に含めません）。DB の `room_lobby_message` 行は残る場合があります。主催者が保存し直すと上書きされます。
 
+### 9.1 在室 0 自動終了（`room_live_presence_watch`）
+
+`live` の会が、Ably の在室が **一度でも 1 人以上** になったあと、在室 **0** の状態が一定時間（既定 **30 分**、環境変数 `EMPTY_LIVE_GATHERING_END_MS` でミリ秒指定可・最小 60000）続いたときに `room_gatherings` を `ended` にする Cron 用の補助テーブルです。**クライアントからは参照しません**。読み書きは **サービスロール**（`GET /api/cron/end-empty-live-gatherings`・`POST /api/room-gatherings`）のみを想定しています。
+
+```sql
+create table if not exists public.room_live_presence_watch (
+  room_id text primary key,
+  last_nonempty_at timestamptz not null
+);
+
+alter table public.room_live_presence_watch enable row level security;
+-- anon / authenticated 用のポリシーは付けない（サービスロールが RLS をバイパスして利用）
+```
+
+- **Vercel Cron** は `vercel.json` で約 10 分おきに上記 API を呼びます。環境変数 **`CRON_SECRET`** を設定し、Cron から送られる `Authorization: Bearer …` と一致させてください（未設定時は API は 503）。
+- **`NEXT_PUBLIC_ABLY_API_KEY` が未設定**の環境では在室数が取れないため、自動終了処理は実行されません。
+- テーブルを作っていない場合、Cron は **`room_live_presence_watch` 未作成**として終了処理をスキップします（本番では上記 SQL の実行を推奨）。
+
 ---
 
 ## 10. マイページ「参加履歴」を使う場合

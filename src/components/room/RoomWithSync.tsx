@@ -36,6 +36,7 @@ import {
   SYSTEM_MESSAGE_JP_NO_COMMENTARY,
   SYSTEM_MESSAGE_QUEUE_SONG_DEFERRED,
   buildAiQuestionGuardSoftDeclineMessage,
+  shouldShowJpNoCommentarySystemMessage,
 } from '@/lib/chat-system-copy';
 import {
   buildTurnOrderClarificationReply,
@@ -2832,7 +2833,11 @@ export default function RoomWithSync({
             const isJpSilenceVideo =
               jpDomesticSilenceVideoIdRef.current != null &&
               jpDomesticSilenceVideoIdRef.current === vid;
-            if (!isJpSilenceVideo) {
+            const skipReason =
+              typeof pack?.skipReason === 'string' ? pack.skipReason : undefined;
+            if (
+              shouldShowJpNoCommentarySystemMessage(skipReason, isJpSilenceVideo)
+            ) {
               addSystemMessage(SYSTEM_MESSAGE_JP_NO_COMMENTARY);
             }
             return null;
@@ -2925,7 +2930,11 @@ export default function RoomWithSync({
                   const isJpSilenceVideo =
                     jpDomesticSilenceVideoIdRef.current != null &&
                     jpDomesticSilenceVideoIdRef.current === vid;
-                  if (!isJpSilenceVideo) {
+                  const skipReason =
+                    typeof data?.skipReason === 'string' ? data.skipReason : undefined;
+                  if (
+                    shouldShowJpNoCommentarySystemMessage(skipReason, isJpSilenceVideo)
+                  ) {
                     addSystemMessage(SYSTEM_MESSAGE_JP_NO_COMMENTARY);
                   }
                   return null;

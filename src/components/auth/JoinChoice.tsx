@@ -46,35 +46,44 @@ function getInitialGuestHandle(): string {
 }
 
 export interface JoinChoiceProps {
-  onJoin: (displayName: string, mode: 'guest' | 'registered') => void;
+  onJoin: (displayName: string, mode: 'guest' | 'registered') => void | Promise<void>;
   roomId: string;
+  /** 参加ボタン押下後、開催再確認中 */
+  joinVerifying?: boolean;
 }
 
-export function JoinChoice({ onJoin, roomId }: JoinChoiceProps) {
+export function JoinChoice({ onJoin, roomId, joinVerifying = false }: JoinChoiceProps) {
   const [showSimpleForm, setShowSimpleForm] = useState(false);
   const [showGuestForm, setShowGuestForm] = useState(false);
   const [guestHandle, setGuestHandle] = useState(getInitialGuestHandle);
   const [error, setError] = useState<string | null>(null);
   const [authNotice, setAuthNotice] = useState<string | null>(null);
+  const [guestSubmitting, setGuestSubmitting] = useState(false);
   const supabase = createClient();
   const hasSupabase = isSupabaseConfigured() && supabase;
 
-  const handleGuestSubmit = (e: React.FormEvent) => {
+  const handleGuestSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const name = guestHandle.trim() || assignDefaultGuestDisplayName();
-    if (typeof window !== 'undefined') {
-      try {
-        sessionStorage.setItem(GUEST_STORAGE_KEY, '1');
-        sessionStorage.setItem(GUEST_NAME_STORAGE_KEY, name);
-        sessionStorage.setItem(GUEST_ROOM_KEY, roomId);
-      } catch {}
+    if (guestSubmitting || joinVerifying) return;
+    setGuestSubmitting(true);
+    try {
+      const name = guestHandle.trim() || assignDefaultGuestDisplayName();
+      if (typeof window !== 'undefined') {
+        try {
+          sessionStorage.setItem(GUEST_STORAGE_KEY, '1');
+          sessionStorage.setItem(GUEST_NAME_STORAGE_KEY, name);
+          sessionStorage.setItem(GUEST_ROOM_KEY, roomId);
+        } catch {}
+      }
+      await onJoin(name, 'guest');
+    } finally {
+      setGuestSubmitting(false);
     }
-    onJoin(name, 'guest');
   };
 
-  const handleSimpleAuthSuccess = (displayName: string) => {
+  const handleSimpleAuthSuccess = async (displayName: string) => {
     setError(null);
-    onJoin(displayName, 'registered');
+    await onJoin(displayName, 'registered');
   };
 
   const handleGoogle = async () => {
@@ -105,7 +114,9 @@ export function JoinChoice({ onJoin, roomId }: JoinChoiceProps) {
       <div className="flex min-h-screen flex-col items-center justify-center bg-gray-950 p-4">
         <div className="w-full max-w-sm rounded-lg border border-gray-700 bg-gray-900 p-6">
           <SimpleAuthForm
-            onSuccess={handleSimpleAuthSuccess}
+            onSuccess={(dn) => {
+              void handleSimpleAuthSuccess(dn);
+            }}
             onCancel={() => {
               setShowSimpleForm(false);
               setError(null);
@@ -151,7 +162,7 @@ export function JoinChoice({ onJoin, roomId }: JoinChoiceProps) {
           <p className="mb-3 text-sm text-gray-400">
             ハンドルネームを入力してください（未入力の場合は「ゲスト」＋番号が自動で付きます。例: ゲスト4821）
           </p>
-          <form onSubmit={handleGuestSubmit} className="flex flex-col gap-3">
+          <form onSubmit={(e) => void handleGuestSubmit(e)} className="flex flex-col gap-3">
             <label className="flex flex-col gap-1">
               <span className="text-sm text-gray-300">ハンドルネーム</span>
               <input
@@ -160,21 +171,29 @@ export function JoinChoice({ onJoin, roomId }: JoinChoiceProps) {
                 onChange={(e) => setGuestHandle(e.target.value)}
                 placeholder="ゲスト"
                 maxLength={30}
-                className="rounded border border-gray-600 bg-gray-800 px-3 py-2 text-white placeholder-gray-500"
+                disabled={guestSubmitting || joinVerifying}
+                className="rounded border border-gray-600 bg-gray-800 px-3 py-2 text-white placeholder-gray-500 disabled:opacity-50"
                 autoComplete="nickname"
               />
             </label>
+            {(guestSubmitting || joinVerifying) && (
+              <p className="text-sm text-gray-400" role="status">
+                開催状況を確認しています…
+              </p>
+            )}
             <div className="flex gap-2">
               <button
                 type="submit"
-                className="flex-1 rounded-lg bg-amber-600 px-3 py-2 font-medium text-white transition hover:bg-amber-500"
+                disabled={guestSubmitting || joinVerifying}
+                className="flex-1 rounded-lg bg-amber-600 px-3 py-2 font-medium text-white transition hover:bg-amber-500 disabled:opacity-50"
               >
                 参加する
               </button>
               <button
                 type="button"
+                disabled={guestSubmitting || joinVerifying}
                 onClick={() => setShowGuestForm(false)}
-                className="rounded-lg border border-gray-600 px-3 py-2 text-gray-300 hover:bg-gray-800"
+                className="rounded-lg border border-gray-600 px-3 py-2 text-gray-300 hover:bg-gray-800 disabled:opacity-50"
               >
                 キャンセル
               </button>
@@ -215,8 +234,9 @@ export function JoinChoice({ onJoin, roomId }: JoinChoiceProps) {
           )}
           <button
             type="button"
+            disabled={joinVerifying}
             onClick={() => setShowGuestForm(true)}
-            className="rounded-lg border border-gray-600 bg-gray-800 px-4 py-3 text-white transition hover:bg-gray-700"
+            className="rounded-lg border border-gray-600 bg-gray-800 px-4 py-3 text-white transition hover:bg-gray-700 disabled:opacity-50"
           >
             ゲストで参加
           </button>

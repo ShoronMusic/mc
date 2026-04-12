@@ -157,9 +157,21 @@ export function GuideFullNotice() {
         <section className="space-y-2">
           <h3 className="font-semibold text-white">部屋の指定</h3>
           <p className="text-gray-400">
-            トップから 01〜03 に入るほか、URL で <code className="rounded bg-gray-800 px-1 py-0.5 text-gray-200">/04</code>、
-            <code className="rounded bg-gray-800 px-1 py-0.5 text-gray-200">/05</code>{' '}
-            のように部屋番号を指定できます。知らないリンクからの入室には注意してください。
+            トップには、開催中で参加者がいる部屋へのリンクが表示されることがあります。表示がない場合や、部屋を直接指定したい場合は、サイトのアドレスの後ろに{' '}
+            <code className="rounded bg-gray-800 px-1 py-0.5 text-gray-200">/01</code> や{' '}
+            <code className="rounded bg-gray-800 px-1 py-0.5 text-gray-200">/05</code> のように部屋 ID を付けて開けます。知らないリンクからの入室には注意してください。
+          </p>
+        </section>
+        <section className="space-y-2">
+          <h3 className="font-semibold text-white">主催と部屋の使い分け（ログイン時）</h3>
+          <p className="text-gray-400">
+            ログインして会を主催する場合、同時に開催中にできるのは最大<strong className="text-gray-300">2部屋</strong>
+            までです。
+          </p>
+          <p className="text-gray-400">
+            補足として、<strong className="text-gray-300">1部屋を個人専用</strong>（試聴・整理など）、
+            <strong className="text-gray-300">もう1部屋を招待できるオープンルーム</strong>
+            に分けると運用しやすい、というおすすめの一例です（必須ではありません）。
           </p>
         </section>
         <section className="space-y-2">
@@ -172,6 +184,27 @@ export function GuideFullNotice() {
 
       <article className="space-y-5">
         <h2 className="text-lg font-bold text-white">サービス全般</h2>
+        <section className="space-y-2">
+          <h3 className="font-semibold text-white">会の主催（ログイン時）</h3>
+          <p className="text-gray-400">
+            同時に主催できる会は、1アカウントあたり最大2部屋までです。3部屋目を始めるには、いずれかの会を終了してください。
+          </p>
+          <p className="text-gray-400">
+            使い分けの一例として、1部屋を個人専用、もう1部屋を招待できるオープンな部屋とすると整理しやすく、おすすめです（任意です）。
+          </p>
+          <p className="text-gray-400">
+            <span className="font-semibold text-gray-300">会が終了するタイミング：</span>
+            参加ユーザーが誰もいなくなっただけでは会は自動では終了しません。トップの主催者メニューから「この部屋の開催を終了」を押すか、システムによる自動終了を待ちます。自動終了は、誰かが一度でもその部屋に接続（在室）したあと、在室がゼロの状態が一定時間（現状の目安は約30分）続いた場合に行われます。開始から誰も接続しなかった会は対象外です。時間や条件は変更されることがあります。
+          </p>
+          <p className="text-gray-400">
+            <span className="font-semibold text-gray-300">時間の目安（表）</span>：会の自動終了と、参加者個人の「無反応」と在室表示の関係は、
+            <Link href="/guide/service" className="text-amber-400 underline-offset-2 hover:underline">
+              サービス全般
+            </Link>
+            の「時間の目安（自動処理の一覧）」を参照してください。個人の無操作だけでの強制退室は
+            <strong className="text-gray-300">現状ありません</strong>（聞き専利用も想定し、今後の扱いは検討中です）。
+          </p>
+        </section>
         <section className="space-y-2">
           <h3 className="font-semibold text-white">利用料金</h3>
           <ServicePricingNotice />

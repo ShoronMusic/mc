@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { createClient, isSupabaseConfigured } from '@/lib/supabase/client';
 import { GUEST_STORAGE_KEY } from '@/components/auth/JoinChoice';
@@ -132,7 +133,10 @@ export function MeetingStartPanel() {
         const data = (await res.json().catch(() => ({}))) as { error?: string; ok?: boolean };
         if (!res.ok) {
           if (action === 'start' && res.status === 409) {
-            setMessage('この部屋はすでに主催中です。下の「この部屋へ入る」から入室してください。');
+            setMessage(
+              data?.error?.trim() ||
+                'この部屋はすでに主催中です。下の「この部屋へ入る」から入室してください。',
+            );
             return;
           }
           setMessage(data?.error ?? '処理に失敗しました。');
@@ -215,9 +219,23 @@ export function MeetingStartPanel() {
             </p>
             {liveOrganizingCount > 0 && (
               <p className="rounded-md border border-emerald-800/50 bg-emerald-950/40 px-2 py-1.5 text-[11px] font-medium text-emerald-200/95">
-                いま主催中の会：{liveOrganizingCount} 部屋
+                いま主催中の会：{liveOrganizingCount} 部屋（同時は最大2まで）
               </p>
             )}
+            <p className="text-[10px] leading-relaxed text-slate-500">
+              補足：同時主催は最大2部屋です。例として、1つは個人で使う専用・もう1つは招待用のオープンルーム、と分けると整理しやすいです（
+              <Link href="/guide/service" className="text-sky-400/90 underline-offset-2 hover:underline">
+                ご利用上の注意・サービス全般
+              </Link>
+              ）。
+            </p>
+            <p className="text-[10px] leading-relaxed text-slate-500">
+              全員が退室しても会はすぐには終わりません。「この部屋の開催を終了」を押すか、在室ゼロが約30分続くと自動終了します。詳しくは
+              <Link href="/guide/service" className="text-sky-400/90 underline-offset-2 hover:underline">
+                サービス全般
+              </Link>
+              を参照してください。
+            </p>
           </div>
           <p className="mb-2 text-xs font-medium text-slate-400">主催する部屋を選択</p>
           <ul className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-2" role="list">

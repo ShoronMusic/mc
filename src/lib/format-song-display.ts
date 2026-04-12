@@ -341,6 +341,49 @@ export function shouldSkipAiCommentaryForUncertainArtistResolution(params: {
 }
 
 /**
+ * YouTube タイトル／説明が宣伝文・長文プローズのとき true（曲解説・comment-pack を生成しない）。
+ * 視聴履歴の表記修正（display override）で信頼できるタイトルが付いている場合は呼び出し側でスキップしないこと。
+ * `AI_COMMENTARY_SKIP_PROMO_METADATA=0` で無効化。
+ */
+const PROMO_METADATA_PHRASE_RES: RegExp[] = [
+  /\bnugs\.net\b/i,
+  /\bnugs\s+app\b/i,
+  /\bin\s+the\s+nugs\b/i,
+  /\bdownload\s+on\s+nugs\b/i,
+  /\bprofessionally\s+mixed\b/i,
+  /\bstream\s+the[,，]?\s+professionally\b/i,
+  /\bstream\s+the\s+full\b/i,
+  /\bavailable\s+in\s+the\s+nugs\b/i,
+];
+
+export function shouldSkipAiCommentaryForPromotionalOrProseMetadata(params: {
+  rawYouTubeTitle: string;
+  song: string | null | undefined;
+  snippetDescription?: string | null;
+}): boolean {
+  if (process.env.AI_COMMENTARY_SKIP_PROMO_METADATA === '0') return false;
+
+  const raw = (params.rawYouTubeTitle ?? '').trim();
+  const song = (params.song ?? '').trim();
+  const head = (params.snippetDescription ?? '').trim().slice(0, 900);
+
+  for (const text of [raw, song, head]) {
+    if (!text) continue;
+    for (const re of PROMO_METADATA_PHRASE_RES) {
+      if (re.test(text)) return true;
+    }
+  }
+
+  const wordCount = raw.split(/\s+/).filter(Boolean).length;
+  if (wordCount >= 26) return true;
+  if (raw.length >= 140) return true;
+  if (song.length >= 140) return true;
+  if ((raw.match(/,/g) ?? []).length >= 6) return true;
+
+  return false;
+}
+
+/**
  * チャンネル名が「個人のアップロード者」っぽいか。
  * 他者の曲を上げている個人チャンネル（例: Nicolas Fernandez）を
  * アーティストとして表示しないため、フォールバックで使う。

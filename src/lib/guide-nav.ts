@@ -40,13 +40,13 @@ export const GUIDE_SECTIONS = [
     href: '/guide/safety',
     slug: 'safety',
     title: 'アカウントと安全',
-    short: '個人情報・入室方法など',
+    short: '個人情報・主催の目安・入室方法など',
   },
   {
     href: '/guide/service',
     slug: 'service',
     title: 'サービス全般',
-    short: '免責・変更・お問い合わせ',
+    short: '主催の上限・免責・変更・お問い合わせ',
   },
   {
     href: '/terms',

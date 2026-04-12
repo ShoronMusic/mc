@@ -132,7 +132,28 @@ export default function MainArtistTabPanel({ artistName, songTitle }: MainArtist
           {lines.diedFormatted && (
             <p className="text-gray-400">{lines.diedFormatted}</p>
           )}
-          {!hasBasicInfo && !lines.imageUrl && (
+          {lines.youtubeChannelHref && (
+            <p className="pt-1">
+              <a
+                href={lines.youtubeChannelHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex max-w-full items-center gap-2 text-sky-400 hover:text-sky-300 hover:underline"
+                aria-label={`${lines.nameDisplay} の YouTube チャンネル（別タブ）`}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element -- ローカル静的 SVG */}
+                <img
+                  src="/svg/youtube.svg"
+                  alt=""
+                  width={20}
+                  height={20}
+                  className="h-5 w-5 shrink-0"
+                />
+                <span className="min-w-0 break-words">{lines.nameDisplay} YouTube Channel</span>
+              </a>
+            </p>
+          )}
+          {!hasBasicInfo && !lines.imageUrl && !lines.youtubeChannelHref && (
             <p className="text-gray-500">基本情報なし</p>
           )}
         </div>

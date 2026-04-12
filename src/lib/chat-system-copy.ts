@@ -55,6 +55,21 @@ export function buildAiQuestionGuardSoftDeclineMessage(displayName: string): str
 /** 邦楽と判定し AI 曲解説を出さないときのシステムメッセージ */
 export const SYSTEM_MESSAGE_JP_NO_COMMENTARY = '邦楽のため曲解説を取得できませんでした。';
 
+/**
+ * `skipAiCommentary` 応答の `skipReason` に応じて、邦楽用の固定システムメッセージを出すか。
+ * `jp_economy` のみ true。`uncertain_artist` / `promotional_metadata` は無言省略。
+ * `skipReason` なしは従来 API 互換のため邦楽文案を出す。
+ */
+export function shouldShowJpNoCommentarySystemMessage(
+  skipReason: string | null | undefined,
+  isJpDomesticSilenceVideo: boolean,
+): boolean {
+  if (isJpDomesticSilenceVideo) return false;
+  if (skipReason === 'jp_economy') return true;
+  if (skipReason == null || skipReason === '') return true;
+  return false;
+}
+
 /** 曲解説 API が利用できなかったとき（邦楽以外・再試行の文言は付けない） */
 export const SYSTEM_MESSAGE_COMMENTARY_FETCH_FAILED = '曲解説を取得できませんでした。';
 

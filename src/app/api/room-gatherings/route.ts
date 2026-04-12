@@ -1,11 +1,14 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { clearRoomLivePresenceWatch } from '@/lib/empty-live-gathering-cron';
 import { ROOM_DISPLAY_TITLE_MAX_CHARS } from '@/lib/room-lobby-message';
 
 export const dynamic = 'force-dynamic';
 
 const TITLE_MAX = 120;
+/** 同一ユーザーが同時に主催できる live の会の上限（部屋 ID は別々） */
+const MAX_LIVE_GATHERINGS_PER_USER = 2;
 const CREATED_ROOMS_LIMIT = 200;
 const DEFAULT_ROOM_COUNT = 90;
 const DEFAULT_ROOM_IDS = Array.from({ length: DEFAULT_ROOM_COUNT }, (_, i) =>
@@ -53,6 +56,7 @@ async function lobbyDisplayTitleByRoomIds(
  * - { action: 'rename', roomId: string, title: string } … 当該部屋の live タイトルを更新
  *
  * ログインユーザーのみ。RLS で拒否される場合は Supabase 側ポリシーを要確認。
+ * start 時は created_by が同一で status=live の会が既に 2 件あると 409。
  */
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -140,6 +144,30 @@ export async function POST(request: Request) {
       );
     }
 
+    const { count: myLiveCount, error: myLiveErr } = await supabase
+      .from('room_gatherings')
+      .select('*', { count: 'exact', head: true })
+      .eq('created_by', session.user.id)
+      .eq('status', 'live');
+    if (myLiveErr) {
+      if (myLiveErr.code === '42P01') {
+        return NextResponse.json(
+          { error: '会テーブルがありません。docs/room-live-session-spec.md の SQL を実行してください。' },
+          { status: 503 },
+        );
+      }
+      console.error('[room-gatherings start] count my live', myLiveErr);
+      return NextResponse.json({ error: myLiveErr.message }, { status: 500 });
+    }
+    if ((myLiveCount ?? 0) >= MAX_LIVE_GATHERINGS_PER_USER) {
+      return NextResponse.json(
+        {
+          error: `同時に主催できる会は最大${MAX_LIVE_GATHERINGS_PER_USER}部屋までです。不要な会を終了してから再度お試しください。`,
+        },
+        { status: 409 },
+      );
+    }
+
     const { data: inserted, error: insErr } = await supabase
       .from('room_gatherings')
       .insert({
@@ -161,6 +189,11 @@ export async function POST(request: Request) {
       }
       console.error('[room-gatherings start] insert', insErr);
       return NextResponse.json({ error: insErr.message }, { status: 500 });
+    }
+
+    const adminWatch = createAdminClient();
+    if (adminWatch) {
+      await clearRoomLivePresenceWatch(adminWatch, roomId);
     }
 
     return NextResponse.json({ ok: true, gathering: inserted });
@@ -194,6 +227,11 @@ export async function POST(request: Request) {
 
     if (!updated?.length) {
       return NextResponse.json({ error: '開催中の会がありません。' }, { status: 404 });
+    }
+
+    const adminWatchEnd = createAdminClient();
+    if (adminWatchEnd) {
+      await clearRoomLivePresenceWatch(adminWatchEnd, roomId);
     }
 
     return NextResponse.json({ ok: true, endedCount: updated.length });

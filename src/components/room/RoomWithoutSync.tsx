@@ -31,6 +31,7 @@ import {
   SYSTEM_MESSAGE_COMMENTARY_FETCH_FAILED,
   SYSTEM_MESSAGE_JP_NO_COMMENTARY,
   buildAiQuestionGuardSoftDeclineMessage,
+  shouldShowJpNoCommentarySystemMessage,
 } from '@/lib/chat-system-copy';
 import { resolveAiQuestionMusicRelated } from '@/lib/client-ai-question-guard-resolve';
 import { isDevMinimalSongAi } from '@/lib/dev-minimal-song-ai';
@@ -640,7 +641,11 @@ export default function RoomWithoutSync({
               const isJpSilenceVideo =
                 jpDomesticSilenceVideoIdRef.current != null &&
                 jpDomesticSilenceVideoIdRef.current === vid;
-              if (!isJpSilenceVideo) {
+              const skipReason =
+                typeof pack?.skipReason === 'string' ? pack.skipReason : undefined;
+              if (
+                shouldShowJpNoCommentarySystemMessage(skipReason, isJpSilenceVideo)
+              ) {
                 addSystemMessage(SYSTEM_MESSAGE_JP_NO_COMMENTARY);
               }
               return;
@@ -677,7 +682,11 @@ export default function RoomWithoutSync({
             const isJpSilenceVideo =
               jpDomesticSilenceVideoIdRef.current != null &&
               jpDomesticSilenceVideoIdRef.current === vid;
-            if (!isJpSilenceVideo) {
+            const skipReason =
+              typeof data?.skipReason === 'string' ? data.skipReason : undefined;
+            if (
+              shouldShowJpNoCommentarySystemMessage(skipReason, isJpSilenceVideo)
+            ) {
               addSystemMessage(SYSTEM_MESSAGE_JP_NO_COMMENTARY);
             }
             return;

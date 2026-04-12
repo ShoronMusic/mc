@@ -8,7 +8,7 @@ import { FROM_START_KEY } from './FromStartMarker';
 import { AblyProviderWrapper } from '@/components/providers/AblyProviderWrapper';
 import { getOrCreateRoomClientId, isKickedForRoom, isKickedSitewide } from '@/lib/room-owner';
 import { readTermsAccepted } from '@/lib/terms-consent';
-import { isTrialRoomId } from '@/lib/trial-rooms';
+import { runRoomEntryGateCheck } from '@/lib/join-gate-room-check-client';
 
 type GateStatus = 'loading' | 'choice' | 'room' | 'kicked' | 'closed';
 
@@ -33,6 +33,7 @@ export function JoinGate({ roomId }: JoinGateProps) {
   const [closedMessage, setClosedMessage] = useState<string>('');
   const [liveTitle, setLiveTitle] = useState<string>('');
   const [roomDisplayTitle, setRoomDisplayTitle] = useState<string>('');
+  const [joinVerifying, setJoinVerifying] = useState(false);
 
   const clientId = useMemo(
     () => (typeof window !== 'undefined' ? getOrCreateRoomClientId(roomId) : ''),
@@ -67,72 +68,17 @@ export function JoinGate({ roomId }: JoinGateProps) {
     }
 
     const checkRoomLive = async (): Promise<boolean> => {
-      try {
-        const res = await fetch(`/api/room-live-status?roomId=${encodeURIComponent(roomId)}`);
-        const data = (await res.json()) as {
-          configured?: boolean;
-          message?: string;
-          room?: {
-            isLive?: boolean;
-            title?: string | null;
-            displayTitle?: string | null;
-            isOrganizer?: boolean;
-          };
-        };
-        if (data?.configured !== true) {
-          setClosedMessage(data?.message?.trim() || '現在この部屋は開催管理の準備中です。');
-          setLiveTitle('');
-          setRoomDisplayTitle('');
-          setStatus('closed');
-          return false;
-        }
-        const trialRoom = isTrialRoomId(roomId);
-        if (data?.room?.isLive !== true && !trialRoom) {
-          setClosedMessage('現在この部屋で開催中の会はありません。');
-          setLiveTitle('');
-          setRoomDisplayTitle('');
-          setStatus('closed');
-          return false;
-        }
-        if (data?.room?.isLive === true) {
-          setLiveTitle(typeof data?.room?.title === 'string' ? data.room.title.trim() : '');
-          setRoomDisplayTitle(
-            typeof data?.room?.displayTitle === 'string' ? data.room.displayTitle.trim() : '',
-          );
-        } else {
-          setLiveTitle(trialRoom ? '体験部屋' : '');
-          setRoomDisplayTitle('');
-        }
-
-        // 参加者0人のときは、開催中の会の主催者だけ先に入室できる。
-        // （未参加ユーザーが最初に入ってしまうのを防ぐ）
-        try {
-          const p = await fetch(`/api/room-presence?rooms=${encodeURIComponent(roomId)}`);
-          const pd = (await p.json()) as {
-            configured?: boolean;
-            rooms?: Array<{ roomId: string; count: number }>;
-          };
-          if (pd?.configured === true) {
-            const row = Array.isArray(pd.rooms) ? pd.rooms.find((r) => r.roomId === roomId) : null;
-            const count = row?.count ?? 0;
-            const isOrganizer = data?.room?.isOrganizer === true;
-            if (count === 0 && !isOrganizer && !isTrialRoomId(roomId)) {
-              setClosedMessage('主催者の入室待ちです。主催者が先に入室すると参加できます。');
-              setStatus('closed');
-              return false;
-            }
-          }
-        } catch {
-          // 参加者数取得に失敗した場合は live 判定のみで通す
-        }
-        return true;
-      } catch {
-        setClosedMessage('開催状況を確認できませんでした。時間をおいて再度お試しください。');
-        setLiveTitle('');
-        setRoomDisplayTitle('');
+      const gate = await runRoomEntryGateCheck(roomId);
+      if (!gate.ok) {
+        setClosedMessage(gate.closedMessage);
+        setLiveTitle(gate.liveTitle);
+        setRoomDisplayTitle(gate.roomDisplayTitle);
         setStatus('closed');
         return false;
       }
+      setLiveTitle(gate.liveTitle);
+      setRoomDisplayTitle(gate.roomDisplayTitle);
+      return true;
     };
 
     const supabase = createClient();
@@ -178,13 +124,28 @@ export function JoinGate({ roomId }: JoinGateProps) {
     });
   }, [roomId, clientId, consentOk]);
 
-  const handleJoin = (name: string, mode: 'guest' | 'registered') => {
-    setDisplayName(name);
-    setIsGuest(mode === 'guest');
+  const handleJoin = async (name: string, mode: 'guest' | 'registered') => {
+    setJoinVerifying(true);
     try {
-      sessionStorage.removeItem(FROM_START_KEY);
-    } catch {}
-    setStatus('room');
+      const gate = await runRoomEntryGateCheck(roomId);
+      if (!gate.ok) {
+        setClosedMessage(gate.closedMessage);
+        setLiveTitle(gate.liveTitle);
+        setRoomDisplayTitle(gate.roomDisplayTitle);
+        setStatus('closed');
+        return;
+      }
+      setLiveTitle(gate.liveTitle);
+      setRoomDisplayTitle(gate.roomDisplayTitle);
+      setDisplayName(name);
+      setIsGuest(mode === 'guest');
+      try {
+        sessionStorage.removeItem(FROM_START_KEY);
+      } catch {}
+      setStatus('room');
+    } finally {
+      setJoinVerifying(false);
+    }
   };
 
   if (consentOk !== true || status === 'loading') {
@@ -196,7 +157,7 @@ export function JoinGate({ roomId }: JoinGateProps) {
   }
 
   if (status === 'choice') {
-    return <JoinChoice onJoin={handleJoin} roomId={roomId} />;
+    return <JoinChoice onJoin={handleJoin} roomId={roomId} joinVerifying={joinVerifying} />;
   }
 
   if (status === 'kicked') {

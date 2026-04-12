@@ -31,7 +31,19 @@ export interface Music8ArtistJson {
   occupation?: string | Music8OccupationItem[];
   member?: false | Music8MemberItem[] | Music8MemberItem;
   spotify_artist_images?: string;
+  /** YouTube チャンネル ID（UC…）・@ハンドル・または完全 URL */
+  youtube_channel?: string;
   [key: string]: unknown;
+}
+
+/** Music8 `youtube_channel` を別タブ用の URL に正規化 */
+export function resolveYoutubeChannelHref(raw: string | null | undefined): string | null {
+  const s = (raw ?? '').trim();
+  if (!s) return null;
+  if (/^https?:\/\//i.test(s)) return s;
+  if (s.startsWith('@')) return `https://www.youtube.com/${s}`;
+  if (/^UC[0-9A-Za-z_-]{20,}$/.test(s)) return `https://www.youtube.com/channel/${s}`;
+  return `https://www.youtube.com/channel/${encodeURIComponent(s)}`;
 }
 
 /** JSON のキーが snake_case / camelCase 両方に対応して文字列を取得 */
@@ -265,6 +277,8 @@ export function formatMusic8ArtistDisplayLines(artist: Music8ArtistJson): {
   origin: string;
   /** 活動期間 */
   activeYears: string;
+  /** `youtube_channel` があるとき別タブ用 URL */
+  youtubeChannelHref: string | null;
 } {
   // music8 API は acf 内に artistorigin / artistborn / member 等を返すためマージして参照する
   const raw = artist as Record<string, unknown>;
@@ -317,6 +331,16 @@ export function formatMusic8ArtistDisplayLines(artist: Music8ArtistJson): {
   const imageUrl =
     typeof imageRaw === 'string' && imageRaw.trim() ? imageRaw.trim() : null;
 
+  const youtubeChannelRaw = getArtistString(
+    source as Music8ArtistJson,
+    'youtube_channel',
+    'youtubeChannel',
+    'youtube_channel_id',
+  );
+  const youtubeChannelHref = youtubeChannelRaw
+    ? resolveYoutubeChannelHref(youtubeChannelRaw)
+    : null;
+
   return {
     line1,
     line2,
@@ -329,5 +353,6 @@ export function formatMusic8ArtistDisplayLines(artist: Music8ArtistJson): {
     memberDisplay,
     origin,
     activeYears,
+    youtubeChannelHref,
   };
 }

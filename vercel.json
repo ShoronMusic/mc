@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/end-empty-live-gatherings",
+      "schedule": "*/10 * * * *"
+    }
+  ]
+}
