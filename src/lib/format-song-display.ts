@@ -356,6 +356,18 @@ const PROMO_METADATA_PHRASE_RES: RegExp[] = [
   /\bavailable\s+in\s+the\s+nugs\b/i,
 ];
 
+/**
+ * VEVO 等の「Artist - Title (Official …)」型。概要欄の配信誘導だけで曲解説が止まるのを防ぐ。
+ * （タイトル本文・曲名は従来どおりプロモ語を検査する）
+ */
+function looksLikeStandardDistributedTrackYoutubeTitle(raw: string): boolean {
+  const t = raw.trim();
+  if (t.length < 8 || !/\s-\s/.test(t)) return false;
+  return /\([^)]*\bofficial\b[^)]*\)|\([^)]*lyric\s+video[^)]*\)|\([^)]*\bofficial\s+audio[^)]*\)/i.test(
+    t,
+  );
+}
+
 export function shouldSkipAiCommentaryForPromotionalOrProseMetadata(params: {
   rawYouTubeTitle: string;
   song: string | null | undefined;
@@ -367,7 +379,10 @@ export function shouldSkipAiCommentaryForPromotionalOrProseMetadata(params: {
   const song = (params.song ?? '').trim();
   const head = (params.snippetDescription ?? '').trim().slice(0, 900);
 
-  for (const text of [raw, song, head]) {
+  const phraseTargets = looksLikeStandardDistributedTrackYoutubeTitle(raw)
+    ? [raw, song]
+    : [raw, song, head];
+  for (const text of phraseTargets) {
     if (!text) continue;
     for (const re of PROMO_METADATA_PHRASE_RES) {
       if (re.test(text)) return true;

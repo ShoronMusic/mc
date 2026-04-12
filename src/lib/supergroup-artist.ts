@@ -75,6 +75,7 @@ export async function buildSupergroupPromptBlock(artistName: string): Promise<st
   if (isSupergroupByManualHints(name) || (await isSupergroupByMusic8Description(name))) {
     return `【ユニット背景（必須）】
 ・「${name}」は固定バンドとして断定せず、人気バンド／人気アーティストのメンバーが参加したプロジェクト（スーパーグループ）である可能性を踏まえて、**結成背景・参加メンバーの文脈**を1文入れてください。
+・**チャート・ヒットの規模・社会的反響より**、広く知られた範囲で**各主要メンバーの氏名（通称可）と、世に知られる元所属バンド名／ソロ名**を優先して触れてください（列挙が長くなるときは自由コメント1本目に任せ、基本情報では端折してよい）。
 ・メンバー名や元所属を挙げる場合は、広く知られた事実の範囲に限り、不確実な情報は断定しないこと。
 `;
   }

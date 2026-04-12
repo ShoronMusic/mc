@@ -46,6 +46,27 @@ try {
     'short official video title should not skip',
   );
 
+  assert(
+    !shouldSkipAiCommentaryForPromotionalOrProseMetadata({
+      rawYouTubeTitle:
+        'The Traveling Wilburys - End Of The Line (Official 4K Music Video)',
+      song: 'End Of The Line',
+      snippetDescription:
+        'Listen on streaming. stream the full album here professionally mixed bonus content.',
+    }),
+    'official MV title: ignore promo-like phrases in description only',
+  );
+
+  assert(
+    shouldSkipAiCommentaryForPromotionalOrProseMetadata({
+      rawYouTubeTitle: 'Jam Band - Tuesday Night (session)',
+      song: 'Tuesday Night',
+      snippetDescription:
+        'stream the full show in the nugs app. professionally mixed audio.',
+    }),
+    'non-official title: description promo phrases still skip',
+  );
+
   process.env.AI_COMMENTARY_SKIP_PROMO_METADATA = '0';
   assert(
     !shouldSkipAiCommentaryForPromotionalOrProseMetadata({

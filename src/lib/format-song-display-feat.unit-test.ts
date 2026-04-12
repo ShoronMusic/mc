@@ -144,6 +144,8 @@ assert.equal(cleanTitle('Foo © 1999 Some Label LLC'), 'Foo');
   assert.ok(url.endsWith('/kissin-dynamite.json'), `music8 url: ${url}`);
 }
 assert.equal(isSupergroupByManualHints('The Power Station'), true);
+assert.equal(isSupergroupByManualHints('The Traveling Wilburys'), true);
+assert.equal(isSupergroupByManualHints('Traveling Wilburys'), true);
 
 {
   const r = getArtistAndSong('a - ha - Take On Me', null);
