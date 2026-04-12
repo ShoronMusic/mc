@@ -113,7 +113,7 @@ import {
   setCommentPackModeToStorage,
 } from '@/lib/room-owner';
 import { createClient } from '@/lib/supabase/client';
-import { EnvelopeIcon } from '@heroicons/react/24/outline';
+import { DocumentTextIcon, EnvelopeIcon } from '@heroicons/react/24/outline';
 import { useIsLgViewport } from '@/hooks/useLgViewport';
 import { useRoomChatLogPersistence } from '@/hooks/useRoomChatLogPersistence';
 import { useSupabaseAuthUserId } from '@/hooks/useSupabaseAuthUserId';
@@ -3738,11 +3738,14 @@ export default function RoomWithSync({
                     setPolicyTab('terms');
                     setTermsModalOpen(true);
                   }}
-                  className="shrink-0 whitespace-nowrap text-xs text-gray-300 underline decoration-dotted underline-offset-2 hover:text-white sm:text-sm"
+                  className="inline-flex shrink-0 items-center gap-0 text-xs text-gray-300 hover:text-white lg:gap-0.5 lg:whitespace-nowrap sm:text-sm"
                   title="利用規約"
                   aria-label="利用規約"
                 >
-                  利用規約
+                  <DocumentTextIcon className="h-4 w-4 shrink-0" aria-hidden />
+                  <span className="hidden underline decoration-dotted underline-offset-2 lg:inline">
+                    利用規約
+                  </span>
                 </button>
                 <button
                   type="button"
