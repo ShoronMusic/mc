@@ -48,6 +48,7 @@ import { playbackLog } from '@/lib/playback-debug';
 import { useResumeYoutubeWhenTabVisible } from '@/hooks/useResumeYoutubeWhenTabVisible';
 import { rememberRoomForGuideReturn } from '@/lib/safe-return-path';
 import { extractVideoId, isStandaloneNonYouTubeUrl } from '@/lib/youtube';
+import { isYoutubeKeywordSearchEnabled } from '@/lib/youtube-keyword-search-ui';
 import {
   type PlaybackMessage,
   type PlaybackHistoryUpdatedPayload,
@@ -3555,6 +3556,15 @@ export default function RoomWithSync({
       };
 
       if (pendingSongQueryRef.current && isShortConfirmation(text)) {
+        if (!isYoutubeKeywordSearchEnabled()) {
+          pendingSongQueryRef.current = null;
+          pendingSongConfirmationTextRef.current = null;
+          addSystemMessage(
+            'キーワードでの曲検索は現在オフです。YouTube の動画 URL をコピーして貼り、「送信」で選曲してください。',
+          );
+          touchActivity();
+          return;
+        }
         const query = pendingSongQueryRef.current;
         const confirmationText = pendingSongConfirmationTextRef.current;
         pendingSongQueryRef.current = null;
@@ -3649,6 +3659,13 @@ export default function RoomWithSync({
         .then((r) => (r.ok ? r.json() : null))
         .then((data) => {
           if (data?.needConfirm && data?.confirmationText && data?.query) {
+            if (!isYoutubeKeywordSearchEnabled()) {
+              addSystemMessage(
+                'キーワードでの曲検索は現在オフです。YouTube の動画 URL をコピーして貼り、「送信」で選曲するか、曲について @ で質問してください。',
+              );
+              touchActivity();
+              return;
+            }
             pendingSongQueryRef.current = data.query;
             pendingSongConfirmationTextRef.current = data.confirmationText;
             const jpB =
@@ -4142,7 +4159,11 @@ export default function RoomWithSync({
             roomId={roomId ?? undefined}
             myClientId={myClientId || undefined}
             styleAdminChatTools={chatStyleAdminTools}
-            onYoutubeSearchFromAi={(q) => chatInputRef.current?.searchYoutubeWithQuery(q)}
+            onYoutubeSearchFromAi={
+              isYoutubeKeywordSearchEnabled()
+                ? (q) => chatInputRef.current?.searchYoutubeWithQuery(q)
+                : undefined
+            }
           />
         }
         rightTop={
@@ -4155,6 +4176,7 @@ export default function RoomWithSync({
         rightBottom={
           <RoomPlaybackHistory
             roomId={roomId}
+            roomClientId={myClientId}
             currentVideoId={videoId}
             refreshKey={playbackHistoryRefreshKey}
             participantsWithColor={participants
@@ -4177,32 +4199,36 @@ export default function RoomWithSync({
           onVideoUrl={handleVideoUrlFromChat}
           isGuest={isGuest}
           onSystemMessage={addSystemMessage}
-          onAddCandidate={handleAddCandidateFromSearch}
+          onAddCandidate={
+            isYoutubeKeywordSearchEnabled() ? handleAddCandidateFromSearch : undefined
+          }
           onPreviewStart={handlePreviewStart}
           onPreviewStop={handlePreviewStop}
           onClearLocalAiQuestionGuard={
             chatStyleAdminTools ? clearLocalAiQuestionGuardState : undefined
           }
           trailingSlot={
-            <button
-              type="button"
-              className={`flex h-[3.5rem] w-full shrink-0 items-center justify-center gap-0.5 rounded border border-emerald-600 bg-emerald-900/40 px-2 text-xs font-semibold text-emerald-100 hover:bg-emerald-800/70 lg:h-[38px] lg:w-auto lg:px-3 ${
-                candidateButtonFlash ? 'animate-pulse ring-2 ring-emerald-300' : ''
-              }`}
-              onClick={() => setCandidateOpen(true)}
-            >
-              候補リスト
-              {candidateSongs.length > 0 && (
-                <span className="inline-block rounded bg-emerald-700 px-1 text-[10px]">
-                  {candidateSongs.length}
-                </span>
-              )}
-            </button>
+            isYoutubeKeywordSearchEnabled() ? (
+              <button
+                type="button"
+                className={`flex h-[3.75rem] w-full shrink-0 items-center justify-center gap-0.5 rounded border border-emerald-600 bg-emerald-900/40 px-2 text-xs font-semibold text-emerald-100 hover:bg-emerald-800/70 lg:w-auto lg:px-3 ${
+                  candidateButtonFlash ? 'animate-pulse ring-2 ring-emerald-300' : ''
+                }`}
+                onClick={() => setCandidateOpen(true)}
+              >
+                候補リスト
+                {candidateSongs.length > 0 && (
+                  <span className="inline-block rounded bg-emerald-700 px-1 text-[10px]">
+                    {candidateSongs.length}
+                  </span>
+                )}
+              </button>
+            ) : undefined
           }
         />
       </section>
 
-      {candidateOpen && (
+      {candidateOpen && isYoutubeKeywordSearchEnabled() && (
         <div
           className="fixed inset-0 z-40 flex items-center justify-center bg-black/70 p-4"
           role="dialog"

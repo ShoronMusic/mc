@@ -27,6 +27,7 @@ import {
 } from '@/lib/video-playback-display-override';
 import { SONG_STYLE_OPTIONS } from '@/lib/song-styles';
 import type { SongStyle } from '@/lib/gemini';
+import { gateRoomPlaybackHistoryRead } from '@/lib/room-playback-history-access';
 
 export const dynamic = 'force-dynamic';
 
@@ -71,9 +72,27 @@ function parseSelectionRoundForHistory(raw: unknown): number | null {
 /** クライアント時計が未来にずれているとき since を無視する秒数 */
 const SINCE_MAX_FUTURE_SKEW_MS = 120_000;
 
+function safeRoomIdPlayback(raw: string): string | null {
+  const t = raw.trim();
+  if (!t || t.length > 48) return null;
+  if (!/^[a-zA-Z0-9_-]+$/.test(t)) return null;
+  return t;
+}
+
+function safeClientIdPlaybackQuery(raw: string | null): string | null {
+  if (raw == null) return null;
+  const t = raw.trim();
+  if (!t || t.length > 80) return null;
+  if (!/^[a-zA-Z0-9._:-]+$/.test(t)) return null;
+  return t;
+}
+
 /**
  * GET: 部屋の視聴履歴一覧（played_at 降順）
- * Query: roomId, since（任意・ISO8601）— 指定時は played_at >= since の行のみ
+ * Query: roomId, clientId（ゲストまたは参加記録同期前のフォールバック用・Ably presence 照合）,
+ *        since（任意・ISO8601）— 指定時は played_at >= since の行のみ
+ *
+ * 閲覧は「当該部屋の未終了参加履歴があるログインユーザー」または「Ably で在室確認できた clientId」のみ。
  */
 export async function GET(request: Request) {
   const supabase = await createClient();
@@ -82,9 +101,15 @@ export async function GET(request: Request) {
   }
 
   const { searchParams } = new URL(request.url);
-  const roomId = searchParams.get('roomId')?.trim() ?? '';
+  const roomId = safeRoomIdPlayback(searchParams.get('roomId') ?? '');
   if (!roomId) {
     return NextResponse.json({ error: 'roomId is required' }, { status: 400 });
+  }
+
+  const clientId = safeClientIdPlaybackQuery(searchParams.get('clientId'));
+  const gate = await gateRoomPlaybackHistoryRead(supabase, roomId, clientId);
+  if (!gate.allowed) {
+    return NextResponse.json({ error: gate.reason, items: [] as RoomPlaybackHistoryRow[] }, { status: 403 });
   }
 
   const sinceRaw = searchParams.get('since')?.trim() ?? '';

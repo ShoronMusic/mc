@@ -39,6 +39,7 @@ import { USER_SONG_HISTORY_UPDATED_EVENT } from '@/lib/user-song-history-events'
 import { playbackLog } from '@/lib/playback-debug';
 import { rememberRoomForGuideReturn } from '@/lib/safe-return-path';
 import { extractVideoId, isStandaloneNonYouTubeUrl } from '@/lib/youtube';
+import { isYoutubeKeywordSearchEnabled } from '@/lib/youtube-keyword-search-ui';
 import type { ChatMessage, SystemMessageOptions } from '@/types/chat';
 import { useIsLgViewport } from '@/hooks/useLgViewport';
 import { useRoomChatLogPersistence } from '@/hooks/useRoomChatLogPersistence';
@@ -1002,6 +1003,15 @@ export default function RoomWithoutSync({
       };
 
       if (pendingSongQueryRef.current && isShortConfirmation(text)) {
+        if (!isYoutubeKeywordSearchEnabled()) {
+          pendingSongQueryRef.current = null;
+          pendingSongConfirmationTextRef.current = null;
+          addSystemMessage(
+            'キーワードでの曲検索は現在オフです。YouTube の動画 URL をコピーして貼り、「送信」で選曲してください。',
+          );
+          touchActivity();
+          return;
+        }
         const query = pendingSongQueryRef.current;
         const confirmationText = pendingSongConfirmationTextRef.current;
         pendingSongQueryRef.current = null;
@@ -1084,6 +1094,13 @@ export default function RoomWithoutSync({
         .then((r) => (r.ok ? r.json() : null))
         .then((data) => {
           if (data?.needConfirm && data?.confirmationText && data?.query) {
+            if (!isYoutubeKeywordSearchEnabled()) {
+              addSystemMessage(
+                'キーワードでの曲検索は現在オフです。YouTube の動画 URL をコピーして貼り、「送信」で選曲するか、曲について @ で質問してください。',
+              );
+              touchActivity();
+              return;
+            }
             pendingSongQueryRef.current = data.query;
             pendingSongConfirmationTextRef.current = data.confirmationText;
             const jpB =
@@ -1280,7 +1297,11 @@ export default function RoomWithoutSync({
             myClientId="local-client"
             styleAdminChatTools={chatStyleAdminTools}
             canRejectTidbit={canRejectTidbit && !isGuest}
-            onYoutubeSearchFromAi={(q) => chatInputRef.current?.searchYoutubeWithQuery(q)}
+            onYoutubeSearchFromAi={
+              isYoutubeKeywordSearchEnabled()
+                ? (q) => chatInputRef.current?.searchYoutubeWithQuery(q)
+                : undefined
+            }
           />
         }
         rightTop={

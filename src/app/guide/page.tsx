@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { YouTubeDataApiQuotaCallout } from '@/components/guide/YouTubeDataApiQuotaCallout';
 import { GUIDE_SECTIONS } from '@/lib/guide-nav';
 import { withPolicyModalQuery } from '@/lib/policy-modal-link';
 
@@ -31,6 +32,9 @@ export default function GuideIndexPage({ searchParams }: GuideIndexPageProps) {
           </Link>
           をご覧ください。
         </p>
+        <div className="mt-4">
+          <YouTubeDataApiQuotaCallout />
+        </div>
       </div>
       <ul className="grid gap-3 sm:grid-cols-1">
         {sections.map((s) => (

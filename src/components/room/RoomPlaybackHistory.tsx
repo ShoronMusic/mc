@@ -39,27 +39,6 @@ const COL_WIDTH_ERA = 48;
 const COL_WIDTH_LINK = 56;
 const COL_WIDTH_FAV = 36;
 
-/**
- * タブ単位で「この部屋に滞在し始めた時刻」を保持する。
- * 別日・別グループの再生が同じ room_id に残っていても、後から入った人には見せない。
- */
-const PLAYBACK_SESSION_SINCE_STORAGE_PREFIX = 'mc_room_playback_since:v1:';
-
-function getOrCreatePlaybackSessionSinceIso(roomId: string): string {
-  if (typeof window === 'undefined') {
-    return new Date(0).toISOString();
-  }
-  const key = `${PLAYBACK_SESSION_SINCE_STORAGE_PREFIX}${roomId}`;
-  const existing = sessionStorage.getItem(key);
-  if (existing) {
-    const t = new Date(existing).getTime();
-    if (!Number.isNaN(t)) return new Date(t).toISOString();
-  }
-  const now = new Date().toISOString();
-  sessionStorage.setItem(key, now);
-  return now;
-}
-
 /** スタイル値ごとの文字色（背景は従来どおり） */
 const STYLE_TEXT_COLORS: Record<string, string> = {
   Rock: '#6246ea',
@@ -278,6 +257,8 @@ function artistTitle(row: RoomPlaybackHistoryRow): string {
 
 interface RoomPlaybackHistoryProps {
   roomId: string | undefined;
+  /** Ably の clientId。GET 時に在室確認へ渡す（ログイン時は参加履歴でも可） */
+  roomClientId?: string;
   currentVideoId: string | null;
   /** 変更されると再取得する（部屋側で10秒後にPOSTしたあと更新用） */
   refreshKey?: number;
@@ -315,6 +296,7 @@ function playbackHistoryNameLookupKey(displayNameStored: string): string {
 
 export default function RoomPlaybackHistory({
   roomId,
+  roomClientId = '',
   currentVideoId,
   refreshKey,
   participantsWithColor = [],
@@ -496,14 +478,23 @@ export default function RoomPlaybackHistory({
     }
     setLoading(true);
     try {
-      const sinceIso = getOrCreatePlaybackSessionSinceIso(roomId);
-      const qs = new URLSearchParams({
-        roomId,
-        since: sinceIso,
-      });
-      const res = await fetch(`/api/room-playback-history?${qs.toString()}`);
-      const data = await res.json().catch(() => ({}));
-      const raw = Array.isArray(data?.items) ? data.items : [];
+      const qs = new URLSearchParams({ roomId });
+      const cid = typeof roomClientId === 'string' ? roomClientId.trim() : '';
+      if (cid) qs.set('clientId', cid);
+      const url = `/api/room-playback-history?${qs.toString()}`;
+
+      const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+      let data: unknown = {};
+      for (let attempt = 0; attempt < 4; attempt++) {
+        if (attempt > 0) await sleep(450);
+        const res = await fetch(url, { credentials: 'include' });
+        data = await res.json().catch(() => ({}));
+        if (res.status !== 403) break;
+      }
+
+      const raw = Array.isArray((data as { items?: unknown })?.items)
+        ? (data as { items: RoomPlaybackHistoryRow[] }).items
+        : [];
       setItems(
         raw.map((r: RoomPlaybackHistoryRow) => ({
           ...r,
@@ -516,7 +507,7 @@ export default function RoomPlaybackHistory({
     } finally {
       setLoading(false);
     }
-  }, [roomId]);
+  }, [roomId, roomClientId]);
 
   useEffect(() => {
     fetchItems();

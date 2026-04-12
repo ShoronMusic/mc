@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { YouTubeDataApiQuotaCallout } from '@/components/guide/YouTubeDataApiQuotaCallout';
 
 export const metadata: Metadata = {
   title: 'AI について | ご利用上の注意',
@@ -12,6 +13,7 @@ export default function GuideAiPage() {
       <p className="text-xs leading-relaxed text-gray-500">
         部屋内チャットのリンクから開いた場合、画面上部に「← チャットの部屋に戻る」が表示されます。表示されない場合は、ブラウザの戻るでも直前の画面に戻れます。
       </p>
+      <YouTubeDataApiQuotaCallout />
       <section className="space-y-3">
         <h2 className="text-base font-semibold text-white">回答の性質</h2>
         <p className="text-gray-400">

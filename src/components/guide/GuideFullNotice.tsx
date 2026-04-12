@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { YouTubeDataApiQuotaCallout } from '@/components/guide/YouTubeDataApiQuotaCallout';
 import {
   ServiceDisclaimerIntro,
   ServiceDisclaimerList,
@@ -103,6 +104,7 @@ export function GuideFullNotice() {
 
       <article className="space-y-5 border-b border-gray-800 pb-6">
         <h2 className="text-lg font-bold text-white">曲・コメント</h2>
+        <YouTubeDataApiQuotaCallout />
         <section className="space-y-2">
           <h3 className="font-semibold text-white">再生と著作権</h3>
           <p className="text-gray-400">

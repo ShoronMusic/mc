@@ -3,11 +3,18 @@ import { getChatAiClientIp } from '@/lib/chat-ai-rate-limit';
 import { checkYouTubeSearchRateLimit } from '@/lib/youtube-search-rate-limit';
 import { formatArtistTitle } from '@/lib/format-song-display';
 import { isYouTubeConfigured, searchYouTubeWithFallback } from '@/lib/youtube-search';
+import { isYoutubeKeywordSearchEnabled } from '@/lib/youtube-keyword-search-ui';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
   try {
+    if (!isYoutubeKeywordSearchEnabled()) {
+      return NextResponse.json(
+        { ok: false, reason: 'youtube_keyword_search_disabled' },
+        { status: 200 },
+      );
+    }
     const body = await request.json().catch(() => ({}));
     const query = typeof body?.query === 'string' ? body.query.trim() : '';
     const roomId = typeof body?.roomId === 'string' ? body.roomId.trim() : '';

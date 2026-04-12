@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { YouTubeDataApiQuotaCallout } from '@/components/guide/YouTubeDataApiQuotaCallout';
 
 export const metadata: Metadata = {
   title: '曲・コメント | ご利用上の注意',
@@ -9,6 +10,7 @@ export default function GuideMusicPage() {
   return (
     <article className="space-y-6 text-sm leading-relaxed text-gray-300">
       <h1 className="text-2xl font-bold text-white">曲・コメント</h1>
+      <YouTubeDataApiQuotaCallout />
       <section className="space-y-3">
         <h2 className="text-base font-semibold text-white">再生と著作権</h2>
         <p className="text-gray-400">

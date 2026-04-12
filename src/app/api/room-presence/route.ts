@@ -1,7 +1,6 @@
 import Ably from 'ably';
 import { NextResponse } from 'next/server';
 import { allPresenceMembers } from '@/lib/ably-channel-presence';
-import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
@@ -67,6 +66,7 @@ export type RoomPresencePayload = {
 /**
  * GET ?rooms=01,02,03
  * Ably channel `room:{roomId}` の presence を列挙（トップページの参加状況表示用）
+ * — 認証なし GET から DB 削除は行わない（room_lobby_message の掃除は別経路で検討）
  */
 export async function GET(request: Request) {
   const key = getAblyKey();
@@ -102,18 +102,6 @@ export async function GET(request: Request) {
       }
     })
   );
-
-  /** 誰もいない部屋の入室前メッセージは DB から削除（古いテスト文言の残留を防ぐ） */
-  const emptyRoomIds = rooms.filter((r) => r.count === 0 && !r.error).map((r) => r.roomId);
-  if (emptyRoomIds.length > 0) {
-    const admin = createAdminClient();
-    if (admin) {
-      const { error: delErr } = await admin.from('room_lobby_message').delete().in('room_id', emptyRoomIds);
-      if (delErr && delErr.code !== '42P01') {
-        console.error('[room-presence] delete room_lobby_message for empty rooms', delErr);
-      }
-    }
-  }
 
   const supabase = await createClient();
   if (supabase && unique.length > 0) {
