@@ -9,6 +9,8 @@ export const maxDuration = 60;
 /**
  * Vercel Cron 等から GET。`Authorization: Bearer CRON_SECRET` 必須。
  * 在室が一度記録されたあと 0 が続き閾値を超えた live を ended にする。
+ * vercel.json のスケジュールは Hobby プランの「1日1回」制限に合わせて日次（UTC 03:00）。
+ * より頻繁に走らせる場合は Vercel Pro か外部スケジューラでこの URL を叩いてください。
  */
 export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET?.trim();

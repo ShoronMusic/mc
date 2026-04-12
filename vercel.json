@@ -7,7 +7,7 @@
   "crons": [
     {
       "path": "/api/cron/end-empty-live-gatherings",
-      "schedule": "*/10 * * * *"
+      "schedule": "0 3 * * *"
     }
   ]
 }

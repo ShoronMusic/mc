@@ -23,7 +23,7 @@
 | Music8 musicaichat JSON（選曲連携用） | `src/lib/music8-musicaichat.ts` | `docs/music8-musicaichat-json-spec.md`。既定で本番ベース URL を使用。オフは `MUSIC8_MUSICAICHAT_BASE_URL=0`。`youtube_to_song.json` はメモリ TTL キャッシュ（`MUSIC8_MUSICAICHAT_INDEX_TTL_MS`、既定 1 時間）。comment-pack・`/api/ai/commentary` で musicaichat 曲 JSON が取れたとき **Gemini プロンプトに `facts_for_ai` ブロックを注入**（`COMMENT_PACK_INJECT_MUSIC8_FACTS=0` で無効化）。**既存 [DB] キャッシュ**は、曲 JSON 取得かつ注入オン時は既定でスキップして再生成（`COMMENT_PACK_REGENERATE_LIBRARY_WHEN_MUSIC8=0` で再利用のまま）。レスポンスに `music8ModeratorHints`。**AI_TIDBIT_MODERATOR** のみ先頭に `[Music8 …]` 行（`formatMusic8ModeratorIntroPrefix`） |
 | 「@」音楽関連の二次判定 | `src/app/api/ai/question-guard-classify/route.ts` ＋ `src/lib/ai-question-guard-prompt.ts` | クライアントでキーワード落ちしたときだけ Gemini。全体オフは `NEXT_PUBLIC_AI_QUESTION_GUARD_DISABLED=1`（警告・退場なし）。分類 API だけ止めるなら `AI_QUESTION_GUARD_GEMINI=0`。異議・チューニング報告は `docs/supabase-setup.md` 11.1 / 11.2 |
 | AI 質問ガード（退場のみ免除） | `src/lib/ai-question-guard-exempt-user-ids.ts` | 指定した登録ユーザーは警告・カードは通常どおり。累積後の自動退場・入室禁止だけスキップ（`RoomWithSync` / `RoomWithoutSync`） |
-| 会 live の在室 0 自動終了 | `src/lib/empty-live-gathering-cron.ts`・`GET /api/cron/end-empty-live-gatherings`・`vercel.json` | Ably presence と `room_live_presence_watch`（SQL は `docs/supabase-setup.md` 9.1）。Vercel では **`CRON_SECRET`**（`Authorization: Bearer`）必須。任意 **`EMPTY_LIVE_GATHERING_END_MS`**（ミリ秒、最小 60000） |
+| 会 live の在室 0 自動終了 | `src/lib/empty-live-gathering-cron.ts`・`GET /api/cron/end-empty-live-gatherings`・`vercel.json` | Ably presence と `room_live_presence_watch`（SQL は `docs/supabase-setup.md` 9.1）。Vercel では **`CRON_SECRET`**（`Authorization: Bearer`）必須。任意 **`EMPTY_LIVE_GATHERING_END_MS`**（ミリ秒、最小 60000）。**Hobby** は cron が **1 日 1 回まで**のため `vercel.json` は日次スケジュール（より頻繁には Pro か外部スケジューラ） |
 
 ### 設計メモ（拡張予定）
 
