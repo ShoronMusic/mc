@@ -1,11 +1,11 @@
-# push / PR: lint・型・単体テストのみ（高速・OOM 回避）
-# 本番相当の next build は Vercel が実行するため、ここでは二重に回さない
+# main への push では起動しない（Vercel との「1/2 どちらが赤か」分離・二重検証の負荷軽減）
+# PR では lint / 型 / 単体テストを実行。手動は Actions タブ → CI → Run workflow
+# 本番ビルドは Vercel が next build を実行する
 name: CI
 on:
-  push:
-    branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
   quality:
