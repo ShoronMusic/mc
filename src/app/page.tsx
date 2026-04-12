@@ -44,6 +44,7 @@ export default function StartPage() {
             利用規約
           </Link>
         </p>
+        <p className="mt-3 text-center text-[11px] text-gray-600">スマホ・PC どちらからでもご利用いただけます</p>
       </div>
     </div>
     </ConsentEntryGate>
