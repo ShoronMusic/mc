@@ -1,4 +1,0 @@
-{
-  "/page": "app/page.js",
-  "/api/room-presence/route": "app/api/room-presence/route.js"
-}

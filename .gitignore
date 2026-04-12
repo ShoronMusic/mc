@@ -9,6 +9,8 @@
 
 # next.js
 /.next/
+/.next.broken/
+/.next_corrupt_backup/
 /out/
 
 # production
