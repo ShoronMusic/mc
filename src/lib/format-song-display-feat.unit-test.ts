@@ -43,6 +43,13 @@ assert.equal(getArtistDisplayString('Drake ft. Rihanna'), 'Drake, Rihanna');
   assert.equal(r.song, 'Too Shy');
 }
 
+// 「L.A. GUNS - 曲名」型: 左が L.A. 等の略記＋語のバンド名。チャンネルがアップローダー名でも誤スワップしない
+{
+  const r = getArtistAndSong('L.A. GUNS - Magdalaine', 'HECTOR GUNS');
+  assert.equal(r.artistDisplay, 'L.A. GUNS');
+  assert.equal(r.song, 'Magdalaine');
+}
+
 // 「The バンド名 - 曲名」はチャンネルがレーベル（XL 等）でも誤スワップしない（rmHDhAohJlQ 型）
 {
   const r = getArtistAndSong('The Prodigy - Breathe (Official Video)', 'XL Recordings');

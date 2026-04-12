@@ -1143,6 +1143,12 @@ export function getArtistAndSong(
       rightLooksLikeTheBandName &&
       !/^The\s+/i.test(left.trim());
 
+    /**
+     * 「L.A. GUNS - Magdalaine」のように左が頭字語略記＋バンド名で、右が1語の曲名のとき、
+     * 下の songFirst… 条件（複語左・単語右で右が長い）に掛かり誤スワップするのを防ぐ。
+     */
+    const leftHasMultiInitialAbbrevPattern = /\b[A-Z]\.[A-Z]\./.test(left.trim());
+
     // 5) 「Too Shy - Kajagoogoo」型: 左が複語の曲名・右が1語のバンド名（右のほうが長い）。強アーティスト候補でないときだけ。
     const songFirstMultiWordLeftSingleWordRightLonger =
       !channelLooksLikeLeft &&
@@ -1154,7 +1160,8 @@ export function getArtistAndSong(
       left.length < right.length &&
       alnumCompact(right).length > alnumCompact(left).length &&
       !leftLooksLikeStrongArtistCandidate &&
-      !bothSingleWordLatinArtistLike;
+      !bothSingleWordLatinArtistLike &&
+      !leftHasMultiInitialAbbrevPattern;
 
     /**
      * 左だけが「A & B」デュオ表記のときは「アーティスト - 曲」が典型（Daryl Hall & John Oates - Maneater）。

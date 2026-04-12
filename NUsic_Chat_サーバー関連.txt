@@ -10,6 +10,10 @@ npm run dev
 
 mail@musicai.jp
 _Rry/K:]b1j:
+
+
+Youtube Music AI Chat
+AIzaSyBRMcOWJ3blta_QcntsryC3yC_3g40L1gE
 ----------------------------------------------------------------------------
 
 API キー・トークンはすべて .env.local にのみ記載すること。
