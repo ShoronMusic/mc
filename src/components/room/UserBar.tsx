@@ -368,7 +368,11 @@ export default function UserBar({
                   </span>
                 )}
                 {isRoomOwner && (
-                  <span className="shrink-0 text-amber-400" title="チャットオーナー" aria-label="チャットオーナー">
+                  <span
+                    className="hidden shrink-0 text-amber-400 lg:inline"
+                    title="チャットオーナー"
+                    aria-label="チャットオーナー"
+                  >
                     👑
                   </span>
                 )}
@@ -574,7 +578,11 @@ export default function UserBar({
             onParticipantPublicProfileClick={onParticipantPublicProfileClick}
           />
           {currentOwnerClientId && poster.clientId === currentOwnerClientId ? (
-            <span className="shrink-0 text-amber-400" title="チャットオーナー" aria-label="チャットオーナー">
+            <span
+              className="hidden shrink-0 text-amber-400 lg:inline"
+              title="チャットオーナー"
+              aria-label="チャットオーナー"
+            >
               👑
             </span>
           ) : null}
@@ -743,7 +751,11 @@ export default function UserBar({
                         </span>
                       )}
                       {isRoomOwner && (
-                        <span className="text-amber-400" title="チャットオーナー" aria-label="チャットオーナー">
+                        <span
+                          className="hidden text-amber-400 lg:inline"
+                          title="チャットオーナー"
+                          aria-label="チャットオーナー"
+                        >
                           👑
                         </span>
                       )}

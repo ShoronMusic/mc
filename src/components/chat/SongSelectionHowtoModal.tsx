@@ -65,7 +65,7 @@ export function SongSelectionHowtoModal({ open, onClose }: Props) {
             <>
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-gray-700 pb-2">
                 <h2 id="song-howto-detail-title" className="text-base font-semibold text-white">
-                  {isLg ? '選曲のしかた（詳しい説明）' : '選曲のしかた（スマホ・詳しい説明）'}
+                  {isLg ? '選曲方法（詳しい説明）' : '選曲方法（スマホ・詳しい説明）'}
                 </h2>
                 <div className="flex flex-wrap items-center gap-2">
                   <button
@@ -95,7 +95,7 @@ export function SongSelectionHowtoModal({ open, onClose }: Props) {
             <>
               <div className="mb-3 flex items-center justify-between gap-2 border-b border-gray-700 pb-2">
                 <h2 id="song-howto-modal-title" className="text-base font-semibold text-white">
-                  選曲の仕方
+                  選曲方法
                 </h2>
                 <button
                   type="button"

@@ -1149,7 +1149,7 @@ export default function RoomWithoutSync({
       <div className="mb-2 shrink-0 rounded border border-amber-700 bg-amber-900/50 px-3 py-2 text-sm leading-snug text-amber-200">
         .env.local に <strong>NEXT_PUBLIC_ABLY_API_KEY</strong> を設定すると、複数ブラウザ・タブが「同じ部屋の別々の参加者」として扱われ、参加者一覧・同期再生・チャット共有が利用できます。未設定の場合は各ウィンドウが独立して動作します。
       </div>
-      <header className="mb-2 flex shrink-0 flex-row items-center justify-between gap-3 border-b border-gray-800 pb-2">
+      <header className="mb-2 flex shrink-0 flex-row items-center justify-between gap-2 border-b border-gray-800 pb-2 sm:gap-3">
         <div className="flex min-w-0 flex-1 items-center gap-2">
           <Image
             src="/music_ai_chat_wh.png"
@@ -1159,20 +1159,24 @@ export default function RoomWithoutSync({
             className="h-9 w-auto max-h-9 shrink-0 object-contain object-left"
             priority
           />
-          <h1 className="hidden min-w-0 flex-1 truncate text-lg font-semibold text-white sm:block">
+          <h1
+            className="min-w-0 flex-1 truncate text-base font-semibold leading-none text-white sm:text-lg"
+            title={`部屋 ${roomId || '--'}${(roomDisplayTitleCurrent || roomTitle) ? ` - ${roomDisplayTitleCurrent || roomTitle}` : ''}`}
+          >
             {`部屋 ${roomId || '--'}${(roomDisplayTitleCurrent || roomTitle) ? ` - ${roomDisplayTitleCurrent || roomTitle}` : ''}`}
           </h1>
         </div>
         {onLeave && (
-          <div className="flex shrink-0 flex-nowrap items-center justify-end gap-2">
+          <div className="flex shrink-0 flex-nowrap items-center justify-end gap-1.5 sm:gap-2">
             <button
               type="button"
               onClick={() => setSiteFeedbackOpen(true)}
               className="inline-flex items-center gap-1 text-sm text-gray-300 underline decoration-dotted underline-offset-2 hover:text-white"
               title="このサイトへのご意見"
+              aria-label="このサイトへのご意見"
             >
               <EnvelopeIcon className="h-4 w-4 shrink-0" aria-hidden />
-              ご意見
+              <span className="hidden lg:inline">ご意見</span>
             </button>
             <button
               type="button"
@@ -1180,7 +1184,7 @@ export default function RoomWithoutSync({
               className="rounded border border-gray-600 bg-gray-800 px-4 py-2 text-sm font-medium text-gray-200 hover:bg-gray-700 hover:text-white"
               aria-label="部屋を退室して最初の画面に戻る"
             >
-              退室する
+              退室
             </button>
           </div>
         )}

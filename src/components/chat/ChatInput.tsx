@@ -571,7 +571,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
             onClick={(e) => e.stopPropagation()}
           >
             <h2 id="chat-input-usage-guide-title" className="mb-3 text-sm font-semibold text-white">
-              発言欄の使い方
+              発言方法
             </h2>
             <ul className="list-disc space-y-2 pl-4 text-sm leading-relaxed text-gray-300">
               <li>
@@ -643,9 +643,8 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
       )}
 
       <div className="rounded-lg border border-gray-700 bg-gray-900/50 p-2">
-        {/* モバイル: 入力の下に 送信 | 選曲・発言欄（縦）| 検索・候補。PC: 入力とボタン列を横並び */}
-        <div className="flex flex-col gap-2 lg:flex-row lg:items-stretch lg:gap-2">
-          <div className="min-w-0 lg:flex-1">
+        <div className="flex w-full flex-row flex-wrap items-stretch gap-2">
+          <div className="min-w-0 flex-1 basis-[min(100%,12rem)]">
             <input
               ref={inputRef}
               type="text"
@@ -667,62 +666,56 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
               aria-label="チャット入力"
             />
           </div>
-          <div className="flex w-full flex-wrap items-stretch gap-x-2 gap-y-2 lg:w-auto lg:shrink-0">
+          <button
+            type="button"
+            onClick={handleSubmit}
+            title="YouTubeのURLならプレイヤーに反映。それ以外はチャットに表示"
+            className="box-border flex h-[3.75rem] shrink-0 items-center justify-center rounded bg-blue-600 px-4 text-sm font-medium text-white hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50"
+            disabled={!value.trim()}
+          >
+            送信
+          </button>
+          <div className="flex h-[3.75rem] shrink-0 flex-col items-stretch justify-center gap-0.5 py-0.5">
             <button
               type="button"
-              onClick={handleSubmit}
-              title="YouTubeのURLならプレイヤーに反映。それ以外はチャットに表示"
-              className="box-border flex h-[3.75rem] shrink-0 items-center justify-center rounded bg-blue-600 px-4 text-sm font-medium text-white hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50"
-              disabled={!value.trim()}
+              onClick={() => setSongHowtoOpen(true)}
+              className="inline-flex min-h-0 flex-1 items-center gap-0.5 text-left text-[10px] leading-tight text-sky-200/90 hover:text-sky-100"
+              aria-haspopup="dialog"
+              aria-expanded={songHowtoOpen}
+              aria-label="選曲方法（説明を表示）"
+              title="選曲方法"
             >
-              送信
+              <MusicalNoteIcon className="h-3 w-3 shrink-0" aria-hidden />
+              <span className="underline decoration-dotted underline-offset-2">選曲方法</span>
             </button>
-            <div className="flex h-[3.75rem] w-max shrink-0 flex-col">
-              <div className="flex min-h-0 flex-1 items-center justify-start">
-                <button
-                  type="button"
-                  onClick={() => setSongHowtoOpen(true)}
-                  className="inline-flex items-center gap-0.5 text-left text-[10px] leading-tight text-sky-200/90 hover:text-sky-100"
-                  aria-haspopup="dialog"
-                  aria-expanded={songHowtoOpen}
-                  aria-label="選曲の仕方（説明を表示）"
-                  title="選曲の仕方"
-                >
-                  <MusicalNoteIcon className="h-3 w-3 shrink-0" aria-hidden />
-                  <span className="underline decoration-dotted underline-offset-2">選曲の仕方</span>
-                </button>
-              </div>
-              <div className="flex min-h-0 flex-1 items-center justify-start">
-                <button
-                  type="button"
-                  onClick={() => setUsageGuideOpen(true)}
-                  className="inline-flex items-center gap-0.5 text-left text-[10px] leading-tight text-amber-200/90 hover:text-amber-100"
-                  aria-haspopup="dialog"
-                  aria-expanded={usageGuideOpen}
-                  aria-label="発言欄の使い方（説明を表示）"
-                  title="発言欄の使い方"
-                >
-                  <QuestionMarkCircleIcon className="h-3 w-3 shrink-0" aria-hidden />
-                  <span className="underline decoration-dotted underline-offset-2">発言欄の使い方</span>
-                </button>
-              </div>
-            </div>
-            {onVideoUrl && isYoutubeKeywordSearchEnabled() ? (
-              <button
-                type="button"
-                onClick={handleSearchAndPlay}
-                title="キーワードでYouTube検索し、結果一覧を表示（URLを入れた場合は送信と同じくプレイヤーへ）"
-                className="box-border flex h-[3.75rem] shrink-0 items-center justify-center rounded border border-blue-500/60 bg-blue-900/20 px-4 text-sm font-medium text-blue-200 hover:bg-blue-900/35 disabled:opacity-50"
-                disabled={!value.trim() || searching}
-                aria-label="曲名・キーワードで検索"
-              >
-                {searching ? '…' : '検索'}
-              </button>
-            ) : null}
-            {trailingSlot != null && trailingSlot !== false ? (
-              <div className="flex h-[3.75rem] min-w-0 shrink-0 items-center">{trailingSlot}</div>
-            ) : null}
+            <button
+              type="button"
+              onClick={() => setUsageGuideOpen(true)}
+              className="inline-flex min-h-0 flex-1 items-center gap-0.5 text-left text-[10px] leading-tight text-amber-200/90 hover:text-amber-100"
+              aria-haspopup="dialog"
+              aria-expanded={usageGuideOpen}
+              aria-label="発言方法（説明を表示）"
+              title="発言方法"
+            >
+              <QuestionMarkCircleIcon className="h-3 w-3 shrink-0" aria-hidden />
+              <span className="underline decoration-dotted underline-offset-2">発言方法</span>
+            </button>
           </div>
+          {onVideoUrl && isYoutubeKeywordSearchEnabled() ? (
+            <button
+              type="button"
+              onClick={handleSearchAndPlay}
+              title="キーワードでYouTube検索し、結果一覧を表示（URLを入れた場合は送信と同じくプレイヤーへ）"
+              className="box-border flex h-[3.75rem] shrink-0 items-center justify-center rounded border border-blue-500/60 bg-blue-900/20 px-4 text-sm font-medium text-blue-200 hover:bg-blue-900/35 disabled:opacity-50"
+              disabled={!value.trim() || searching}
+              aria-label="曲名・キーワードで検索"
+            >
+              {searching ? '…' : '検索'}
+            </button>
+          ) : null}
+          {trailingSlot != null && trailingSlot !== false ? (
+            <div className="flex h-[3.75rem] min-w-0 shrink-0 items-center">{trailingSlot}</div>
+          ) : null}
         </div>
       </div>
     </>

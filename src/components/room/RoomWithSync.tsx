@@ -3711,7 +3711,7 @@ export default function RoomWithSync({
 
   return (
     <main className="flex h-screen flex-col overflow-hidden bg-gray-950 p-3">
-      <header className="mb-2 flex shrink-0 flex-row items-center justify-between gap-3 border-b border-gray-800 pb-2">
+      <header className="mb-2 flex shrink-0 flex-row items-center justify-between gap-2 border-b border-gray-800 pb-2 sm:gap-3">
         <div className="flex min-w-0 flex-1 items-center gap-2">
           <Image
             src="/music_ai_chat_wh.png"
@@ -3721,12 +3721,15 @@ export default function RoomWithSync({
             className="h-9 w-auto max-h-9 shrink-0 object-contain object-left"
             priority
           />
-          <h1 className="hidden min-w-0 flex-1 truncate text-lg font-semibold text-white sm:block">
+          <h1
+            className="min-w-0 flex-1 truncate text-base font-semibold leading-none text-white sm:text-lg"
+            title={`部屋 ${roomId || '--'}${(roomDisplayTitleCurrent || roomTitle) ? ` - ${roomDisplayTitleCurrent || roomTitle}` : ''}`}
+          >
             {`部屋 ${roomId || '--'}${(roomDisplayTitleCurrent || roomTitle) ? ` - ${roomDisplayTitleCurrent || roomTitle}` : ''}`}
           </h1>
         </div>
         {onLeave && (
-          <div className="flex shrink-0 flex-nowrap items-center justify-end gap-2">
+          <div className="flex shrink-0 flex-nowrap items-center justify-end gap-1.5 sm:gap-2">
             {!isGuest && (
               <>
                 <button
@@ -3735,8 +3738,9 @@ export default function RoomWithSync({
                     setPolicyTab('terms');
                     setTermsModalOpen(true);
                   }}
-                  className="text-sm text-gray-300 underline decoration-dotted underline-offset-2 hover:text-white"
+                  className="shrink-0 whitespace-nowrap text-xs text-gray-300 underline decoration-dotted underline-offset-2 hover:text-white sm:text-sm"
                   title="利用規約"
+                  aria-label="利用規約"
                 >
                   利用規約
                 </button>
@@ -3745,9 +3749,10 @@ export default function RoomWithSync({
                   onClick={() => setSiteFeedbackOpen(true)}
                   className="inline-flex items-center gap-1 text-sm text-gray-300 underline decoration-dotted underline-offset-2 hover:text-white"
                   title="このサイトへのご意見"
+                  aria-label="このサイトへのご意見"
                 >
                   <EnvelopeIcon className="h-4 w-4 shrink-0" aria-hidden />
-                  ご意見
+                  <span className="hidden lg:inline">ご意見</span>
                 </button>
                 <button
                   type="button"
@@ -3769,9 +3774,10 @@ export default function RoomWithSync({
                 onClick={() => setSiteFeedbackOpen(true)}
                 className="inline-flex items-center gap-1 text-sm text-gray-300 underline decoration-dotted underline-offset-2 hover:text-white"
                 title="このサイトへのご意見"
+                aria-label="このサイトへのご意見"
               >
                 <EnvelopeIcon className="h-4 w-4 shrink-0" aria-hidden />
-                ご意見
+                <span className="hidden lg:inline">ご意見</span>
               </button>
             )}
             <button
@@ -3780,7 +3786,7 @@ export default function RoomWithSync({
               className="rounded border border-gray-600 bg-gray-800 px-4 py-2 text-sm font-medium text-gray-200 hover:bg-gray-700 hover:text-white"
               aria-label="部屋を退室して最初の画面に戻る"
             >
-              退室する
+              退室
             </button>
           </div>
         )}
