@@ -69,6 +69,14 @@ export default function TermsPage({ searchParams }: TermsPageProps) {
         <h1 className="text-2xl font-bold text-white">利用規約（要約）</h1>
         <p className="mt-1 text-xs text-gray-500">
           本ページの内容は、運営上の必要に応じて予告なく更新されることがあります。
+          見出しの「要約」は読みやすさのための整理であり、条件の詳細は以下の各条および
+          <Link
+            href={withPolicyModalQuery('/guide', isModal)}
+            className="text-amber-400/90 underline-offset-2 hover:underline"
+          >
+            ご利用上の注意
+          </Link>
+          にも含まれる場合があります。
         </p>
         <p className="mt-2 text-gray-500">
           最終更新目安：掲載日時点。詳しいマナー・AI・楽曲・安全については{' '}
