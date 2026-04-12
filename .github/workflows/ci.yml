@@ -19,4 +19,8 @@ jobs:
       - run: npm run lint
       - run: npx tsc --noEmit
       - run: npm run test
-      - run: npm run build
+      - name: Build
+        run: npm run build
+        env:
+          NODE_OPTIONS: '--max-old-space-size=6144'
+          NEXT_TELEMETRY_DISABLED: '1'

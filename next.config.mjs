@@ -1,5 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // CI / Vercel では npm run lint を別途実行するため、next build 内の ESLint を省略してメモリ・時間を節約
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
   async redirects() {
     return [{ source: '/favicon.ico', destination: '/musicAI_icon.png', permanent: false }];
   },
