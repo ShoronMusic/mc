@@ -1,7 +1,12 @@
 /**
- * 発言欄の YouTube キーワード検索・検索結果モーダル・候補リスト連携をまとめてオフにする。
- * `NEXT_PUBLIC_YOUTUBE_KEYWORD_SEARCH_DISABLED=1` で無効（未設定・0 なら従来どおり有効）。
+ * 発言欄の YouTube キーワード検索・検索結果モーダル・候補リスト連携。
+ * 既定はオフ（本番で env 未設定でも検索 UI を出さない）。
+ * - 有効にする: `NEXT_PUBLIC_YOUTUBE_KEYWORD_SEARCH_ENABLED=1`
+ * - 旧方式（無効を明示）: `NEXT_PUBLIC_YOUTUBE_KEYWORD_SEARCH_DISABLED=1` は引き続き最優先でオフ
+ * - 後方互換: `NEXT_PUBLIC_YOUTUBE_KEYWORD_SEARCH_DISABLED=0` のときはオン扱い
  */
 export function isYoutubeKeywordSearchEnabled(): boolean {
-  return process.env.NEXT_PUBLIC_YOUTUBE_KEYWORD_SEARCH_DISABLED !== '1';
+  if (process.env.NEXT_PUBLIC_YOUTUBE_KEYWORD_SEARCH_DISABLED === '1') return false;
+  if (process.env.NEXT_PUBLIC_YOUTUBE_KEYWORD_SEARCH_DISABLED === '0') return true;
+  return process.env.NEXT_PUBLIC_YOUTUBE_KEYWORD_SEARCH_ENABLED === '1';
 }
