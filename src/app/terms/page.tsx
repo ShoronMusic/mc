@@ -67,6 +67,9 @@ export default function TermsPage({ searchParams }: TermsPageProps) {
 
       <main className="mx-auto max-w-3xl px-4 py-8 text-sm leading-relaxed text-gray-300">
         <h1 className="text-2xl font-bold text-white">利用規約（要約）</h1>
+        <p className="mt-1 text-xs text-gray-500">
+          本ページの内容は、運営上の必要に応じて予告なく更新されることがあります。
+        </p>
         <p className="mt-2 text-gray-500">
           最終更新目安：掲載日時点。詳しいマナー・AI・楽曲・安全については{' '}
           <Link
