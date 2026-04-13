@@ -12,6 +12,7 @@
 | 領域 | パス | 説明 |
 |------|------|------|
 | Gemini プロンプト | `src/lib/gemini.ts` | チャット返答、tidbit、選曲クエリ抽出、曲解説、スタイル分類 |
+| 生成モデル ID（料金検証・Gemma 等） | `src/lib/gemini-model-routing.ts`・`src/lib/gemini-gemma-host.ts` | 既定は Flash（`gemini-2.5-flash`）。**全体を差し替え**: `GEMINI_GENERATION_MODEL`。**一部だけセカンダリ**（例: Gemma）: `GEMINI_MODEL_SECONDARY` + カンマ区切り `GEMINI_USE_SECONDARY_FOR`。hosted **Gemma** は consumer API が `thinkingConfig` を拒否することがあるため付与せず、英語思考の混入は `sanitizeGemmaVisibleOutputText` とプロンプトで抑える。`/api/ai/status` の `geminiGeneration`・`GEMINI_LOG_USAGE`・`gemini_usage_logs.model` も実モデル ID |
 | 生成文ポリシー | `src/lib/ai-output-policy.ts` | 根拠なしチャート/バズ等の**再生成判定**（変更時は単体テスト必須） |
 | 曲解説パック API | `src/app/api/ai/comment-pack/route.ts` | 基本1本＋自由3本。上記ポリシーを利用。クライアントは `recentMessages`（直近 user/ai）を送れる。`COMMENT_PACK_SESSION_CONTEXT=0` で会話文脈注入オフ。開発で基本1本のみ＋選曲直後の announce 非表示は `.env.local` に `NEXT_PUBLIC_DEV_MINIMAL_SONG_AI=1` |
 | ユーザー趣向（パーソナライズ） | 手動: `user_ai_taste_summary`・`/api/user/ai-taste-summary`。自動: `user_ai_taste_auto_profile`・`POST /api/user/ai-taste-auto-refresh`・`gather-user-taste-signals.ts`・`gemini.generateUserTasteAutoProfile`。合成: `fetchUserTasteContextForChat`（`src/lib/user-ai-taste-context.ts`）→ `@` の `/api/ai/chat` | マイページで手動メモ保存＋「履歴から自動要約を更新」。SQL は `docs/supabase-setup.md` 第 14・15 章 |

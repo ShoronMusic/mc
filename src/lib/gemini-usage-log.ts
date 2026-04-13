@@ -3,8 +3,7 @@
  */
 
 import { createAdminClient } from '@/lib/supabase/admin';
-
-const MODEL = 'gemini-2.5-flash';
+import { resolveGenerationModelId } from '@/lib/gemini-model-routing';
 
 export type GeminiUsageMeta = {
   promptTokenCount?: number;
@@ -31,7 +30,7 @@ export async function persistGeminiUsageLog(
   const u = usage ?? {};
   const { error } = await admin.from('gemini_usage_logs').insert({
     context: context.slice(0, 120),
-    model: MODEL,
+    model: resolveGenerationModelId(context),
     prompt_token_count: u.promptTokenCount ?? null,
     output_token_count: u.candidatesTokenCount ?? null,
     total_token_count: u.totalTokenCount ?? null,

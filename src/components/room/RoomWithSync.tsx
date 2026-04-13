@@ -286,6 +286,8 @@ interface CandidateSong {
 const SEC_AFTER_END_BEFORE_PROMPT = 30;
 const DEFAULT_DURATION_WHEN_UNKNOWN_SEC = 240;
 const FIVE_MIN_MS = 5 * 60 * 1000;
+/** comment-pack 自由コメントの小出し間隔。60s だと frees 完了後も 1本目がさらに 60s 後になり 3本目まで極端に遅れる */
+const COMMENT_PACK_FREE_STAGGER_MS = 15_000;
 
 interface RoomWithSyncProps {
   displayName?: string;
@@ -2797,30 +2799,31 @@ export default function RoomWithSync({
       }
       const skipPackCache = options?.skipCommentPackCache === true;
       const packHint = options?.adminPlaybackDisplayHint;
-      // まず comment-pack を試し、基本コメント＋自由コメント3本をまとめて取得して小出しにする
+      const packBody = {
+        videoId: vid,
+        slots,
+        roomId,
+        jpAiUnlockEnabled: jpAiUnlockEnabledRef.current,
+        recentMessages: messages.slice(-18).map((m) => ({
+          displayName: m.displayName,
+          body: typeof m.body === 'string' ? m.body : '',
+          messageType: m.messageType ?? 'user',
+        })),
+        ...(skipPackCache ? { skipCommentPackCache: true } : {}),
+        ...(packHint?.title?.trim()
+          ? {
+              adminPlaybackDisplayHint: {
+                title: packHint.title.trim(),
+                artist_name: packHint.artist_name,
+              },
+            }
+          : {}),
+      };
+      // まず packPhase=base で基本だけ返し表示 → 続けて frees で自由3本（遅いモデルでも最初の解説が先に出る）
       fetch('/api/ai/comment-pack', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          videoId: vid,
-          slots,
-          roomId,
-          jpAiUnlockEnabled: jpAiUnlockEnabledRef.current,
-          recentMessages: messages.slice(-18).map((m) => ({
-            displayName: m.displayName,
-            body: typeof m.body === 'string' ? m.body : '',
-            messageType: m.messageType ?? 'user',
-          })),
-          ...(skipPackCache ? { skipCommentPackCache: true } : {}),
-          ...(packHint?.title?.trim()
-            ? {
-                adminPlaybackDisplayHint: {
-                  title: packHint.title.trim(),
-                  artist_name: packHint.artist_name,
-                },
-              }
-            : {}),
-        }),
+        body: JSON.stringify({ ...packBody, packPhase: 'base' }),
       })
         .then((r) => (r.ok ? r.json() : null))
         .then((pack) => {
@@ -2841,6 +2844,111 @@ export default function RoomWithSync({
               addSystemMessage(SYSTEM_MESSAGE_JP_NO_COMMENTARY);
             }
             return null;
+          }
+          if (
+            pack?.packPhase === 'base' &&
+            typeof pack?.baseComment === 'string' &&
+            pack.baseComment.trim()
+          ) {
+            suppressTidbitRef.current = true;
+            commentPackVideoIdRef.current = vid;
+            const packPrefixPhase = pack?.source === 'library' ? '[DB] ' : '[NEW] ';
+            const idsPhase: (string | null | undefined)[] = Array.isArray(pack.tidbitIds)
+              ? pack.tidbitIds
+              : [];
+            const tid0Phase = parseTidbitIdFromPack(idsPhase[0]);
+            const modIntroPhase = formatMusic8ModeratorIntroPrefix(
+              canRejectTidbit,
+              pack.music8ModeratorHints,
+            );
+            addAiMessage(packPrefixPhase + modIntroPhase + pack.baseComment.trim(), {
+              allowWhenAiStopped: true,
+              tidbitId: tid0Phase,
+              songId: pack.songId ?? null,
+              videoId: vid,
+              aiSource: 'tidbit',
+            });
+            touchActivity();
+            tidbitPreferMainArtistLeftRef.current = 2;
+
+            return fetch('/api/ai/comment-pack', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                ...packBody,
+                packPhase: 'frees',
+                baseComment: pack.baseComment.trim(),
+              }),
+            })
+              .then((r2) => {
+                if (!r2.ok) {
+                  suppressTidbitRef.current = false;
+                  return null;
+                }
+                return r2.json();
+              })
+              .then((pack2) => {
+                if (!pack2 || videoIdRef.current !== vid) return null;
+                if (pack2.error) {
+                  suppressTidbitRef.current = false;
+                  return null;
+                }
+                if (pack2.skipAiCommentary) {
+                  suppressTidbitRef.current = false;
+                  return null;
+                }
+                const freeArr2: string[] = Array.isArray(pack2.freeComments)
+                  ? pack2.freeComments.map((c: unknown) => (typeof c === 'string' ? c : ''))
+                  : [];
+                while (freeArr2.length < COMMENT_PACK_MAX_FREE_COMMENTS) freeArr2.push('');
+                const packPrefix2 = pack2?.source === 'library' ? '[DB] ' : '[NEW] ';
+                const ids2: (string | null | undefined)[] = Array.isArray(pack2.tidbitIds)
+                  ? pack2.tidbitIds
+                  : [];
+                const freeTidbitIdsRaw2: unknown[] = Array.isArray(pack2.freeCommentTidbitIds)
+                  ? pack2.freeCommentTidbitIds
+                  : [];
+
+                if (freeCommentTimeoutsRef.current.length > 0) {
+                  freeCommentTimeoutsRef.current.forEach((t) => clearTimeout(t));
+                  freeCommentTimeoutsRef.current = [];
+                }
+
+                const pendingFreeBodies2 = freeArr2
+                  .slice(0, COMMENT_PACK_MAX_FREE_COMMENTS)
+                  .map((c) => c.trim())
+                  .filter(Boolean);
+                suppressTidbitRef.current =
+                  equivalentBaseOnlySlots(commentPackSlotsRef.current) ||
+                  pendingFreeBodies2.length > 0;
+
+                let shownIdx2 = 0;
+                for (let i = 0; i < COMMENT_PACK_MAX_FREE_COMMENTS; i++) {
+                  const c = freeArr2[i]?.trim() ?? '';
+                  if (!c) continue;
+                  const delayMs = (shownIdx2 + 1) * COMMENT_PACK_FREE_STAGGER_MS;
+                  shownIdx2 += 1;
+                  const tidN =
+                    parseTidbitIdFromPack(freeTidbitIdsRaw2[i]) ??
+                    parseTidbitIdFromPack(ids2[i + 1]);
+                  const timer = setTimeout(() => {
+                    if (videoIdRef.current !== vid) return;
+                    addAiMessage(packPrefix2 + c, {
+                      allowWhenAiStopped: true,
+                      tidbitId: tidN,
+                      songId: pack2.songId ?? null,
+                      videoId: vid,
+                      aiSource: 'tidbit',
+                    });
+                    touchActivity();
+                  }, delayMs);
+                  freeCommentTimeoutsRef.current.push(timer);
+                }
+                return null;
+              })
+              .catch(() => {
+                suppressTidbitRef.current = false;
+              });
           }
           const baseStr = typeof pack?.baseComment === 'string' ? pack.baseComment.trim() : '';
           const freeArr: string[] = Array.isArray(pack.freeComments)
@@ -2890,14 +2998,15 @@ export default function RoomWithSync({
             for (let i = 0; i < COMMENT_PACK_MAX_FREE_COMMENTS; i++) {
               const c = freeArr[i]?.trim() ?? '';
               if (!c) continue;
-              const delayMs = (shownIdx + 1) * 60 * 1000;
+              const delayMs = (shownIdx + 1) * COMMENT_PACK_FREE_STAGGER_MS;
               shownIdx += 1;
               const tidN =
                 parseTidbitIdFromPack(freeTidbitIdsRaw[i]) ??
                 parseTidbitIdFromPack(ids[i + 1]);
               const timer = setTimeout(() => {
                 if (videoIdRef.current !== vid) return;
-                if (nextPromptShownForVideoIdRef.current === vid) return;
+                /* 次曲案内後も同一 videoId なら出す。ここで nextPromptShown を見ると、
+                   comment-pack が遅いとき曲終了→「次の曲」で自由3本が全スキップされる */
                 addAiMessage(packPrefix + c, {
                   allowWhenAiStopped: true,
                   tidbitId: tidN,

@@ -6,7 +6,9 @@ import {
   AI_QUESTION_GUARD_CLASSIFIER_INSTRUCTION,
   buildAiQuestionGuardUserPayload,
 } from '@/lib/ai-question-guard-prompt';
+import { extractTextFromGenerateContentResponse } from '@/lib/gemini-gemma-host';
 import { getGeminiModel, logGeminiUsage } from '@/lib/gemini';
+import { resolveGenerationModelId } from '@/lib/gemini-model-routing';
 import { persistGeminiUsageLog } from '@/lib/gemini-usage-log';
 
 export type RecentGuardMessage = {
@@ -49,7 +51,7 @@ export async function classifyMusicRelatedAiQuestionGemini(
   if (process.env.AI_QUESTION_GUARD_GEMINI === '0') {
     return null;
   }
-  const model = getGeminiModel();
+  const model = getGeminiModel('question_guard_classify');
   if (!model) return null;
 
   const recentLines = toRecentLines(recentMessages);
@@ -57,6 +59,7 @@ export async function classifyMusicRelatedAiQuestionGemini(
   const prompt = `${AI_QUESTION_GUARD_CLASSIFIER_INSTRUCTION}\n\n---\n${userPayload}`;
 
   try {
+    const guardModelId = resolveGenerationModelId('question_guard_classify');
     const result = await model.generateContent({
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
       generationConfig: {
@@ -69,7 +72,7 @@ export async function classifyMusicRelatedAiQuestionGemini(
       roomId: meta?.roomId ?? null,
       videoId: null,
     });
-    const text = result.response.text();
+    const text = extractTextFromGenerateContentResponse(result.response, guardModelId);
     const parsed = parseQuestionGuardModelJson(text);
     return parsed;
   } catch (e) {

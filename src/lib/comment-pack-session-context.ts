@@ -4,7 +4,9 @@
  */
 
 import type { GenerativeModel } from '@google/generative-ai';
+import { extractTextFromGenerateContentResponse } from '@/lib/gemini-gemma-host';
 import { logGeminiUsage } from '@/lib/gemini';
+import { resolveGenerationModelId } from '@/lib/gemini-model-routing';
 import { persistGeminiUsageLog } from '@/lib/gemini-usage-log';
 
 export type CommentPackRecentMessage = {
@@ -101,6 +103,7 @@ ${fixed.slice(0, 1200)}
 つなぎの文だけを出力してください。前置きや見出しは禁止。`;
 
   try {
+    const bridgeModelId = resolveGenerationModelId('comment_pack_session_bridge');
     const result = await model.generateContent({
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
       generationConfig: {
@@ -113,8 +116,10 @@ ${fixed.slice(0, 1200)}
       videoId: usageMeta.videoId,
       roomId: usageMeta.roomId ?? null,
     });
-    const text = result.response.text()?.trim() ?? '';
+    const text = extractTextFromGenerateContentResponse(result.response, bridgeModelId);
     if (!text) return null;
+    /** Gemma が英語メタだけ返したときはつなぎを出さない */
+    if (!/[\u3040-\u30FF\u4E00-\u9FFF]/.test(text)) return null;
     const oneLine = text.replace(/\s+/g, ' ').trim();
     return oneLine.length > 200 ? oneLine.slice(0, 197) + '…' : oneLine;
   } catch (e) {

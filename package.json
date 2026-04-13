@@ -32,7 +32,9 @@
     "test:music8-musicaichat": "tsx src/lib/music8-musicaichat.unit-test.ts",
     "test:music8-moderator-prefix": "tsx src/lib/music8-moderator-chat-prefix.unit-test.ts",
     "test:promo-metadata": "tsx src/lib/format-song-display-promo-metadata.unit-test.ts",
-    "test": "npm run test:mb && npm run test:policy && npm run test:format && npm run test:ai-question-guard && npm run test:turn-order-clarification && npm run test:question-guard-classify && npm run test:comment-pack-slots && npm run test:comment-pack-session && npm run test:youtube-pv && npm run test:chat-rate && npm run test:yt-search-rate && npm run test:mb-facts && npm run test:ai-guard-objection && npm run test:chat-conversation-snapshot && npm run test:selection-round && npm run test:my-list-suggest && npm run test:join-greeting && npm run test:user-taste-context && npm run test:user-public-profile && npm run test:music8-musicaichat && npm run test:music8-moderator-prefix && npm run test:promo-metadata",
+    "test:gemini-model-routing": "tsx src/lib/gemini-model-routing.unit-test.ts",
+    "test:gemini-gemma-host": "tsx src/lib/gemini-gemma-host.unit-test.ts",
+    "test": "npm run test:mb && npm run test:policy && npm run test:format && npm run test:ai-question-guard && npm run test:turn-order-clarification && npm run test:question-guard-classify && npm run test:comment-pack-slots && npm run test:comment-pack-session && npm run test:youtube-pv && npm run test:chat-rate && npm run test:yt-search-rate && npm run test:mb-facts && npm run test:ai-guard-objection && npm run test:chat-conversation-snapshot && npm run test:selection-round && npm run test:my-list-suggest && npm run test:join-greeting && npm run test:user-taste-context && npm run test:user-public-profile && npm run test:music8-musicaichat && npm run test:music8-moderator-prefix && npm run test:promo-metadata && npm run test:gemini-model-routing && npm run test:gemini-gemma-host",
     "verify:utf8": "node scripts/verify-source-utf8.mjs",
     "verify:utf8:fix": "node scripts/verify-source-utf8.mjs --fix",
     "validate": "npm run verify:utf8 && npm run lint && npx tsc --noEmit && npm run test"
