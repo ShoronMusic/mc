@@ -479,6 +479,65 @@ export function getArtistDisplayString(artistPart: string): string {
   return uniq.join(', ') || artistPart.trim();
 }
 
+/**
+ * AI 曲解説（comment-pack / commentary）向けに、アーティストラベルと曲名ラベルを整える。
+ * 曲名側に残った「… ft./feat. 客演者」をアーティスト表示へ寄せ、「〇〇の『曲』」と英語メタの対応を崩しにくくする。
+ */
+export function buildAiCommentaryPromptLabels(input: {
+  artistDisplay: string | null | undefined;
+  artist: string | null | undefined;
+  authorName: string | null | undefined;
+  song: string | null | undefined;
+  titleFallback: string;
+}): { artistLabel: string; songLabel: string } {
+  const songRaw =
+    (typeof input.song === 'string' ? input.song.trim() : '') ||
+    (typeof input.titleFallback === 'string' ? input.titleFallback.trim() : '') ||
+    '';
+  const baseArtist =
+    (input.artistDisplay && input.artistDisplay.trim()) ||
+    (input.artist && input.artist.trim()) ||
+    (input.authorName && input.authorName.trim()) ||
+    '';
+
+  const tailFeat = songRaw.match(
+    /^(.+?)\s+(?:ft\.?|feat\.?|fet\.?|featuring)\s+(.+)$/i,
+  );
+  if (!tailFeat) {
+    return {
+      artistLabel: baseArtist,
+      songLabel: songRaw,
+    };
+  }
+  const titlePart = (tailFeat[1] ?? '').trim();
+  let featPart = (tailFeat[2] ?? '').trim();
+  featPart = featPart
+    .replace(/\s*\((?:Lyrics|Lyric Video|Official[^)]*)\)\s*$/i, '')
+    .trim();
+  if (!titlePart || !featPart) {
+    return {
+      artistLabel: baseArtist,
+      songLabel: songRaw,
+    };
+  }
+
+  const d = baseArtist.toLowerCase();
+  const f = featPart.toLowerCase();
+  if (f && d.includes(f)) {
+    return {
+      artistLabel: baseArtist,
+      songLabel: titlePart,
+    };
+  }
+
+  const combined = baseArtist ? `${baseArtist}, ${featPart}` : featPart;
+  const artistLabel = getArtistDisplayString(combined) || combined;
+  return {
+    artistLabel,
+    songLabel: titlePart,
+  };
+}
+
 /** YouTube 概要の日付・公開メタ行が「アーティスト - 曲名」と誤爆しないよう除外する */
 function isYoutubeDescriptionMetadataLine(line: string): boolean {
   const s = line.trim();

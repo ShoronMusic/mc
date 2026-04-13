@@ -4,6 +4,7 @@
  */
 import assert from 'node:assert/strict';
 import {
+  buildAiCommentaryPromptLabels,
   cleanTitle,
   getAmbiguousTitleSegmentsForMusicBrainz,
   getArtistAndSong,
@@ -291,6 +292,31 @@ assert.equal(isSupergroupByManualHints('Traveling Wilburys'), true);
   );
   assert.equal(r.artistDisplay, 'Linkin Park X Steve Aoki');
   assert.ok(r.song.includes('A Light That Never Comes'));
+}
+
+// AI 曲解説プロンプト: 曲名に残った ft をアーティスト側へ寄せる（「曲の『アーティスト』」誤生成の抑制）
+{
+  const r = buildAiCommentaryPromptLabels({
+    artistDisplay: 'SZA',
+    artist: 'SZA',
+    authorName: null,
+    song: 'Back Together ft Tame Impala',
+    titleFallback: 'SZA - Back Together ft Tame Impala (Lyrics)',
+  });
+  assert.equal(r.songLabel, 'Back Together');
+  assert.ok(/SZA/i.test(r.artistLabel));
+  assert.ok(/Tame Impala/i.test(r.artistLabel));
+}
+{
+  const r = buildAiCommentaryPromptLabels({
+    artistDisplay: 'SZA, Tame Impala',
+    artist: 'SZA',
+    authorName: null,
+    song: 'Back Together ft Tame Impala',
+    titleFallback: 'x',
+  });
+  assert.equal(r.songLabel, 'Back Together');
+  assert.equal(r.artistLabel, 'SZA, Tame Impala');
 }
 
 console.log('format-song-display feat separator unit tests: OK');

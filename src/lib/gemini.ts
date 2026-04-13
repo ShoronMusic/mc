@@ -468,7 +468,7 @@ export async function generateCommentary(
   /** 原文が「曲名 - アーティスト」でも、上記2行を唯一の正として文中の呼び方を固定する */
   const artistSongOrderLock =
     authorName && authorName !== title
-      ? `・文中でアーティスト名と曲名を述べるときは、必ず「${authorName}の『${title}』」の語順にすること（YouTube 原文の語順やスペルと食い違っても、直前の「アーティスト:」「曲名:」の対応を優先）。\n`
+      ? `・文中でアーティスト名と曲名を述べるときは、必ず「${authorName}の『${title}』」の語順にすること（YouTube 原文の語順やスペルと食い違っても、直前の「アーティスト:」「曲名:」の対応を優先）。\n・『』で囲むのは曲名のみ。アーティスト名（feat. や共演者を含む）を『』の内側に入れないこと。\n`
       : '';
 
   const rawTitle = usageMeta?.rawYouTubeTitle?.trim();

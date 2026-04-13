@@ -4,6 +4,7 @@ import { fetchOEmbed } from '@/lib/youtube-oembed';
 import { isJpDomesticOfficialChannelAiException } from '@/lib/jp-official-channel-exception';
 import { resolveJapaneseEconomyWithMusicBrainz } from '@/lib/resolve-japanese-economy';
 import {
+  buildAiCommentaryPromptLabels,
   colorsStudiosTrustsOembedArtistFirst,
   isAppleMusicChannelAuthor,
   isGeniusChannelAuthor,
@@ -364,7 +365,20 @@ export async function POST(request: Request) {
           }
         : {};
 
-    const artistLabelPre = artistDisplay || artist || authorName || 'Unknown Artist';
+    const aiPromptLabels = buildAiCommentaryPromptLabels({
+      artistDisplay,
+      artist,
+      authorName: authorName ?? null,
+      song,
+      titleFallback: title,
+    });
+    const artistLabelPre =
+      aiPromptLabels.artistLabel.trim() ||
+      artistDisplay ||
+      artist ||
+      authorName ||
+      'Unknown Artist';
+    const songLabelForAiPrompt = aiPromptLabels.songLabel.trim() || song || title;
     const supergroupBlockPre = await buildSupergroupPromptBlock(artistLabelPre);
     const isSupergroupArtist = supergroupBlockPre.trim().length > 0;
 
@@ -384,7 +398,7 @@ export async function POST(request: Request) {
               baseOut = await prependLibrarySessionBridge(baseOut, {
                 sessionBlock,
                 artistLabel: artistLabelPre,
-                songLabel: song || title,
+                songLabel: songLabelForAiPrompt,
                 videoId,
                 roomId,
               });
@@ -413,7 +427,7 @@ export async function POST(request: Request) {
               baseOutLib = await prependLibrarySessionBridge(baseOutLib, {
                 sessionBlock,
                 artistLabel: artistLabelPre,
-                songLabel: song || title,
+                songLabel: songLabelForAiPrompt,
                 videoId,
                 roomId,
               });
@@ -445,7 +459,7 @@ export async function POST(request: Request) {
 
     const currentYear = new Date().getFullYear();
     const artistLabel = artistLabelPre;
-    const songLabel = song || title;
+    const songLabel = songLabelForAiPrompt;
     const rawYouTubeTitle = rawYouTubeTitleForPrompt;
 
     const colorsOfficialLock = colorsStudiosTrustsOembedArtistFirst(authorName, title)
@@ -487,6 +501,7 @@ ${colorsOfficialLock}${geniusOfficialLock}${appleMusicOfficialLock}
 ${supergroupBlock}
 ・YouTube タイトルに「 • 」「 · 」のあとに続く語（TopPop、番組名など）が付いていても、それは**曲名の一部ではない**。【曲名】は「${songLabel}」のみとし、番組名を曲名や『』の中に含めないこと。
 ・絶対禁止: 「${songLabel}」をアーティスト名のように扱い、「${artistLabel}」を曲名のように扱うこと（例:「${songLabel}の代表曲『${artistLabel}』」は誤り。正しくは「${artistLabel}の『${songLabel}』」）。
+・禁止: 【曲名】を「の」の前に、【アーティスト】を全角かぎかっこ『』の内側に入れる書き方（例:「Back Togetherの『SZA ft. Tame Impala』は〜」）。『』で囲むのは【曲名】${songLabel}のみ。
 ・「〜の代表曲」は必ず アーティスト → 曲 の順で書く（${artistLabel} の代表曲として『${songLabel}』、など）。
 ・アーティスト名と曲名を入れ替えたり、別の架空の曲として語らないこと。
 ・タイトル・チャンネル名と矛盾するリリース年・アルバム名・編成・未来の年号は書かない。不明・不確実ならその一句を省くか「〜として知られる」など弱い表現にとどめる。

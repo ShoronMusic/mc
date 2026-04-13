@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { fetchOEmbed } from '@/lib/youtube-oembed';
 import {
+  buildAiCommentaryPromptLabels,
   formatArtistTitle,
   shouldSkipAiCommentaryForPromotionalOrProseMetadata,
   shouldSkipAiCommentaryForUncertainArtistResolution,
@@ -167,12 +168,22 @@ export async function POST(request: Request) {
       }
     }
 
-    const artistLabel = artistDisplay ?? artist ?? authorName ?? undefined;
+    const aiPromptLabels = buildAiCommentaryPromptLabels({
+      artistDisplay,
+      artist,
+      authorName,
+      song,
+      titleFallback: title,
+    });
+    const artistLabel =
+      aiPromptLabels.artistLabel.trim() ||
+      (artistDisplay ?? artist ?? authorName ?? undefined);
+    const commentarySongLabel = aiPromptLabels.songLabel.trim() || song || title;
     const supergroupHint =
       artistLabel && artistLabel.trim().length > 0
         ? await buildSupergroupPromptBlock(artistLabel)
         : '';
-    const text = await generateCommentary(song ?? title, artistLabel, {
+    const text = await generateCommentary(commentarySongLabel, artistLabel, {
       videoId,
       rawYouTubeTitle,
       supergroupHintText: supergroupHint || null,
