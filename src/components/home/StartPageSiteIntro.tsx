@@ -9,10 +9,19 @@ import { createClient, isSupabaseConfigured } from '@/lib/supabase/client';
  * 未ログイン・ゲスト未確定のときだけサービス説明とイメージを表示する。
  * ログイン後やゲスト参加確定後は TopPageAuthBar と同様に非表示。
  */
-export function StartPageSiteIntro() {
+interface StartPageSiteIntroProps {
+  /** 同意画面などで未ログイン判定をスキップして常時表示する */
+  forceShow?: boolean;
+}
+
+export function StartPageSiteIntro({ forceShow = false }: StartPageSiteIntroProps) {
   const [show, setShow] = useState<boolean | null>(null);
 
   useEffect(() => {
+    if (forceShow) {
+      setShow(true);
+      return;
+    }
     if (typeof window === 'undefined') return;
     if (sessionStorage.getItem(GUEST_STORAGE_KEY)) {
       setShow(false);
@@ -26,16 +35,27 @@ export function StartPageSiteIntro() {
     void supabase.auth.getSession().then(({ data: { session } }) => {
       setShow(!session?.user);
     });
-  }, []);
+  }, [forceShow]);
 
   if (show !== true) return null;
 
   return (
     <>
       <h1 className="mb-2 text-center text-xl font-bold text-white">洋楽AIチャット</h1>
-      <p className="mb-4 text-center text-sm leading-relaxed text-gray-300">
-        YouTubeの曲を参加者みんなで同じタイミングで聴きながら、チャットで交流する洋楽サロンです。AIの大きな役割は、順番に選曲していく進行のサポートと、選ばれた曲の解説です。おひとりでも解説で楽しめ、音楽のことなら「@」の質問にも応じます。まだ未熟なところもありますが、一緒に洋楽を楽しむ時間に少しでも役立てば──という試みのサービスです。
-      </p>
+      <div className="mb-4 rounded-lg border border-gray-700 bg-gray-900/40 p-3 text-sm text-gray-300">
+        <p className="mb-2 leading-relaxed">
+          YouTubeの曲を参加者みんなで同じタイミングで聴きながら、チャットで交流できる洋楽サロンです。
+        </p>
+        <ul className="mb-2 list-disc space-y-1 pl-5 leading-relaxed">
+          <li>みんなでYouTubeを同時視聴しながらチャットで会話</li>
+          <li>曲を順番に選ぶときにAIが進行をサポート</li>
+          <li>選曲した曲をAIが解説</li>
+          <li>音楽に関する「@」質問にAIが回答</li>
+        </ul>
+        <p className="leading-relaxed text-gray-400">
+          仲間と曲を共有しながら交流するのもよし！ひとりで解説や質問を通して理解を深めるのもよし！洋楽をより楽しむためのサービスです。
+        </p>
+      </div>
       <div className="mb-6 space-y-5">
         <figure className="space-y-1.5">
           <Image

@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { GuideFullNotice } from '@/components/guide/GuideFullNotice';
 import { TermsConsentBlock } from '@/components/auth/TermsConsentBlock';
+import { StartPageSiteIntro } from '@/components/home/StartPageSiteIntro';
 import { safeInternalPath } from '@/lib/safe-next-path';
 
 export const metadata: Metadata = {
@@ -23,6 +24,9 @@ export default function ConsentPage({
           <p className="mt-1 text-center text-xs text-gray-500">ご利用にあたって</p>
         </header>
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+          <div className="mb-6 border-b border-gray-800 pb-6">
+            <StartPageSiteIntro forceShow />
+          </div>
           <GuideFullNotice />
         </div>
         <TermsConsentBlock nextPath={nextPath} />

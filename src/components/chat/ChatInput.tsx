@@ -78,6 +78,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
   const [searching, setSearching] = useState(false);
   const [searchResultsOpen, setSearchResultsOpen] = useState(false);
   const [usageGuideOpen, setUsageGuideOpen] = useState(false);
+  const [aiQuestionExamplesOpen, setAiQuestionExamplesOpen] = useState(false);
   const [songHowtoOpen, setSongHowtoOpen] = useState(false);
   const [searchResults, setSearchResults] = useState<SearchResultRow[]>([]);
   const [previewVideoId, setPreviewVideoId] = useState<string | null>(null);
@@ -89,6 +90,23 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
   const previewWatchedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
+  const aiQuestionExamples = [
+    {
+      question: '@アヴリル・ラヴィーンのデビュー曲は？',
+      answer:
+        '「Complicated」です。2002年のアルバム『Let Go』からのリードシングルとして広く知られています。',
+    },
+    {
+      question: '@アヴリル・ラヴィーンのデビュー当時のライバルは？',
+      answer:
+        '「ライバル」というより、当時のポップ主流（ブリトニー・スピアーズ、クリスティーナ・アギレラ等）と対比される存在でした。',
+    },
+    {
+      question: '@アヴリル・ラヴィーンの人気曲は？',
+      answer:
+        '代表的には「Complicated」「Sk8er Boi」「My Happy Ending」「Girlfriend」などがよく挙げられます。',
+    },
+  ] as const;
 
   const playCandidateAddedSe = useCallback(() => {
     // クリック（ユーザー操作）内で呼ばれるので、ブラウザの自動再生制限を回避しやすい
@@ -602,6 +620,19 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                     について」）。
                   </>
                 )}
+                <button
+                  type="button"
+                  className="ml-2 inline-flex items-center text-xs text-amber-200 underline decoration-dotted underline-offset-2 hover:text-amber-100"
+                  onClick={() => {
+                    setUsageGuideOpen(false);
+                    setAiQuestionExamplesOpen(true);
+                  }}
+                  aria-haspopup="dialog"
+                  aria-expanded={aiQuestionExamplesOpen}
+                  aria-label="AIへの質問例を表示"
+                >
+                  AI質問例を見る
+                </button>
               </li>
               {isYoutubeKeywordSearchEnabled() ? (
                 <li>
@@ -634,6 +665,54 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                 type="button"
                 className="rounded border border-gray-600 bg-gray-800 px-4 py-2 text-sm text-gray-200 hover:bg-gray-700"
                 onClick={() => setUsageGuideOpen(false)}
+              >
+                閉じる
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {aiQuestionExamplesOpen && (
+        <div
+          className="fixed inset-0 z-[95] flex items-center justify-center bg-black/70 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="chat-input-ai-examples-title"
+          onClick={() => setAiQuestionExamplesOpen(false)}
+        >
+          <div
+            className="max-h-[min(80vh,28rem)] w-full max-w-md overflow-y-auto rounded-lg border border-gray-600 bg-gray-900 p-4 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="chat-input-ai-examples-title" className="mb-3 text-sm font-semibold text-white">
+              AIへの質問例
+            </h2>
+            <p className="mb-3 text-xs leading-relaxed text-gray-300">
+              文頭に <span className="text-gray-200">@</span> を付けると AI に質問できます。下の例をそのまま入力して使えます。
+            </p>
+            <ul className="space-y-2">
+              {aiQuestionExamples.map((example) => (
+                <li key={example.question} className="rounded border border-gray-700 bg-gray-800/60 p-2">
+                  <details className="group">
+                    <summary className="cursor-pointer list-none break-words text-sm leading-relaxed text-gray-100">
+                      <span className="inline-flex items-center gap-2">
+                        <span>{example.question}</span>
+                        <span className="text-xs text-gray-400 group-open:hidden">回答を表示</span>
+                        <span className="hidden text-xs text-gray-400 group-open:inline">回答を閉じる</span>
+                      </span>
+                    </summary>
+                    <p className="mt-2 whitespace-pre-line rounded border border-gray-700 bg-gray-900/60 p-2 text-sm leading-relaxed text-gray-300">
+                      {example.answer}
+                    </p>
+                  </details>
+                </li>
+              ))}
+            </ul>
+            <div className="mt-4 flex justify-end">
+              <button
+                type="button"
+                className="rounded border border-gray-600 bg-gray-800 px-4 py-2 text-sm text-gray-200 hover:bg-gray-700"
+                onClick={() => setAiQuestionExamplesOpen(false)}
               >
                 閉じる
               </button>

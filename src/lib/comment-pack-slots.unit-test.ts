@@ -8,6 +8,7 @@ import {
   isCommentPackFullyOff,
   normalizeCommentPackSlotsFromRequestBody,
   parseCommentPackSlotsFromStorageRaw,
+  parseOptionalFreeSlotIndex,
 } from './comment-pack-slots';
 
 assert.equal(isCommentPackFullyOff([false, false, false, false]), true);
@@ -33,5 +34,10 @@ assert.deepEqual(
 assert.equal(commentPackSlotsEqual([true, true, true, true], COMMENT_PACK_SLOTS_FULL), true);
 assert.equal(commentPackSlotsEqual([true, true, true, true], [true, false, false, false]), false);
 assert.strictEqual(canonicalCommentPackSlots([true, true, true, true]), COMMENT_PACK_SLOTS_FULL);
+
+assert.equal(parseOptionalFreeSlotIndex({ freeSlotIndex: 0 }), 0);
+assert.equal(parseOptionalFreeSlotIndex({ freeSlotIndex: '2' }), 2);
+assert.equal(parseOptionalFreeSlotIndex({ freeSlotIndex: 5 }), null);
+assert.equal(parseOptionalFreeSlotIndex({ freeSlotIndex: 'x' }), null);
 
 console.log('comment-pack-slots unit tests: OK');

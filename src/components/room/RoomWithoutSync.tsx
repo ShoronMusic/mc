@@ -1104,9 +1104,8 @@ export default function RoomWithoutSync({
         .then((data) => {
           if (data?.needConfirm && data?.confirmationText && data?.query) {
             if (!isYoutubeKeywordSearchEnabled()) {
-              addSystemMessage(
-                'キーワードでの曲検索は現在オフです。YouTube の動画 URL をコピーして貼り、「送信」で選曲するか、曲について @ で質問してください。',
-              );
+              /** 検索オフ時は曲名確認フローを出せないので、そのまま @ チャット（/api/ai/chat）へ */
+              doChatReply();
               touchActivity();
               return;
             }

@@ -370,6 +370,7 @@ export async function POST(request: Request) {
       artistName: artist,
       oembedTitle: title,
       description: snippetDescription,
+      publishedAtIso: snippet?.publishedAt ?? null,
     }, { roomId, videoId });
   } catch (e) {
     console.error('[room-playback-history] getOrAssignEra', e);

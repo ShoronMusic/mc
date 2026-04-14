@@ -75,6 +75,18 @@ export function toggleCommentPackSlot(
 export const COMMENT_PACK_SLOTS_NONE: CommentPackSlotSelection = [false, false, false, false];
 export const COMMENT_PACK_SLOTS_FULL: CommentPackSlotSelection = [true, true, true, true];
 
+/** `packPhase=frees` 時に 0..2 の1枠だけ生成するクライアント用（並列リクエストで応答を早く返す） */
+export function parseOptionalFreeSlotIndex(body: unknown): number | null {
+  if (typeof body !== 'object' || body === null) return null;
+  const v = (body as Record<string, unknown>).freeSlotIndex;
+  if (typeof v === 'number' && Number.isInteger(v) && v >= 0 && v < 3) return v;
+  if (typeof v === 'string' && /^\d+$/.test(v)) {
+    const n = parseInt(v, 10);
+    if (n >= 0 && n < 3) return n;
+  }
+  return null;
+}
+
 /** 既知パターンは共有定数に寄せ、React の不要な再レンダー・effect 連鎖を減らす */
 export function canonicalCommentPackSlots(s: CommentPackSlotSelection): CommentPackSlotSelection {
   if (commentPackSlotsEqual(s, COMMENT_PACK_SLOTS_NONE)) return COMMENT_PACK_SLOTS_NONE;

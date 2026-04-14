@@ -1,0 +1,133 @@
+ろん
+15:09
+@アヴリル・ラヴィーンのデビュー曲は？
+
+DBに報告（チューニング）
+AIready.アヴリル・ラヴィーンのデビューシングルは「Complicated」ですよ。2002年にリリースされたファーストアルバム『Let Go』（レット・ゴー）に収録されており、当時のポップ・パンクシーンにおいても彼女の存在感を一躍有名にした、まさに彼女の代名詞とも言える楽曲です。
+15:11
+DBに報告（チューニング）
+ろん
+15:12
+@アヴリル・ラヴィーンのデビュー当時のライバルは？
+
+DBに報告（チューニング）
+AI*Wait, let's refine the text one more time to be more "Music Buddy-like".*
+ "その頃の話ですが、ブリトニー・スピアーズやクリスティーナ・アギレラといった「ポップ・プリンセス」たちが、彼女と対照的な存在としてよく比較されていました。彼女たちが完璧にプロデュースされた華やかなポップ・アイコンだったのに対し、アヴリルはスケーターらしい自由で少し反抗的なスタイルを持っていたので、当時の音楽シーンにおける大きなコントラストになっていましたね。" 「その頃の話ですが、ブリトニー・スピアーズやクリスティーナ・アギレラといった「ポップ・プリンセス」たちが、彼女と対照的な的な存在としてよく比較されていました。」。
+15:16
+DBに報告（チューニング）
+ろん
+15:16
+@アヴリル・ラヴィーンの2026年の活動状況は？
+
+DBに報告（チューニング）
+システム
+15:16
+判定がタイムアウトしました。もう一度送ってください。
+
+DBに報告（チューニング）
+ろん
+15:16
+@アヴリル・ラヴィーンの2026年の活動状況は？
+
+DBに報告（チューニング）
+システム
+15:16
+判定がタイムアウトしました。もう一度送ってください。
+
+DBに報告（チューニング）
+ろん
+15:17
+@アヴリル・ラヴィーンの人気曲は？
+
+DBに報告（チューニング）
+AI「アヴリル・ラヴィーンの楽曲なら、やはりデビュー作の『Complicated』や『Sk8er Boi』が真っ先に思い浮かびます。それから、キャリア中期に大ヒットした『My Happy Ending』や、ポップな魅力が詰まった『Girlfriend』なども、彼女の代表曲としてとても有名ですよ。」 "アヴリル・ラヴィーンの楽曲なら、やはりデビュー作の『Complicated』や『Sk8er Boi』が真っ先に思い浮かびます。
+
+以下ログ
+[resolve-song-request] intent: {
+  query: '* Context: "ろんさん入室" (Ron-san entered), "ろんさんチャットオーナー" (Ron-san chat owner). No song titles/artists mentioned in the recent conversation history provided.',
+  confirmation: `* User's latest statement: "アヴリル・ラヴィーンのデビュー曲は？" (What is Avril Lavigne's debut song?)`
+}
+ POST /api/ai/resolve-song-request 200 in 6120ms
+ ✓ Compiled /api/ai/chat in 186ms (485 modules)
+[ai/chat] incoming {
+  roomId: '02',
+  isGuest: false,
+  forceReply: true,
+  newestUserText: 'アヴリル・ラヴィーンのデビュー曲は？',
+  messagesCount: 2
+}
+ ✓ Compiled /api/ai/tidbit in 95ms (443 modules)
+ POST /api/ai/tidbit 200 in 133ms
+{"t":"gemini_usage","context":"chat_reply","model":"gemma-4-26b-a4b-it","promptTokenCount":2848,"outputTokenCount":96,"totalTokenCount":4903,"cachedTokenCount":null,"ts":"2026-04-14T06:10:34.417Z"}
+ POST /api/ai/tidbit 200 in 14ms
+{"t":"gemini_usage","context":"chat_reply","model":"gemma-4-26b-a4b-it","promptTokenCount":2921,"outputTokenCount":86,"totalTokenCount":6395,"cachedTokenCount":null,"ts":"2026-04-14T06:11:48.574Z"}
+[ai/chat] gemini_result { hasText: true, roomId: '02', forceReply: true }
+ POST /api/ai/chat 200 in 119113ms
+ POST /api/ai/tidbit 200 in 11ms
+{"t":"gemini_usage","context":"extract_song_search","model":"gemma-4-26b-a4b-it","promptTokenCount":422,"outputTokenCount":1,"totalTokenCount":677,"cachedTokenCount":null,"ts":"2026-04-14T06:12:53.497Z"}
+[resolve-song-request] intent: {
+  query: '* Input:',
+  confirmation: `* Context: Discussion about Avril Lavigne's debut song "Complicated".`
+}
+ POST /api/ai/resolve-song-request 200 in 6947ms
+[ai/chat] incoming {
+  roomId: '02',
+  isGuest: false,
+  forceReply: true,
+  newestUserText: 'アヴリル・ラヴィーンのデビュー当時のライバルは？',
+  messagesCount: 4
+}
+ POST /api/ai/tidbit 200 in 8ms
+ ✓ Compiled /api/room-chat-log in 189ms (437 modules)
+ POST /api/room-chat-log 200 in 980ms
+{"t":"gemini_usage","context":"chat_reply","model":"gemma-4-26b-a4b-it","promptTokenCount":2938,"outputTokenCount":101,"totalTokenCount":7169,"cachedTokenCount":null,"ts":"2026-04-14T06:14:24.568Z"}
+ POST /api/ai/tidbit 200 in 23ms
+ POST /api/ai/tidbit 200 in 8ms
+{"t":"gemini_usage","context":"chat_reply","model":"gemma-4-26b-a4b-it","promptTokenCount":3011,"outputTokenCount":101,"totalTokenCount":7496,"cachedTokenCount":null,"ts":"2026-04-14T06:15:59.488Z"}
+[ai/chat] gemini_result { hasText: true, roomId: '02', forceReply: true }
+ POST /api/ai/chat 200 in 186763ms
+ ✓ Compiled /api/ai/question-guard-classify in 278ms (440 modules)
+ POST /api/ai/question-guard-classify 200 in 4498ms
+{"t":"gemini_usage","context":"question_guard_classify","model":"gemma-4-26b-a4b-it","promptTokenCount":1177,"outputTokenCount":6,"totalTokenCount":1749,"cachedTokenCount":null,"ts":"2026-04-14T06:16:55.645Z"}
+ POST /api/ai/question-guard-classify 200 in 4496ms
+{"t":"gemini_usage","context":"question_guard_classify","model":"gemma-4-26b-a4b-it","promptTokenCount":1213,"outputTokenCount":5,"totalTokenCount":1822,"cachedTokenCount":null,"ts":"2026-04-14T06:17:06.707Z"}
+ ✓ Compiled /api/ai/resolve-song-request in 112ms (417 modules)
+{"t":"gemini_usage","context":"extract_song_search","model":"gemma-4-26b-a4b-it","promptTokenCount":569,"outputTokenCount":1,"totalTokenCount":793,"cachedTokenCount":null,"ts":"2026-04-14T06:17:31.047Z"}
+[resolve-song-request] intent: {
+  query: "* Context: The user is asking about Avril Lavigne's popular songs.",
+  confirmation: "* Previous conversation: Discussion about Avril Lavigne's rivals (Britney Spears, Christina Aguilera)."
+}
+ POST /api/ai/resolve-song-request 200 in 6393ms
+ ✓ Compiled /api/ai/chat in 64ms (443 modules)
+[ai/chat] incoming {
+  roomId: '02',
+  isGuest: false,
+  forceReply: true,
+  newestUserText: 'アヴリル・ラヴィーンの人気曲は？',
+  messagesCount: 10
+}
+ ✓ Compiled /api/ai/tidbit in 50ms (443 modules)
+ POST /api/ai/tidbit 200 in 79ms
+{"t":"gemini_usage","context":"chat_reply","model":"gemma-4-26b-a4b-it","promptTokenCount":3187,"outputTokenCount":93,"totalTokenCount":7535,"cachedTokenCount":2039,"ts":"2026-04-14T06:19:04.587Z"}
+[ai/chat] gemini_result { hasText: true, roomId: '02', forceReply: true }
+ POST /api/ai/chat 200 in 93987ms
+ ✓ Compiled /api/room-chat-log in 133ms (409 modules)
+ POST /api/room-chat-log 200 in 717ms
+ ✓ Compiled /api/ai/tidbit in 49ms (437 modules)
+ POST /api/ai/tidbit 200 in 69ms
+
+
+
+Gemini 利用ログ
+日時	種別	model	入力	出力	room	video
+2026/4/14 15:19:05	chat_reply	gemma-4-26b-a4b-it	3187	93	02	—
+2026/4/14 15:17:31	extract_song_search	gemma-4-26b-a4b-it	569	1	02	—
+2026/4/14 15:17:07	question_guard_classify	gemma-4-26b-a4b-it	1213	5	02	—
+2026/4/14 15:16:56	question_guard_classify	gemma-4-26b-a4b-it	1177	6	02	—
+2026/4/14 15:16:00	chat_reply	gemma-4-26b-a4b-it	3011	101	02	—
+2026/4/14 15:14:24	chat_reply	gemma-4-26b-a4b-it	2938	101	02	—
+2026/4/14 15:12:54	extract_song_search	gemma-4-26b-a4b-it	422	1	02	—
+2026/4/14 15:11:48	chat_reply	gemma-4-26b-a4b-it	2921	86	02	—
+2026/4/14 15:10:35	chat_reply	gemma-4-26b-a4b-it	2848	96	02	—
+2026/4/14 15:09:49	extract_song_search	gemma-4-26b-a4b-it	332	1	02	—
+2026/4/14 15:07:29	extract_song_search	gemma-4-26b-a4b-it	332	1	02	—

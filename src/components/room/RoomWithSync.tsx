@@ -286,8 +286,8 @@ interface CandidateSong {
 const SEC_AFTER_END_BEFORE_PROMPT = 30;
 const DEFAULT_DURATION_WHEN_UNKNOWN_SEC = 240;
 const FIVE_MIN_MS = 5 * 60 * 1000;
-/** comment-pack 自由コメントの小出し間隔。60s だと frees 完了後も 1本目がさらに 60s 後になり 3本目まで極端に遅れる */
-const COMMENT_PACK_FREE_STAGGER_MS = 15_000;
+/** comment-pack 自由コメントの小出し間隔（1本目は 0、2本目以降は shownIdx×この値）。旧 (n+1)×15s だと frees 遅延のあとさらに 15s 空き「最初しか出ない」感になる */
+const COMMENT_PACK_FREE_STAGGER_MS = 5000;
 
 interface RoomWithSyncProps {
   displayName?: string;
@@ -2871,84 +2871,130 @@ export default function RoomWithSync({
             touchActivity();
             tidbitPreferMainArtistLeftRef.current = 2;
 
-            return fetch('/api/ai/comment-pack', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                ...packBody,
-                packPhase: 'frees',
-                baseComment: pack.baseComment.trim(),
-              }),
-            })
-              .then((r2) => {
-                if (!r2.ok) {
-                  suppressTidbitRef.current = false;
-                  return null;
+            if (freeCommentTimeoutsRef.current.length > 0) {
+              freeCommentTimeoutsRef.current.forEach((t) => clearTimeout(t));
+              freeCommentTimeoutsRef.current = [];
+            }
+
+            const freeIdxSorted = ([0, 1, 2] as const).filter((i) => slots[i + 1]);
+            if (freeIdxSorted.length === 0) {
+              suppressTidbitRef.current = equivalentBaseOnlySlots(commentPackSlotsRef.current);
+              return null;
+            }
+
+            const filledForSlot: string[] = ['', '', ''];
+            const finishedSlot: boolean[] = [false, false, false];
+            const tidForSlot: (string | undefined)[] = [undefined, undefined, undefined];
+            const prefixForSlot: string[] = ['[NEW] ', '[NEW] ', '[NEW] '];
+
+            let nextToSchedule = 0;
+            let shownIdx2 = 0;
+            const scheduledForSlot: boolean[] = [false, false, false];
+
+            const baseSongId = typeof pack.songId === 'string' ? pack.songId : null;
+
+            const pumpFreesSequential = () => {
+              if (videoIdRef.current !== vid) return;
+              while (nextToSchedule < COMMENT_PACK_MAX_FREE_COMMENTS) {
+                const i = nextToSchedule;
+                if (!slots[i + 1]) {
+                  nextToSchedule += 1;
+                  continue;
                 }
-                return r2.json();
+                if (!finishedSlot[i]) return;
+                const c = filledForSlot[i]?.trim() ?? '';
+                if (!c) {
+                  nextToSchedule += 1;
+                  continue;
+                }
+                if (scheduledForSlot[i]) {
+                  nextToSchedule += 1;
+                  continue;
+                }
+                scheduledForSlot[i] = true;
+                const delayMs = shownIdx2 * COMMENT_PACK_FREE_STAGGER_MS;
+                shownIdx2 += 1;
+                const tidN = tidForSlot[i] ?? parseTidbitIdFromPack(idsPhase[i + 1]);
+                const prefixI = prefixForSlot[i];
+                const timer = setTimeout(() => {
+                  if (videoIdRef.current !== vid) return;
+                  addAiMessage(prefixI + c, {
+                    allowWhenAiStopped: true,
+                    tidbitId: tidN,
+                    songId: baseSongId,
+                    videoId: vid,
+                    aiSource: 'tidbit',
+                  });
+                  touchActivity();
+                }, delayMs);
+                freeCommentTimeoutsRef.current.push(timer);
+                nextToSchedule += 1;
+              }
+            };
+
+            let freesRequestsRemaining = freeIdxSorted.length;
+
+            freeIdxSorted.forEach((slotK) => {
+              void fetch('/api/ai/comment-pack', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  ...packBody,
+                  packPhase: 'frees',
+                  baseComment: pack.baseComment.trim(),
+                  freeSlotIndex: slotK,
+                }),
               })
-              .then((pack2) => {
-                if (!pack2 || videoIdRef.current !== vid) return null;
-                if (pack2.error) {
-                  suppressTidbitRef.current = false;
-                  return null;
-                }
-                if (pack2.skipAiCommentary) {
-                  suppressTidbitRef.current = false;
-                  return null;
-                }
-                const freeArr2: string[] = Array.isArray(pack2.freeComments)
-                  ? pack2.freeComments.map((c: unknown) => (typeof c === 'string' ? c : ''))
-                  : [];
-                while (freeArr2.length < COMMENT_PACK_MAX_FREE_COMMENTS) freeArr2.push('');
-                const packPrefix2 = pack2?.source === 'library' ? '[DB] ' : '[NEW] ';
-                const ids2: (string | null | undefined)[] = Array.isArray(pack2.tidbitIds)
-                  ? pack2.tidbitIds
-                  : [];
-                const freeTidbitIdsRaw2: unknown[] = Array.isArray(pack2.freeCommentTidbitIds)
-                  ? pack2.freeCommentTidbitIds
-                  : [];
+                .then((r2) => (r2.ok ? r2.json() : null))
+                .then((pack2) => {
+                  if (videoIdRef.current !== vid) return;
+                  finishedSlot[slotK] = true;
+                  if (pack2 && !pack2.error && !pack2.skipAiCommentary) {
+                    if (pack2.source === 'library') prefixForSlot[slotK] = '[DB] ';
+                    const fa: string[] = Array.isArray(pack2.freeComments)
+                      ? pack2.freeComments.map((c: unknown) => (typeof c === 'string' ? c : ''))
+                      : [];
+                    while (fa.length < COMMENT_PACK_MAX_FREE_COMMENTS) fa.push('');
+                    const c = (fa[slotK] ?? '').trim();
+                    if (c) {
+                      filledForSlot[slotK] = c;
+                      const freeTidRaw: unknown[] = Array.isArray(pack2.freeCommentTidbitIds)
+                        ? pack2.freeCommentTidbitIds
+                        : [];
+                      const ids2: (string | null | undefined)[] = Array.isArray(pack2.tidbitIds)
+                        ? pack2.tidbitIds
+                        : [];
+                      tidForSlot[slotK] =
+                        parseTidbitIdFromPack(freeTidRaw[slotK]) ??
+                        parseTidbitIdFromPack(ids2[slotK + 1]);
+                      const pendingFreeBodies2 = freeIdxSorted
+                        .map((ix) => filledForSlot[ix]?.trim())
+                        .filter(Boolean);
+                      suppressTidbitRef.current =
+                        equivalentBaseOnlySlots(commentPackSlotsRef.current) ||
+                        pendingFreeBodies2.length > 0;
+                    }
+                  }
+                  pumpFreesSequential();
+                })
+                .catch(() => {
+                  finishedSlot[slotK] = true;
+                  pumpFreesSequential();
+                })
+                .finally(() => {
+                  freesRequestsRemaining -= 1;
+                  if (freesRequestsRemaining === 0 && videoIdRef.current === vid) {
+                    const pendingBodies = freeIdxSorted
+                      .map((ix) => filledForSlot[ix]?.trim())
+                      .filter(Boolean);
+                    if (pendingBodies.length === 0) {
+                      suppressTidbitRef.current = false;
+                    }
+                  }
+                });
+            });
 
-                if (freeCommentTimeoutsRef.current.length > 0) {
-                  freeCommentTimeoutsRef.current.forEach((t) => clearTimeout(t));
-                  freeCommentTimeoutsRef.current = [];
-                }
-
-                const pendingFreeBodies2 = freeArr2
-                  .slice(0, COMMENT_PACK_MAX_FREE_COMMENTS)
-                  .map((c) => c.trim())
-                  .filter(Boolean);
-                suppressTidbitRef.current =
-                  equivalentBaseOnlySlots(commentPackSlotsRef.current) ||
-                  pendingFreeBodies2.length > 0;
-
-                let shownIdx2 = 0;
-                for (let i = 0; i < COMMENT_PACK_MAX_FREE_COMMENTS; i++) {
-                  const c = freeArr2[i]?.trim() ?? '';
-                  if (!c) continue;
-                  const delayMs = (shownIdx2 + 1) * COMMENT_PACK_FREE_STAGGER_MS;
-                  shownIdx2 += 1;
-                  const tidN =
-                    parseTidbitIdFromPack(freeTidbitIdsRaw2[i]) ??
-                    parseTidbitIdFromPack(ids2[i + 1]);
-                  const timer = setTimeout(() => {
-                    if (videoIdRef.current !== vid) return;
-                    addAiMessage(packPrefix2 + c, {
-                      allowWhenAiStopped: true,
-                      tidbitId: tidN,
-                      songId: pack2.songId ?? null,
-                      videoId: vid,
-                      aiSource: 'tidbit',
-                    });
-                    touchActivity();
-                  }, delayMs);
-                  freeCommentTimeoutsRef.current.push(timer);
-                }
-                return null;
-              })
-              .catch(() => {
-                suppressTidbitRef.current = false;
-              });
+            return null;
           }
           const baseStr = typeof pack?.baseComment === 'string' ? pack.baseComment.trim() : '';
           const freeArr: string[] = Array.isArray(pack.freeComments)
@@ -2998,7 +3044,7 @@ export default function RoomWithSync({
             for (let i = 0; i < COMMENT_PACK_MAX_FREE_COMMENTS; i++) {
               const c = freeArr[i]?.trim() ?? '';
               if (!c) continue;
-              const delayMs = (shownIdx + 1) * COMMENT_PACK_FREE_STAGGER_MS;
+              const delayMs = shownIdx * COMMENT_PACK_FREE_STAGGER_MS;
               shownIdx += 1;
               const tidN =
                 parseTidbitIdFromPack(freeTidbitIdsRaw[i]) ??
@@ -3778,9 +3824,8 @@ export default function RoomWithSync({
         .then((data) => {
           if (data?.needConfirm && data?.confirmationText && data?.query) {
             if (!isYoutubeKeywordSearchEnabled()) {
-              addSystemMessage(
-                'キーワードでの曲検索は現在オフです。YouTube の動画 URL をコピーして貼り、「送信」で選曲するか、曲について @ で質問してください。',
-              );
+              /** 検索オフ時は曲名確認フローを出せないので、そのまま @ チャット（/api/ai/chat）へ */
+              doChatReply();
               touchActivity();
               return;
             }

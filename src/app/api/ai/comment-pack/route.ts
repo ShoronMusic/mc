@@ -43,11 +43,13 @@ import {
   insertTidbit,
 } from '../../../../lib/song-tidbits';
 import { isRoomJpAiUnlockEnabled } from '@/lib/room-jp-ai-unlock-server';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   type CommentPackSlotSelection,
   equivalentBaseOnlySlots,
   isCommentPackFullyOff,
   normalizeCommentPackSlotsFromRequestBody,
+  parseOptionalFreeSlotIndex,
 } from '@/lib/comment-pack-slots';
 import { buildSupergroupPromptBlock } from '@/lib/supergroup-artist';
 import {
@@ -159,7 +161,38 @@ async function prependLibrarySessionBridge(
     { videoId: ctx.videoId, roomId: ctx.roomId || null },
   );
   if (!br?.trim()) return baseComment;
-  return `${br.trim()}\n\n${trimmed}`;
+  const joined = `${br.trim()}\n\n${trimmed}`;
+  /** bridge は extract で polish 済みでも、結合直後にだけ残るメタがあるため Gemma 時は全体を再 polish */
+  const gemmaPackOrBridge =
+    isGemmaHostedModelId(resolveGenerationModelId('comment_pack_session_bridge')) ||
+    isGemmaHostedModelId(resolveGenerationModelId('comment_pack_base'));
+  return gemmaPackOrBridge ? polishGemmaModelVisibleText(joined) : joined;
+}
+
+/** frees フェーズで ai_chat_1〜3 の現行 tidbit id を集める（単枠 upsert 後の tidbitIds 用） */
+async function fetchCommentPackChatTidbitIds(
+  dbWrite: SupabaseClient,
+  videoId: string,
+  baseRowId: string,
+): Promise<(string | null)[]> {
+  const freeSources = ['ai_chat_1', 'ai_chat_2', 'ai_chat_3'] as const;
+  const out: (string | null)[] = [baseRowId];
+  for (const src of freeSources) {
+    const { data, error } = await dbWrite
+      .from('song_tidbits')
+      .select('id')
+      .eq('video_id', videoId.trim())
+      .eq('source', src)
+      .eq('is_active', true)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error && error.code !== '42P01') {
+      console.warn('[api/ai/comment-pack] fetch chat tidbit id', src, error.message);
+    }
+    out.push(typeof data?.id === 'string' ? data.id : null);
+  }
+  return out;
 }
 
 function isPublishedWithinLastDays(publishedAtIso: string | undefined, days: number): boolean {
@@ -684,7 +717,10 @@ ${basePromptTail}`;
       );
     }
 
-    const freeComments: string[] = [];
+    const freeSlotIndexParsed = packPhase === 'frees' ? parseOptionalFreeSlotIndex(body) : null;
+    const freeSlotIndexOnly =
+      freeSlotIndexParsed !== null && slots[freeSlotIndexParsed + 1] ? freeSlotIndexParsed : null;
+    const freeComments: string[] = ['', '', ''];
 
     if (!baseOnlyPack) {
       const banBlockStandard = `・禁止事項（断定・根拠薄い内容の回避）:
@@ -760,33 +796,53 @@ ${isHonorsTopic ? banBlockHonors : isSupergroupMemberTopic ? banBlockSupergroupM
 ・前置きは短く。「豆知識ですが」は使わない。
 ・この1本だけを出力してください。説明や箇条書きは禁止。
 ・英語の思考過程・メタメモは禁止（チャット掲載用の本文のみ）。
-・「One detail:」「*Final Version*」「Final Draft:」など英語の見出し・自己チェック用の文は禁止（日本語の本文だけを出力）。`;
+・「One detail:」「*Final Version*」「*Final Polish*」「Final Draft:」など英語の見出し・自己チェック用の文は禁止（日本語の本文だけを出力）。`;
       };
 
-      /** 遅いモデル対策: 初回は3枠を並列にし、壁時計時間を短縮。検証落ちのみ従来どおり逐次リトライ */
-      const parallelRoleLines =
+      const freeIndices: number[] =
+        packPhase === 'frees' && freeSlotIndexOnly !== null
+          ? [freeSlotIndexOnly]
+          : ([0, 1, 2] as const).filter((ix) => slots[ix + 1]);
+      const filteredFreeIndices = freeIndices.filter(
+        (ix) => ix >= 0 && ix < COMMENT_PACK_MAX_FREE_COMMENTS && slots[ix + 1],
+      );
+
+      /** 遅いモデル対策: 3枠まとめは Promise.all。クライアントが freeSlotIndex で分割したときは1枠＋別HTTP並列 */
+      const parallelRoleLinesMulti =
         '・同じHTTPリクエスト内で、**ほか2つの自由コメント枠**も**並列**に生成しています（各枠の観点は異なります）。**この枠の観点だけ**に絞り、基本情報の焼き直しにしないこと。栄誉・歌詞・サウンドで**役割が分かれている**前提として、他枠と主旨が被る本文にしないでください。\n';
+      const parallelRoleLinesSingle =
+        '・このリクエストでは**このスロットのみ**を生成しています。他の自由枠は**別のHTTPリクエストで並列**に生成されるため、他枠の本文は参照できません。基本情報の焼き直しにしないこと。基本情報と主旨が被らないよう、この枠の観点だけに従ってください。\n';
+      const parallelRoleLines =
+        filteredFreeIndices.length < COMMENT_PACK_MAX_FREE_COMMENTS
+          ? parallelRoleLinesSingle
+          : parallelRoleLinesMulti;
       const usedParallel =
         typeof baseText === 'string' && baseText.trim().length > 0 ? baseText.trim() : 'まだありません';
 
-      const draftTexts = await Promise.all(
-        [0, 1, 2].map(async (i) => {
-          try {
-            const p0 = buildFreePrompt(i, usedParallel, parallelRoleLines);
-            const res = await model.generateContent(p0);
-            logGeminiUsage(`comment_pack_free_${i + 1}`, res.response);
-            await persistGeminiUsageLog(`comment_pack_free_${i + 1}`, res.response.usageMetadata, {
-              videoId,
-            });
-            return extractTextFromGenerateContentResponse(res.response, commentPackModelId);
-          } catch (e) {
-            console.error('[api/ai/comment-pack] parallel free slot', i + 1, e);
-            return '';
-          }
-        }),
-      );
+      const draftTexts: string[] = ['', '', ''];
+      if (filteredFreeIndices.length > 0) {
+        await Promise.all(
+          filteredFreeIndices.map(async (i) => {
+            try {
+              const p0 = buildFreePrompt(i, usedParallel, parallelRoleLines);
+              const res = await model.generateContent(p0);
+              logGeminiUsage(`comment_pack_free_${i + 1}`, res.response);
+              await persistGeminiUsageLog(`comment_pack_free_${i + 1}`, res.response.usageMetadata, {
+                videoId,
+              });
+              draftTexts[i] = extractTextFromGenerateContentResponse(res.response, commentPackModelId);
+            } catch (e) {
+              console.error('[api/ai/comment-pack] parallel free slot', i + 1, e);
+              draftTexts[i] = '';
+            }
+          }),
+        );
+      }
 
-      for (let i = 0; i < COMMENT_PACK_MAX_FREE_COMMENTS; i++) {
+      const existingFreeBodies = (): string[] =>
+        freeComments.map((s) => (typeof s === 'string' ? s.trim() : '')).filter((s) => s.length > 0);
+
+      for (const i of filteredFreeIndices) {
         const isHonorsTopic = i === 0 && !isSupergroupArtist;
         const isSupergroupMemberTopic = i === 0 && isSupergroupArtist;
         const parallelTxt = (draftTexts[i] ?? '').trim();
@@ -795,14 +851,14 @@ ${isHonorsTopic ? banBlockHonors : isSupergroupMemberTopic ? banBlockSupergroupM
         const okParallel =
           parallelTxt.length > 0 &&
           !containsUnreliableCommentPackClaim(parallelTxt, policyHonorsParallel) &&
-          !isSimilarToExistingComment(parallelTxt, [baseText, ...freeComments]);
+          !isSimilarToExistingComment(parallelTxt, [baseText, ...existingFreeBodies()]);
 
         if (okParallel) {
-          freeComments.push(parallelTxt);
+          freeComments[i] = parallelTxt;
           continue;
         }
 
-        const used = [baseText, ...freeComments].filter(Boolean).join('\n---\n');
+        const used = [baseText, ...existingFreeBodies()].filter(Boolean).join('\n---\n');
         const maxAttempts = 3;
         try {
           let attempt = 0;
@@ -817,9 +873,9 @@ ${isHonorsTopic ? banBlockHonors : isSupergroupMemberTopic ? banBlockSupergroupM
             const txt = extractTextFromGenerateContentResponse(res.response, commentPackModelId);
             /** 3回目は栄誉枠でもチャート数字を避けるフォールバック → 歌詞・サウンド枠と同じ厳しさで通す */
             const policyHonors = isHonorsTopic && attempt < maxAttempts;
-            const tooSimilar = isSimilarToExistingComment(txt, [baseText, ...freeComments]);
+            const tooSimilar = isSimilarToExistingComment(txt, [baseText, ...existingFreeBodies()]);
             if (txt && !containsUnreliableCommentPackClaim(txt, policyHonors) && !tooSimilar) {
-              freeComments.push(txt);
+              freeComments[i] = txt;
               break;
             }
             if (attempt >= maxAttempts) {
@@ -862,10 +918,10 @@ ${isHonorsTopic ? banBlockHonors : isSupergroupMemberTopic ? banBlockSupergroupM
     }
 
     const freeCommentsCapped = freeComments.slice(0, COMMENT_PACK_MAX_FREE_COMMENTS);
-    /** insert・tidbitId 紐づけ・クライアント表示を一致させる（空文字スロットを除外） */
-    const freeBodiesForPack = freeCommentsCapped
-      .map((t) => (typeof t === 'string' ? t.trim() : ''))
-      .filter((t) => t.length > 0);
+    /** スロット 0〜2 と DB の ai_chat_1〜3 を対応させる（空枠は '' のまま） */
+    const freeBodiesTrimmedTriple = freeCommentsCapped.map((t) =>
+      typeof t === 'string' ? t.trim() : '',
+    );
 
     // song_tidbits に保存（新曲は基本のみ、通常は基本＋自由3本）
     const tidbitIds: (string | null)[] = [];
@@ -921,40 +977,71 @@ ${isHonorsTopic ? banBlockHonors : isSupergroupMemberTopic ? banBlockSupergroupM
           }
         }
         if (baseRowId) {
-          tidbitIds.push(baseRowId);
-          for (const src of ['ai_chat_1', 'ai_chat_2', 'ai_chat_3'] as const) {
-            try {
-              const { error: d0 } = await dbWrite
-                .from('song_tidbits')
-                .delete()
-                .eq('video_id', videoId)
-                .eq('source', src);
-              if (d0) console.warn('[api/ai/comment-pack] delete chat slot', src, d0.message);
-            } catch (e) {
-              console.warn('[api/ai/comment-pack] delete chat slot', src, e);
+          if (baseOnlyPack) {
+            const mergedIdsBaseOnly = await fetchCommentPackChatTidbitIds(dbWrite, videoId, baseRowId);
+            tidbitIds.push(...mergedIdsBaseOnly);
+          } else {
+          const freeSources = ['ai_chat_1', 'ai_chat_2', 'ai_chat_3'] as const;
+          if (freeSlotIndexOnly !== null) {
+            const k = freeSlotIndexOnly;
+            const bod = freeBodiesTrimmedTriple[k] ?? '';
+            if (bod) {
+              try {
+                const { error: d0 } = await dbWrite
+                  .from('song_tidbits')
+                  .delete()
+                  .eq('video_id', videoId)
+                  .eq('source', freeSources[k]);
+                if (d0) console.warn('[api/ai/comment-pack] delete chat slot', freeSources[k], d0.message);
+              } catch (e) {
+                console.warn('[api/ai/comment-pack] delete chat slot', freeSources[k], e);
+              }
+              try {
+                const row = await insertTidbit(dbWrite, {
+                  songId,
+                  videoId,
+                  body: bod,
+                  source: freeSources[k],
+                });
+                if (!row?.id) console.warn('[api/ai/comment-pack] insertTidbit frees single slot', k);
+              } catch (e) {
+                console.error('[api/ai/comment-pack] insertTidbit frees single slot', k, e);
+              }
+            }
+          } else {
+            for (const src of freeSources) {
+              try {
+                const { error: d0 } = await dbWrite
+                  .from('song_tidbits')
+                  .delete()
+                  .eq('video_id', videoId)
+                  .eq('source', src);
+                if (d0) console.warn('[api/ai/comment-pack] delete chat slot', src, d0.message);
+              } catch (e) {
+                console.warn('[api/ai/comment-pack] delete chat slot', src, e);
+              }
+            }
+            for (let k = 0; k < COMMENT_PACK_MAX_FREE_COMMENTS; k++) {
+              const bod = freeBodiesTrimmedTriple[k] ?? '';
+              if (!bod) continue;
+              try {
+                const row = await insertTidbit(dbWrite, {
+                  songId,
+                  videoId,
+                  body: bod,
+                  source: freeSources[k],
+                });
+                if (!row?.id) console.warn('[api/ai/comment-pack] insertTidbit frees phase', k);
+              } catch (e) {
+                console.error('[api/ai/comment-pack] insertTidbit frees phase', k, e);
+              }
             }
           }
-          const freeSources = ['ai_chat_1', 'ai_chat_2', 'ai_chat_3'];
-          for (let i = 0; i < freeBodiesForPack.length; i++) {
-            try {
-              const row = await insertTidbit(dbWrite, {
-                songId,
-                videoId,
-                body: freeBodiesForPack[i],
-                source: freeSources[i] ?? 'ai_chat',
-              });
-              tidbitIds.push(row?.id ?? null);
-            } catch (e) {
-              console.error('[api/ai/comment-pack] insertTidbit frees phase', i, e);
-              tidbitIds.push(null);
-            }
+          const mergedIds = await fetchCommentPackChatTidbitIds(dbWrite, videoId, baseRowId);
+          tidbitIds.push(...mergedIds);
           }
         }
       } else {
-        const allBodies = baseOnlyPack
-          ? [baseTrim].filter((t) => t.length > 0)
-          : [baseTrim, ...freeBodiesForPack].filter((t) => t.length > 0);
-
         // 同一動画で再生成（COMMENT_PACK_SKIP_CACHE 等）するとき、古い ai_commentary / ai_chat_* と UNIQUE がぶつかり
         // ai_chat_1 だけ insert 失敗 → 2本目に tidbitId が付かない、となる。先に該当行を消してから入れ直す。
         try {
@@ -970,19 +1057,38 @@ ${isHonorsTopic ? banBlockHonors : isSupergroupMemberTopic ? banBlockSupergroupM
           console.warn('[api/ai/comment-pack] delete old song_tidbits', e);
         }
 
-        const sources = ['ai_commentary', 'ai_chat_1', 'ai_chat_2', 'ai_chat_3'];
-        for (let i = 0; i < allBodies.length; i++) {
-          try {
-            const row = await insertTidbit(dbWrite, {
-              songId,
-              videoId,
-              body: allBodies[i],
-              source: sources[i] ?? 'ai_chat',
-            });
-            tidbitIds.push(row?.id ?? null);
-          } catch (e) {
-            console.error('[api/ai/comment-pack] insertTidbit', i, e);
-            tidbitIds.push(null);
+        const freeSourcesFull = ['ai_chat_1', 'ai_chat_2', 'ai_chat_3'] as const;
+        try {
+          const rowBase = await insertTidbit(dbWrite, {
+            songId,
+            videoId,
+            body: baseTrim,
+            source: 'ai_commentary',
+          });
+          tidbitIds.push(rowBase?.id ?? null);
+        } catch (e) {
+          console.error('[api/ai/comment-pack] insertTidbit base', e);
+          tidbitIds.push(null);
+        }
+        if (!baseOnlyPack) {
+          for (let k = 0; k < COMMENT_PACK_MAX_FREE_COMMENTS; k++) {
+            const bod = freeBodiesTrimmedTriple[k] ?? '';
+            if (!bod) {
+              tidbitIds.push(null);
+              continue;
+            }
+            try {
+              const row = await insertTidbit(dbWrite, {
+                songId,
+                videoId,
+                body: bod,
+                source: freeSourcesFull[k],
+              });
+              tidbitIds.push(row?.id ?? null);
+            } catch (e) {
+              console.error('[api/ai/comment-pack] insertTidbit free', k, e);
+              tidbitIds.push(null);
+            }
           }
         }
       }
@@ -991,7 +1097,7 @@ ${isHonorsTopic ? banBlockHonors : isSupergroupMemberTopic ? banBlockSupergroupM
     const freeCommentTidbitIds =
       !baseOnlyPack && tidbitIds.length > 1 ? tidbitIds.slice(1) : [];
 
-    const filteredOut = applySlotsToPackBodies(baseText, freeBodiesForPack, slots);
+    const filteredOut = applySlotsToPackBodies(baseText, freeBodiesTrimmedTriple, slots);
 
     return NextResponse.json({
       songId,

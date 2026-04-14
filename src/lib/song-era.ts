@@ -7,12 +7,32 @@ export interface SongEraResolveInput {
   artistName?: string | null;
   oembedTitle?: string | null;
   description?: string | null;
+  /** YouTube Data API の `publishedAt`（MV 公開年。Gemma が年代ラベルを外したときのフォールバックに使用） */
+  publishedAtIso?: string | null;
 }
 
 function normalizeEra(era: string | null | undefined): SongEraOption | null {
   if (typeof era !== 'string') return null;
   const trimmed = era.trim();
   return SONG_ERA_OPTIONS.includes(trimmed as SongEraOption) ? (trimmed as SongEraOption) : null;
+}
+
+/** YouTube 動画の公開年から十年ラベル（録音年ではなく MV/公式動画の公開に基づく目安） */
+export function songEraFromYoutubePublishedAt(iso: string | null | undefined): SongEraOption | null {
+  if (!iso || typeof iso !== 'string') return null;
+  const d = new Date(iso.trim());
+  if (Number.isNaN(d.getTime())) return null;
+  const y = d.getUTCFullYear();
+  if (!Number.isFinite(y) || y < 1900 || y > 2100) return null;
+  if (y < 1950) return 'Pre-50s';
+  if (y < 1960) return '50s';
+  if (y < 1970) return '60s';
+  if (y < 1980) return '70s';
+  if (y < 1990) return '80s';
+  if (y < 2000) return '90s';
+  if (y < 2010) return '00s';
+  if (y < 2020) return '10s';
+  return '20s';
 }
 
 export async function getEraFromDb(
@@ -64,17 +84,25 @@ export async function getOrAssignEra(
   input: SongEraResolveInput,
   usageMeta?: { roomId?: string | null; videoId?: string | null }
 ): Promise<SongEraOption> {
+  const fromPublished = songEraFromYoutubePublishedAt(input.publishedAtIso);
   const cached = await getEraFromDb(supabase, videoId);
-  if (cached) return cached;
+  if (cached && cached !== 'Other') return cached;
+  if (cached === 'Other' && fromPublished && fromPublished !== 'Other') {
+    if (supabase) await setEraInDb(supabase, videoId, fromPublished);
+    return fromPublished;
+  }
 
   const title = input.songTitle?.trim() || input.oembedTitle?.trim() || videoId.trim() || 'Unknown';
-  const era = await getSongEra(
+  let eraLabel = await getSongEra(
     title,
     input.artistName ?? undefined,
     input.description ?? undefined,
     usageMeta
   );
-  const normalized = normalizeEra(era) ?? 'Other';
+  let normalized = normalizeEra(eraLabel) ?? 'Other';
+  if (normalized === 'Other' && fromPublished && fromPublished !== 'Other') {
+    normalized = fromPublished;
+  }
   if (supabase) await setEraInDb(supabase, videoId, normalized);
   return normalized;
 }

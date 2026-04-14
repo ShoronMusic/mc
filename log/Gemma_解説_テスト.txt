@@ -1,0 +1,171 @@
+Gemma テスト
+
+AIろんさんの選曲です！
+Post Malone - Better Now
+15:00
+表記メタを記録（STYLE_ADMIN）
+DBに報告（チューニング）
+AI[NEW] [Music8 アーチストJSON_Hit ソングJSON_Hit]
+Post Maloneの『Better Now』は、2018年にリリースされたアルバム『Beerbongs & Bentleys』に収録されている楽曲です。オルタナティブR&Bやヒップホップの要素を併せ持つスタイルが特徴で、失恋の痛みや葛藤を歌っています。2010年代後半を代表する世界的なヒット曲のひとつです。
+15:01
+
+
+
+※ライブラリから削除済
+DB報告
+表記メタを記録（STYLE_ADMIN）
+AI[NEW] * *Wait, let's make it even more distinct from the existing comment.*
+ * Existing: "2010年代後半を代表する世界的なヒット曲のひとつです。
+ * My text: "2018年には米国のビルボードチャートをはじめ、世界各地の音楽チャートで大きな成功を収めました。この楽曲のヒットにより、彼のポップ・ラップにおける地位はより一層強固なものとなりました。
+ * It's close. Let's change "地位はより一層強固なものとなりました" to "世界的な音楽シーンにおける存在感を確立しました".。
+15:03
+
+
+
+※ライブラリから削除済
+DB報告
+表記メタを記録（STYLE_ADMIN）
+AI[NEW] Character count: 88.
+ Sentences: 2.
+ Matches all rules.印象的なリフレインを用いることで、楽曲に独特の響きを与えています。メロディックな歌唱とリズムの緩急を組み合わせた語り口により、聴き手に訴えかける感情の揺らぎがダイレクトに描き出されています。
+15:03
+
+
+
+※ライブラリから削除済
+DB報告
+表記メタを記録（STYLE_ADMIN）
+AI[NEW] * *Option 1 (Japanese):* Post Malone特有のメロディックなラップスタイルが際立っており、少しハスキーながらも滑らかな歌声が楽曲の哀愁を深めています。重なり合うボーカルのレイヤーが、楽曲の奥行きを生み出しています。* ~85 characters. Good.
+
+ * *Option 2 (Japanese):* トラップの影響を受けた力強いビートと、空間を埋めるようなシンセサイザーの音色が特徴的です。重厚なベースラインが楽曲全体の低音を支え、独特の浮遊感のあるアレンジを作り上げています。* ~95 characters. Good.
+
+ * "Post Maloneのメロディックなラップスタイルが核となっており、独特のハスキーな歌声が楽曲の哀愁を引き立てています。幾層にも重ねられたボーカルのレイヤーが、音響的な奥行きを与えています。" (89 characters)
+
+ * *Wait, let's look at the "Music8" facts:* Cloud rap, Pop rap, Hip-Hop.
+ * Cloud rap often involves atmospheric, "cloudy" textures. Let's use that. *
+ 浮遊感のあるシンセサイザーの音色を用いたアレンジが、クラウド・ラップ特有の幻想的な空気感を作り出しています。そこに重厚なベースラインが加わることで、楽曲に心地よいリズムの推進力が生まれています。(93 characters) *
+ - Focus on one point (Arrangement/Texture)? Yes.
+ - Specific? Yes (synth/bass/cloud rap texture).
+ - No "catchy hook" abstraction? Yes.
+
+ - No charts/rumors? Yes.
+ - 2-4 sentences? Yes (2 sentences).
+ - 60-140 chars? Yes (93).
+
+ "浮遊感のあるシンセサイザーの音色を用いたアレンジが、クラウド・ラップ特有の幻想的な空気感を作り出しています。
+ "ポスト・マローン特有のメロディックなラップスタイルが際立っており、ハスキーで情感豊かな歌声が楽曲の旋律を形作っています。ボーカルを幾重にも重ねる手法が、音に厚みと奥行きを与えています。" (92 chars)
+
+ *Refined Version:*
+ 浮遊感のあるシンセサイザーの音色が、クラウド・ラップ特有の幻想的な空気感を演出しています。そこに重厚なベースラインが加わることで、楽曲全体に独特の推進力と奥行きが生まれています。(89 characters)
+
+ "ハスキーながらも滑らかな歌声によるメロディックなラップが、楽曲の核となっています。ボーカルを幾重にも重ねるレイヤー手法を用いることで、旋律に情緒的な深みと豊かな響きが加えられています。" (90 characters)
+
+ This feels very safe and adheres to all "prohibited" logic.
+
+ ハスキーながらも滑らかな歌声によるメロディックなラップが、楽曲の核となっています。Check against: "耳に残るフックなど抽象語の積み重ねだけは禁止" (Don't just stack abstract words like 'catchy hook').
+ "Melodic rap" + "Layering vocals" + "Deep/Rich resonance" is a specific technical observation of the sound.
+
+ "浮遊感のあるシンセサイザーの音色が、クラウド・ラップ特有の幻想的な空気感を演出しています。そこに重厚なベースラインが組み合わさることで、楽曲に独特の奥行きとリズムの推進力が生まれています。" (89 chars)
+
+ This is solid.
+
+ *One final check of the prompt:* "共演がある場合は声質やパートの違いをサウンドに与える効果を一言入れてよい" -> No co-performer here, so skip.
+
+ "浮遊感のあるシンセサイザーの音色が、クラウド・ラップ特有の幻想的な空気感を演出しています。
+ Length: 89 chars.
+ Sentences: 2.
+ Content: Arrangement (Synth/Bass).
+ No repetition.
+ No forbidden info.
+
+ 浮遊感のあるシンセサイザーの音色が、クラウド・ラップ特有の幻想的な空気感を演出しています。
+15:03
+
+
+
+※ライブラリから削除済
+DB報告
+表記メタを記録（STYLE_ADMIN）
+
+以下ログ
+
+[resolveArtistSongForPackAsync] mylist_oembed {
+  title: 'Post Malone - Better Now',
+  authorName: 'Post Malone',
+  artistDisplay: 'Post Malone',
+  song: 'Better Now'
+}
+[resolveArtistSongForPackAsync] mylist_oembed {
+  title: 'Post Malone - Better Now',
+  authorName: 'Post Malone',
+  artistDisplay: 'Post Malone',
+  song: 'Better Now'
+}
+ POST /api/ai/announce-song 200 in 2074ms
+Using the user object as returned from supabase.auth.getSession() or from some supabase.auth.onAuthStateChange() events could be insecure! This value comes directly from the storage medium (usually cookies on the server) and may not be authentic. Use supabase.auth.getUser() instead which authenticates the data by contacting the Supabase Auth server.
+[resolveArtistSongForPackAsync] mylist_oembed {
+  title: 'Post Malone - Better Now',
+  authorName: 'PostMaloneVEVO',
+  artistDisplay: 'Post Malone',
+  song: 'Better Now'
+}
+[room-playback-history POST] resolved {
+  videoId: 'UYwF-jdcVjY',
+  oembedTitle: 'Post Malone - Better Now',
+  authorName: 'PostMaloneVEVO',
+  artistDisplay: 'Post Malone',
+  song: 'Better Now'
+}
+ POST /api/room-playback-history 200 in 2388ms
+ GET /api/room-playback-history?roomId=02&clientId=82e67c4a-96f6-404a-8176-a39696456eaf 200 in 1273ms
+ GET /api/music8/musicaichat-by-video?videoId=UYwF-jdcVjY 200 in 36ms
+ GET /api/room-playback-history?roomId=02&clientId=82e67c4a-96f6-404a-8176-a39696456eaf 200 in 599ms
+ GET /api/music8/musicaichat-by-video?videoId=UYwF-jdcVjY 200 in 34ms
+ GET /api/room-playback-history?roomId=02&clientId=82e67c4a-96f6-404a-8176-a39696456eaf 200 in 543ms
+ GET /api/music8/musicaichat-by-video?videoId=UYwF-jdcVjY 200 in 35ms
+ ✓ Compiled /api/ai/tidbit in 100ms (474 modules)
+ POST /api/ai/tidbit 200 in 149ms
+{"t":"gemini_usage","context":"comment_pack_base","model":"gemma-4-26b-a4b-it","promptTokenCount":1493,"outputTokenCount":79,"totalTokenCount":3798,"cachedTokenCount":null,"ts":"2026-04-14T06:01:20.323Z"}
+ POST /api/ai/comment-pack 200 in 52704ms
+[resolveArtistSongForPackAsync] mylist_oembed {
+  title: 'Post Malone - Better Now',
+  authorName: 'Post Malone',
+  artistDisplay: 'Post Malone',
+  song: 'Better Now'
+}
+[resolveArtistSongForPackAsync] mylist_oembed {
+  title: 'Post Malone - Better Now',
+  authorName: 'Post Malone',
+  artistDisplay: 'Post Malone',
+  song: 'Better Now'
+}
+[resolveArtistSongForPackAsync] mylist_oembed {
+  title: 'Post Malone - Better Now',
+  authorName: 'Post Malone',
+  artistDisplay: 'Post Malone',
+  song: 'Better Now'
+}
+{"t":"gemini_usage","context":"comment_pack_free_3","model":"gemma-4-26b-a4b-it","promptTokenCount":1522,"outputTokenCount":63,"totalTokenCount":3039,"cachedTokenCount":null,"ts":"2026-04-14T06:01:55.735Z"}
+{"t":"gemini_usage","context":"comment_pack_free_2","model":"gemma-4-26b-a4b-it","promptTokenCount":1619,"outputTokenCount":55,"totalTokenCount":3987,"cachedTokenCount":null,"ts":"2026-04-14T06:02:13.784Z"}
+ POST /api/ai/comment-pack 200 in 54126ms
+{"t":"gemini_usage","context":"comment_pack_free_3","model":"gemma-4-26b-a4b-it","promptTokenCount":1453,"outputTokenCount":53,"totalTokenCount":3389,"cachedTokenCount":null,"ts":"2026-04-14T06:02:37.982Z"}
+ POST /api/ai/comment-pack 200 in 77936ms
+{"t":"gemini_usage","context":"comment_pack_free_1","model":"gemma-4-26b-a4b-it","promptTokenCount":1884,"outputTokenCount":48,"totalTokenCount":7335,"cachedTokenCount":null,"ts":"2026-04-14T06:03:17.984Z"}
+ POST /api/ai/comment-pack 200 in 117770ms
+ ✓ Compiled /api/ai/reject-tidbit in 139ms (412 modules)
+ POST /api/ai/reject-tidbit 200 in 950ms
+ POST /api/ai/reject-tidbit 200 in 315ms
+ POST /api/ai/reject-tidbit 200 in 309ms
+ POST /api/ai/reject-tidbit 200 in 261ms
+ ✓ Compiled /api/room-chat-log in 52ms (414 modules)
+ POST /api/room-chat-log 200 in 886ms
+
+
+
+Gemini 利用ログ
+日時	種別	model	入力	出力	room	video
+2026/4/14 15:03:18	comment_pack_free_1	gemma-4-26b-a4b-it	1884	48	—	UYwF-jdcVjY
+2026/4/14 15:02:38	comment_pack_free_3	gemma-4-26b-a4b-it	1453	53	—	UYwF-jdcVjY
+2026/4/14 15:02:14	comment_pack_free_2	gemma-4-26b-a4b-it	1619	55	—	UYwF-jdcVjY
+2026/4/14 15:01:56	comment_pack_free_3	gemma-4-26b-a4b-it	1522	63	—	UYwF-jdcVjY
+2026/4/14 15:01:20	comment_pack_base	gemma-4-26b-a4b-it	1493	79	—	UYwF-jdcVjY

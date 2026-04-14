@@ -1,0 +1,81 @@
+@アヴリル・ラヴィーンのデビュー曲は？
+
+DBに報告（チューニング）
+AIアヴリル・ラヴィーンのデビュー曲は「Complicated」ですね。2002年にリリースされたこの曲は、彼女のファーストアルバム『Let Go』からのリードシングルとして、世界中で大ヒットを記録しました。
+当時の彼女は、フレッシュな歌声と、スケートパンクやポップパンクの要素を取り入れたサウンドで、一躍シーンの注目を浴びましたね。
+
+参考アルバム： Avril Lavigne - Let Go
+シングル： Avril Lavigne - Complicated
+15:30
+DBに報告（チューニング）
+ろん
+15:30
+@アヴリル・ラヴィーンのデビュー当時のライバルは？
+
+DBに報告（チューニング）
+AIそうですね、「ライバル」というよりは、当時のポップシーンの中で、アヴリルは独自の立ち位置を確立していたと言えるかもしれません。2000年代初頭は、ブリトニー・スピアーズやクリスティーナ・アギレラのようなポップアイドルが主流でしたが、彼女はよりロックやパンクの要素を取り入れた「反抗的なティーンエイジャー」というイメージで登場し、新鮮に受け止められました。
+そのため、ポップアイドルたちとは異なる層から支持を得ていましたし、P!nkやMichelle Branchといった、彼女と同じようにギターを携えた女性アーティストとは、よく比較されることもありましたね。
+15:30
+DBに報告（チューニング）
+ろん
+15:30
+@アヴリル・ラヴィーンの人気曲は？
+
+DBに報告（チューニング）
+AIそうですね、アヴリル・ラヴィーンには本当にたくさんの人気曲がありますね！ デビューアルバム『Let Go』からは、先ほどお話しした「Complicated」の他に、勢いのあるロックチューン「Sk8er Boi」も代表的で、ライブでも定番の盛り上がる曲です。
+
+その後も、感情豊かなバラード「My Happy Ending」（アルバム『Under My Skin』収録）や、ポップでパワフルな「Girlfriend」（アルバム『The Best Damn Thing』収録）など、時期によって様々なスタイルで世界中で大ヒットを飛ばし続けました。どの曲も彼女の個性が光っていますよね。
+
+代表曲： Avril Lavigne - Sk8er Boi
+
+
+以下ログ
+[ai/chat] incoming {
+  roomId: '02',
+  isGuest: false,
+  forceReply: true,
+  newestUserText: 'アヴリル・ラヴィーンのデビュー曲は？',
+  messagesCount: 2
+}
+{"t":"gemini_usage","context":"chat_reply","model":"gemini-2.5-flash","promptTokenCount":2848,"outputTokenCount":81,"totalTokenCount":3428,"cachedTokenCount":null,"ts":"2026-04-14T06:30:00.460Z"}
+{"t":"gemini_usage","context":"chat_reply","model":"gemini-2.5-flash","promptTokenCount":2921,"outputTokenCount":108,"totalTokenCount":3451,"cachedTokenCount":null,"ts":"2026-04-14T06:30:04.602Z"}
+[ai/chat] gemini_result { hasText: true, roomId: '02', forceReply: true }
+ POST /api/ai/chat 200 in 8641ms
+{"t":"gemini_usage","context":"extract_song_search","model":"gemini-2.5-flash","promptTokenCount":461,"outputTokenCount":1,"totalTokenCount":513,"cachedTokenCount":null,"ts":"2026-04-14T06:30:13.705Z"}
+[resolve-song-request] no intent for: アヴリル・ラヴィーンのデビュー当時のライバルは？
+ POST /api/ai/resolve-song-request 200 in 1740ms
+[ai/chat] incoming {
+  roomId: '02',
+  isGuest: false,
+  forceReply: true,
+  newestUserText: 'アヴリル・ラヴィーンのデビュー当時のライバルは？',
+  messagesCount: 4
+}
+{"t":"gemini_usage","context":"chat_reply","model":"gemini-2.5-flash","promptTokenCount":2977,"outputTokenCount":137,"totalTokenCount":4720,"cachedTokenCount":2032,"ts":"2026-04-14T06:30:25.118Z"}
+[ai/chat] gemini_result { hasText: true, roomId: '02', forceReply: true }
+ POST /api/ai/chat 200 in 11397ms
+{"t":"gemini_usage","context":"extract_song_search","model":"gemini-2.5-flash","promptTokenCount":616,"outputTokenCount":1,"totalTokenCount":676,"cachedTokenCount":null,"ts":"2026-04-14T06:30:37.668Z"}
+[resolve-song-request] no intent for: アヴリル・ラヴィーンの人気曲は？
+ POST /api/ai/resolve-song-request 200 in 1669ms
+[ai/chat] incoming {
+  roomId: '02',
+  isGuest: false,
+  forceReply: true,
+  newestUserText: 'アヴリル・ラヴィーンの人気曲は？',
+  messagesCount: 6
+}
+{"t":"gemini_usage","context":"chat_reply","model":"gemini-2.5-flash","promptTokenCount":3132,"outputTokenCount":179,"totalTokenCount":3852,"cachedTokenCount":null,"ts":"2026-04-14T06:30:43.209Z"}
+{"t":"gemini_usage","context":"chat_reply","model":"gemini-2.5-flash","promptTokenCount":3205,"outputTokenCount":148,"totalTokenCount":5128,"cachedTokenCount":null,"ts":"2026-04-14T06:30:56.071Z"}
+[ai/chat] gemini_result { hasText: true, roomId: '02', forceReply: true }
+ POST /api/ai/chat 200 in 18371ms
+ ✓ Compiled /api/ai/tidbit in 218ms (465 modules)
+ POST /api/ai/tidbit 200 in 272ms
+
+
+
+以下Gemini 利用ログ
+日時	種別	model	入力	出力	room	video
+2026/4/14 15:30:14	extract_song_search	gemini-2.5-flash	461	1	02	—
+2026/4/14 15:30:04	chat_reply	gemini-2.5-flash	2921	108	02	—
+2026/4/14 15:30:00	chat_reply	gemini-2.5-flash	2848	81	02	—
+2026/4/14 15:29:56	extract_song_search	gemini-2.5-flash	332	1	02	—

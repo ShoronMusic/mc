@@ -1,0 +1,110 @@
+AIろんさんの選曲です！
+Post Malone - Better Now
+15:24
+表記メタを記録（STYLE_ADMIN）
+DBに報告（チューニング）
+AI[NEW] [Music8 アーチストJSON_Hit ソングJSON_Hit]
+Post Maloneの『Better Now』は、2018年リリースのアルバム『Beerbongs & Bentleys』に収録されています。ポップラップやAlternative R&Bの要素を取り入れた楽曲で、過ぎ去った恋愛への未練や後悔がテーマ。2010年代後半に世界的なヒットとなりました。
+15:24
+
+
+
+NG（DBから外す）
+DB報告
+表記メタを記録（STYLE_ADMIN）
+AI[NEW] Post Maloneの『Better Now』は、リリースされた2018年、アメリカのBillboard Hot 100をはじめ、イギリスやオーストラリアなど世界各国の主要音楽チャートで大きなヒットを記録しました。この楽曲は、複数の国でトップ圏内にランクインし、その年のヒットソングとして広く認識され、Post Maloneの国際的な人気を確固たるものにしました。
+15:24
+
+
+
+NG（DBから外す）
+DB報告
+表記メタを記録（STYLE_ADMIN）
+AI[NEW] 『Better Now』の歌詞は、過ぎ去った恋愛への複雑な未練を、ときに自嘲的に、ときに皮肉を込めて綴る語り口が特徴です。「You probably think that you are better now」というサビの繰り返されるフレーズは、相手への問いかけと自身の後悔が混じり合い、感情の揺らぎを印象付けます。Post Maloneのメロディックなボーカルは、その感傷的な心情を聴き手に深く訴えかけます。
+15:25
+
+
+
+NG（DBから外す）
+DB報告
+表記メタを記録（STYLE_ADMIN）
+AI[NEW] 『Better Now』のサウンドは、細かく刻まれるハイハットと重低音の効いた808ベースによるトラップ系のリズムセクションが特徴です。この現代的なヒップホップのグルーヴに、Post Maloneのメロディアスな歌声とラップを織り交ぜたフロウが心地よく乗ります。対照的な要素の融合が、楽曲に奥行きと独自の魅力を与えています。
+15:25
+
+
+
+NG（DBから外す）
+DB報告
+表記メタを記録（STYLE_ADMIN）
+
+
+以下ログ
+[resolveArtistSongForPackAsync] mylist_oembed {
+  title: 'Post Malone - Better Now',
+  authorName: 'Post Malone',
+  artistDisplay: 'Post Malone',
+  song: 'Better Now'
+}
+[resolveArtistSongForPackAsync] mylist_oembed {
+  title: 'Post Malone - Better Now',
+  authorName: 'Post Malone',
+  artistDisplay: 'Post Malone',
+  song: 'Better Now'
+}
+ POST /api/ai/announce-song 200 in 1420ms
+Using the user object as returned from supabase.auth.getSession() or from some supabase.auth.onAuthStateChange() events could be insecure! This value comes directly from the storage medium (usually cookies on the server) and may not be authentic. Use supabase.auth.getUser() instead which authenticates the data by contacting the Supabase Auth server.
+[resolveArtistSongForPackAsync] mylist_oembed {
+  title: 'Post Malone - Better Now',
+  authorName: 'PostMaloneVEVO',
+  artistDisplay: 'Post Malone',
+  song: 'Better Now'
+}
+[room-playback-history POST] resolved {
+  videoId: 'UYwF-jdcVjY',
+  oembedTitle: 'Post Malone - Better Now',
+  authorName: 'PostMaloneVEVO',
+  artistDisplay: 'Post Malone',
+  song: 'Better Now'
+}
+{"t":"gemini_usage","context":"comment_pack_base","model":"gemini-2.5-flash","promptTokenCount":1493,"outputTokenCount":70,"totalTokenCount":3135,"cachedTokenCount":null,"ts":"2026-04-14T06:24:45.581Z"}
+ POST /api/room-playback-history 200 in 2072ms
+ POST /api/ai/comment-pack 200 in 12094ms
+ GET /api/room-playback-history?roomId=02&clientId=82e67c4a-96f6-404a-8176-a39696456eaf 200 in 600ms
+[resolveArtistSongForPackAsync] mylist_oembed {
+  title: 'Post Malone - Better Now',
+  authorName: 'Post Malone',
+  artistDisplay: 'Post Malone',
+  song: 'Better Now'
+}
+[resolveArtistSongForPackAsync] mylist_oembed {
+  title: 'Post Malone - Better Now',
+  authorName: 'Post Malone',
+  artistDisplay: 'Post Malone',
+  song: 'Better Now'
+}
+[resolveArtistSongForPackAsync] mylist_oembed {
+  title: 'Post Malone - Better Now',
+  authorName: 'Post Malone',
+  artistDisplay: 'Post Malone',
+  song: 'Better Now'
+}
+ GET /api/music8/musicaichat-by-video?videoId=UYwF-jdcVjY 200 in 37ms
+ GET /api/room-playback-history?roomId=02&clientId=82e67c4a-96f6-404a-8176-a39696456eaf 200 in 587ms
+ GET /api/music8/musicaichat-by-video?videoId=UYwF-jdcVjY 200 in 85ms
+ GET /api/room-playback-history?roomId=02&clientId=82e67c4a-96f6-404a-8176-a39696456eaf 200 in 601ms
+ GET /api/music8/musicaichat-by-video?videoId=UYwF-jdcVjY 200 in 34ms
+{"t":"gemini_usage","context":"comment_pack_free_1","model":"gemini-2.5-flash","promptTokenCount":1873,"outputTokenCount":83,"totalTokenCount":2917,"cachedTokenCount":null,"ts":"2026-04-14T06:24:53.780Z"}
+{"t":"gemini_usage","context":"comment_pack_free_3","model":"gemini-2.5-flash","promptTokenCount":1511,"outputTokenCount":96,"totalTokenCount":2504,"cachedTokenCount":null,"ts":"2026-04-14T06:24:54.265Z"}
+{"t":"gemini_usage","context":"comment_pack_free_2","model":"gemini-2.5-flash","promptTokenCount":1608,"outputTokenCount":109,"totalTokenCount":2622,"cachedTokenCount":null,"ts":"2026-04-14T06:24:54.266Z"}
+ POST /api/ai/comment-pack 200 in 8517ms
+ POST /api/ai/comment-pack 200 in 8941ms
+ POST /api/ai/comment-pack 200 in 8943ms
+
+
+
+以下Gemini 利用ログ
+日時	種別	model	入力	出力	room	video
+2026/4/14 15:24:54	comment_pack_free_2	gemini-2.5-flash	1608	109	—	UYwF-jdcVjY
+2026/4/14 15:24:54	comment_pack_free_3	gemini-2.5-flash	1511	96	—	UYwF-jdcVjY
+2026/4/14 15:24:54	comment_pack_free_1	gemini-2.5-flash	1873	83	—	UYwF-jdcVjY
+2026/4/14 15:24:45	comment_pack_base	gemini-2.5-flash	1493	70	—	UYwF-jdcVjY

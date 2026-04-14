@@ -623,6 +623,27 @@ ${input}
   }
 }
 
+/** Gemma が前置きのあとにだけ正答ラベルを書く／文中に Pre-50s 等だけ含むときの抽出 */
+export function extractSongEraOptionFromModelText(raw: string): SongEraOption | null {
+  const text = raw.trim();
+  if (!text) return null;
+  if (SONG_ERA_OPTIONS.includes(text as SongEraOption)) return text as SongEraOption;
+  const firstToken = text.split(/\s+/)[0]?.trim() ?? '';
+  if (SONG_ERA_OPTIONS.includes(firstToken as SongEraOption)) return firstToken as SongEraOption;
+  const ordered = [...SONG_ERA_OPTIONS].filter((o) => o !== 'Other').sort((a, b) => b.length - a.length);
+  for (const opt of ordered) {
+    const esc = opt.replace(/-/g, '\\-');
+    const re = new RegExp(`(^|[^A-Za-z0-9])(${esc})([^A-Za-z0-9]|$)`, 'i');
+    const m = re.exec(text);
+    if (m) {
+      const hit = m[2];
+      const exact = SONG_ERA_OPTIONS.find((o) => o.toLowerCase() === hit.toLowerCase());
+      if (exact) return exact;
+    }
+  }
+  return null;
+}
+
 /**
  * 曲タイトル・アーティスト・任意の説明から、録音／ヒットの十年を1つ返す。分からない場合は Other。
  */
@@ -650,19 +671,15 @@ export async function getSongEra(
 ${input}
 
 ・Pre-50s = 1950年以前、50s = 1950年代、…、20s = 2020年代
-上記以外のラベルは使わないこと。`;
+上記以外のラベルは使わないこと。
+・**出力はリストのラベル1語（例: 10s）のみ**。説明文・前置き・箇条書きは禁止。`;
 
   try {
     const result = await model.generateContent(prompt);
     logGeminiUsage('get_song_era', result.response);
     await persistGeminiUsageLog('get_song_era', result.response.usageMetadata, usageMeta);
     const text = readGeneratedText(result.response, 'get_song_era');
-    if (SONG_ERA_OPTIONS.includes(text as SongEraOption)) return text as SongEraOption;
-    const firstToken = text.split(/\s+/)[0]?.trim() ?? '';
-    if (SONG_ERA_OPTIONS.includes(firstToken as SongEraOption)) {
-      return firstToken as SongEraOption;
-    }
-    return 'Other';
+    return extractSongEraOptionFromModelText(text) ?? 'Other';
   } catch (e) {
     console.error('[gemini] getSongEra:', e);
     return 'Other';

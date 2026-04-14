@@ -709,6 +709,24 @@ export default function Chat({
 
   const [disclaimerOpen, setDisclaimerOpen] = useState(false);
   const [conversationGuideOpen, setConversationGuideOpen] = useState(false);
+  const [aiQuestionExamplesOpen, setAiQuestionExamplesOpen] = useState(false);
+  const aiQuestionExamples = [
+    {
+      question: '@アヴリル・ラヴィーンのデビュー曲は？',
+      answer:
+        '「Complicated」です。2002年のアルバム『Let Go』からのリードシングルとして広く知られています。',
+    },
+    {
+      question: '@アヴリル・ラヴィーンのデビュー当時のライバルは？',
+      answer:
+        '「ライバル」というより、当時のポップ主流（ブリトニー・スピアーズ、クリスティーナ・アギレラ等）と対比される存在でした。',
+    },
+    {
+      question: '@アヴリル・ラヴィーンの人気曲は？',
+      answer:
+        '代表的には「Complicated」「Sk8er Boi」「My Happy Ending」「Girlfriend」などがよく挙げられます。',
+    },
+  ] as const;
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden rounded-lg border border-gray-700 bg-gray-900/50">
@@ -1308,6 +1326,18 @@ export default function Chat({
             <p className="whitespace-pre-line text-sm leading-relaxed text-gray-300">
               {getAiChatDisclaimerForDisplay()}
             </p>
+            <p className="mt-3 text-sm">
+              <button
+                type="button"
+                className="text-amber-200/90 underline decoration-dotted underline-offset-2 hover:text-amber-100"
+                onClick={() => {
+                  setDisclaimerOpen(false);
+                  setAiQuestionExamplesOpen(true);
+                }}
+              >
+                AI質問例を見る
+              </button>
+            </p>
             <div className="mt-4 flex justify-end">
               <button
                 type="button"
@@ -1340,6 +1370,18 @@ export default function Chat({
               {getAiConversationGuideForDisplay()}
             </p>
             <p className="mt-3 text-sm">
+              <button
+                type="button"
+                className="text-amber-200/90 underline decoration-dotted underline-offset-2 hover:text-amber-100"
+                onClick={() => {
+                  setConversationGuideOpen(false);
+                  setAiQuestionExamplesOpen(true);
+                }}
+              >
+                AI質問例を見る
+              </button>
+            </p>
+            <p className="mt-3 text-sm">
               <Link
                 href={guideAiHref}
                 className="text-amber-200/90 underline underline-offset-2 hover:text-amber-100"
@@ -1352,6 +1394,54 @@ export default function Chat({
                 type="button"
                 className="rounded border border-gray-600 bg-gray-800 px-4 py-2 text-sm text-gray-200 hover:bg-gray-700"
                 onClick={() => setConversationGuideOpen(false)}
+              >
+                閉じる
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {aiQuestionExamplesOpen && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="chat-ai-question-examples-title"
+          onClick={() => setAiQuestionExamplesOpen(false)}
+        >
+          <div
+            className="max-h-[min(80vh,28rem)] w-full max-w-md overflow-y-auto rounded-lg border border-gray-600 bg-gray-900 p-4 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="chat-ai-question-examples-title" className="mb-3 text-sm font-semibold text-white">
+              AIへの質問例
+            </h2>
+            <p className="mb-3 text-xs leading-relaxed text-gray-300">
+              文頭に <span className="text-gray-200">@</span> を付けて送信してください。
+            </p>
+            <ul className="space-y-2">
+              {aiQuestionExamples.map((example) => (
+                <li key={example.question} className="rounded border border-gray-700 bg-gray-800/60 p-2">
+                  <details className="group">
+                    <summary className="cursor-pointer list-none break-words text-sm leading-relaxed text-gray-100">
+                      <span className="inline-flex items-center gap-2">
+                        <span>{example.question}</span>
+                        <span className="text-xs text-gray-400 group-open:hidden">回答を表示</span>
+                        <span className="hidden text-xs text-gray-400 group-open:inline">回答を閉じる</span>
+                      </span>
+                    </summary>
+                    <p className="mt-2 whitespace-pre-line rounded border border-gray-700 bg-gray-900/60 p-2 text-sm leading-relaxed text-gray-300">
+                      {example.answer}
+                    </p>
+                  </details>
+                </li>
+              ))}
+            </ul>
+            <div className="mt-4 flex justify-end">
+              <button
+                type="button"
+                className="rounded border border-gray-600 bg-gray-800 px-4 py-2 text-sm text-gray-200 hover:bg-gray-700"
+                onClick={() => setAiQuestionExamplesOpen(false)}
               >
                 閉じる
               </button>
