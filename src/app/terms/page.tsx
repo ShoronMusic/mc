@@ -8,7 +8,7 @@ import { ServicePricingNotice } from '@/components/legal/ServicePricingNotice';
 import { withPolicyModalQuery } from '@/lib/policy-modal-link';
 
 export const metadata: Metadata = {
-  title: '利用規約 | 洋楽AIチャット',
+  title: '利用規約 | 洋楽AIチャット（β版）',
   description: '洋楽AIチャットの利用条件（要約）です。利用料金・マナー・AI・楽曲の詳細はご利用上の注意もご覧ください。',
 };
 

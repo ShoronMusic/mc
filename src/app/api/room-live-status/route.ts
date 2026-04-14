@@ -10,6 +10,16 @@ type LiveRoom = {
   title: string;
   startedAt: string | null;
   displayTitle: string;
+  joinLocked: boolean;
+  canEnter: boolean;
+};
+
+type RoomGatheringRow = {
+  id: string;
+  room_id: string;
+  title: string | null;
+  started_at: string | null;
+  join_locked?: boolean | null;
 };
 
 function safeRoomId(raw: string): string | null {
@@ -64,11 +74,17 @@ export async function GET(request: Request) {
   const roomId = safeRoomId(searchParams.get('roomId') ?? '');
   const roomsRaw = searchParams.get('rooms') ?? '';
 
-  let query = supabase
-    .from('room_gatherings')
-    .select('id, room_id, title, started_at')
-    .eq('status', 'live')
-    .order('started_at', { ascending: true });
+  const buildBaseQuery = (withJoinLocked: boolean) => {
+    const selectCols = withJoinLocked
+      ? 'id, room_id, title, started_at, join_locked'
+      : 'id, room_id, title, started_at';
+    return supabase
+      .from('room_gatherings')
+      .select(selectCols)
+      .eq('status', 'live')
+      .order('started_at', { ascending: true });
+  };
+  let query = buildBaseQuery(true);
 
   if (roomId) {
     query = query.eq('room_id', roomId);
@@ -86,7 +102,32 @@ export async function GET(request: Request) {
     }
   }
 
-  const { data, error } = await query;
+  let data: RoomGatheringRow[] | null = null;
+  let error: { code?: string; message?: string } | null = null;
+  {
+    const res = await query;
+    data = (res.data as RoomGatheringRow[] | null) ?? null;
+    error = res.error as { code?: string; message?: string } | null;
+  }
+  if (error?.code === '42703' || error?.message?.includes('join_locked')) {
+    let fallback = buildBaseQuery(false);
+    if (roomId) {
+      fallback = fallback.eq('room_id', roomId);
+    } else if (roomsRaw.trim()) {
+      const ids = Array.from(
+        new Set(
+          roomsRaw
+            .split(',')
+            .map((s) => safeRoomId(s))
+            .filter((x): x is string => x != null),
+        ),
+      ).slice(0, 24);
+      if (ids.length > 0) fallback = fallback.in('room_id', ids);
+    }
+    const res2 = await fallback;
+    data = (res2.data as RoomGatheringRow[] | null) ?? null;
+    error = res2.error as { code?: string; message?: string } | null;
+  }
   if (error) {
     if (error.code === '42P01') {
       return NextResponse.json(
@@ -113,36 +154,76 @@ export async function GET(request: Request) {
     title: typeof r.title === 'string' && r.title.trim() ? r.title.trim() : 'タイトル未設定の会',
     startedAt: typeof r.started_at === 'string' ? r.started_at : null,
     displayTitle: '',
+    joinLocked: r.join_locked === true,
+    canEnter: true,
   }));
 
   const lobbyMap = await lobbyDisplayTitleByRoomIds(
     supabase,
     baseRooms.map((r) => r.roomId).filter(Boolean),
   );
-  const rooms: LiveRoom[] = baseRooms.map((r) => ({
-    ...r,
-    displayTitle: lobbyMap.get(r.roomId) ?? '',
-  }));
+  const roomIdsLive = baseRooms.map((r) => r.roomId).filter(Boolean);
+  const gatheringIdsLive = baseRooms.map((r) => r.gatheringId).filter(Boolean);
 
   const { data: sessionData } = await supabase.auth.getSession();
   const sessionUserId = sessionData?.session?.user?.id ?? '';
 
-  if (roomId) {
-    const first = rooms[0];
-    let isOrganizer = false;
-    if (sessionUserId && first) {
-      const admin = createAdminClient();
-      if (admin) {
-        const { data: orgRow } = await admin
-          .from('room_gatherings')
-          .select('id')
-          .eq('room_id', roomId)
-          .eq('status', 'live')
-          .eq('created_by', sessionUserId)
-          .maybeSingle();
-        isOrganizer = !!orgRow;
+  let organizerRoomIdSet = new Set<string>();
+  if (sessionUserId && roomIdsLive.length > 0) {
+    const admin = createAdminClient();
+    if (admin) {
+      const { data: myLiveRows, error: myLiveErr } = await admin
+        .from('room_gatherings')
+        .select('room_id')
+        .eq('status', 'live')
+        .eq('created_by', sessionUserId)
+        .in('room_id', roomIdsLive);
+      if (!myLiveErr) {
+        organizerRoomIdSet = new Set(
+          (myLiveRows ?? [])
+            .map((r) => (typeof (r as { room_id?: string }).room_id === 'string' ? (r as { room_id: string }).room_id : ''))
+            .filter(Boolean),
+        );
       }
     }
+  }
+
+  let enteredGatheringSet = new Set<string>();
+  if (sessionUserId && gatheringIdsLive.length > 0) {
+    const admin = createAdminClient();
+    if (admin) {
+      const { data: joinedRows, error: joinedErr } = await admin
+        .from('user_room_participation_history')
+        .select('gathering_id')
+        .eq('user_id', sessionUserId)
+        .in('gathering_id', gatheringIdsLive);
+      if (!joinedErr) {
+        enteredGatheringSet = new Set(
+          (joinedRows ?? [])
+            .map((r) =>
+              typeof (r as { gathering_id?: string | null }).gathering_id === 'string'
+                ? (r as { gathering_id: string }).gathering_id
+                : '',
+            )
+            .filter(Boolean),
+        );
+      }
+    }
+  }
+
+  const rooms: LiveRoom[] = baseRooms.map((r) => {
+    const isOrganizerForRoom = organizerRoomIdSet.has(r.roomId);
+    const canEnter = !r.joinLocked || isOrganizerForRoom || enteredGatheringSet.has(r.gatheringId);
+    return {
+      ...r,
+      displayTitle: lobbyMap.get(r.roomId) ?? '',
+      canEnter,
+    };
+  });
+
+  if (roomId) {
+    const first = rooms[0];
+    const isOrganizer = first ? organizerRoomIdSet.has(first.roomId) : false;
     return NextResponse.json(
       {
         configured: true,
@@ -154,6 +235,8 @@ export async function GET(request: Request) {
               startedAt: first.startedAt,
               isLive: true,
               displayTitle: first.displayTitle,
+              joinLocked: first.joinLocked,
+              canEnter: first.canEnter,
               isOrganizer,
             }
           : {
@@ -163,6 +246,8 @@ export async function GET(request: Request) {
               startedAt: null,
               isLive: false,
               displayTitle: '',
+              joinLocked: false,
+              canEnter: true,
               isOrganizer: false,
             },
         rooms: [],

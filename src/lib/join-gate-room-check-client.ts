@@ -23,6 +23,8 @@ export async function runRoomEntryGateCheck(roomId: string): Promise<RoomEntryGa
         isLive?: boolean;
         title?: string | null;
         displayTitle?: string | null;
+        joinLocked?: boolean;
+        canEnter?: boolean;
         isOrganizer?: boolean;
       };
     };
@@ -53,6 +55,16 @@ export async function runRoomEntryGateCheck(roomId: string): Promise<RoomEntryGa
       data?.room?.isLive === true && typeof data?.room?.displayTitle === 'string'
         ? data.room.displayTitle.trim()
         : '';
+    const joinLocked = data?.room?.joinLocked === true;
+    const canEnter = data?.room?.canEnter !== false;
+    if (joinLocked && !canEnter) {
+      return {
+        ok: false,
+        closedMessage: 'この会は新規参加を締め切っています（既参加者は再入室できます）。',
+        liveTitle,
+        roomDisplayTitle,
+      };
+    }
 
     try {
       const p = await fetch(`/api/room-presence?rooms=${encodeURIComponent(roomId)}`, {

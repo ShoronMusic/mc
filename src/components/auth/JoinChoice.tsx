@@ -207,7 +207,7 @@ export function JoinChoice({ onJoin, roomId, joinVerifying = false }: JoinChoice
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-gray-950 p-4">
       <div className="w-full max-w-md rounded-xl border border-gray-700 bg-gray-900 p-8 shadow-lg">
-        <h1 className="mb-2 text-center text-xl font-bold text-white">洋楽AIチャット</h1>
+        <h1 className="mb-2 text-center text-xl font-bold text-white">洋楽AIチャット（β版）</h1>
         <p className="mb-6 text-center text-sm text-gray-400">
           チャットに参加する方法を選んでください
         </p>

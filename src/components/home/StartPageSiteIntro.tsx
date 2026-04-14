@@ -41,7 +41,7 @@ export function StartPageSiteIntro({ forceShow = false }: StartPageSiteIntroProp
 
   return (
     <>
-      <h1 className="mb-2 text-center text-xl font-bold text-white">洋楽AIチャット</h1>
+      <h1 className="mb-2 text-center text-xl font-bold text-white">洋楽AIチャット（β版）</h1>
       <div className="mb-4 rounded-lg border border-gray-700 bg-gray-900/40 p-3 text-sm text-gray-300">
         <p className="mb-2 leading-relaxed">
           YouTubeの曲を参加者みんなで同じタイミングで聴きながら、チャットで交流できる洋楽サロンです。

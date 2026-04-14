@@ -1,6 +1,6 @@
 # 会（Live Session）仕様メモ
 
-最終更新: 2026-04-12
+最終更新: 2026-04-14
 
 このドキュメントは「常設ルームを使った会の開催管理」を段階実装するための仕様メモ。
 
@@ -18,6 +18,7 @@
 - 以前に使っていた「スナップショット」用語は使わない。
 - 前回の状態再現は行わず、会話は毎回新しく始める。
 - サブリーダー権限は後続フェーズで検討する。
+- オーナーは開催中の会に「新規参加締切（鍵）」を設定できる。締切中は新規参加不可、既参加者の再入室は許可する（ゲスト再入室の厳密判定は今後拡張余地あり）。
 
 ## 用語
 
@@ -62,6 +63,7 @@ create table if not exists public.room_gatherings (
   room_id text not null,
   title text not null,
   status text not null check (status in ('live', 'ended')),
+  join_locked boolean not null default false,
   started_at timestamptz null,
   ended_at timestamptz null,
   created_by uuid null,
@@ -70,6 +72,10 @@ create table if not exists public.room_gatherings (
 
 create index if not exists room_gatherings_room_status_idx
   on public.room_gatherings (room_id, status);
+
+-- 既存テーブルを使っている環境向け（列追加）
+alter table public.room_gatherings
+  add column if not exists join_locked boolean not null default false;
 ```
 
 ## 相談が必要な論点（未決）

@@ -54,6 +54,7 @@ async function lobbyDisplayTitleByRoomIds(
  * - { action: 'start', roomId: string, title?: string } … 開催を live で開始
  * - { action: 'end', roomId: string } … 当該部屋の live を ended にする
  * - { action: 'rename', roomId: string, title: string } … 当該部屋の live タイトルを更新
+ * - { action: 'set_lock', roomId: string, locked: boolean } … 新規参加の締切（鍵）ON/OFF
  *
  * ログインユーザーのみ。RLS で拒否される場合は Supabase 側ポリシーを要確認。
  * start 時は created_by が同一で status=live の会が既に 2 件あると 409。
@@ -69,7 +70,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'ログインしていません。' }, { status: 401 });
   }
 
-  let body: { action?: string; roomId?: string; title?: string; autoAssign?: boolean };
+  let body: { action?: string; roomId?: string; title?: string; autoAssign?: boolean; locked?: boolean };
   try {
     body = await request.json();
   } catch {
@@ -296,7 +297,50 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, gathering: updated[0] });
   }
 
-  return NextResponse.json({ error: 'action は start / end / rename を指定してください。' }, { status: 400 });
+  if (action === 'set_lock') {
+    const roomId = requestedRoomId;
+    if (!roomId) {
+      return NextResponse.json({ error: 'roomId が不正です。' }, { status: 400 });
+    }
+    if (typeof body?.locked !== 'boolean') {
+      return NextResponse.json({ error: 'locked は boolean を指定してください。' }, { status: 400 });
+    }
+
+    const { data: updated, error: updErr } = await supabase
+      .from('room_gatherings')
+      .update({ join_locked: body.locked })
+      .eq('room_id', roomId)
+      .eq('status', 'live')
+      .select('id, room_id, join_locked')
+      .limit(1);
+
+    if (updErr) {
+      if (updErr.code === '42P01') {
+        return NextResponse.json(
+          { error: '会テーブルがありません。docs/room-live-session-spec.md の SQL を実行してください。' },
+          { status: 503 },
+        );
+      }
+      if (updErr.code === '42703' || updErr.message?.includes('join_locked')) {
+        return NextResponse.json(
+          {
+            error:
+              '新規参加締切（鍵）機能の列が未作成です。docs/room-live-session-spec.md の追加 SQL（join_locked）を実行してください。',
+          },
+          { status: 503 },
+        );
+      }
+      console.error('[room-gatherings set_lock] update', updErr);
+      return NextResponse.json({ error: updErr.message }, { status: 500 });
+    }
+    if (!updated?.length) {
+      return NextResponse.json({ error: '開催中の会がありません。' }, { status: 404 });
+    }
+
+    return NextResponse.json({ ok: true, roomId, joinLocked: body.locked });
+  }
+
+  return NextResponse.json({ error: 'action は start / end / rename / set_lock を指定してください。' }, { status: 400 });
 }
 
 /**

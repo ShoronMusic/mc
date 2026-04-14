@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { withPolicyModalQuery } from '@/lib/policy-modal-link';
 
 export const metadata: Metadata = {
-  title: 'プライバシーポリシー | 洋楽AIチャット',
+  title: 'プライバシーポリシー | 洋楽AIチャット（β版）',
   description:
     '洋楽AIチャットにおける個人情報の取扱い（取得情報・利用目的・外部送信・お問い合わせ）を簡潔にまとめたページです。',
 };

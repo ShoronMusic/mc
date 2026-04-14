@@ -5,7 +5,7 @@ import { GUIDE_SECTIONS } from '@/lib/guide-nav';
 import { withPolicyModalQuery } from '@/lib/policy-modal-link';
 
 export const metadata: Metadata = {
-  title: 'ご利用上の注意（目次） | 洋楽AIチャット',
+  title: 'ご利用上の注意（目次） | 洋楽AIチャット（β版）',
   description: 'チャット・AI・楽曲コメントなど、参加時の注意事項の目次です。',
 };
 

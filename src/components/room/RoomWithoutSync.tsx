@@ -1158,6 +1158,9 @@ export default function RoomWithoutSync({
             className="h-9 w-auto max-h-9 shrink-0 object-contain object-left"
             priority
           />
+          <span className="inline-flex shrink-0 items-center rounded border border-sky-500/60 bg-sky-500/10 px-2 py-0.5 text-[10px] font-semibold text-sky-200">
+            （β）版
+          </span>
           <h1
             className="min-w-0 flex-1 truncate text-base font-semibold leading-none text-white sm:text-lg"
             title={`部屋 ${roomId || '--'}${(roomDisplayTitleCurrent || roomTitle) ? ` - ${roomDisplayTitleCurrent || roomTitle}` : ''}`}

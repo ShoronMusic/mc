@@ -11,6 +11,8 @@ type LiveRoom = {
   title: string;
   startedAt: string | null;
   displayTitle?: string;
+  joinLocked?: boolean;
+  canEnter?: boolean;
 };
 
 type RoomPayload = {
@@ -52,6 +54,8 @@ function RoomRow({
 }) {
   const headline = (room.displayTitle?.trim() || room.title).trim();
   const label = `${headline} に入る`;
+  const joinLocked = room.joinLocked === true;
+  const canEnter = room.canEnter !== false;
 
   let sub: ReactNode = null;
   if (configured) {
@@ -81,13 +85,10 @@ function RoomRow({
 
   const lobby = payload?.lobbyMessage?.trim();
 
-  return (
-    <Link
-      href={`/${room.roomId}`}
-      className="flex flex-col gap-1.5 rounded-lg border border-gray-600 bg-gray-800 px-4 py-3 text-white transition hover:bg-gray-700 hover:border-sky-600/50"
-    >
+  const body = (
+    <>
       <span className="self-center rounded-full bg-emerald-600/25 px-2.5 py-0.5 text-[10px] font-semibold tracking-wide text-emerald-300">
-        開催中
+        {joinLocked ? '開催中 🔒 新規締切' : '開催中'}
       </span>
       <span className="text-center font-medium">{label}</span>
       <span className="text-center text-[11px] text-gray-500">部屋ID: {room.roomId}</span>
@@ -97,7 +98,29 @@ function RoomRow({
       {lobby && (
         <span className="text-center text-xs leading-snug text-gray-300 break-words whitespace-pre-wrap">{lobby}</span>
       )}
+      {joinLocked && !canEnter && (
+        <span className="text-center text-xs leading-snug text-amber-300">
+          新規参加は締切中です（既参加者のみ再入室できます）
+        </span>
+      )}
       {sub && <span className="text-center text-xs leading-snug break-words">{sub}</span>}
+    </>
+  );
+
+  if (joinLocked && !canEnter) {
+    return (
+      <div className="flex flex-col gap-1.5 rounded-lg border border-amber-700/60 bg-gray-800/80 px-4 py-3 text-gray-300">
+        {body}
+      </div>
+    );
+  }
+
+  return (
+    <Link
+      href={`/${room.roomId}`}
+      className="flex flex-col gap-1.5 rounded-lg border border-gray-600 bg-gray-800 px-4 py-3 text-white transition hover:bg-gray-700 hover:border-sky-600/50"
+    >
+      {body}
     </Link>
   );
 }

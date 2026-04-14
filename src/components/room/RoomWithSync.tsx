@@ -113,7 +113,7 @@ import {
   setCommentPackModeToStorage,
 } from '@/lib/room-owner';
 import { createClient } from '@/lib/supabase/client';
-import { DocumentTextIcon, EnvelopeIcon } from '@heroicons/react/24/outline';
+import { DocumentTextIcon, EnvelopeIcon, LockClosedIcon, LockOpenIcon } from '@heroicons/react/24/outline';
 import { useIsLgViewport } from '@/hooks/useLgViewport';
 import { useRoomChatLogPersistence } from '@/hooks/useRoomChatLogPersistence';
 import { useSupabaseAuthUserId } from '@/hooks/useSupabaseAuthUserId';
@@ -286,8 +286,8 @@ interface CandidateSong {
 const SEC_AFTER_END_BEFORE_PROMPT = 30;
 const DEFAULT_DURATION_WHEN_UNKNOWN_SEC = 240;
 const FIVE_MIN_MS = 5 * 60 * 1000;
-/** comment-pack 自由コメントの小出し間隔（1本目は 0、2本目以降は shownIdx×この値）。旧 (n+1)×15s だと frees 遅延のあとさらに 15s 空き「最初しか出ない」感になる */
-const COMMENT_PACK_FREE_STAGGER_MS = 5000;
+/** comment-pack 自由コメントの小出し間隔（各コメントは最低30秒以上空ける） */
+const COMMENT_PACK_FREE_STAGGER_MS = 30_000;
 
 interface RoomWithSyncProps {
   displayName?: string;
@@ -343,6 +343,8 @@ export default function RoomWithSync({
   const [termsModalOpen, setTermsModalOpen] = useState(false);
   const [siteFeedbackOpen, setSiteFeedbackOpen] = useState(false);
   const [cancelReservationModalOpen, setCancelReservationModalOpen] = useState(false);
+  const [joinLocked, setJoinLocked] = useState(false);
+  const [joinLockSaving, setJoinLockSaving] = useState(false);
   const [policyTab, setPolicyTab] = useState<'terms' | 'privacy' | 'guide'>('terms');
   useEffect(() => {
     setRoomDisplayTitleCurrent(roomDisplayTitle);
@@ -963,6 +965,34 @@ export default function RoomWithSync({
   const ownerLeftAt = ownerState.ownerLeftAt;
   const isOwner = Boolean(myClientId && ownerClientId && myClientId === ownerClientId && ownerLeftAt === null);
   const canUseOwnerControls = isOwner && !isGuest;
+
+  useEffect(() => {
+    if (!roomId?.trim()) return;
+    let cancelled = false;
+    const rid = roomId.trim();
+    const loadJoinLock = async () => {
+      try {
+        const r = await fetch(`/api/room-live-status?roomId=${encodeURIComponent(rid)}`, {
+          credentials: 'include',
+        });
+        const d = (await r.json().catch(() => null)) as {
+          room?: { isLive?: boolean; joinLocked?: boolean };
+        } | null;
+        if (cancelled) return;
+        if (d?.room?.isLive === true && typeof d.room.joinLocked === 'boolean') {
+          setJoinLocked(d.room.joinLocked);
+        }
+      } catch {
+        /* ignore */
+      }
+    };
+    void loadJoinLock();
+    const t = window.setInterval(() => void loadJoinLock(), 20_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(t);
+    };
+  }, [roomId]);
 
   const publishRef = useRef<((name: string, data: unknown) => void) | null>(null);
 
@@ -2912,7 +2942,7 @@ export default function RoomWithSync({
                   continue;
                 }
                 scheduledForSlot[i] = true;
-                const delayMs = shownIdx2 * COMMENT_PACK_FREE_STAGGER_MS;
+                const delayMs = (shownIdx2 + 1) * COMMENT_PACK_FREE_STAGGER_MS;
                 shownIdx2 += 1;
                 const tidN = tidForSlot[i] ?? parseTidbitIdFromPack(idsPhase[i + 1]);
                 const prefixI = prefixForSlot[i];
@@ -3044,7 +3074,7 @@ export default function RoomWithSync({
             for (let i = 0; i < COMMENT_PACK_MAX_FREE_COMMENTS; i++) {
               const c = freeArr[i]?.trim() ?? '';
               if (!c) continue;
-              const delayMs = shownIdx * COMMENT_PACK_FREE_STAGGER_MS;
+              const delayMs = (shownIdx + 1) * COMMENT_PACK_FREE_STAGGER_MS;
               shownIdx += 1;
               const tidN =
                 parseTidbitIdFromPack(freeTidbitIdsRaw[i]) ??
@@ -3875,17 +3905,68 @@ export default function RoomWithSync({
             className="h-9 w-auto max-h-9 shrink-0 object-contain object-left"
             priority
           />
+          <span className="inline-flex shrink-0 items-center rounded border border-sky-500/60 bg-sky-500/10 px-2 py-0.5 text-[10px] font-semibold text-sky-200">
+            （β）版
+          </span>
           <h1
             className="min-w-0 flex-1 truncate text-base font-semibold leading-none text-white sm:text-lg"
             title={`部屋 ${roomId || '--'}${(roomDisplayTitleCurrent || roomTitle) ? ` - ${roomDisplayTitleCurrent || roomTitle}` : ''}`}
           >
             {`部屋 ${roomId || '--'}${(roomDisplayTitleCurrent || roomTitle) ? ` - ${roomDisplayTitleCurrent || roomTitle}` : ''}`}
           </h1>
+          {joinLocked && (
+            <span className="inline-flex shrink-0 items-center gap-1 rounded border border-amber-700/80 bg-amber-950/40 px-2 py-0.5 text-[10px] font-semibold text-amber-200">
+              <LockClosedIcon className="h-3.5 w-3.5" aria-hidden />
+              新規参加締切中
+            </span>
+          )}
         </div>
         {onLeave && (
           <div className="flex shrink-0 flex-nowrap items-center justify-end gap-1.5 sm:gap-2">
             {!isGuest && (
               <>
+                {canUseOwnerControls && (
+                  <button
+                    type="button"
+                    disabled={joinLockSaving}
+                    onClick={async () => {
+                      if (joinLockSaving) return;
+                      setJoinLockSaving(true);
+                      try {
+                        const next = !joinLocked;
+                        const r = await fetch('/api/room-gatherings', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          credentials: 'include',
+                          body: JSON.stringify({ action: 'set_lock', roomId, locked: next }),
+                        });
+                        const d = (await r.json().catch(() => null)) as { joinLocked?: boolean; error?: string } | null;
+                        if (!r.ok) {
+                          addSystemMessage(
+                            d?.error?.trim() || '新規参加締切の更新に失敗しました。時間をおいて再度お試しください。',
+                          );
+                          return;
+                        }
+                        setJoinLocked(d?.joinLocked === true);
+                        addSystemMessage(
+                          d?.joinLocked === true
+                            ? 'この会は新規参加を締め切りました（既参加者は再入室できます）。'
+                            : 'この会の新規参加締切を解除しました。',
+                        );
+                      } catch {
+                        addSystemMessage('新規参加締切の更新に失敗しました。時間をおいて再度お試しください。');
+                      } finally {
+                        setJoinLockSaving(false);
+                      }
+                    }}
+                    className="inline-flex items-center gap-1 rounded border border-amber-700 bg-amber-900/30 px-2.5 py-1.5 text-xs text-amber-200 hover:bg-amber-800/50 disabled:opacity-50"
+                    title="新規参加を締め切る / 解除する（既参加者の再入室は可）"
+                    aria-label="新規参加締切の切替"
+                  >
+                    {joinLocked ? <LockClosedIcon className="h-4 w-4" aria-hidden /> : <LockOpenIcon className="h-4 w-4" aria-hidden />}
+                    {joinLocked ? '鍵を開ける' : '鍵を掛ける'}
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => {

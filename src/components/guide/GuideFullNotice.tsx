@@ -169,6 +169,9 @@ export function GuideFullNotice() {
             までです。
           </p>
           <p className="text-gray-400">
+            開催中の部屋では、チャットオーナーが右上の<strong className="text-gray-300">「鍵を掛ける」</strong>で新規参加を締め切れます（既に参加済みのユーザーは再入室できます）。
+          </p>
+          <p className="text-gray-400">
             補足として、<strong className="text-gray-300">1部屋を個人専用</strong>（試聴・整理など）、
             <strong className="text-gray-300">もう1部屋を招待できるオープンルーム</strong>
             に分けると運用しやすい、というおすすめの一例です（必須ではありません）。
