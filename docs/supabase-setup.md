@@ -363,6 +363,7 @@ create table if not exists public.site_feedback (
   id uuid primary key default gen_random_uuid(),
   created_at timestamptz not null default now(),
   rating smallint not null check (rating >= -2 and rating <= 2),
+  pain_points text[],
   comment text,
   room_id text,
   display_name text,
@@ -374,6 +375,13 @@ create index if not exists site_feedback_created_idx
   on public.site_feedback (created_at desc);
 
 alter table public.site_feedback enable row level security;
+```
+
+既存テーブルを使っている場合は、次の `alter table` だけ追加実行してください。
+
+```sql
+alter table public.site_feedback
+  add column if not exists pain_points text[];
 ```
 
 anon には `insert` / `select` ポリシーを付けません（クライアント直叩き不可）。API のみサービスロールで挿入し、管理 API のみ読み取ります。

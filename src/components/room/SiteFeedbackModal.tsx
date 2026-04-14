@@ -4,6 +4,20 @@ import { useCallback, useEffect, useState } from 'react';
 import { XMarkIcon } from '@heroicons/react/24/outline';
 
 const RATINGS = [-2, -1, 0, 1, 2] as const;
+const RATING_EMOJIS: Record<(typeof RATINGS)[number], string> = {
+  [-2]: '😡',
+  [-1]: '😟',
+  [0]: '😐',
+  [1]: '🙂',
+  [2]: '😄',
+};
+const PAIN_POINT_OPTIONS = [
+  '入室方法',
+  'YouTube URL貼り付け',
+  'AIへの質問方法',
+  '画面の見方',
+  '特になし',
+] as const;
 
 export type SiteFeedbackModalProps = {
   open: boolean;
@@ -22,6 +36,7 @@ export function SiteFeedbackModal({
 }: SiteFeedbackModalProps) {
   const [step, setStep] = useState<Step>('input');
   const [rating, setRating] = useState<number>(0);
+  const [painPoints, setPainPoints] = useState<string[]>([]);
   const [comment, setComment] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -29,6 +44,7 @@ export function SiteFeedbackModal({
   const reset = useCallback(() => {
     setStep('input');
     setRating(0);
+    setPainPoints([]);
     setComment('');
     setSending(false);
     setError(null);
@@ -43,6 +59,7 @@ export function SiteFeedbackModal({
     if (!open) return;
     setStep('input');
     setRating(0);
+    setPainPoints([]);
     setComment('');
     setSending(false);
     setError(null);
@@ -67,6 +84,7 @@ export function SiteFeedbackModal({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           rating,
+          painPoints: painPoints.length > 0 ? painPoints : undefined,
           comment: comment.trim() || undefined,
           roomId: roomId?.trim() || undefined,
           displayName: displayName?.trim() || undefined,
@@ -84,7 +102,7 @@ export function SiteFeedbackModal({
     } finally {
       setSending(false);
     }
-  }, [rating, comment, roomId, displayName]);
+  }, [rating, painPoints, comment, roomId, displayName]);
 
   if (!open) return null;
 
@@ -125,25 +143,67 @@ export function SiteFeedbackModal({
             </p>
             <fieldset className="mt-4">
               <legend className="mb-2 text-xs font-medium text-gray-500">評価</legend>
-              <div className="flex flex-wrap gap-3">
-                {RATINGS.map((v) => (
-                  <label
-                    key={v}
-                    className="inline-flex cursor-pointer items-center gap-1.5 rounded border border-gray-600 bg-gray-800/80 px-2.5 py-1.5 text-sm text-gray-200 has-[:checked]:border-amber-500 has-[:checked]:bg-amber-950/40"
-                  >
-                    <input
-                      type="radio"
-                      name="site-feedback-rating"
-                      value={v}
-                      checked={rating === v}
-                      onChange={() => setRating(v)}
-                      className="border-gray-500 text-amber-500 focus:ring-amber-500"
-                    />
-                    <span>{v > 0 ? `+${v}` : String(v)}</span>
-                  </label>
-                ))}
+              <div className="flex flex-wrap gap-3" role="radiogroup" aria-label="評価">
+                {RATINGS.map((v) => {
+                  const isActive = rating === v;
+                  return (
+                    <button
+                      key={v}
+                      type="button"
+                      role="radio"
+                      aria-checked={isActive}
+                      onClick={() => setRating(v)}
+                      className={`inline-flex items-center gap-1.5 rounded border px-2.5 py-1.5 text-sm transition ${
+                        isActive
+                          ? 'border-amber-500 bg-amber-950/40 text-amber-100'
+                          : 'border-gray-600 bg-gray-800/80 text-gray-200 hover:border-gray-500 hover:bg-gray-800'
+                      }`}
+                    >
+                      <span className="text-base leading-none" aria-hidden="true">
+                        {RATING_EMOJIS[v]}
+                      </span>
+                      <span>{v > 0 ? `+${v}` : String(v)}</span>
+                    </button>
+                  );
+                })}
               </div>
             </fieldset>
+            <label className="mt-4 block">
+              <span className="mb-1 block text-xs font-medium text-gray-500">どこで迷いましたか（任意・複数選択）</span>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {PAIN_POINT_OPTIONS.map((option) => {
+                  const checked = painPoints.includes(option);
+                  return (
+                    <label
+                      key={option}
+                      className={`flex cursor-pointer items-center gap-2 rounded border px-2.5 py-2 text-xs transition ${
+                        checked
+                          ? 'border-sky-500 bg-sky-950/30 text-sky-100'
+                          : 'border-gray-600 bg-gray-800/60 text-gray-200 hover:border-gray-500'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            if (option === '特になし') {
+                              setPainPoints(['特になし']);
+                              return;
+                            }
+                            setPainPoints((prev) => [...prev.filter((p) => p !== '特になし'), option]);
+                            return;
+                          }
+                          setPainPoints((prev) => prev.filter((p) => p !== option));
+                        }}
+                        className="h-4 w-4 rounded border-gray-500 bg-gray-900 text-sky-500 focus:ring-sky-500"
+                      />
+                      <span>{option}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </label>
             <label className="mt-4 block">
               <span className="mb-1 block text-xs font-medium text-gray-500">自由コメント（任意）</span>
               <textarea
@@ -184,7 +244,18 @@ export function SiteFeedbackModal({
             <dl className="mt-4 space-y-3 text-sm">
               <div>
                 <dt className="text-gray-500">評価</dt>
-                <dd className="text-gray-100">{rating > 0 ? `+${rating}` : String(rating)}</dd>
+                <dd className="inline-flex items-center gap-2 text-gray-100">
+                  <span className="text-base leading-none" aria-hidden="true">
+                    {RATING_EMOJIS[rating as (typeof RATINGS)[number]]}
+                  </span>
+                  <span>{rating > 0 ? `+${rating}` : String(rating)}</span>
+                </dd>
+              </div>
+              <div>
+                <dt className="text-gray-500">迷った点</dt>
+                <dd className="text-gray-100">
+                  {painPoints.length > 0 ? painPoints.join(' / ') : '（なし）'}
+                </dd>
               </div>
               <div>
                 <dt className="text-gray-500">コメント</dt>

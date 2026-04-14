@@ -15,6 +15,7 @@ export async function POST(request: Request) {
 
   let body: {
     rating?: unknown;
+    painPoints?: unknown;
     comment?: unknown;
     roomId?: unknown;
     displayName?: unknown;
@@ -36,6 +37,21 @@ export async function POST(request: Request) {
   if (typeof body.comment === 'string' && body.comment.trim()) {
     comment = body.comment.trim().slice(0, MAX_COMMENT);
   }
+  const allowedPainPoints = new Set([
+    '入室方法',
+    'YouTube URL貼り付け',
+    'AIへの質問方法',
+    '画面の見方',
+    '特になし',
+  ]);
+  const painPoints =
+    Array.isArray(body.painPoints) && body.painPoints.length > 0
+      ? body.painPoints
+          .filter((v): v is string => typeof v === 'string')
+          .map((v) => v.trim())
+          .filter((v) => v.length > 0 && allowedPainPoints.has(v))
+          .slice(0, 5)
+      : null;
 
   const roomId =
     typeof body.roomId === 'string' && body.roomId.trim() ? body.roomId.trim().slice(0, 64) : null;
@@ -59,6 +75,7 @@ export async function POST(request: Request) {
 
   const row = {
     rating,
+    pain_points: painPoints && painPoints.length > 0 ? painPoints : null,
     comment,
     room_id: roomId,
     display_name: displayName,
@@ -66,7 +83,20 @@ export async function POST(request: Request) {
     user_id: userId,
   };
 
-  const { error } = await admin.from('site_feedback').insert(row);
+  let { error } = await admin.from('site_feedback').insert(row);
+  if (error?.code === 'PGRST204' || error?.code === '42703') {
+    // 旧スキーマ（pain_points 未追加）でもまずは保存できるように後方互換で再試行
+    const fallbackRow = {
+      rating,
+      comment,
+      room_id: roomId,
+      display_name: displayName,
+      is_guest: !userId,
+      user_id: userId,
+    };
+    const retry = await admin.from('site_feedback').insert(fallbackRow);
+    error = retry.error;
+  }
 
   if (error) {
     if (error.code === '42P01') {

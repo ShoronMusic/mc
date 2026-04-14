@@ -7,6 +7,7 @@ type Row = {
   id: string;
   created_at: string;
   rating: number;
+  pain_points: string[] | null;
   comment: string | null;
   room_id: string | null;
   display_name: string | null;
@@ -66,7 +67,7 @@ export default function AdminSiteFeedbackPage() {
       <AdminMenuBar />
       <h1 className="text-2xl font-semibold tracking-tight text-white sm:text-3xl">サイトご意見</h1>
       <p className="mt-2 text-sm text-gray-400">
-        部屋ヘッダーの「ご意見」から送信された評価（-2〜2）と自由コメントの一覧です。
+        部屋ヘッダーの「ご意見」から送信された、評価（-2〜2）・迷った点（複数選択）・自由コメントの一覧です。
       </p>
       <div className="mt-4 flex gap-2">
         <button
@@ -100,6 +101,7 @@ export default function AdminSiteFeedbackPage() {
                 <th className="whitespace-nowrap px-3 py-2 font-medium text-gray-400">評価</th>
                 <th className="whitespace-nowrap px-3 py-2 font-medium text-gray-400">表示名</th>
                 <th className="whitespace-nowrap px-3 py-2 font-medium text-gray-400">部屋</th>
+                <th className="min-w-[180px] px-3 py-2 font-medium text-gray-400">迷った点</th>
                 <th className="whitespace-nowrap px-3 py-2 font-medium text-gray-400">ゲスト</th>
                 <th className="max-w-[100px] px-3 py-2 font-medium text-gray-400">user_id</th>
                 <th className="min-w-[200px] px-3 py-2 font-medium text-gray-400">コメント</th>
@@ -114,6 +116,11 @@ export default function AdminSiteFeedbackPage() {
                     {r.display_name ?? '—'}
                   </td>
                   <td className="whitespace-nowrap px-3 py-2 text-gray-400">{r.room_id ?? '—'}</td>
+                  <td className="whitespace-pre-wrap px-3 py-2 text-gray-300">
+                    {Array.isArray(r.pain_points) && r.pain_points.length > 0
+                      ? r.pain_points.join(' / ')
+                      : '—'}
+                  </td>
                   <td className="whitespace-nowrap px-3 py-2 text-gray-400">{r.is_guest ? 'はい' : 'いいえ'}</td>
                   <td
                     className="max-w-[100px] truncate px-3 py-2 font-mono text-[11px] text-gray-500"
