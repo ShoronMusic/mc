@@ -68,4 +68,17 @@ assert.equal(
 );
 assert.equal(isMusicRelatedAiQuestion('What song was that in the ad?'), true);
 
+assert.equal(
+  isMusicRelatedAiQuestion('Michael JacksonのBeat Itでギターを弾いているのは？'),
+  true
+);
+assert.equal(isMusicRelatedAiQuestion('Who played the guitar solo on Beat It?'), true);
+
+assert.equal(
+  isMusicRelatedAiQuestion('Chaka KhanのI Feel for Youでハーモニカを吹いているのは？'),
+  true
+);
+assert.equal(isMusicRelatedAiQuestion('この曲のコーラスは誰？'), true);
+assert.equal(isMusicRelatedAiQuestion('Who produced I Feel for You?'), true);
+
 console.log('is-music-related-ai-question unit tests: OK');

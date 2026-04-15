@@ -48,6 +48,11 @@ import { COMMENT_PACK_MAX_FREE_COMMENTS } from '@/lib/song-tidbits';
 import { playbackLog } from '@/lib/playback-debug';
 import { useResumeYoutubeWhenTabVisible } from '@/hooks/useResumeYoutubeWhenTabVisible';
 import { rememberRoomForGuideReturn } from '@/lib/safe-return-path';
+import {
+  markLeaveSiteFeedbackAnswered,
+  markLeaveSiteFeedbackShown,
+  shouldShowLeaveSiteFeedbackPrompt,
+} from '@/lib/site-feedback-prompt';
 import { extractVideoId, isStandaloneNonYouTubeUrl } from '@/lib/youtube';
 import { isYoutubeKeywordSearchEnabled } from '@/lib/youtube-keyword-search-ui';
 import {
@@ -342,10 +347,53 @@ export default function RoomWithSync({
   const [chatSummaryError, setChatSummaryError] = useState<string | null>(null);
   const [termsModalOpen, setTermsModalOpen] = useState(false);
   const [siteFeedbackOpen, setSiteFeedbackOpen] = useState(false);
+  const [feedbackExitAction, setFeedbackExitAction] = useState<'none' | 'leave' | 'logout'>('none');
   const [cancelReservationModalOpen, setCancelReservationModalOpen] = useState(false);
   const [joinLocked, setJoinLocked] = useState(false);
   const [joinLockSaving, setJoinLockSaving] = useState(false);
   const [policyTab, setPolicyTab] = useState<'terms' | 'privacy' | 'guide'>('terms');
+  const performLogoutAndLeave = useCallback(async () => {
+    const supabase = createClient();
+    if (supabase) await supabase.auth.signOut();
+    onLeave?.();
+  }, [onLeave]);
+  const handleLeaveClick = useCallback(() => {
+    if (!onLeave) return;
+    if (shouldShowLeaveSiteFeedbackPrompt()) {
+      markLeaveSiteFeedbackShown();
+      setFeedbackExitAction('leave');
+      setSiteFeedbackOpen(true);
+      return;
+    }
+    onLeave();
+  }, [onLeave]);
+  const handleLogoutClick = useCallback(() => {
+    if (shouldShowLeaveSiteFeedbackPrompt()) {
+      markLeaveSiteFeedbackShown();
+      setFeedbackExitAction('logout');
+      setSiteFeedbackOpen(true);
+      return;
+    }
+    void performLogoutAndLeave();
+  }, [performLogoutAndLeave]);
+  const handleCloseSiteFeedback = useCallback(() => {
+    setSiteFeedbackOpen(false);
+    if (feedbackExitAction === 'leave') {
+      setFeedbackExitAction('none');
+      onLeave?.();
+      return;
+    }
+    if (feedbackExitAction === 'logout') {
+      setFeedbackExitAction('none');
+      void performLogoutAndLeave();
+      return;
+    }
+    setFeedbackExitAction('none');
+  }, [feedbackExitAction, onLeave, performLogoutAndLeave]);
+  const handleOpenSiteFeedbackFromHeader = useCallback(() => {
+    setFeedbackExitAction('none');
+    setSiteFeedbackOpen(true);
+  }, []);
   useEffect(() => {
     setRoomDisplayTitleCurrent(roomDisplayTitle);
   }, [roomDisplayTitle]);
@@ -3984,7 +4032,7 @@ export default function RoomWithSync({
                 </button>
                 <button
                   type="button"
-                  onClick={() => setSiteFeedbackOpen(true)}
+                  onClick={handleOpenSiteFeedbackFromHeader}
                   className="inline-flex items-center gap-1 text-sm text-gray-300 underline decoration-dotted underline-offset-2 hover:text-white"
                   title="このサイトへのご意見"
                   aria-label="このサイトへのご意見"
@@ -3994,11 +4042,7 @@ export default function RoomWithSync({
                 </button>
                 <button
                   type="button"
-                  onClick={async () => {
-                    const supabase = createClient();
-                    if (supabase) await supabase.auth.signOut();
-                    onLeave();
-                  }}
+                  onClick={handleLogoutClick}
                   className="rounded border border-amber-700 bg-amber-900/40 px-3 py-2 text-sm text-amber-200 hover:bg-amber-800/60"
                   aria-label="ログアウトして最初の画面に戻る"
                 >
@@ -4009,7 +4053,7 @@ export default function RoomWithSync({
             {isGuest && (
               <button
                 type="button"
-                onClick={() => setSiteFeedbackOpen(true)}
+                onClick={handleOpenSiteFeedbackFromHeader}
                 className="inline-flex items-center gap-1 text-sm text-gray-300 underline decoration-dotted underline-offset-2 hover:text-white"
                 title="このサイトへのご意見"
                 aria-label="このサイトへのご意見"
@@ -4020,7 +4064,7 @@ export default function RoomWithSync({
             )}
             <button
               type="button"
-              onClick={onLeave}
+              onClick={handleLeaveClick}
               className="rounded border border-gray-600 bg-gray-800 px-4 py-2 text-sm font-medium text-gray-200 hover:bg-gray-700 hover:text-white"
               aria-label="部屋を退室して最初の画面に戻る"
             >
@@ -4120,7 +4164,8 @@ export default function RoomWithSync({
 
       <SiteFeedbackModal
         open={siteFeedbackOpen}
-        onClose={() => setSiteFeedbackOpen(false)}
+        onClose={handleCloseSiteFeedback}
+        onSubmitted={() => markLeaveSiteFeedbackAnswered()}
         roomId={roomId}
         displayName={effectiveDisplayName}
       />

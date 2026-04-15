@@ -124,7 +124,7 @@ export default function GuideServicePage() {
       <section className="space-y-3 rounded-lg border border-gray-800 bg-gray-900/40 p-4">
         <h2 className="text-base font-semibold text-white">運営者・連絡先</h2>
         <p className="text-gray-300">洋楽AIチャット事務局</p>
-        <p className="text-gray-300">mail@musicai.jp</p>
+        <p className="text-gray-300">musicaichat0@gmail.com</p>
       </section>
     </article>
   );

@@ -51,6 +51,11 @@ import {
   clearKickedSitewideStorage,
 } from '@/lib/room-owner';
 import { lineFromJoinGreetingApi } from '@/lib/join-greeting-logic';
+import {
+  markLeaveSiteFeedbackAnswered,
+  markLeaveSiteFeedbackShown,
+  shouldShowLeaveSiteFeedbackPrompt,
+} from '@/lib/site-feedback-prompt';
 
 const AI_DISPLAY_NAME = 'AI';
 const SILENCE_TIDBIT_SEC = 30;
@@ -121,10 +126,32 @@ export default function RoomWithoutSync({
   const [myPageOpen, setMyPageOpen] = useState(false);
   const [guestRegisterModalOpen, setGuestRegisterModalOpen] = useState(false);
   const [siteFeedbackOpen, setSiteFeedbackOpen] = useState(false);
+  const [leaveFeedbackPending, setLeaveFeedbackPending] = useState(false);
   const [playbackHistoryModalOpen, setPlaybackHistoryModalOpen] = useState(false);
   const [chatSummaryModalOpen, setChatSummaryModalOpen] = useState(false);
   const [chatSummaryLoading, setChatSummaryLoading] = useState(false);
   const [chatSummaryError, setChatSummaryError] = useState<string | null>(null);
+  const handleLeaveClick = useCallback(() => {
+    if (!onLeave) return;
+    if (shouldShowLeaveSiteFeedbackPrompt()) {
+      markLeaveSiteFeedbackShown();
+      setLeaveFeedbackPending(true);
+      setSiteFeedbackOpen(true);
+      return;
+    }
+    onLeave();
+  }, [onLeave]);
+  const handleCloseSiteFeedback = useCallback(() => {
+    setSiteFeedbackOpen(false);
+    if (leaveFeedbackPending) {
+      setLeaveFeedbackPending(false);
+      onLeave?.();
+    }
+  }, [leaveFeedbackPending, onLeave]);
+  const handleOpenSiteFeedbackFromHeader = useCallback(() => {
+    setLeaveFeedbackPending(false);
+    setSiteFeedbackOpen(true);
+  }, []);
   useEffect(() => {
     setRoomDisplayTitleCurrent(roomDisplayTitle);
   }, [roomDisplayTitle]);
@@ -1172,7 +1199,7 @@ export default function RoomWithoutSync({
           <div className="flex shrink-0 flex-nowrap items-center justify-end gap-1.5 sm:gap-2">
             <button
               type="button"
-              onClick={() => setSiteFeedbackOpen(true)}
+              onClick={handleOpenSiteFeedbackFromHeader}
               className="inline-flex items-center gap-1 text-sm text-gray-300 underline decoration-dotted underline-offset-2 hover:text-white"
               title="このサイトへのご意見"
               aria-label="このサイトへのご意見"
@@ -1182,7 +1209,7 @@ export default function RoomWithoutSync({
             </button>
             <button
               type="button"
-              onClick={onLeave}
+              onClick={handleLeaveClick}
               className="rounded border border-gray-600 bg-gray-800 px-4 py-2 text-sm font-medium text-gray-200 hover:bg-gray-700 hover:text-white"
               aria-label="部屋を退室して最初の画面に戻る"
             >
@@ -1212,7 +1239,8 @@ export default function RoomWithoutSync({
 
       <SiteFeedbackModal
         open={siteFeedbackOpen}
-        onClose={() => setSiteFeedbackOpen(false)}
+        onClose={handleCloseSiteFeedback}
+        onSubmitted={() => markLeaveSiteFeedbackAnswered()}
         roomId={roomId}
         displayName={displayNameProp}
       />

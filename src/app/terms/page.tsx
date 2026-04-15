@@ -200,7 +200,7 @@ export default function TermsPage({ searchParams }: TermsPageProps) {
         <section className="mt-10 rounded-lg border border-gray-800 bg-gray-900/40 p-4">
           <h2 className="text-sm font-semibold text-white">運営者</h2>
           <p className="mt-2 text-sm text-gray-300">洋楽AIチャット事務局</p>
-          <p className="text-sm text-gray-300">mail@musicai.jp</p>
+          <p className="text-sm text-gray-300">musicaichat0@gmail.com</p>
         </section>
 
       </main>

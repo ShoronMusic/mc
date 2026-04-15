@@ -22,6 +22,7 @@ const PAIN_POINT_OPTIONS = [
 export type SiteFeedbackModalProps = {
   open: boolean;
   onClose: () => void;
+  onSubmitted?: () => void;
   roomId?: string;
   displayName?: string;
 };
@@ -31,6 +32,7 @@ type Step = 'input' | 'confirm' | 'thanks';
 export function SiteFeedbackModal({
   open,
   onClose,
+  onSubmitted,
   roomId,
   displayName,
 }: SiteFeedbackModalProps) {
@@ -96,13 +98,14 @@ export function SiteFeedbackModal({
         setSending(false);
         return;
       }
+      onSubmitted?.();
       setStep('thanks');
     } catch {
       setError('送信に失敗しました。');
     } finally {
       setSending(false);
     }
-  }, [rating, painPoints, comment, roomId, displayName]);
+  }, [rating, painPoints, comment, roomId, displayName, onSubmitted]);
 
   if (!open) return null;
 
