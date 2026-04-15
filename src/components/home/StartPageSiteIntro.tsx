@@ -44,7 +44,7 @@ export function StartPageSiteIntro({ forceShow = false }: StartPageSiteIntroProp
       <h1 className="mb-2 text-center text-xl font-bold text-white">洋楽AIチャット（β版）</h1>
       <figure className="mb-4">
         <Image
-          src="/musicaichat_cover_l.png"
+          src="/musicaichat_cover_l_2.png"
           alt="洋楽AIチャット：同じタイミングでYouTubeを視聴し、チャットで交流するイメージ"
           width={1920}
           height={1071}
