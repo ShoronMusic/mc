@@ -524,7 +524,7 @@ interface MyPageProps {
   /** オーナー時のみ。AI 自由発言が停止中か */
   aiFreeSpeechStopped?: boolean;
   onAiFreeSpeechStopToggle?: () => void;
-  /** オーナー時のみ。[基本, ヒット/受賞, 歌詞, サウンド] */
+  /** オーナー時のみ。[基本, ヒット/受賞, 歌詞, サウンド, アーティスト情報] */
   commentPackSlots?: CommentPackSlotSelection;
   onCommentPackSlotsChange?: (slots: CommentPackSlotSelection) => void;
   /** オーナー時のみ。邦楽AI解説の解禁（デフォルトOFF） */
@@ -2028,7 +2028,7 @@ export default function MyPage({
                   onClick={() => onCommentPackSlotsChange(COMMENT_PACK_SLOTS_FULL)}
                   className="rounded bg-gray-700 px-2.5 py-1 text-xs text-gray-200 hover:bg-gray-600"
                 >
-                  4 本すべて
+                  5 本すべて
                 </button>
               </div>
               <ul className="space-y-2 text-xs text-gray-200">
@@ -2038,6 +2038,7 @@ export default function MyPage({
                     { i: 1 as const, label: '2. ヒット・受賞・話題（チャート等）' },
                     { i: 2 as const, label: '3. 歌詞のテーマ・メッセージ' },
                     { i: 3 as const, label: '4. サウンドの特徴' },
+                    { i: 4 as const, label: '5. アーティスト情報（当時の概要・活動フェーズ）' },
                   ] as const
                 ).map(({ i, label }) => (
                   <li key={i} className="flex items-start gap-2">

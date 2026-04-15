@@ -77,10 +77,11 @@ function applySlotsToPackBodies(
     typeof freeComments[0] === 'string' ? freeComments[0] : '',
     typeof freeComments[1] === 'string' ? freeComments[1] : '',
     typeof freeComments[2] === 'string' ? freeComments[2] : '',
+    typeof freeComments[3] === 'string' ? freeComments[3] : '',
   ];
   return {
     baseComment: slots[0] ? baseComment : '',
-    freeComments: [slots[1] ? f[0] : '', slots[2] ? f[1] : '', slots[3] ? f[2] : ''],
+    freeComments: [slots[1] ? f[0] : '', slots[2] ? f[1] : '', slots[3] ? f[2] : '', slots[4] ? f[3] : ''],
   };
 }
 
@@ -169,13 +170,13 @@ async function prependLibrarySessionBridge(
   return gemmaPackOrBridge ? polishGemmaModelVisibleText(joined) : joined;
 }
 
-/** frees フェーズで ai_chat_1〜3 の現行 tidbit id を集める（単枠 upsert 後の tidbitIds 用） */
+/** frees フェーズで ai_chat_1〜4 の現行 tidbit id を集める（単枠 upsert 後の tidbitIds 用） */
 async function fetchCommentPackChatTidbitIds(
   dbWrite: SupabaseClient,
   videoId: string,
   baseRowId: string,
 ): Promise<(string | null)[]> {
-  const freeSources = ['ai_chat_1', 'ai_chat_2', 'ai_chat_3'] as const;
+  const freeSources = ['ai_chat_1', 'ai_chat_2', 'ai_chat_3', 'ai_chat_4'] as const;
   const out: (string | null)[] = [baseRowId];
   for (const src of freeSources) {
     const { data, error } = await dbWrite
@@ -232,21 +233,21 @@ function buildCollaborationPromptBlock(
 ・メタデータ上、この曲には複数名のクレジットが関わっています（${names}）。**解説全体を通じ、可能な限り複数人に触れてください**。
 ${secondaryHint}・世界的知名度の高い客演者がいる一曲では、その参加がトラックにもたらした**対比・掛け合い・話題性**を、**広く知られる事実の範囲**で述べてください（例：ラップ／歌唱の役割分担が曲の特徴になっている、など）。
 ・「共演が実現した経緯・当人同士の関係性」は、**公的に繰り返し語られている内容**に限ります。裏付けのない私人話・根拠のない制作秘話は書かないこと。
-・各スロット（基本・栄誉・歌詞・サウンド）で**同じ趣旨の焼き直し**にせず、観点を分けてください。
+・各スロット（基本・栄誉・歌詞・サウンド・アーティスト情報）で**同じ趣旨の焼き直し**にせず、観点を分けてください。
 `;
 }
 
 /**
  * 曲ごとのコメントパック生成API
- * - 基本コメント1本 + 自由コメント最大3本（1:栄誉・チャート 2:歌詞 3:サウンド）をまとめて生成する
- * - 動画公開から30日以内は「新曲」とみなし、基本コメントのみ（末尾に注釈）。自由3本は生成しない
+ * - 基本コメント1本 + 自由コメント最大4本（1:栄誉・チャート 2:歌詞 3:サウンド 4:アーティスト情報）をまとめて生成する
+ * - 動画公開から30日以内は「新曲」とみなし、基本コメントのみ（末尾に注釈）。自由4本は生成しない
  * - 同一動画は song_tidbits から再利用（新曲は注釈付き基本のみキャッシュ、それ以外は4本そろいでキャッシュ）
  * - 邦楽節約: メタデータが日本語っぽい／音声言語が ja／MusicBrainz で Area=Japan 等のときは AI 曲解説を出さない（skipAiCommentary）。ただし ONE OK ROCK / XG / Ado / ATARASHII GAKKO!（＋88rising）/ YOASOBI の公式 YouTube チャンネル（channelId 固定＋ env 追加分）は除外。COMMENT_PACK_JP_ECONOMY=0 でオフ
  * - COMMENT_PACK_SKIP_CACHE=1 で常に新規生成
  * - musicaichat 曲 JSON が取れ、Music8 注入オン時は既定で [DB] キャッシュを使わず再生成（`COMMENT_PACK_REGENERATE_LIBRARY_WHEN_MUSIC8=0` でオフ）。`/api/ai/commentary` も同条件
- * - NEXT_PUBLIC_DEV_MINIMAL_SONG_AI=1 で開発簡略: 基本1本のみ生成・キャッシュ返却も自由3本を落とす（新曲30日以内扱いと同様）
- * - 自由コメント3本の**初回生成は並列**（基本のあと Promise.all）。ポリシー・重複検証に落ちた枠だけ従来どおり逐次リトライ（遅いモデルでもレスポンスが返るまでの壁時計時間を短縮）
- * - **packPhase=base**: 基本だけ生成し DB に ai_commentary のみ保存して即 JSON 返却（遅いモデルでも最初の解説を先に出せる）。**packPhase=frees**: 直前の基本文と一致する ai_commentary を前提に自由3本だけ生成し ai_chat_* のみ差し替え
+ * - NEXT_PUBLIC_DEV_MINIMAL_SONG_AI=1 で開発簡略: 基本1本のみ生成・キャッシュ返却も自由4本を落とす（新曲30日以内扱いと同様）
+ * - 自由コメント4本の**初回生成は並列**（基本のあと Promise.all）。ポリシー・重複検証に落ちた枠だけ従来どおり逐次リトライ（遅いモデルでもレスポンスが返るまでの壁時計時間を短縮）
+ * - **packPhase=base**: 基本だけ生成し DB に ai_commentary のみ保存して即 JSON 返却（遅いモデルでも最初の解説を先に出せる）。**packPhase=frees**: 直前の基本文と一致する ai_commentary を前提に自由4本だけ生成し ai_chat_* のみ差し替え
  * - メタからアーティストを信頼できない（曲名も空・キュレーターchでアップローダー名=アーティスト等）は skipAiCommentary。AI_COMMENTARY_ALLOW_UNCERTAIN_ARTIST=1 で無効化
  * - YouTube タイトル／説明が宣伝文・長文プローズっぽいときは skipAiCommentary（skipReason: promotional_metadata）。視聴履歴の表記修正でタイトルが付いているときはスキップしない。AI_COMMENTARY_SKIP_PROMO_METADATA=0 で無効化
  */
@@ -329,7 +330,7 @@ export async function POST(request: Request) {
     });
     const roomJpAiUnlock = roomId ? await isRoomJpAiUnlockEnabled(roomId) : false;
     const jpAiUnlockEnabled = roomJpAiUnlock;
-    /** 新曲のみ基本1本（自由3本なし）。開発フラグ時も同様。邦楽は公式チャンネル例外を除き生成しない */
+    /** 新曲のみ基本1本（自由4本なし）。開発フラグ時も同様。邦楽は公式チャンネル例外を除き生成しない */
     const baseOnlyPack = equivalentBaseOnlySlots(slots) || isNewRelease || devMinimalSongAi;
 
     if (isCommentPackFullyOff(slots)) {
@@ -573,7 +574,7 @@ ${music8SourcePolicyLine}
 ・この後に自由コメントは出しません。ここ1本で完結する基本紹介にしてください。`
       : devMinimalSongAi || equivalentBaseOnlySlots(slots)
         ? `・開発中モードのため、自由コメントは生成しません。ここ1本で完結する基本紹介にしてください。`
-        : `・この1本は「基本情報」専用です。あとから3本の自由コメント（解釈・サウンド・栄誉など）が続くため、ここでは深い解説や歌詞の細かい読み下しは書かないでください。`;
+        : `・この1本は「基本情報」専用です。あとから4本の自由コメント（栄誉・歌詞・サウンド・アーティスト情報）が続くため、ここでは深い解説や歌詞の細かい読み下しは書かないでください。`;
 
     const baseExcludeChartsBlock = isSupergroupArtist
       ? `・チャート順位、週数、売上、グラミー等の受賞・ノミネート、メディアやSNSの**反響**の**具体**（スーパーグループでは後続の自由コメントでもこれらを**主題にしません**。**自由コメント1本目**で**各メンバーの氏名と元所属の紹介**を優先します）`
@@ -698,17 +699,19 @@ ${basePromptTail}`;
       }
     }
 
-    // 2. 自由コメント3本（基本情報のあと。1本目＝栄誉・チャート／スーパーグループ時はメンバー紹介、2＝歌詞、3＝サウンド）
+    // 2. 自由コメント4本（基本情報のあと。1本目＝栄誉・チャート／スーパーグループ時はメンバー紹介、2＝歌詞、3＝サウンド、4＝アーティスト情報）
     const topics = isSupergroupArtist
       ? ([
           'スーパーグループの**主要メンバー紹介**（**氏名**を通称またはフルネームで**複数**必ず出し、それぞれに**世に知られる元所属バンド名・ソロ名・役割**を本文中で対応づける。結成経緯が分かれば1文に収めてよい。**チャート・売上・受賞・「大ヒット」「バズ」「反響」はこのスロットでも後続でも主題にしない**。不確実な人名・関係性は断定しない）',
           '歌詞テーマやメッセージ（共演・フィーチャリングでは**客演側のパートが担う役割**（例：ラップ対メインヴォーカル）を必ず含め、双方の対比を1〜2文で。パートの長い列挙は禁止）',
           'サウンドの特徴（メロディ・リズム・アレンジの**うち1点**に絞って具体化。共演がある場合は**声質やパートの違いがサウンドに与える効果**を一言入れてよい。「耳に残るフック」など抽象語の積み重ねだけは禁止）',
+          'アーティスト情報（当該曲リリース時点の文脈で、**メインアーティスト中心**に紹介。国籍・ソロ/バンド/グループ種別、当時のフェーズ（デビュー期/転換期/人気絶頂期/円熟期など）を優先。複数名義の場合は**最大3人まで具体名**、4人以上はメイン中心＋他メンバーは軽く触れる。コラボ曲なら、関係性・組み合わせの異色性・話題性・接点が分かる範囲で1文添える。断定困難な経歴は避ける）',
         ] as const)
       : ([
           '商業的成功と社会的な話題性（このスロット専用。**必ず**次のいずれかを含めること：①主要チャートでの**定性的**な成功（西暦の年を明記。**1位・9位・33位など順位の数字は書かない**。例：1983年頃に全英シングルチャートで大きなヒット、翌年には米ビルボードでもチャート入り）②グラミー等の主要ノミネート・受賞（分かる場合のみ。**Rap/Sung Collaboration 等、共演枠の賞がある場合はその性質に触れてよい**）③複数国で広く再生・話題となったことなど、年とともに触れられる事実。④**タイトル等からリミックス版と分かる曲**では、オリジナルよりこのミックスの方が後からヒット・定着した、といった文脈を**定性・年**で触れてよい（断定できないときは弱い表現）。**禁止**：○位・最高○位・第○位・「〜週1位」など順位や週数の具体数字、作詞者の私人話、伝聞だけの表現、歌詞の読み下し。マイナー曲はライブ定番やカバーの多さにとどめる）',
           '歌詞テーマやメッセージ（共演・フィーチャリングでは**客演側のパートが担う役割**（例：ラップ対メインヴォーカル）を必ず含め、双方の対比を1〜2文で。パートの長い列挙は禁止）',
           'サウンドの特徴（メロディ・リズム・アレンジの**うち1点**に絞って具体化。共演がある場合は**声質やパートの違いがサウンドに与える効果**を一言入れてよい。「耳に残るフック」など抽象語の積み重ねだけは禁止）',
+          'アーティスト情報（当該曲リリース時点の文脈で、**メインアーティスト中心**に紹介。国籍・ソロ/バンド/グループ種別、当時のフェーズ（デビュー期/転換期/人気絶頂期/円熟期など）を優先。複数名義の場合は**最大3人まで具体名**、4人以上はメイン中心＋他メンバーは軽く触れる。コラボ曲なら、関係性・組み合わせの異色性・話題性・接点が分かる範囲で1文添える。断定困難な経歴は避ける）',
         ] as const);
     if (topics.length !== COMMENT_PACK_MAX_FREE_COMMENTS) {
       console.warn(
@@ -759,6 +762,13 @@ ${basePromptTail}`;
   - 制作期間の断定（「数日で」等）、録音工程の断定、TikTokバズや若者文化の誇張はしない
   - 「恋人からインスピレーションを得た」等の私人話・作詞秘話に逃げない（その内容は2本目以降でも推測口調は禁止）`;
 
+      const banBlockArtistInfo = `・この1本だけの必須・禁止:
+  - **必須**：当該曲のリリース時点に寄せて、アーティストの概要（国籍、ソロ/バンド/グループ種別、当時の活動フェーズ）を含める
+  - **必須**：複数アーティストの場合は**メインを中心**にし、固有名の詳細紹介は最大3人まで（4人以上は「他メンバー」などで軽く触れる）
+  - **推奨**：バンドなら当時のメンバー交代やソロ活動への分岐、コラボなら関係性・接点・異色性・話題性を分かる範囲で1文入れる
+  - **禁止**：チャート順位・週数・受賞名・売上など数値/実績の詳細を主題にしない（それらは1本目で扱う）
+  - **禁止**：裏取りできない経歴・人間関係・私生活の断定、過剰な誇張表現`;
+
       const buildFreePrompt = (
         i: number,
         usedSection: string,
@@ -767,6 +777,7 @@ ${basePromptTail}`;
         const topic = topics[i];
         const isHonorsTopic = i === 0 && !isSupergroupArtist;
         const isSupergroupMemberTopic = i === 0 && isSupergroupArtist;
+        const isArtistInfoTopic = i === 3;
         return `以下の曲について、すでに「基本情報」と他の自由コメントが存在します。
 
 ${metaLockBlock}
@@ -788,7 +799,7 @@ ${
             : ''
         }
 
-${isHonorsTopic ? banBlockHonors : isSupergroupMemberTopic ? banBlockSupergroupMemberIntro : isSupergroupArtist ? banBlockStandardSupergroup : banBlockStandard}
+${isHonorsTopic ? banBlockHonors : isSupergroupMemberTopic ? banBlockSupergroupMemberIntro : isArtistInfoTopic ? banBlockArtistInfo : isSupergroupArtist ? banBlockStandardSupergroup : banBlockStandard}
 
 出力ルール:
 ・日本語、です・ます調。
@@ -802,14 +813,14 @@ ${isHonorsTopic ? banBlockHonors : isSupergroupMemberTopic ? banBlockSupergroupM
       const freeIndices: number[] =
         packPhase === 'frees' && freeSlotIndexOnly !== null
           ? [freeSlotIndexOnly]
-          : ([0, 1, 2] as const).filter((ix) => slots[ix + 1]);
+          : ([0, 1, 2, 3] as const).filter((ix) => slots[ix + 1]);
       const filteredFreeIndices = freeIndices.filter(
         (ix) => ix >= 0 && ix < COMMENT_PACK_MAX_FREE_COMMENTS && slots[ix + 1],
       );
 
-      /** 遅いモデル対策: 3枠まとめは Promise.all。クライアントが freeSlotIndex で分割したときは1枠＋別HTTP並列 */
+      /** 遅いモデル対策: 4枠まとめは Promise.all。クライアントが freeSlotIndex で分割したときは1枠＋別HTTP並列 */
       const parallelRoleLinesMulti =
-        '・同じHTTPリクエスト内で、**ほか2つの自由コメント枠**も**並列**に生成しています（各枠の観点は異なります）。**この枠の観点だけ**に絞り、基本情報の焼き直しにしないこと。栄誉・歌詞・サウンドで**役割が分かれている**前提として、他枠と主旨が被る本文にしないでください。\n';
+        '・同じHTTPリクエスト内で、**ほか3つの自由コメント枠**も**並列**に生成しています（各枠の観点は異なります）。**この枠の観点だけ**に絞り、基本情報の焼き直しにしないこと。栄誉・歌詞・サウンド・アーティスト情報で**役割が分かれている**前提として、他枠と主旨が被る本文にしないでください。\n';
       const parallelRoleLinesSingle =
         '・このリクエストでは**このスロットのみ**を生成しています。他の自由枠は**別のHTTPリクエストで並列**に生成されるため、他枠の本文は参照できません。基本情報の焼き直しにしないこと。基本情報と主旨が被らないよう、この枠の観点だけに従ってください。\n';
       const parallelRoleLines =
@@ -819,7 +830,7 @@ ${isHonorsTopic ? banBlockHonors : isSupergroupMemberTopic ? banBlockSupergroupM
       const usedParallel =
         typeof baseText === 'string' && baseText.trim().length > 0 ? baseText.trim() : 'まだありません';
 
-      const draftTexts: string[] = ['', '', ''];
+      const draftTexts: string[] = ['', '', '', ''];
       if (filteredFreeIndices.length > 0) {
         await Promise.all(
           filteredFreeIndices.map(async (i) => {
@@ -845,6 +856,7 @@ ${isHonorsTopic ? banBlockHonors : isSupergroupMemberTopic ? banBlockSupergroupM
       for (const i of filteredFreeIndices) {
         const isHonorsTopic = i === 0 && !isSupergroupArtist;
         const isSupergroupMemberTopic = i === 0 && isSupergroupArtist;
+        const isArtistInfoTopic = i === 3;
         const parallelTxt = (draftTexts[i] ?? '').trim();
 
         const policyHonorsParallel = isHonorsTopic;
@@ -898,6 +910,9 @@ ${isHonorsTopic ? banBlockHonors : isSupergroupMemberTopic ? banBlockSupergroupM
                 : isSupergroupMemberTopic
                   ? prompt +
                     '\n（追加指示）**主要メンバー氏名を複数**と元所属を本文の中心に置き、チャート・ヒット規模・反響・受賞には触れずに書き直してください。前の文と同じ内容・言い換えのみは避けてください。'
+                  : isArtistInfoTopic
+                    ? prompt +
+                      '\n（追加指示）当該曲リリース時点のアーティスト情報に絞り、国籍・種別（ソロ/バンド等）・当時の活動フェーズを必ず含めて書き直してください。複数名義は最大3人まで具体名、4人以上はメイン中心で簡潔に。'
                   : prompt +
                     '\n（追加指示）チャート/受賞/制作期間/録音工程に触れず、指定観点だけで短く書き直してください。すでに出した文と同じ内容・同じ言い換えは避けてください。';
             } else if (attempt === 2) {
@@ -907,6 +922,9 @@ ${isHonorsTopic ? banBlockHonors : isSupergroupMemberTopic ? banBlockSupergroupM
                 : isSupergroupMemberTopic
                   ? prompt +
                     '\n（3回目・最終）**メンバー氏名＋元所属**だけに絞り、60〜120字。チャート・反響・受賞は禁止。前の文の焼き直しは不可。'
+                  : isArtistInfoTopic
+                    ? prompt +
+                      '\n（3回目・最終）アーティスト概要のみ、70〜120字。リリース当時の立ち位置（デビュー期/転換期/絶頂期/円熟期など）を1語以上含め、チャート・受賞・売上の具体は書かない。'
                   : prompt +
                     '\n（3回目・最終）指定観点だけ、60〜100字。チャート/受賞/制作断定は避け、穏やかな表現に。前に出た文の焼き直しは不可。';
             }
@@ -918,12 +936,12 @@ ${isHonorsTopic ? banBlockHonors : isSupergroupMemberTopic ? banBlockSupergroupM
     }
 
     const freeCommentsCapped = freeComments.slice(0, COMMENT_PACK_MAX_FREE_COMMENTS);
-    /** スロット 0〜2 と DB の ai_chat_1〜3 を対応させる（空枠は '' のまま） */
+    /** スロット 0〜3 と DB の ai_chat_1〜4 を対応させる（空枠は '' のまま） */
     const freeBodiesTrimmedTriple = freeCommentsCapped.map((t) =>
       typeof t === 'string' ? t.trim() : '',
     );
 
-    // song_tidbits に保存（新曲は基本のみ、通常は基本＋自由3本）
+    // song_tidbits に保存（新曲は基本のみ、通常は基本＋自由4本）
     const tidbitIds: (string | null)[] = [];
     if (supabase && songId) {
       const dbWrite = createAdminClient() ?? supabase;
@@ -981,7 +999,7 @@ ${isHonorsTopic ? banBlockHonors : isSupergroupMemberTopic ? banBlockSupergroupM
             const mergedIdsBaseOnly = await fetchCommentPackChatTidbitIds(dbWrite, videoId, baseRowId);
             tidbitIds.push(...mergedIdsBaseOnly);
           } else {
-          const freeSources = ['ai_chat_1', 'ai_chat_2', 'ai_chat_3'] as const;
+          const freeSources = ['ai_chat_1', 'ai_chat_2', 'ai_chat_3', 'ai_chat_4'] as const;
           if (freeSlotIndexOnly !== null) {
             const k = freeSlotIndexOnly;
             const bod = freeBodiesTrimmedTriple[k] ?? '';
@@ -1057,7 +1075,7 @@ ${isHonorsTopic ? banBlockHonors : isSupergroupMemberTopic ? banBlockSupergroupM
           console.warn('[api/ai/comment-pack] delete old song_tidbits', e);
         }
 
-        const freeSourcesFull = ['ai_chat_1', 'ai_chat_2', 'ai_chat_3'] as const;
+        const freeSourcesFull = ['ai_chat_1', 'ai_chat_2', 'ai_chat_3', 'ai_chat_4'] as const;
         try {
           const rowBase = await insertTidbit(dbWrite, {
             songId,

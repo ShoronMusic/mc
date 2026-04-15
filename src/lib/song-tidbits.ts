@@ -1,14 +1,15 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 /** 基本コメントに続けて出す自由コメントの本数（最大） */
-export const COMMENT_PACK_MAX_FREE_COMMENTS = 3;
+export const COMMENT_PACK_MAX_FREE_COMMENTS = 4;
 
-/** comment-pack 保存時の source（この4件が揃えば DB から再利用可） */
+/** comment-pack 保存時の source（この5件が揃えば DB から再利用可） */
 export const COMMENT_PACK_SOURCES = [
   'ai_commentary',
   'ai_chat_1',
   'ai_chat_2',
   'ai_chat_3',
+  'ai_chat_4',
 ] as const;
 
 export interface SongTidbitRow {
@@ -66,8 +67,8 @@ export async function insertTidbit(
 
 export interface StoredCommentPack {
   baseComment: string;
-  freeComments: [string, string, string];
-  /** ai_commentary → ai_chat_1..3 の順の song_tidbits.id（NG削除API用） */
+  freeComments: [string, string, string, string];
+  /** ai_commentary → ai_chat_1..4 の順の song_tidbits.id（NG削除API用） */
   tidbitIds?: string[];
 }
 
@@ -78,7 +79,7 @@ export const COMMENT_PACK_NEW_RELEASE_DISCLAIMER =
 const NEW_RELEASE_CACHE_MARKER = '【注釈】新曲と判断したため';
 
 /**
- * 新曲モードで保存された基本コメントのみキャッシュヒット（自由3本は使わない）
+ * 新曲モードで保存された基本コメントのみキャッシュヒット（自由4本は使わない）
  */
 export async function getStoredNewReleaseCommentPack(
   supabase: SupabaseClient | null,
@@ -109,7 +110,7 @@ export async function getStoredNewReleaseCommentPack(
 }
 
 /**
- * 邦楽節約モード: ai_commentary のみがあり ai_chat_1 が無いときキャッシュヒット（自由3本なし）
+ * 邦楽節約モード: ai_commentary のみがあり ai_chat_1 が無いときキャッシュヒット（自由4本なし）
  */
 export async function getStoredBaseOnlyCommentPackByVideoId(
   supabase: SupabaseClient | null,
@@ -155,7 +156,7 @@ export async function getStoredBaseOnlyCommentPackByVideoId(
 }
 
 /**
- * 同一 video_id で comment-pack 相当の4本（基本＋自由3）が既にあれば最新セットを返す。
+ * 同一 video_id で comment-pack 相当の5本（基本＋自由4）が既にあれば最新セットを返す。
  * service_role または RLS で読めるクライアントが必要（未設定だと他ユーザーの蓄積が読めない場合あり）。
  */
 export async function getStoredCommentPackByVideoId(
@@ -192,7 +193,7 @@ export async function getStoredCommentPackByVideoId(
 
   return {
     baseComment: base.ai_commentary!,
-    freeComments: [base.ai_chat_1!, base.ai_chat_2!, base.ai_chat_3!],
+    freeComments: [base.ai_chat_1!, base.ai_chat_2!, base.ai_chat_3!, base.ai_chat_4!],
     tidbitIds,
   };
 }

@@ -42,6 +42,17 @@ export function StartPageSiteIntro({ forceShow = false }: StartPageSiteIntroProp
   return (
     <>
       <h1 className="mb-2 text-center text-xl font-bold text-white">洋楽AIチャット（β版）</h1>
+      <figure className="mb-4">
+        <Image
+          src="/musicaichat_cover_l.png"
+          alt="洋楽AIチャット：同じタイミングでYouTubeを視聴し、チャットで交流するイメージ"
+          width={1920}
+          height={1071}
+          className="w-full rounded-lg border border-gray-700 bg-gray-950"
+          sizes="(max-width: 512px) 100vw, 448px"
+          priority
+        />
+      </figure>
       <div className="mb-4 rounded-lg border border-gray-700 bg-gray-900/40 p-3 text-sm text-gray-300">
         <p className="mb-2 leading-relaxed">
           YouTubeの曲を参加者みんなで同じタイミングで聴きながら、チャットで交流できる洋楽サロンです。
@@ -65,7 +76,6 @@ export function StartPageSiteIntro({ forceShow = false }: StartPageSiteIntroProp
             height={518}
             className="w-full rounded-lg border border-gray-700 bg-gray-950"
             sizes="(max-width: 512px) 100vw, 448px"
-            priority
           />
           <figcaption className="text-center text-xs text-gray-500">
             みんなで同じタイミング視聴 × チャット

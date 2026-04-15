@@ -53,7 +53,7 @@ export const OWNER_COMMENT_PACK_MODE_EVENT = 'owner:commentPackMode';
 
 export type { CommentPackSlotSelection };
 
-/** Ably ペイロード: slots[0..3] = 基本・ヒット/受賞・歌詞・サウンド */
+/** Ably ペイロード: slots[0..4] = 基本・ヒット/受賞・歌詞・サウンド・アーティスト情報 */
 export interface OwnerCommentPackModePayload {
   slots: CommentPackSlotSelection;
   /** Date.now()。古いメッセージの後着で上書きされチェックが点滅するのを防ぐ */

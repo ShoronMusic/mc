@@ -578,7 +578,7 @@ export default function RoomWithSync({
   const [currentSongPosterClientId, setCurrentSongPosterClientId] = useState('');
   /** オーナーによる5分制限。デフォルトON。そのセッションのみ */
   const [songLimit5MinEnabled, setSongLimit5MinEnabled] = useState(true);
-  /** オーナーによる曲紹介スロット [基本, ヒット/受賞, 歌詞, サウンド]（部屋ID単位で localStorage に保持） */
+  /** オーナーによる曲紹介スロット [基本, ヒット/受賞, 歌詞, サウンド, アーティスト情報]（部屋ID単位で localStorage に保持） */
   const [commentPackSlots, setCommentPackSlots] = useState<CommentPackSlotSelection>(() => {
     if (typeof window === 'undefined') return DEFAULT_COMMENT_PACK_SLOTS;
     const rid = roomId?.trim();
@@ -1342,7 +1342,7 @@ export default function RoomWithSync({
         const sentAtRaw = d.sentAt;
         const sentAt =
           typeof sentAtRaw === 'number' && Number.isFinite(sentAtRaw) ? sentAtRaw : 0;
-        // sentAt 付きの古いメッセージは無視（例: 先に「まとめてオフ」し、遅れて「4本すべて」のエコーが来る）
+        // sentAt 付きの古いメッセージは無視（例: 先に「まとめてオフ」し、遅れて「5本すべて」のエコーが来る）
         if (sentAt > 0 && sentAt < commentPackSlotsSentAtRef.current) {
           return;
         }
@@ -2897,7 +2897,7 @@ export default function RoomWithSync({
             }
           : {}),
       };
-      // まず packPhase=base で基本だけ返し表示 → 続けて frees で自由3本（遅いモデルでも最初の解説が先に出る）
+      // まず packPhase=base で基本だけ返し表示 → 続けて frees で自由4本（遅いモデルでも最初の解説が先に出る）
       fetch('/api/ai/comment-pack', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -3130,7 +3130,7 @@ export default function RoomWithSync({
               const timer = setTimeout(() => {
                 if (videoIdRef.current !== vid) return;
                 /* 次曲案内後も同一 videoId なら出す。ここで nextPromptShown を見ると、
-                   comment-pack が遅いとき曲終了→「次の曲」で自由3本が全スキップされる */
+                   comment-pack が遅いとき曲終了→「次の曲」で自由4本が全スキップされる */
                 addAiMessage(packPrefix + c, {
                   allowWhenAiStopped: true,
                   tidbitId: tidN,
