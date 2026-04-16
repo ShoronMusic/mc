@@ -35,7 +35,7 @@ function isClearlyNonJapaneseMetadata(opts: JapaneseEconomyMetadataInput): boole
 }
 
 /**
- * 邦楽節約と同じ条件で判定（日本語メタ／ja 音声 → 即 true、それ以外は MusicBrainz）。
+ * 邦楽節約と同じ条件で判定（主要メタの日本語／ja 音声 → 即 true、概要欄のみの日本語は英字主体なら除外、それ以外は MusicBrainz）。
  * COMMENT_PACK_JP_ECONOMY=0 のときは常に false（MusicBrainz も呼ばない）。
  */
 export async function resolveJapaneseEconomyWithMusicBrainz(
