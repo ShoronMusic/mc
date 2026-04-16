@@ -723,7 +723,10 @@ ${basePromptTail}`;
     const freeSlotIndexParsed = packPhase === 'frees' ? parseOptionalFreeSlotIndex(body) : null;
     const freeSlotIndexOnly =
       freeSlotIndexParsed !== null && slots[freeSlotIndexParsed + 1] ? freeSlotIndexParsed : null;
-    const freeComments: string[] = ['', '', ''];
+    const freeComments: string[] = Array.from(
+      { length: COMMENT_PACK_MAX_FREE_COMMENTS },
+      () => '',
+    );
 
     if (!baseOnlyPack) {
       const banBlockStandard = `・禁止事項（断定・根拠薄い内容の回避）:

@@ -18,13 +18,15 @@ export function useSupabaseAuthUserId(isGuest: boolean): string | null {
       return;
     }
     let cancelled = false;
-    void supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!cancelled) setUserId(session?.user?.id ?? null);
+    void supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!cancelled) setUserId(user?.id ?? null);
     });
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUserId(session?.user?.id ?? null);
+    } = supabase.auth.onAuthStateChange(() => {
+      void supabase.auth.getUser().then(({ data: { user } }) => {
+        if (!cancelled) setUserId(user?.id ?? null);
+      });
     });
     return () => {
       cancelled = true;

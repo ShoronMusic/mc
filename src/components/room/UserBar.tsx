@@ -83,8 +83,11 @@ function participantDisplayName(
   myClientId: string,
   isGuest: boolean,
 ): string {
+  const hasGuestMarker =
+    /（\s*ゲスト\s*）|\(\s*guest\s*\)|\bguest\b|ゲスト/i.test(p.displayName);
+  const guestSuffix = isGuest && !hasGuestMarker ? '（ゲスト）' : '';
   return p.clientId === myClientId
-    ? `${p.displayName}${isGuest ? '（ゲスト）' : ''} (自分)`
+    ? `${p.displayName}${guestSuffix} (自分)`
     : p.displayName;
 }
 
@@ -149,7 +152,9 @@ export default function UserBar({
 }: UserBarProps) {
   const isLg = useIsLgViewport();
   const [listOpen, setListOpen] = useState(false);
-  const label = isGuest ? `${displayName}（ゲスト）` : displayName;
+  const hasGuestMarkerInLabel =
+    /（\s*ゲスト\s*）|\(\s*guest\s*\)|\bguest\b|ゲスト/i.test(displayName);
+  const label = isGuest ? `${displayName}${hasGuestMarkerInLabel ? '' : '（ゲスト）'}` : displayName;
   const showGuestRegister = isGuest && onGuestRegisterClick != null;
   const gapHours = Math.round(SELECTION_ROUND_SESSION_MAX_GAP_MS / (60 * 60 * 1000));
   const roundTitle = `選曲ラウンド（ラウンド ${selectionRoundNumber}）。オーナーの番が一周して戻るたびに+1。同一ブラウザでは約${gapHours}時間以内に再入室すると続きから復元します。`;
@@ -493,10 +498,11 @@ export default function UserBar({
           <button
             type="button"
             onClick={onMyPageClick}
-            className="shrink-0 rounded border border-gray-600 bg-gray-800 px-3 py-2 text-sm font-medium text-gray-200 hover:bg-gray-700 hover:text-white sm:px-4"
+            className="inline-flex shrink-0 items-center gap-1 rounded border border-gray-600 bg-gray-800 px-3 py-2 text-sm font-medium text-gray-200 hover:bg-gray-700 hover:text-white sm:px-4"
             aria-label="マイページを開く"
             title="マイページ"
           >
+            <UserCircleIcon className="h-4 w-4" aria-hidden />
             マイページ
           </button>
         ) : null}
@@ -504,10 +510,11 @@ export default function UserBar({
           <button
             type="button"
             onClick={onPlaybackHistoryClick}
-            className="shrink-0 rounded border border-gray-600 bg-gray-800 px-3 py-2 text-sm font-medium text-gray-200 hover:bg-gray-700 hover:text-white"
+            className="inline-flex shrink-0 items-center gap-1 rounded border border-gray-600 bg-gray-800 px-3 py-2 text-sm font-medium text-gray-200 hover:bg-gray-700 hover:text-white"
             aria-label="視聴履歴を表示"
             title="視聴履歴を表示"
           >
+            <ClockIcon className="h-4 w-4" aria-hidden />
             視聴履歴
           </button>
         ) : null}

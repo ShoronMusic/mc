@@ -61,9 +61,9 @@ export async function POST(request: Request) {
       : null;
 
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  const userId = session?.user?.id ?? null;
+    data: { user },
+  } = await supabase.auth.getUser();
+  const userId = user?.id ?? null;
 
   const admin = createAdminClient();
   if (!admin) {

@@ -32,8 +32,8 @@ export function StartPageSiteIntro({ forceShow = false }: StartPageSiteIntroProp
       setShow(true);
       return;
     }
-    void supabase.auth.getSession().then(({ data: { session } }) => {
-      setShow(!session?.user);
+    void supabase.auth.getUser().then(({ data: { user } }) => {
+      setShow(!user);
     });
   }, [forceShow]);
 

@@ -165,8 +165,8 @@ export async function GET(request: Request) {
   const roomIdsLive = baseRooms.map((r) => r.roomId).filter(Boolean);
   const gatheringIdsLive = baseRooms.map((r) => r.gatheringId).filter(Boolean);
 
-  const { data: sessionData } = await supabase.auth.getSession();
-  const sessionUserId = sessionData?.session?.user?.id ?? '';
+  const { data: userData } = await supabase.auth.getUser();
+  const sessionUserId = userData?.user?.id ?? '';
 
   let organizerRoomIdSet = new Set<string>();
   if (sessionUserId && roomIdsLive.length > 0) {

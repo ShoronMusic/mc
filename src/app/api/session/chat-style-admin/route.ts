@@ -13,8 +13,8 @@ export async function GET() {
     return NextResponse.json({ chatStyleAdmin: false });
   }
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  const uid = session?.user?.id ?? null;
+    data: { user },
+  } = await supabase.auth.getUser();
+  const uid = user?.id ?? null;
   return NextResponse.json({ chatStyleAdmin: isChatStyleAdminUserId(uid) });
 }

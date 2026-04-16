@@ -39,8 +39,8 @@ export function TopPageAuthBar() {
       setLoading(false);
       return;
     }
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setDisplayName(session?.user ? getDisplayName(session.user) : null);
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      setDisplayName(user ? getDisplayName(user) : null);
       setIsGuest(false);
       setLoading(false);
     });

@@ -58,8 +58,8 @@ export function AuthCallbackClient({ forcedNext }: AuthCallbackClientProps) {
 
       const { error } = await supabase.auth.exchangeCodeForSession(code);
       if (error) {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
           router.replace(next);
           return;
         }

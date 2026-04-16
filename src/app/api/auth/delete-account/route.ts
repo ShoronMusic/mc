@@ -15,8 +15,8 @@ export async function POST() {
     );
   }
 
-  const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-  if (sessionError || !session?.user?.id) {
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  if (userError || !user?.id) {
     return NextResponse.json(
       { error: 'ログインしていません。' },
       { status: 401 }
@@ -31,7 +31,7 @@ export async function POST() {
     );
   }
 
-  const userId = session.user.id;
+  const userId = user.id;
   const { error: deleteError } = await admin.auth.admin.deleteUser(userId);
   if (deleteError) {
     console.error('[delete-account]', deleteError);

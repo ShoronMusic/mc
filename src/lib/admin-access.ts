@@ -78,8 +78,8 @@ export async function sessionMayEditRoomPlaybackHistoryFields(
   if (adminIds.length === 0) return true;
   if (!supabase) return false;
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  const uid = session?.user?.id;
+    data: { user },
+  } = await supabase.auth.getUser();
+  const uid = user?.id;
   return Boolean(uid && adminIds.includes(uid));
 }

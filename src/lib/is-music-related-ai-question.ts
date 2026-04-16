@@ -1,8 +1,11 @@
+import { ARTIST_NICKNAME_MUSIC_KEYWORDS } from '@/lib/artist-nickname-music-keywords';
+
 /**
  * 「@ …」AI 質問が音楽関連っぽいかのクライアント側ヒューリスティック。
  * 厳密な自然言語理解ではなく、誤爆を減らすためのキーワード列挙。
  */
 const MUSIC_KEYWORD_SOURCES = [
+  ...ARTIST_NICKNAME_MUSIC_KEYWORDS,
   // 一般
   '音楽',
   '洋楽',

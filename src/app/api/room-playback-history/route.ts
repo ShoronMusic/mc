@@ -217,8 +217,8 @@ export async function POST(request: Request) {
     ? (isGuest ? `${displayName} (G)` : displayName)
     : (isGuest ? 'ゲスト (G)' : 'ゲスト');
 
-  const { data: { session } } = await supabase.auth.getSession();
-  const userId = session?.user?.id ?? null;
+  const { data: { user } } = await supabase.auth.getUser();
+  const userId = user?.id ?? null;
 
   const cutoff = new Date(Date.now() - TWO_MINUTES_MS).toISOString();
 
@@ -469,9 +469,9 @@ export async function PATCH(request: Request) {
   const adminIds = getStyleAdminUserIds();
   if (adminIds.length > 0) {
     const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    const uid = session?.user?.id;
+      data: { user },
+    } = await supabase.auth.getUser();
+    const uid = user?.id;
     if (!uid || !adminIds.includes(uid)) {
       return NextResponse.json(
         {

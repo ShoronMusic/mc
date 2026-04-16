@@ -42,13 +42,13 @@ export async function GET() {
   }
 
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  if (!session?.user?.id) {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user?.id) {
     return NextResponse.json({ error: 'ログインしていません。' }, { status: 401 });
   }
 
-  const uid = session.user.id;
+  const uid = user.id;
   console.info('[my-list/library-artists] GET start', { userId: uid });
 
   // 既存データとの不整合（過去保存分・一部失敗）を吸収するため、

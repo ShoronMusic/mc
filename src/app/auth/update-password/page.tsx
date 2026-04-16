@@ -42,16 +42,18 @@ export default function UpdatePasswordPage() {
       return;
     }
     let cancelled = false;
-    client.auth.getSession().then(({ data: { session } }) => {
+    client.auth.getUser().then(({ data: { user } }) => {
       if (!cancelled) {
-        setHasSession(!!session);
+        setHasSession(!!user);
         setChecking(false);
       }
     });
     const {
       data: { subscription },
-    } = client.auth.onAuthStateChange((_event, session) => {
-      if (!cancelled) setHasSession(!!session);
+    } = client.auth.onAuthStateChange(() => {
+      void client.auth.getUser().then(({ data: { user } }) => {
+        if (!cancelled) setHasSession(!!user);
+      });
     });
     return () => {
       cancelled = true;

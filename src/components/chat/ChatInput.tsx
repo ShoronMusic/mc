@@ -19,7 +19,12 @@ import { NON_YOUTUBE_URL_SYSTEM_MESSAGE } from '@/lib/chat-non-youtube-url';
 import { extractVideoId, isStandaloneNonYouTubeUrl } from '@/lib/youtube';
 import type { SystemMessageOptions } from '@/types/chat';
 import { isAiQuestionGuardDisabledClient } from '@/lib/chat-system-copy';
-import { MusicalNoteIcon, QuestionMarkCircleIcon } from '@heroicons/react/24/outline';
+import {
+  DocumentTextIcon,
+  EnvelopeIcon,
+  MusicalNoteIcon,
+  QuestionMarkCircleIcon,
+} from '@heroicons/react/24/outline';
 import { SongSelectionHowtoModal } from '@/components/chat/SongSelectionHowtoModal';
 import { isYoutubeKeywordSearchEnabled } from '@/lib/youtube-keyword-search-ui';
 
@@ -58,6 +63,10 @@ interface ChatInputProps {
   trailingSlot?: ReactNode;
   /** この端末の AI 質問ガード警告・入室制限ストレージを消す（親で room 連動の state も直す） */
   onClearLocalAiQuestionGuard?: () => void;
+  /** モバイル下段リンク: 利用規約を開く */
+  onOpenTerms?: () => void;
+  /** モバイル下段リンク: サイトご意見を開く */
+  onOpenSiteFeedback?: () => void;
 }
 
 const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput(
@@ -71,6 +80,8 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
     onPreviewStop,
     trailingSlot,
     onClearLocalAiQuestionGuard,
+    onOpenTerms,
+    onOpenSiteFeedback,
   },
   ref
 ) {
@@ -754,30 +765,108 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
           >
             送信
           </button>
-          <div className="flex h-[3.75rem] shrink-0 flex-col items-stretch justify-center gap-0.5 py-0.5">
+          <div className="hidden h-[3.75rem] shrink-0 items-center gap-2 sm:flex">
+            <div className="flex min-h-0 flex-col items-start justify-center gap-0.5">
+              <button
+                type="button"
+                onClick={() => setSongHowtoOpen(true)}
+                className="inline-flex h-[1.8rem] min-h-0 items-center gap-1 rounded border border-sky-700/60 bg-sky-900/20 px-2 text-left text-xs leading-tight text-sky-100 hover:bg-sky-800/35"
+                aria-haspopup="dialog"
+                aria-expanded={songHowtoOpen}
+                aria-label="選曲方法（説明を表示）"
+                title="選曲方法"
+              >
+                <MusicalNoteIcon className="h-3 w-3 shrink-0" aria-hidden />
+                <span>選曲方法</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setUsageGuideOpen(true)}
+                className="inline-flex h-[1.8rem] min-h-0 items-center gap-1 rounded border border-amber-700/60 bg-amber-900/20 px-2 text-left text-xs leading-tight text-amber-100 hover:bg-amber-800/35"
+                aria-haspopup="dialog"
+                aria-expanded={usageGuideOpen}
+                aria-label="発言方法（説明を表示）"
+                title="発言方法"
+              >
+                <QuestionMarkCircleIcon className="h-3 w-3 shrink-0" aria-hidden />
+                <span>発言方法</span>
+              </button>
+            </div>
+            <div className="flex min-h-0 flex-col items-start justify-center gap-0.5">
+              {onOpenTerms && (
+                <button
+                  type="button"
+                  onClick={onOpenTerms}
+                  className="inline-flex h-[1.8rem] min-h-0 items-center gap-1 rounded border border-gray-700 bg-gray-800/55 px-2 text-left text-xs leading-tight text-gray-100 hover:bg-gray-700/75"
+                  aria-label="利用規約"
+                  title="利用規約"
+                >
+                  <DocumentTextIcon className="h-3 w-3 shrink-0" aria-hidden />
+                  <span>利用規約</span>
+                </button>
+              )}
+              {onOpenSiteFeedback && (
+                <button
+                  type="button"
+                  onClick={onOpenSiteFeedback}
+                  className="inline-flex h-[1.8rem] min-h-0 items-center gap-1 rounded border border-gray-700 bg-gray-800/55 px-2 text-left text-xs leading-tight text-gray-100 hover:bg-gray-700/75"
+                  aria-label="このサイトへのご意見"
+                  title="このサイトへのご意見"
+                >
+                  <EnvelopeIcon className="h-3 w-3 shrink-0" aria-hidden />
+                  <span>ご意見</span>
+                </button>
+              )}
+            </div>
+          </div>
+          <div className="order-last flex w-full items-center gap-2 pt-0.5 text-xs leading-tight sm:hidden">
+            {onOpenTerms && (
+              <button
+                type="button"
+                onClick={onOpenTerms}
+                className="inline-flex h-[1.8rem] items-center gap-1 whitespace-nowrap rounded border border-gray-700 bg-gray-800/55 px-2 text-gray-100 hover:bg-gray-700/75"
+                aria-label="利用規約"
+                title="利用規約"
+              >
+                <DocumentTextIcon className="h-3 w-3 shrink-0" aria-hidden />
+                <span>利用規約</span>
+              </button>
+            )}
+            {onOpenSiteFeedback && (
+              <button
+                type="button"
+                onClick={onOpenSiteFeedback}
+                className="inline-flex h-[1.8rem] items-center gap-1 whitespace-nowrap rounded border border-gray-700 bg-gray-800/55 px-2 text-gray-100 hover:bg-gray-700/75"
+                aria-label="このサイトへのご意見"
+                title="このサイトへのご意見"
+              >
+                <EnvelopeIcon className="h-3 w-3 shrink-0" aria-hidden />
+                <span>ご意見</span>
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setSongHowtoOpen(true)}
-              className="inline-flex min-h-0 flex-1 items-center gap-0.5 text-left text-[10px] leading-tight text-sky-200/90 hover:text-sky-100"
+              className="inline-flex h-[1.8rem] items-center gap-1 whitespace-nowrap rounded border border-sky-700/60 bg-sky-900/20 px-2 text-sky-100 hover:bg-sky-800/35"
               aria-haspopup="dialog"
               aria-expanded={songHowtoOpen}
               aria-label="選曲方法（説明を表示）"
               title="選曲方法"
             >
               <MusicalNoteIcon className="h-3 w-3 shrink-0" aria-hidden />
-              <span className="underline decoration-dotted underline-offset-2">選曲方法</span>
+              <span>選曲方法</span>
             </button>
             <button
               type="button"
               onClick={() => setUsageGuideOpen(true)}
-              className="inline-flex min-h-0 flex-1 items-center gap-0.5 text-left text-[10px] leading-tight text-amber-200/90 hover:text-amber-100"
+              className="inline-flex h-[1.8rem] items-center gap-1 whitespace-nowrap rounded border border-amber-700/60 bg-amber-900/20 px-2 text-amber-100 hover:bg-amber-800/35"
               aria-haspopup="dialog"
               aria-expanded={usageGuideOpen}
               aria-label="発言方法（説明を表示）"
               title="発言方法"
             >
               <QuestionMarkCircleIcon className="h-3 w-3 shrink-0" aria-hidden />
-              <span className="underline decoration-dotted underline-offset-2">発言方法</span>
+              <span>発言方法</span>
             </button>
           </div>
           {onVideoUrl && isYoutubeKeywordSearchEnabled() ? (

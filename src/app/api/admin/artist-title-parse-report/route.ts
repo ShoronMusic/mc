@@ -21,9 +21,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: '認証が利用できません。' }, { status: 503 });
   }
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  const uid = session?.user?.id ?? null;
+    data: { user },
+  } = await supabase.auth.getUser();
+  const uid = user?.id ?? null;
   if (!uid) {
     return NextResponse.json({ error: 'ログインが必要です。' }, { status: 401 });
   }

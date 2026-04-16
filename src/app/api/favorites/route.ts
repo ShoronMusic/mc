@@ -21,8 +21,8 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: '認証が利用できません。' }, { status: 503 });
   }
 
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session?.user?.id) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user?.id) {
     return NextResponse.json({ error: 'ログインしていません。' }, { status: 401 });
   }
 
@@ -34,7 +34,7 @@ export async function GET(request: Request) {
     const { data, error } = await supabase
       .from('user_favorites')
       .select('video_id')
-      .eq('user_id', session.user.id)
+      .eq('user_id', user.id)
       .order('played_at', { ascending: false });
 
     if (error) {
@@ -55,7 +55,7 @@ export async function GET(request: Request) {
   const { data, error } = await supabase
     .from('user_favorites')
     .select('id, video_id, display_name, played_at, title, artist_name')
-    .eq('user_id', session.user.id)
+    .eq('user_id', user.id)
     .order('played_at', { ascending: false });
 
   if (error) {
@@ -82,8 +82,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: '認証が利用できません。' }, { status: 503 });
   }
 
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session?.user?.id) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user?.id) {
     return NextResponse.json({ error: 'ログインしていません。' }, { status: 401 });
   }
 
@@ -110,7 +110,7 @@ export async function POST(request: Request) {
   }
 
   const { error } = await supabase.from('user_favorites').insert({
-    user_id: session.user.id,
+    user_id: user.id,
     video_id: videoId,
     display_name: displayName || '—',
     played_at: playedAtDate.toISOString(),
@@ -144,8 +144,8 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: '認証が利用できません。' }, { status: 503 });
   }
 
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session?.user?.id) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user?.id) {
     return NextResponse.json({ error: 'ログインしていません。' }, { status: 401 });
   }
 
@@ -158,7 +158,7 @@ export async function DELETE(request: Request) {
   const { error } = await supabase
     .from('user_favorites')
     .delete()
-    .eq('user_id', session.user.id)
+    .eq('user_id', user.id)
     .eq('video_id', videoId);
 
   if (error) {

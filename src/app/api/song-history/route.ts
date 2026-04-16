@@ -23,8 +23,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: '認証が利用できません。' }, { status: 503 });
   }
 
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session?.user?.id) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user?.id) {
     return NextResponse.json({ error: 'ログインしていません。' }, { status: 401 });
   }
 
@@ -45,7 +45,7 @@ export async function POST(request: Request) {
   const { data: recentDup } = await supabase
     .from('user_song_history')
     .select('id')
-    .eq('user_id', session.user.id)
+    .eq('user_id', user.id)
     .eq('room_id', roomId)
     .eq('video_id', videoId)
     .gte('posted_at', cutoff)
@@ -62,7 +62,7 @@ export async function POST(request: Request) {
   const artist = oembed?.author_name ?? null;
 
   const insertRow: Record<string, unknown> = {
-    user_id: session.user.id,
+    user_id: user.id,
     room_id: roomId,
     video_id: videoId,
     url,

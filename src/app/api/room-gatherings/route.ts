@@ -65,8 +65,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'DBが利用できません。' }, { status: 503 });
   }
 
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session?.user?.id) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user?.id) {
     return NextResponse.json({ error: 'ログインしていません。' }, { status: 401 });
   }
 
@@ -148,7 +148,7 @@ export async function POST(request: Request) {
     const { count: myLiveCount, error: myLiveErr } = await supabase
       .from('room_gatherings')
       .select('*', { count: 'exact', head: true })
-      .eq('created_by', session.user.id)
+      .eq('created_by', user.id)
       .eq('status', 'live');
     if (myLiveErr) {
       if (myLiveErr.code === '42P01') {
@@ -176,7 +176,7 @@ export async function POST(request: Request) {
         title,
         status: 'live',
         started_at: new Date().toISOString(),
-        created_by: session.user.id,
+        created_by: user.id,
       })
       .select('id, room_id, title, started_at')
       .maybeSingle();
@@ -353,15 +353,15 @@ export async function GET() {
     return NextResponse.json({ error: 'DBが利用できません。' }, { status: 503 });
   }
 
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session?.user?.id) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user?.id) {
     return NextResponse.json({ error: 'ログインしていません。' }, { status: 401 });
   }
 
   const { data, error } = await supabase
     .from('room_gatherings')
     .select('room_id, title, status, started_at')
-    .eq('created_by', session.user.id)
+    .eq('created_by', user.id)
     .order('started_at', { ascending: false })
     .limit(CREATED_ROOMS_LIMIT);
 

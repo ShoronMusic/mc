@@ -345,6 +345,8 @@ export default function RoomWithSync({
   const [chatSummaryModalOpen, setChatSummaryModalOpen] = useState(false);
   const [chatSummaryLoading, setChatSummaryLoading] = useState(false);
   const [chatSummaryError, setChatSummaryError] = useState<string | null>(null);
+  const headerRoomId = roomId || '--';
+  const headerRoomSub = (roomDisplayTitleCurrent || roomTitle || '').trim();
   const [termsModalOpen, setTermsModalOpen] = useState(false);
   const [siteFeedbackOpen, setSiteFeedbackOpen] = useState(false);
   const [feedbackExitAction, setFeedbackExitAction] = useState<'none' | 'leave' | 'logout'>('none');
@@ -2954,20 +2956,38 @@ export default function RoomWithSync({
               freeCommentTimeoutsRef.current = [];
             }
 
-            const freeIdxSorted = ([0, 1, 2] as const).filter((i) => slots[i + 1]);
+            const freeIdxSorted = Array.from(
+              { length: COMMENT_PACK_MAX_FREE_COMMENTS },
+              (_, i) => i,
+            ).filter((i) => slots[i + 1]);
             if (freeIdxSorted.length === 0) {
               suppressTidbitRef.current = equivalentBaseOnlySlots(commentPackSlotsRef.current);
               return null;
             }
 
-            const filledForSlot: string[] = ['', '', ''];
-            const finishedSlot: boolean[] = [false, false, false];
-            const tidForSlot: (string | undefined)[] = [undefined, undefined, undefined];
-            const prefixForSlot: string[] = ['[NEW] ', '[NEW] ', '[NEW] '];
+            const filledForSlot: string[] = Array.from(
+              { length: COMMENT_PACK_MAX_FREE_COMMENTS },
+              () => '',
+            );
+            const finishedSlot: boolean[] = Array.from(
+              { length: COMMENT_PACK_MAX_FREE_COMMENTS },
+              () => false,
+            );
+            const tidForSlot: (string | undefined)[] = Array.from(
+              { length: COMMENT_PACK_MAX_FREE_COMMENTS },
+              () => undefined,
+            );
+            const prefixForSlot: string[] = Array.from(
+              { length: COMMENT_PACK_MAX_FREE_COMMENTS },
+              () => '[NEW] ',
+            );
 
             let nextToSchedule = 0;
             let shownIdx2 = 0;
-            const scheduledForSlot: boolean[] = [false, false, false];
+            const scheduledForSlot: boolean[] = Array.from(
+              { length: COMMENT_PACK_MAX_FREE_COMMENTS },
+              () => false,
+            );
 
             const baseSongId = typeof pack.songId === 'string' ? pack.songId : null;
 
@@ -3950,17 +3970,26 @@ export default function RoomWithSync({
             alt=""
             width={180}
             height={36}
-            className="h-9 w-auto max-h-9 shrink-0 object-contain object-left"
+            className="h-10 w-auto max-h-10 shrink-0 object-contain object-left"
             priority
           />
-          <span className="inline-flex shrink-0 items-center rounded border border-sky-500/60 bg-sky-500/10 px-2 py-0.5 text-[10px] font-semibold text-sky-200">
-            （β）版
+          <span className="inline-flex shrink-0 items-center rounded bg-lime-400/10 px-1.5 py-0.5 text-[9px] font-semibold text-lime-200 sm:px-1 sm:text-[10px]">
+            <span className="sm:hidden">β</span>
+            <span className="hidden sm:inline">（β）版</span>
           </span>
           <h1
-            className="min-w-0 flex-1 truncate text-base font-semibold leading-none text-white sm:text-lg"
-            title={`部屋 ${roomId || '--'}${(roomDisplayTitleCurrent || roomTitle) ? ` - ${roomDisplayTitleCurrent || roomTitle}` : ''}`}
+            className="min-w-0 flex-1 text-xs font-semibold leading-tight text-white sm:truncate sm:text-lg sm:leading-none"
+            title={`部屋 ${headerRoomId}${headerRoomSub ? ` - ${headerRoomSub}` : ''}`}
           >
-            {`部屋 ${roomId || '--'}${(roomDisplayTitleCurrent || roomTitle) ? ` - ${roomDisplayTitleCurrent || roomTitle}` : ''}`}
+            <span className="inline-flex min-w-0 items-center gap-1">
+              <span className="inline-flex h-10 w-10 shrink-0 flex-col items-center justify-center rounded border border-sky-500/60 bg-sky-500/10 px-0 py-0 leading-none text-sky-200 sm:w-auto sm:px-1 sm:py-0.5">
+                <span className="text-[8px] font-medium sm:text-[9px]">部屋</span>
+                <span className="text-[11px] font-semibold sm:text-xs">{headerRoomId}</span>
+              </span>
+              <span className="min-w-0 truncate text-base font-semibold leading-none text-white">
+                {headerRoomSub || ''}
+              </span>
+            </span>
           </h1>
           {joinLocked && (
             <span className="inline-flex shrink-0 items-center gap-1 rounded border border-amber-700/80 bg-amber-950/40 px-2 py-0.5 text-[10px] font-semibold text-amber-200">
@@ -3982,6 +4011,23 @@ export default function RoomWithSync({
                       setJoinLockSaving(true);
                       try {
                         const next = !joinLocked;
+                        const needsConfirm =
+                          typeof window !== 'undefined' &&
+                          window.matchMedia('(max-width: 639px)').matches;
+                        if (needsConfirm) {
+                          const actionLabel = next ? '新規参加を締め切る' : '新規参加締切を解除する';
+                          const ok = window.confirm(`${actionLabel}を実行します。よろしいですか？`);
+                          if (!ok) return;
+                          const keyword = next ? 'lock' : 'unlock';
+                          const typed = window.prompt(
+                            `${actionLabel}するには「${keyword}」と入力してください。`,
+                            '',
+                          );
+                          if ((typed ?? '').trim().toLowerCase() !== keyword) {
+                            addSystemMessage('新規参加締切の切替をキャンセルしました。');
+                            return;
+                          }
+                        }
                         const r = await fetch('/api/room-gatherings', {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
@@ -4007,12 +4053,12 @@ export default function RoomWithSync({
                         setJoinLockSaving(false);
                       }
                     }}
-                    className="inline-flex items-center gap-1 rounded border border-amber-700 bg-amber-900/30 px-2.5 py-1.5 text-xs text-amber-200 hover:bg-amber-800/50 disabled:opacity-50"
+                    className="inline-flex h-10 w-10 items-center justify-center gap-0 rounded border border-amber-700 bg-amber-900/30 px-0 py-0 text-xs text-amber-200 hover:bg-amber-800/50 disabled:opacity-50 sm:w-auto sm:gap-1 sm:px-2.5 sm:py-1.5"
                     title="新規参加を締め切る / 解除する（既参加者の再入室は可）"
                     aria-label="新規参加締切の切替"
                   >
                     {joinLocked ? <LockClosedIcon className="h-4 w-4" aria-hidden /> : <LockOpenIcon className="h-4 w-4" aria-hidden />}
-                    {joinLocked ? '鍵を開ける' : '鍵を掛ける'}
+                    <span className="hidden sm:inline">{joinLocked ? '鍵を開ける' : '鍵を掛ける'}</span>
                   </button>
                 )}
                 <button
@@ -4021,7 +4067,7 @@ export default function RoomWithSync({
                     setPolicyTab('terms');
                     setTermsModalOpen(true);
                   }}
-                  className="inline-flex shrink-0 items-center gap-0 text-xs text-gray-300 hover:text-white lg:gap-0.5 lg:whitespace-nowrap sm:text-sm"
+                  className="hidden"
                   title="利用規約"
                   aria-label="利用規約"
                 >
@@ -4033,7 +4079,7 @@ export default function RoomWithSync({
                 <button
                   type="button"
                   onClick={handleOpenSiteFeedbackFromHeader}
-                  className="inline-flex items-center gap-1 text-sm text-gray-300 underline decoration-dotted underline-offset-2 hover:text-white"
+                  className="hidden"
                   title="このサイトへのご意見"
                   aria-label="このサイトへのご意見"
                 >
@@ -4043,10 +4089,14 @@ export default function RoomWithSync({
                 <button
                   type="button"
                   onClick={handleLogoutClick}
-                  className="rounded border border-amber-700 bg-amber-900/40 px-3 py-2 text-sm text-amber-200 hover:bg-amber-800/60"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded border border-amber-700 bg-amber-900/40 px-0 py-0 text-xs text-amber-200 hover:bg-amber-800/60 sm:w-auto sm:px-3 sm:py-2 sm:text-sm"
                   aria-label="ログアウトして最初の画面に戻る"
                 >
-                  ログアウト
+                  <span className="inline-flex flex-col leading-none sm:hidden">
+                    <span>ログ</span>
+                    <span>アウト</span>
+                  </span>
+                  <span className="hidden sm:inline">ログアウト</span>
                 </button>
               </>
             )}
@@ -4054,7 +4104,7 @@ export default function RoomWithSync({
               <button
                 type="button"
                 onClick={handleOpenSiteFeedbackFromHeader}
-                className="inline-flex items-center gap-1 text-sm text-gray-300 underline decoration-dotted underline-offset-2 hover:text-white"
+                className="hidden"
                 title="このサイトへのご意見"
                 aria-label="このサイトへのご意見"
               >
@@ -4065,7 +4115,7 @@ export default function RoomWithSync({
             <button
               type="button"
               onClick={handleLeaveClick}
-              className="rounded border border-gray-600 bg-gray-800 px-4 py-2 text-sm font-medium text-gray-200 hover:bg-gray-700 hover:text-white"
+              className="h-10 w-10 rounded border border-gray-600 bg-gray-800 px-0 py-0 text-[11px] font-medium leading-none text-gray-200 hover:bg-gray-700 hover:text-white sm:w-auto sm:px-4 sm:py-2 sm:text-sm"
               aria-label="部屋を退室して最初の画面に戻る"
             >
               退室
@@ -4497,6 +4547,11 @@ export default function RoomWithSync({
           onVideoUrl={handleVideoUrlFromChat}
           isGuest={isGuest}
           onSystemMessage={addSystemMessage}
+          onOpenTerms={() => {
+            setPolicyTab('terms');
+            setTermsModalOpen(true);
+          }}
+          onOpenSiteFeedback={handleOpenSiteFeedbackFromHeader}
           onAddCandidate={
             isYoutubeKeywordSearchEnabled() ? handleAddCandidateFromSearch : undefined
           }

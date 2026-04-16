@@ -783,11 +783,11 @@ export default function MyPage({
       setLoading(false);
       return;
     }
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        setDisplayNameValue(getDisplayName(session.user));
-        setEmailValue(session.user.email ?? '');
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      setUser(user ?? null);
+      if (user) {
+        setDisplayNameValue(getDisplayName(user));
+        setEmailValue(user.email ?? '');
       }
       setLoading(false);
     });

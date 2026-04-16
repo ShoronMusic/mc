@@ -5,7 +5,7 @@
  * 固定列幅・はみ出しは...、ソート（時間デフォルト／参加者名）、アクティブ行表示。
  */
 
-import { CalendarDaysIcon, ChartBarIcon } from '@heroicons/react/24/outline';
+import { CalendarDaysIcon, ChartBarIcon, ClockIcon } from '@heroicons/react/24/outline';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { RoomPlaybackHistoryRow } from '@/app/api/room-playback-history/route';
 import { getArtistAndSong, getMainArtist, repairQuotedSongArtistPackInversion } from '@/lib/format-song-display';
@@ -723,8 +723,9 @@ export default function RoomPlaybackHistory({
           <button
             type="button"
             onClick={() => setActiveTab('history')}
-            className={`rounded px-2 py-1 text-sm transition ${activeTab === 'history' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:bg-gray-700/50 hover:text-gray-200'}`}
+            className={`inline-flex items-center gap-1 rounded px-2 py-1 text-sm transition ${activeTab === 'history' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:bg-gray-700/50 hover:text-gray-200'}`}
           >
+            <ClockIcon className="h-4 w-4 shrink-0" aria-hidden />
             視聴履歴
           </button>
           {hasMainArtistData && (

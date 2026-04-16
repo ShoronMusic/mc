@@ -104,8 +104,8 @@ export function JoinGate({ roomId }: JoinGateProps) {
         return;
       }
 
-      void supabase.auth.getSession().then(({ data: { session } }) => {
-        if (session?.user) {
+      void supabase.auth.getUser().then(({ data: { user } }) => {
+        if (user) {
           try {
             sessionStorage.removeItem(GUEST_STORAGE_KEY);
             sessionStorage.removeItem(GUEST_NAME_STORAGE_KEY);
@@ -113,7 +113,7 @@ export function JoinGate({ roomId }: JoinGateProps) {
           } catch {
             /* ignore */
           }
-          setDisplayName(getDisplayNameFromUser(session.user));
+          setDisplayName(getDisplayNameFromUser(user));
           setIsGuest(false);
           clearFromStart();
           setStatus('room');

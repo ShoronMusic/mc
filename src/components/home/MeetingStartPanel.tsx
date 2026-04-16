@@ -64,10 +64,10 @@ export function MeetingStartPanel() {
       setVisible(false);
       return;
     }
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      const loggedIn = !!session?.user;
-      if (session?.user) {
-        const defaultTitle = defaultGatheringTitleFromUser(session.user);
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      const loggedIn = !!user;
+      if (user) {
+        const defaultTitle = defaultGatheringTitleFromUser(user);
         setNewTitle(defaultTitle);
         setJoinTitle(defaultTitle);
       }

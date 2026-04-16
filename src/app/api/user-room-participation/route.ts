@@ -29,9 +29,9 @@ export async function GET() {
   }
 
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  if (!session?.user?.id) {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user?.id) {
     return NextResponse.json({ items: [] as unknown[] });
   }
 
@@ -70,9 +70,9 @@ export async function POST(request: Request) {
   }
 
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  if (!session?.user?.id) {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user?.id) {
     return NextResponse.json({ ok: true, skipped: true });
   }
 
@@ -106,7 +106,7 @@ export async function POST(request: Request) {
     const { data: openRows, error: openErr } = await supabase
       .from('user_room_participation_history')
       .select('id')
-      .eq('user_id', session.user.id)
+      .eq('user_id', user.id)
       .eq('room_id', roomId)
       .is('left_at', null)
       .eq('gathering_id', gatheringId)
@@ -129,7 +129,7 @@ export async function POST(request: Request) {
     }
 
     const { error: insErr } = await supabase.from('user_room_participation_history').insert({
-      user_id: session.user.id,
+      user_id: user.id,
       room_id: roomId,
       gathering_id: gatheringId,
       gathering_title: gatheringTitle,
@@ -158,7 +158,7 @@ export async function POST(request: Request) {
     const { data: openRows, error: selErr } = await supabase
       .from('user_room_participation_history')
       .select('id')
-      .eq('user_id', session.user.id)
+      .eq('user_id', user.id)
       .eq('room_id', roomId)
       .is('left_at', null)
       .order('joined_at', { ascending: false })

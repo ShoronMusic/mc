@@ -18,8 +18,8 @@ export async function POST(request: Request) {
   }
 
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
+    data: { user },
+  } = await supabase.auth.getUser();
 
   let body: {
     songId?: string | null;
@@ -92,7 +92,7 @@ export async function POST(request: Request) {
     body: commentText,
     source,
     is_upvote: detailFeedback ? false : isUpvote,
-    user_id: session?.user?.id ?? null,
+    user_id: user?.id ?? null,
   };
 
   if (detailFeedback) {
@@ -118,7 +118,7 @@ export async function POST(request: Request) {
       videoId,
       songId,
       source,
-      userId: session?.user?.id ?? null,
+      userId: user?.id ?? null,
       detail: detailFeedback,
     });
     emailSent = emailResult.ok;

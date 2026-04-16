@@ -86,9 +86,9 @@ export function AblyProviderWrapper({
     const supabase = createClient();
     if (!supabase) return;
     let mounted = true;
-    void supabase.auth.getSession().then(({ data: { session } }) => {
+    void supabase.auth.getUser().then(({ data: { user } }) => {
       if (!mounted) return;
-      if (!session?.user?.id) return;
+      if (!user?.id) return;
       void postParticipation('join');
     });
 

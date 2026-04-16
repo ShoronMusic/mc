@@ -131,6 +131,8 @@ export default function RoomWithoutSync({
   const [chatSummaryModalOpen, setChatSummaryModalOpen] = useState(false);
   const [chatSummaryLoading, setChatSummaryLoading] = useState(false);
   const [chatSummaryError, setChatSummaryError] = useState<string | null>(null);
+  const headerRoomId = roomId || '--';
+  const headerRoomSub = (roomDisplayTitleCurrent || roomTitle || '').trim();
   const handleLeaveClick = useCallback(() => {
     if (!onLeave) return;
     if (shouldShowLeaveSiteFeedbackPrompt()) {
@@ -1182,17 +1184,26 @@ export default function RoomWithoutSync({
             alt=""
             width={180}
             height={36}
-            className="h-9 w-auto max-h-9 shrink-0 object-contain object-left"
+            className="h-10 w-auto max-h-10 shrink-0 object-contain object-left"
             priority
           />
-          <span className="inline-flex shrink-0 items-center rounded border border-sky-500/60 bg-sky-500/10 px-2 py-0.5 text-[10px] font-semibold text-sky-200">
-            （β）版
+          <span className="inline-flex shrink-0 items-center rounded bg-lime-400/10 px-1.5 py-0.5 text-[9px] font-semibold text-lime-200 sm:px-2 sm:text-[10px]">
+            <span className="sm:hidden">β</span>
+            <span className="hidden sm:inline">（β）版</span>
           </span>
           <h1
-            className="min-w-0 flex-1 truncate text-base font-semibold leading-none text-white sm:text-lg"
-            title={`部屋 ${roomId || '--'}${(roomDisplayTitleCurrent || roomTitle) ? ` - ${roomDisplayTitleCurrent || roomTitle}` : ''}`}
+            className="min-w-0 flex-1 text-xs font-semibold leading-tight text-white sm:truncate sm:text-lg sm:leading-none"
+            title={`部屋 ${headerRoomId}${headerRoomSub ? ` - ${headerRoomSub}` : ''}`}
           >
-            {`部屋 ${roomId || '--'}${(roomDisplayTitleCurrent || roomTitle) ? ` - ${roomDisplayTitleCurrent || roomTitle}` : ''}`}
+            <span className="inline-flex min-w-0 items-center gap-1">
+              <span className="inline-flex h-10 w-10 shrink-0 flex-col items-center justify-center rounded border border-sky-500/60 bg-sky-500/10 px-0 py-0 leading-none text-sky-200 sm:w-auto sm:px-1 sm:py-0.5">
+                <span className="text-[8px] font-medium sm:text-[9px]">部屋</span>
+                <span className="text-[11px] font-semibold sm:text-xs">{headerRoomId}</span>
+              </span>
+              <span className="min-w-0 truncate text-base font-semibold leading-none text-white">
+                {headerRoomSub || ''}
+              </span>
+            </span>
           </h1>
         </div>
         {onLeave && (
@@ -1210,7 +1221,7 @@ export default function RoomWithoutSync({
             <button
               type="button"
               onClick={handleLeaveClick}
-              className="rounded border border-gray-600 bg-gray-800 px-4 py-2 text-sm font-medium text-gray-200 hover:bg-gray-700 hover:text-white"
+              className="h-10 w-10 rounded border border-gray-600 bg-gray-800 px-0 py-0 text-[11px] font-medium leading-none text-gray-200 hover:bg-gray-700 hover:text-white sm:w-auto sm:px-4 sm:py-2 sm:text-sm"
               aria-label="部屋を退室して最初の画面に戻る"
             >
               退室

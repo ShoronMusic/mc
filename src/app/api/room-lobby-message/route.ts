@@ -145,8 +145,8 @@ export async function POST(request: Request) {
   }
 
   const supabaseUser = await createClient();
-  const { data: { session } } = supabaseUser ? await supabaseUser.auth.getSession() : { data: { session: null } };
-  const userId = session?.user?.id ?? '';
+  const { data: { user } } = supabaseUser ? await supabaseUser.auth.getUser() : { data: { user: null } };
+  const userId = user?.id ?? '';
 
   let authorized = false;
   if (userId && (await isLiveGatheringOrganizer(admin, roomId, userId))) {

@@ -28,13 +28,15 @@ export function TopPageLoginAndLiveRooms() {
       return;
     }
     let active = true;
-    void supabase.auth.getSession().then(({ data }) => {
+    void supabase.auth.getUser().then(({ data }) => {
       if (!active) return;
-      setIsLoggedIn(!!data.session?.user);
+      setIsLoggedIn(!!data.user);
     });
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!active) return;
-      setIsLoggedIn(!!session?.user);
+    const { data: sub } = supabase.auth.onAuthStateChange(() => {
+      void supabase.auth.getUser().then(({ data }) => {
+        if (!active) return;
+        setIsLoggedIn(!!data.user);
+      });
     });
     return () => {
       active = false;

@@ -84,13 +84,15 @@ export function TopPageLoginEntry({
       return;
     }
     let active = true;
-    supabase.auth.getSession().then(({ data }) => {
+    supabase.auth.getUser().then(({ data }) => {
       if (!active) return;
-      setIsLoggedIn(!!data.session?.user);
+      setIsLoggedIn(!!data.user);
     });
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!active) return;
-      setIsLoggedIn(!!session?.user);
+    const { data: sub } = supabase.auth.onAuthStateChange(() => {
+      void supabase.auth.getUser().then(({ data }) => {
+        if (!active) return;
+        setIsLoggedIn(!!data.user);
+      });
     });
     return () => {
       active = false;

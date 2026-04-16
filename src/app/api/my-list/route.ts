@@ -81,9 +81,9 @@ export async function GET() {
   }
 
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  if (!session?.user?.id) {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user?.id) {
     return NextResponse.json({ error: 'ログインしていません。' }, { status: 401 });
   }
 
@@ -92,7 +92,7 @@ export async function GET() {
     .select(
       'id, video_id, url, title, artist, note, source, music8_song_id, created_at, updated_at',
     )
-    .eq('user_id', session.user.id)
+    .eq('user_id', user.id)
     .order('created_at', { ascending: false });
 
   if (error) {
@@ -115,9 +115,9 @@ export async function POST(request: Request) {
   }
 
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  if (!session?.user?.id) {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user?.id) {
     return NextResponse.json({ error: 'ログインしていません。' }, { status: 401 });
   }
 
@@ -166,7 +166,7 @@ export async function POST(request: Request) {
       : null;
 
   const insertRow: Record<string, unknown> = {
-    user_id: session.user.id,
+    user_id: user.id,
     video_id: videoId,
     url: url.length > 2000 ? url.slice(0, 2000) : url,
     title,
@@ -187,7 +187,7 @@ export async function POST(request: Request) {
         .select(
           'id, video_id, url, title, artist, note, source, music8_song_id, created_at, updated_at',
         )
-        .eq('user_id', session.user.id)
+        .eq('user_id', user.id)
         .eq('video_id', videoId)
         .maybeSingle();
 
@@ -208,7 +208,7 @@ export async function POST(request: Request) {
   const { data: inserted, error: selErr } = await supabase
     .from('user_my_list_items')
     .select('id, video_id, url, title, artist, note, source, music8_song_id, created_at, updated_at')
-    .eq('user_id', session.user.id)
+    .eq('user_id', user.id)
     .eq('video_id', videoId)
     .maybeSingle();
 
@@ -218,7 +218,7 @@ export async function POST(request: Request) {
 
   await syncMyListItemLibraryArtists(
     supabase,
-    session.user.id,
+    user.id,
     inserted.id,
     inserted.artist,
   );
@@ -237,9 +237,9 @@ export async function PATCH(request: Request) {
   }
 
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  if (!session?.user?.id) {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user?.id) {
     return NextResponse.json({ error: 'ログインしていません。' }, { status: 401 });
   }
 
@@ -265,7 +265,7 @@ export async function PATCH(request: Request) {
   const style = typeof body.style === 'string' ? body.style.trim() : '';
   const era = typeof body.era === 'string' ? body.era.trim() : '';
   console.info('[my-list PATCH] request', {
-    userId: session.user.id,
+    userId: user.id,
     id,
     hasTitle: typeof body.title === 'string',
     hasArtist: typeof body.artist === 'string',
@@ -292,7 +292,7 @@ export async function PATCH(request: Request) {
     .from('user_my_list_items')
     .update(patch)
     .eq('id', id)
-    .eq('user_id', session.user.id)
+    .eq('user_id', user.id)
     .select('id, video_id, url, title, artist, note, source, music8_song_id, created_at, updated_at')
     .maybeSingle();
 
@@ -348,7 +348,7 @@ export async function PATCH(request: Request) {
     }
   }
 
-  await syncMyListItemLibraryArtists(supabase, session.user.id, data.id, data.artist);
+  await syncMyListItemLibraryArtists(supabase, user.id, data.id, data.artist);
   console.info('[my-list PATCH] sync requested', {
     id: data.id,
     videoId: data.video_id,
@@ -368,9 +368,9 @@ export async function DELETE(request: Request) {
   }
 
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  if (!session?.user?.id) {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user?.id) {
     return NextResponse.json({ error: 'ログインしていません。' }, { status: 401 });
   }
 
@@ -384,7 +384,7 @@ export async function DELETE(request: Request) {
     .from('user_my_list_items')
     .delete()
     .eq('id', id)
-    .eq('user_id', session.user.id)
+    .eq('user_id', user.id)
     .select('id');
 
   if (error) {

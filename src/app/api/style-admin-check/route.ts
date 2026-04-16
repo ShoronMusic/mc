@@ -15,9 +15,9 @@ export async function GET() {
     return NextResponse.json({ canEdit: true });
   }
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  const uid = session?.user?.id;
+    data: { user },
+  } = await supabase.auth.getUser();
+  const uid = user?.id;
   if (!uid) {
     return NextResponse.json({ canEdit: false });
   }
