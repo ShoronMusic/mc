@@ -64,6 +64,7 @@ import {
   shouldRegenerateLibraryWhenMusicaichatSong,
   skipMusic8FactInjectEnv,
 } from '@/lib/music8-musicaichat';
+import { buildSongQuizApiExtension } from '@/lib/song-quiz-after-commentary';
 
 export const dynamic = 'force-dynamic';
 
@@ -317,6 +318,13 @@ export async function POST(request: Request) {
       resolvePackOpts,
     );
 
+    const songQuizExtension = buildSongQuizApiExtension({
+      channelId: snippet?.channelId ?? null,
+      channelTitle: snippet?.channelTitle ?? null,
+      videoTitle: rawYouTubeTitleForPrompt,
+      channelAuthorName: authorName ?? null,
+    });
+
     const isNewRelease = isPublishedWithinLastDays(snippet?.publishedAt, NEW_RELEASE_DAYS);
     const devMinimalSongAi = isDevMinimalSongAi();
     const isJpEconomy = await resolveJapaneseEconomyWithMusicBrainz({
@@ -334,7 +342,13 @@ export async function POST(request: Request) {
     const baseOnlyPack = equivalentBaseOnlySlots(slots) || isNewRelease || devMinimalSongAi;
 
     if (isCommentPackFullyOff(slots)) {
-      return NextResponse.json({ videoId, disabledByOwner: true, baseComment: '', freeComments: [] });
+      return NextResponse.json({
+        videoId,
+        disabledByOwner: true,
+        baseComment: '',
+        freeComments: [],
+        ...songQuizExtension,
+      });
     }
 
     // songs / song_videos 登録＋ song_id
@@ -352,7 +366,13 @@ export async function POST(request: Request) {
     }
 
     if (isJpEconomy && !isJpDomesticOfficialChannelAiException(snippet?.channelId) && !jpAiUnlockEnabled) {
-      return NextResponse.json({ skipAiCommentary: true, songId, videoId, skipReason: 'jp_economy' });
+      return NextResponse.json({
+        skipAiCommentary: true,
+        songId,
+        videoId,
+        skipReason: 'jp_economy',
+        ...songQuizExtension,
+      });
     }
 
     if (
@@ -369,6 +389,7 @@ export async function POST(request: Request) {
         songId,
         videoId,
         skipReason: 'uncertain_artist',
+        ...songQuizExtension,
       });
     }
 
@@ -386,6 +407,7 @@ export async function POST(request: Request) {
         songId,
         videoId,
         skipReason: 'promotional_metadata',
+        ...songQuizExtension,
       });
     }
 
@@ -464,6 +486,7 @@ export async function POST(request: Request) {
               newReleaseOnly: true,
               ...(nrCached.tidbitIds?.length ? { tidbitIds: nrCached.tidbitIds } : {}),
               ...music8ModeratorHintsPayload,
+              ...songQuizExtension,
             });
           }
         }
@@ -503,6 +526,7 @@ export async function POST(request: Request) {
               ...(tidbitIdsFull.length ? { tidbitIds: tidbitIdsFull } : {}),
               ...(freeCommentTidbitIds.length > 0 ? { freeCommentTidbitIds } : {}),
               ...music8ModeratorHintsPayload,
+              ...songQuizExtension,
             });
           }
         }
@@ -511,10 +535,7 @@ export async function POST(request: Request) {
 
     const model = getGeminiModel('comment_pack_base');
     if (!model) {
-      return NextResponse.json(
-        { error: 'Gemini is not configured' },
-        { status: 503 },
-      );
+      return NextResponse.json({ error: 'Gemini is not configured', ...songQuizExtension }, { status: 503 });
     }
 
     const currentYear = new Date().getFullYear();
@@ -638,7 +659,10 @@ ${basePromptTail}`;
       }
       if (!fromClient) {
         return NextResponse.json(
-          { error: 'baseComment または DB の ai_commentary が必要です（先に packPhase=base を実行してください）' },
+          {
+            error: 'baseComment または DB の ai_commentary が必要です（先に packPhase=base を実行してください）',
+            ...songQuizExtension,
+          },
           { status: 400 },
         );
       }
@@ -695,6 +719,7 @@ ${basePromptTail}`;
           packPhase: 'base',
           ...(tid0 ? { tidbitIds: [tid0] } : {}),
           ...music8ModeratorHintsPayload,
+          ...songQuizExtension,
         });
       }
     }
@@ -1130,6 +1155,7 @@ ${isHonorsTopic ? banBlockHonors : isSupergroupMemberTopic ? banBlockSupergroupM
       ...(tidbitIds.length > 0 ? { tidbitIds } : {}),
       ...(freeCommentTidbitIds.length > 0 ? { freeCommentTidbitIds } : {}),
       ...music8ModeratorHintsPayload,
+      ...songQuizExtension,
     });
   } catch (e) {
     console.error('[api/ai/comment-pack]', e);

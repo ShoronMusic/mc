@@ -33,6 +33,11 @@ import {
   buildAiQuestionGuardSoftDeclineMessage,
   shouldShowJpNoCommentarySystemMessage,
 } from '@/lib/chat-system-copy';
+import type { SongQuizPayload } from '@/lib/song-quiz-types';
+import {
+  buildSongQuizResultAnnouncement,
+  getSongQuizRevealDelayMs,
+} from '@/lib/song-quiz-result-announcement';
 import { resolveAiQuestionMusicRelated } from '@/lib/client-ai-question-guard-resolve';
 import { isDevMinimalSongAi } from '@/lib/dev-minimal-song-ai';
 import { formatMusic8ModeratorIntroPrefix } from '@/lib/music8-moderator-chat-prefix';
@@ -252,6 +257,12 @@ export default function RoomWithoutSync({
   const jpDomesticSilenceVideoIdRef = useRef<string | null>(null);
   /** 開発簡略モードで comment-pack 基本を出した動画。豆知識を当該曲中は抑止 */
   const commentPackVideoIdRef = useRef<string | null>(null);
+  const songQuizFetchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  type SongQuizRoundMetaLocal = { correctIndex: number; choices: string[]; videoId: string };
+  type SongQuizAnswerRow = { clientId: string; displayName: string; pickedIndex: number };
+  const songQuizLocalRevealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const songQuizLocalMetaByIdRef = useRef<Map<string, SongQuizRoundMetaLocal>>(new Map());
+  const songQuizLocalAnswersByIdRef = useRef<Map<string, SongQuizAnswerRow[]>>(new Map());
   videoIdRef.current = videoId;
   playingRef.current = playing;
   useResumeYoutubeWhenTabVisible(playerRef, videoIdRef, playingRef);
@@ -415,6 +426,43 @@ export default function RoomWithoutSync({
     },
     []
   );
+
+  const scheduleLocalSongQuizReveal = useCallback((quizMessageId: string, q: SongQuizPayload, vid: string) => {
+    if (songQuizLocalRevealTimerRef.current) {
+      clearTimeout(songQuizLocalRevealTimerRef.current);
+      songQuizLocalRevealTimerRef.current = null;
+    }
+    songQuizLocalMetaByIdRef.current.set(quizMessageId, {
+      correctIndex: q.correctIndex,
+      choices: q.choices,
+      videoId: vid,
+    });
+    songQuizLocalAnswersByIdRef.current.set(quizMessageId, []);
+    const revealDelay = getSongQuizRevealDelayMs();
+    songQuizLocalRevealTimerRef.current = setTimeout(() => {
+      songQuizLocalRevealTimerRef.current = null;
+      const meta = songQuizLocalMetaByIdRef.current.get(quizMessageId);
+      if (!meta || videoIdRef.current !== meta.videoId) return;
+      const answers = songQuizLocalAnswersByIdRef.current.get(quizMessageId) ?? [];
+      songQuizLocalMetaByIdRef.current.delete(quizMessageId);
+      songQuizLocalAnswersByIdRef.current.delete(quizMessageId);
+      addAiMessage(buildSongQuizResultAnnouncement(meta.correctIndex, meta.choices, answers), {
+        bypassJpDomesticSilence: true,
+        videoId: meta.videoId,
+      });
+    }, revealDelay);
+  }, [addAiMessage]);
+
+  const handleSongQuizPick = useCallback((quizMessageId: string, _vid: string, pickedIndex: number) => {
+    const list = songQuizLocalAnswersByIdRef.current.get(quizMessageId) ?? [];
+    const filtered = list.filter((x) => x.clientId !== 'local-client');
+    filtered.push({
+      clientId: 'local-client',
+      displayName: displayNameProp.trim() || 'ゲスト',
+      pickedIndex,
+    });
+    songQuizLocalAnswersByIdRef.current.set(quizMessageId, filtered);
+  }, [displayNameProp]);
 
   const handleSkipCurrentTrack = useCallback(() => {
     const vid = videoIdRef.current;
@@ -605,6 +653,16 @@ export default function RoomWithoutSync({
       clearTimeout(nextPromptTimeoutRef.current);
       nextPromptTimeoutRef.current = null;
     }
+    if (songQuizFetchTimeoutRef.current) {
+      clearTimeout(songQuizFetchTimeoutRef.current);
+      songQuizFetchTimeoutRef.current = null;
+    }
+    if (songQuizLocalRevealTimerRef.current) {
+      clearTimeout(songQuizLocalRevealTimerRef.current);
+      songQuizLocalRevealTimerRef.current = null;
+    }
+    songQuizLocalMetaByIdRef.current.clear();
+    songQuizLocalAnswersByIdRef.current.clear();
   }, [videoId]);
 
   const fetchAnnounceAndPublish = useCallback(
@@ -688,6 +746,44 @@ export default function RoomWithoutSync({
               );
               addAiMessage(packPrefix + modIntro + pack.baseComment, { videoId: vid });
               touchActivity();
+              const commentaryCtx =
+                typeof pack.baseComment === 'string' ? pack.baseComment.trim() : '';
+              if (commentaryCtx.length >= 60) {
+                if (songQuizFetchTimeoutRef.current) clearTimeout(songQuizFetchTimeoutRef.current);
+                songQuizFetchTimeoutRef.current = setTimeout(() => {
+                  songQuizFetchTimeoutRef.current = null;
+                  if (videoIdRef.current !== vid) return;
+                  void fetch('/api/ai/song-quiz', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      videoId: vid,
+                      roomId,
+                      commentaryContext: commentaryCtx,
+                    }),
+                  })
+                    .then((r) => (r.ok ? r.json() : null))
+                    .then((res) => {
+                      if (videoIdRef.current !== vid || !res?.quiz) return;
+                      const q = res.quiz as SongQuizPayload;
+                      const id = createMessageId();
+                      setMessages((prev) => [
+                        ...prev,
+                        {
+                          id,
+                          body: '三択クイズ（曲解説の内容のみを根拠に自動生成）',
+                          displayName: 'クイズ',
+                          messageType: 'system',
+                          createdAt: new Date().toISOString(),
+                          videoId: vid,
+                          systemKind: 'song_quiz',
+                          songQuiz: q,
+                        },
+                      ]);
+                      scheduleLocalSongQuizReveal(id, q, vid);
+                    });
+                }, 3500);
+              }
               tidbitPreferMainArtistLeftRef.current = 2;
               return;
             }
@@ -724,6 +820,43 @@ export default function RoomWithoutSync({
             const prefix = data.source === 'library' ? '[DB] ' : '[NEW] ';
             addAiMessage(prefix + data.text, { videoId: vid });
             touchActivity();
+            const commentarySingle = `${prefix}${data.text}`.trim();
+            if (commentarySingle.length >= 60) {
+              if (songQuizFetchTimeoutRef.current) clearTimeout(songQuizFetchTimeoutRef.current);
+              songQuizFetchTimeoutRef.current = setTimeout(() => {
+                songQuizFetchTimeoutRef.current = null;
+                if (videoIdRef.current !== vid) return;
+                void fetch('/api/ai/song-quiz', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    videoId: vid,
+                    roomId,
+                    commentaryContext: commentarySingle,
+                  }),
+                })
+                  .then((r) => (r.ok ? r.json() : null))
+                  .then((res) => {
+                    if (videoIdRef.current !== vid || !res?.quiz) return;
+                    const q = res.quiz as SongQuizPayload;
+                    const id = createMessageId();
+                    setMessages((prev) => [
+                      ...prev,
+                      {
+                        id,
+                        body: '三択クイズ（曲解説の内容のみを根拠に自動生成）',
+                        displayName: 'クイズ',
+                        messageType: 'system',
+                        createdAt: new Date().toISOString(),
+                        videoId: vid,
+                        systemKind: 'song_quiz',
+                        songQuiz: q,
+                      },
+                    ]);
+                    scheduleLocalSongQuizReveal(id, q, vid);
+                  });
+              }, 4000);
+            }
             tidbitPreferMainArtistLeftRef.current = 2;
           } else addSystemMessage(SYSTEM_MESSAGE_COMMENTARY_FETCH_FAILED);
         })
@@ -731,7 +864,7 @@ export default function RoomWithoutSync({
           addSystemMessage(SYSTEM_MESSAGE_COMMENTARY_FETCH_FAILED);
         });
     },
-    [addAiMessage, addSystemMessage, touchActivity, roomId, messages, canRejectTidbit]
+    [addAiMessage, addSystemMessage, touchActivity, roomId, messages, canRejectTidbit, scheduleLocalSongQuizReveal]
   );
 
   const schedulePlaybackHistory = useCallback(
@@ -1356,6 +1489,7 @@ export default function RoomWithoutSync({
                 ? (q) => chatInputRef.current?.searchYoutubeWithQuery(q)
                 : undefined
             }
+            onSongQuizPick={handleSongQuizPick}
           />
         }
         rightTop={

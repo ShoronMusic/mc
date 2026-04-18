@@ -32,7 +32,9 @@ const GEMINI_CONTEXT_SONG_COMMENTARY = new Set([
   'comment_pack_free_1',
   'comment_pack_free_2',
   'comment_pack_free_3',
+  'comment_pack_free_4',
   'commentary',
+  'song_quiz',
 ]);
 
 type DayTriplet = { date_jst: string; new: number; db: number; other: number };
@@ -40,7 +42,7 @@ type DayTriplet = { date_jst: string; new: number; db: number; other: number };
 /**
  * STYLE_ADMIN_USER_IDS ＋ service_role のみ。
  * - room_chat_log の AI 行を [NEW]/[DB]/その他に分類（発言単位）
- * - gemini_usage_logs の曲解説・comment-pack 系・tidbit の API 回数・トークン（課金の目安）
+ * - gemini_usage_logs の曲解説・comment-pack 系・曲解説後クイズ（song_quiz）・tidbit の API 回数・トークン（課金の目安）
  */
 export async function GET(request: Request) {
   const supabase = await createClient();

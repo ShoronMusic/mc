@@ -118,7 +118,9 @@ export default function AdminAiCommentOriginPage() {
             </li>
             <li>
               <strong className="text-gray-300">Gemini API（gemini_usage_logs）</strong>
-              … 実際に課金が発生した呼び出し回数・トークンです。comment-pack が{' '}
+              … 実際に課金が発生した呼び出し回数・トークンです。下表の「曲解説系」には comment-pack・旧
+              commentary・<strong className="text-gray-300">曲解説後クイズ（song_quiz）</strong>
+              が含まれます。comment-pack が{' '}
               <strong className="text-gray-300">キャッシュヒット</strong>した場合は API 行が増えず、チャットには{' '}
               <code className="rounded bg-gray-800 px-1">[DB]</code> 発言だけが載る、という差が経費削減の指標になります。
             </li>
@@ -225,7 +227,7 @@ export default function AdminAiCommentOriginPage() {
                 <div className="mb-6 grid gap-4 md:grid-cols-2">
                   <div className="rounded-lg border border-gray-700 bg-gray-900/40 p-4">
                     <h3 className="mb-2 text-sm font-medium text-gray-200">
-                      曲解説・comment-pack（commentary / comment_pack_*）
+                      曲解説・comment-pack・クイズ（commentary / comment_pack_* / song_quiz）
                     </h3>
                     <p className="text-xs text-gray-500">
                       呼び出し {data.gemini.songCommentary.calls.toLocaleString()} 回 · 入力{' '}
@@ -247,7 +249,7 @@ export default function AdminAiCommentOriginPage() {
                     <thead className="border-b border-gray-700 bg-gray-800/80">
                       <tr>
                         <th className="px-3 py-2">日付（JST）</th>
-                        <th className="px-3 py-2 text-right">曲解説系 回数</th>
+                        <th className="px-3 py-2 text-right">曲解説・クイズ系 回数</th>
                         <th className="px-3 py-2 text-right">入力Tok</th>
                         <th className="px-3 py-2 text-right">出力Tok</th>
                         <th className="px-3 py-2 text-right">tidbit 回数</th>

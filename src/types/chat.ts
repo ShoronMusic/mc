@@ -2,6 +2,8 @@
  * チャットメッセージ・部屋まわりの型
  */
 
+import type { SongQuizPayload } from '@/lib/song-quiz-types';
+
 export type MessageType = 'user' | 'ai' | 'system';
 
 /** システム警告「@ 質問の音楽関連チェック」用メタ（異議申立て・表示制御用） */
@@ -40,6 +42,8 @@ export interface ChatMessage {
   videoId?: string | null;
   /** AIコメントの種別（曲解説 / 豆知識 / 通常応答など） */
   aiSource?: 'commentary' | 'tidbit' | 'chat_reply' | 'other';
+  /** AI 本文の強調（入室直後の選曲案内など。未設定は通常色） */
+  aiBodyEmphasis?: 'yellow';
   /** song_tidbits の行ID（comment-pack 由来のみ。モデレーターNG用） */
   tidbitId?: string | null;
   /** モデレーターがNGを押しライブラリから無効化済み（ローカル表示用） */
@@ -51,13 +55,26 @@ export interface ChatMessage {
   /** 参加者退室通知メッセージ専用。true のときだけ退室効果音を鳴らす */
   playLeaveChime?: boolean;
   /** システムメッセージの種別（異議ボタン表示など） */
-  systemKind?: 'ai_question_guard';
+  systemKind?: 'ai_question_guard' | 'song_quiz';
   /** AI 質問ガード警告の詳細（systemKind が ai_question_guard のとき） */
   aiGuardMeta?: AiQuestionGuardMeta;
+  /** systemKind が song_quiz のときの三択データ */
+  songQuiz?: SongQuizPayload;
 }
 
 /** Ably で送るチャットイベントのペイロード */
 export const CHAT_MESSAGE_EVENT = 'chat:message';
+
+/** 三択クイズの回答（最古入室者が集計） */
+export const SONG_QUIZ_ANSWER_EVENT = 'song-quiz:answer';
+
+export interface SongQuizAnswerPayload {
+  quizMessageId: string;
+  videoId: string;
+  clientId: string;
+  displayName: string;
+  pickedIndex: number;
+}
 
 export interface ChatMessagePayload {
   id: string;
@@ -73,6 +90,8 @@ export interface ChatMessagePayload {
   videoId?: string | null;
   /** AIコメントの種別（曲解説 / 豆知識 / 通常応答など） */
   aiSource?: 'commentary' | 'tidbit' | 'chat_reply' | 'other';
+  /** AI 本文の強調（入室直後の選曲案内など） */
+  aiBodyEmphasis?: 'yellow';
   /** song_tidbits の行ID（comment-pack 由来） */
   tidbitId?: string | null;
   /** 邦楽選曲アナウンス時のみ。受信クライアントが同じ videoId の間 AI 発言を止める */
@@ -81,4 +100,6 @@ export interface ChatMessagePayload {
   playJoinChime?: boolean;
   /** 参加者退室通知。受信側で退室音用 */
   playLeaveChime?: boolean;
+  systemKind?: 'ai_question_guard' | 'song_quiz';
+  songQuiz?: SongQuizPayload;
 }

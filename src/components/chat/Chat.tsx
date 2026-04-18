@@ -87,6 +87,8 @@ interface ChatProps {
   styleAdminChatTools?: boolean;
   /** AI 検索用ブロック行の「検索」から発言欄の YouTube 検索モーダルを開く */
   onYoutubeSearchFromAi?: (query: string) => void;
+  /** 曲解説後三択クイズの選択（同期部屋では Ably で共有） */
+  onSongQuizPick?: (quizMessageId: string, videoId: string, pickedIndex: number) => void;
 }
 
 function formatTime(createdAt: string): string {
@@ -357,6 +359,7 @@ export default function Chat({
   myClientId,
   styleAdminChatTools = false,
   onYoutubeSearchFromAi,
+  onSongQuizPick,
 }: ChatProps) {
   const pathname = usePathname();
   const pathSegs = pathname?.split('/').filter(Boolean) ?? [];
@@ -380,6 +383,8 @@ export default function Chat({
   const [detailComment, setDetailComment] = useState('');
   const [tidbitRejectingId, setTidbitRejectingId] = useState<string | null>(null);
   const [artistTitleReportingId, setArtistTitleReportingId] = useState<string | null>(null);
+  /** 三択クイズ: メッセージ id → 選んだ選択肢 index */
+  const [songQuizPickedIndex, setSongQuizPickedIndex] = useState<Record<string, number>>({});
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -790,6 +795,7 @@ export default function Chat({
               const isSelectionAnnounce = selectorName != null;
               const isNextPromptMessage =
                 m.messageType === 'ai' && m.body.includes('再生が終了したら次の選曲をどうぞ');
+              const isYellowEmphasisAi = m.messageType === 'ai' && m.aiBodyEmphasis === 'yellow';
               const messageColor =
                 m.messageType === 'user' && m.clientId
                   ? participantTextColors[m.clientId] ?? DEFAULT_MESSAGE_COLOR
@@ -821,9 +827,13 @@ export default function Chat({
                 {m.messageType === 'ai' ? (
                   <div className="flex items-baseline justify-between gap-2">
                     <div
-                      className={`min-w-0 flex-1 break-words whitespace-pre-wrap text-gray-200 ${isSelectionAnnounce || isNextPromptMessage ? 'font-bold' : ''}`}
+                      className={`min-w-0 flex-1 break-words whitespace-pre-wrap ${
+                        isYellowEmphasisAi
+                          ? 'font-semibold text-yellow-300'
+                          : `text-gray-200 ${isSelectionAnnounce || isNextPromptMessage ? 'font-bold' : ''}`
+                      }`}
                       style={
-                        isSelectionAnnounce && selectionAnnounceColor
+                        !isYellowEmphasisAi && isSelectionAnnounce && selectionAnnounceColor
                           ? { color: selectionAnnounceColor }
                           : undefined
                       }
@@ -890,6 +900,53 @@ export default function Chat({
                           )}
                         </div>
                       )}
+                    {m.messageType === 'system' && m.systemKind === 'song_quiz' && m.songQuiz && (
+                      <div className="mt-2 space-y-2 rounded-md border border-cyan-800/45 bg-gray-950/50 p-2.5">
+                        <p className="text-sm font-medium leading-snug text-cyan-50/95">
+                          {m.songQuiz.question}
+                        </p>
+                        <div className="flex flex-col gap-1.5">
+                          {m.songQuiz.choices.map((label, idx) => {
+                            const picked = songQuizPickedIndex[m.id];
+                            const hasPicked = typeof picked === 'number';
+                            const isCorrect = hasPicked && idx === m.songQuiz!.correctIndex;
+                            const isWrongPick = hasPicked && picked === idx && !isCorrect;
+                            return (
+                              <button
+                                key={idx}
+                                type="button"
+                                disabled={hasPicked}
+                                onClick={() => {
+                                  setSongQuizPickedIndex((prev) => ({ ...prev, [m.id]: idx }));
+                                  const vid =
+                                    (typeof m.videoId === 'string' && m.videoId.trim()
+                                      ? m.videoId.trim()
+                                      : '') ||
+                                    (typeof currentVideoId === 'string' && currentVideoId.trim()
+                                      ? currentVideoId.trim()
+                                      : '');
+                                  onSongQuizPick?.(m.id, vid, idx);
+                                }}
+                                className={`rounded px-2.5 py-1.5 text-left text-xs transition-colors disabled:cursor-default sm:text-sm ${
+                                  hasPicked
+                                    ? isCorrect
+                                      ? 'border border-emerald-600/70 bg-emerald-950/40 text-emerald-100'
+                                      : isWrongPick
+                                        ? 'border border-rose-700/50 bg-rose-950/30 text-rose-100/90'
+                                        : 'border border-gray-600/40 bg-gray-800/50 text-gray-400'
+                                    : 'border border-gray-600 bg-gray-800/90 text-gray-100 hover:border-cyan-700/60 hover:bg-gray-800'
+                                }`}
+                              >
+                                {idx + 1}. {label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        {typeof songQuizPickedIndex[m.id] === 'number' && (
+                          <p className="text-xs leading-relaxed text-gray-300">{m.songQuiz.explanation}</p>
+                        )}
+                      </div>
+                    )}
                     {canRejectTidbit && roomId?.trim() && (
                       <div className="mt-1.5 flex justify-end">
                         <button

@@ -38,6 +38,11 @@ import {
   buildAiQuestionGuardSoftDeclineMessage,
   shouldShowJpNoCommentarySystemMessage,
 } from '@/lib/chat-system-copy';
+import type { SongQuizPayload } from '@/lib/song-quiz-types';
+import {
+  buildSongQuizResultAnnouncement,
+  getSongQuizRevealDelayMs,
+} from '@/lib/song-quiz-result-announcement';
 import {
   buildTurnOrderClarificationReply,
   isAiTurnOrderClarificationText,
@@ -64,8 +69,10 @@ import {
 } from '@/types/playback';
 import {
   CHAT_MESSAGE_EVENT,
+  SONG_QUIZ_ANSWER_EVENT,
   type ChatMessage,
   type ChatMessagePayload,
+  type SongQuizAnswerPayload,
   type SystemMessageOptions,
 } from '@/types/chat';
 import {
@@ -220,6 +227,9 @@ const AI_FIRST_VOICE =
 /** 選曲順の説明 */
 const TURN_ORDER_VOICE =
   '入室した順で、選曲に参加している方から曲を貼っていきます（視聴専用の方は順番に含めず案内も飛ばします）。退席から30分以内は枠と選曲順を維持し、ターン案内は在室の方へ進みます（予約曲は順番どおり再生されます）。';
+/** ターン未取得時の選曲案内（黄色強調） */
+const JOIN_PASTE_YOUTUBE_URL_HINT =
+  'YouTubeで選曲した洋楽のURLを発言欄に貼ってください';
 const TIDBIT_COOLDOWN_SEC = 60;
 /** presence から落ちた直後も、入室順の枠を残す時間（選曲順・表示順の土台を維持） */
 const VACANT_SLOT_RETENTION_MS = 30 * 60 * 1000;
@@ -499,6 +509,13 @@ export default function RoomWithSync({
   const commentPackVideoIdRef = useRef<string | null>(null);
   /** comment-pack の自由コメントを遅延表示するタイマー（次の曲案内で必ずクリア） */
   const freeCommentTimeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  type SongQuizAnswerRow = { clientId: string; displayName: string; pickedIndex: number };
+  type SongQuizRoundMetaLocal = { correctIndex: number; choices: string[]; videoId: string };
+  /** 三択クイズ: 締め切り後に正解者を発表するタイマー（quiz メッセージ id キー） */
+  const songQuizRevealTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  /** 三択クイズ: 最古入室者のみが回答を集計 */
+  const songQuizAnswersByQuizIdRef = useRef<Map<string, SongQuizAnswerRow[]>>(new Map());
+  const songQuizRoundMetaRef = useRef<Map<string, SongQuizRoundMetaLocal>>(new Map());
   /** 自由コメント待ちの間は一般豆知識を抑止 */
   const suppressTidbitRef = useRef(false);
   /** （邦楽）選曲アナウンス後〜次の曲が貼られるまで AI 発言を止める対象の videoId */
@@ -1208,6 +1225,29 @@ export default function RoomWithSync({
     lastActivityAtRef.current = Date.now();
   }, []);
 
+  const clearPendingSongQuizRoundState = useCallback(() => {
+    for (const t of songQuizRevealTimersRef.current.values()) {
+      clearTimeout(t);
+    }
+    songQuizRevealTimersRef.current.clear();
+    songQuizAnswersByQuizIdRef.current.clear();
+    songQuizRoundMetaRef.current.clear();
+  }, []);
+
+  const recordSongQuizAnswer = useCallback(
+    (quizMessageId: string, clientId: string, displayName: string, pickedIndex: number) => {
+      const list = songQuizAnswersByQuizIdRef.current.get(quizMessageId) ?? [];
+      const filtered = list.filter((x) => x.clientId !== clientId);
+      filtered.push({
+        clientId,
+        displayName: (displayName || 'ゲスト').trim() || 'ゲスト',
+        pickedIndex,
+      });
+      songQuizAnswersByQuizIdRef.current.set(quizMessageId, filtered);
+    },
+    [],
+  );
+
   const applyAiQuestionGuardEvent = useCallback(
     (payload: OwnerAiQuestionGuardPayload) => {
       if (!payload?.targetClientId) return;
@@ -1382,6 +1422,21 @@ export default function RoomWithSync({
       applyAiQuestionGuardEvent(d);
       return;
     }
+    if (message.name === SONG_QUIZ_ANSWER_EVENT) {
+      if (myClientId !== oldestRef.current) return;
+      const p = message.data as SongQuizAnswerPayload;
+      if (
+        !p ||
+        typeof p.quizMessageId !== 'string' ||
+        typeof p.clientId !== 'string' ||
+        typeof p.pickedIndex !== 'number' ||
+        !Number.isFinite(p.pickedIndex)
+      ) {
+        return;
+      }
+      recordSongQuizAnswer(p.quizMessageId, p.clientId, p.displayName ?? 'ゲスト', p.pickedIndex);
+      return;
+    }
     if (message.name === PLAYBACK_HISTORY_UPDATED_EVENT) {
       const d = message.data as PlaybackHistoryUpdatedPayload;
       const targetVid = typeof d?.videoId === 'string' ? d.videoId : null;
@@ -1467,6 +1522,7 @@ export default function RoomWithSync({
             freeCommentTimeoutsRef.current.forEach((t) => clearTimeout(t));
             freeCommentTimeoutsRef.current = [];
           }
+          clearPendingSongQuizRoundState();
           suppressTidbitRef.current = false;
         }
       }
@@ -1491,6 +1547,9 @@ export default function RoomWithSync({
               : {}),
             ...(p.playJoinChime ? { playJoinChime: true as const } : {}),
             ...(p.playLeaveChime ? { playLeaveChime: true as const } : {}),
+            ...(p.aiBodyEmphasis ? { aiBodyEmphasis: p.aiBodyEmphasis } : {}),
+            ...(p.systemKind ? { systemKind: p.systemKind } : {}),
+            ...(p.songQuiz ? { songQuiz: p.songQuiz } : {}),
           },
         ];
       });
@@ -1879,6 +1938,26 @@ export default function RoomWithSync({
     [publish]
   );
 
+  const publishSongQuizAnswer = useCallback(
+    (quizMessageId: string, videoIdForAnswer: string, pickedIndex: number) => {
+      const cid = (myClientId ?? '').trim();
+      if (!cid) return;
+      const displayName = effectiveDisplayName.trim() || 'ゲスト';
+      const payload: SongQuizAnswerPayload = {
+        quizMessageId,
+        videoId: videoIdForAnswer,
+        clientId: cid,
+        displayName,
+        pickedIndex,
+      };
+      if (oldestRef.current === cid) {
+        recordSongQuizAnswer(quizMessageId, cid, displayName, pickedIndex);
+      }
+      safePublish(SONG_QUIZ_ANSWER_EVENT, payload);
+    },
+    [safePublish, myClientId, effectiveDisplayName, recordSongQuizAnswer],
+  );
+
   publishRef.current = safePublish;
 
   useEffect(() => {
@@ -2201,6 +2280,8 @@ export default function RoomWithSync({
         playJoinChime?: boolean;
         /** 参加者退室通知行のみ true（退室効果音の唯一のトリガ） */
         playLeaveChime?: boolean;
+        /** AI 本文の強調（入室直後の選曲案内など） */
+        aiBodyEmphasis?: ChatMessage['aiBodyEmphasis'];
       }
     ) => {
       if (aiFreeSpeechStopped && !options?.allowWhenAiStopped) return;
@@ -2230,6 +2311,7 @@ export default function RoomWithSync({
           : {}),
         ...(options?.playJoinChime ? { playJoinChime: true as const } : {}),
         ...(options?.playLeaveChime ? { playLeaveChime: true as const } : {}),
+        ...(options?.aiBodyEmphasis ? { aiBodyEmphasis: options.aiBodyEmphasis } : {}),
       };
       if (!options?.localOnly) {
         safePublish(CHAT_MESSAGE_EVENT, payload);
@@ -2251,6 +2333,7 @@ export default function RoomWithSync({
             : {}),
           ...(payload.playJoinChime ? { playJoinChime: true as const } : {}),
           ...(payload.playLeaveChime ? { playLeaveChime: true as const } : {}),
+          ...(payload.aiBodyEmphasis ? { aiBodyEmphasis: payload.aiBodyEmphasis } : {}),
         },
       ]);
     },
@@ -2334,6 +2417,70 @@ export default function RoomWithSync({
       return [...prev, msg];
     });
   }, []);
+
+  const addSongQuizMessage = useCallback(
+    (quiz: SongQuizPayload, videoIdForQuiz: string) => {
+      const id = createMessageId();
+      const body = '三択クイズ（曲解説の内容のみを根拠に自動生成）';
+      const payload: ChatMessagePayload = {
+        id,
+        body,
+        displayName: 'クイズ',
+        messageType: 'system',
+        createdAt: new Date().toISOString(),
+        videoId: videoIdForQuiz,
+        systemKind: 'song_quiz',
+        songQuiz: quiz,
+      };
+      safePublish(CHAT_MESSAGE_EVENT, payload);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: payload.id,
+          body: payload.body,
+          displayName: payload.displayName,
+          messageType: payload.messageType,
+          createdAt: payload.createdAt,
+          ...(payload.videoId != null ? { videoId: payload.videoId } : {}),
+          ...(payload.systemKind ? { systemKind: payload.systemKind } : {}),
+          ...(payload.songQuiz ? { songQuiz: payload.songQuiz } : {}),
+        },
+      ]);
+
+      const revealDelay = getSongQuizRevealDelayMs();
+      songQuizRoundMetaRef.current.set(id, {
+        correctIndex: quiz.correctIndex,
+        choices: quiz.choices,
+        videoId: videoIdForQuiz,
+      });
+      songQuizAnswersByQuizIdRef.current.set(id, []);
+      const prevT = songQuizRevealTimersRef.current.get(id);
+      if (prevT) clearTimeout(prevT);
+      const t = setTimeout(() => {
+        songQuizRevealTimersRef.current.delete(id);
+        if (videoIdRef.current !== videoIdForQuiz) return;
+        const cid = (myClientId ?? '').trim();
+        if (!cid || cid !== oldestRef.current) return;
+        const meta = songQuizRoundMetaRef.current.get(id);
+        if (!meta) return;
+        const answers = songQuizAnswersByQuizIdRef.current.get(id) ?? [];
+        songQuizRoundMetaRef.current.delete(id);
+        songQuizAnswersByQuizIdRef.current.delete(id);
+        const bodyAnnounce = buildSongQuizResultAnnouncement(
+          meta.correctIndex,
+          meta.choices,
+          answers.map((a) => ({ displayName: a.displayName, pickedIndex: a.pickedIndex })),
+        );
+        addAiMessage(bodyAnnounce, {
+          allowWhenAiStopped: true,
+          videoId: videoIdForQuiz,
+          aiSource: 'tidbit',
+        });
+      }, revealDelay);
+      songQuizRevealTimersRef.current.set(id, t);
+    },
+    [safePublish, addAiMessage, myClientId],
+  );
 
   const clearLocalAiQuestionGuardState = useCallback(() => {
     const rid = roomId || 'unknown-room';
@@ -2535,7 +2682,7 @@ export default function RoomWithSync({
         publishRef.current?.(TURN_STATE_EVENT, buildTurnStatePayload(first.clientId));
         addAiMessage(`${first.displayName}さん、曲を貼ってください`, localGuide);
       } else {
-        addAiMessage('どなたでもどうぞ貼ってください', localGuide);
+        addAiMessage(JOIN_PASTE_YOUTUBE_URL_HINT, { ...localGuide, aiBodyEmphasis: 'yellow' });
       }
       touchActivity();
     })();
@@ -2647,8 +2794,9 @@ export default function RoomWithSync({
       freeCommentTimeoutsRef.current.forEach((t) => clearTimeout(t));
       freeCommentTimeoutsRef.current = [];
     }
+    clearPendingSongQuizRoundState();
     suppressTidbitRef.current = false;
-  }, []);
+  }, [clearPendingSongQuizRoundState]);
 
   /** 視聴専用をスキップしつつ、次の選曲者に促す。曲終了・5分経過時は投稿者のクライアントのみ実行 */
   const promptNextTurn = useCallback((options?: { fiveMinElapsed?: boolean }) => {
@@ -2758,10 +2906,11 @@ export default function RoomWithSync({
       freeCommentTimeoutsRef.current.forEach((t) => clearTimeout(t));
       freeCommentTimeoutsRef.current = [];
     }
+    clearPendingSongQuizRoundState();
     suppressTidbitRef.current = false;
     commentPackVideoIdRef.current = null;
     setSkipUsedForVideoId(null);
-  }, [videoId]);
+  }, [videoId, clearPendingSongQuizRoundState]);
 
   const fetchAnnounceAndPublish = useCallback(
     (
@@ -2872,6 +3021,7 @@ export default function RoomWithSync({
           freeCommentTimeoutsRef.current.forEach((t) => clearTimeout(t));
           freeCommentTimeoutsRef.current = [];
         }
+        clearPendingSongQuizRoundState();
         // スロット全オフでは同一曲中の補助解説(tidbit)も出さない
         suppressTidbitRef.current = true;
         commentPackVideoIdRef.current = null;
@@ -2912,6 +3062,7 @@ export default function RoomWithSync({
               freeCommentTimeoutsRef.current.forEach((t) => clearTimeout(t));
               freeCommentTimeoutsRef.current = [];
             }
+            clearPendingSongQuizRoundState();
             suppressTidbitRef.current = false;
             const isJpSilenceVideo =
               jpDomesticSilenceVideoIdRef.current != null &&
@@ -2955,6 +3106,7 @@ export default function RoomWithSync({
               freeCommentTimeoutsRef.current.forEach((t) => clearTimeout(t));
               freeCommentTimeoutsRef.current = [];
             }
+            clearPendingSongQuizRoundState();
 
             const freeIdxSorted = Array.from(
               { length: COMMENT_PACK_MAX_FREE_COMMENTS },
@@ -2962,6 +3114,33 @@ export default function RoomWithSync({
             ).filter((i) => slots[i + 1]);
             if (freeIdxSorted.length === 0) {
               suppressTidbitRef.current = equivalentBaseOnlySlots(commentPackSlotsRef.current);
+              const baseOnlyCtx = pack.baseComment.trim();
+              const delayBaseOnly = 3500;
+              if (
+                myClientId &&
+                oldestParticipantClientId &&
+                myClientId === oldestParticipantClientId &&
+                baseOnlyCtx.length >= 60
+              ) {
+                const timer = setTimeout(() => {
+                  if (videoIdRef.current !== vid) return;
+                  void fetch('/api/ai/song-quiz', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      videoId: vid,
+                      roomId,
+                      commentaryContext: baseOnlyCtx,
+                    }),
+                  })
+                    .then((r) => (r.ok ? r.json() : null))
+                    .then((res) => {
+                      if (videoIdRef.current !== vid || !res?.quiz) return;
+                      addSongQuizMessage(res.quiz as SongQuizPayload, vid);
+                    });
+                }, delayBaseOnly);
+                freeCommentTimeoutsRef.current.push(timer);
+              }
               return null;
             }
 
@@ -3088,6 +3267,41 @@ export default function RoomWithSync({
                     if (pendingBodies.length === 0) {
                       suppressTidbitRef.current = false;
                     }
+                    const baseLine =
+                      typeof pack.baseComment === 'string' ? pack.baseComment.trim() : '';
+                    const commentaryContext = [
+                      baseLine,
+                      ...freeIdxSorted.map((ix) => filledForSlot[ix]?.trim()).filter(Boolean),
+                    ]
+                      .filter(Boolean)
+                      .join('\n\n---\n\n');
+                    const delayMs =
+                      freeIdxSorted.length * COMMENT_PACK_FREE_STAGGER_MS + 3500;
+                    if (
+                      myClientId &&
+                      oldestParticipantClientId &&
+                      myClientId === oldestParticipantClientId &&
+                      commentaryContext.length >= 60
+                    ) {
+                      const timer = setTimeout(() => {
+                        if (videoIdRef.current !== vid) return;
+                        void fetch('/api/ai/song-quiz', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            videoId: vid,
+                            roomId,
+                            commentaryContext,
+                          }),
+                        })
+                          .then((r) => (r.ok ? r.json() : null))
+                          .then((res) => {
+                            if (videoIdRef.current !== vid || !res?.quiz) return;
+                            addSongQuizMessage(res.quiz as SongQuizPayload, vid);
+                          });
+                      }, delayMs);
+                      freeCommentTimeoutsRef.current.push(timer);
+                    }
                   }
                 });
             });
@@ -3130,6 +3344,7 @@ export default function RoomWithSync({
               freeCommentTimeoutsRef.current.forEach((t) => clearTimeout(t));
               freeCommentTimeoutsRef.current = [];
             }
+            clearPendingSongQuizRoundState();
 
             const pendingFreeBodies = freeArr
               .slice(0, COMMENT_PACK_MAX_FREE_COMMENTS)
@@ -3160,6 +3375,36 @@ export default function RoomWithSync({
                 });
                 touchActivity();
               }, delayMs);
+              freeCommentTimeoutsRef.current.push(timer);
+            }
+
+            const commentaryContextSingle = [baseStr, ...freeArr.map((c) => c.trim()).filter(Boolean)]
+              .filter(Boolean)
+              .join('\n\n---\n\n');
+            const delayMsSingle = shownIdx * COMMENT_PACK_FREE_STAGGER_MS + 3500;
+            if (
+              myClientId &&
+              oldestParticipantClientId &&
+              myClientId === oldestParticipantClientId &&
+              commentaryContextSingle.length >= 60
+            ) {
+              const timer = setTimeout(() => {
+                if (videoIdRef.current !== vid) return;
+                void fetch('/api/ai/song-quiz', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    videoId: vid,
+                    roomId,
+                    commentaryContext: commentaryContextSingle,
+                  }),
+                })
+                  .then((r) => (r.ok ? r.json() : null))
+                  .then((res) => {
+                    if (videoIdRef.current !== vid || !res?.quiz) return;
+                    addSongQuizMessage(res.quiz as SongQuizPayload, vid);
+                  });
+              }, delayMsSingle);
               freeCommentTimeoutsRef.current.push(timer);
             }
           } else {
@@ -3204,6 +3449,33 @@ export default function RoomWithSync({
                     aiSource: 'tidbit',
                   });
                   touchActivity();
+                  const commentarySingle = `${prefix}${data.text}`.trim();
+                  const delayCommentary = 4000;
+                  if (
+                    myClientId &&
+                    oldestParticipantClientId &&
+                    myClientId === oldestParticipantClientId &&
+                    commentarySingle.length >= 60
+                  ) {
+                    const timer = setTimeout(() => {
+                      if (videoIdRef.current !== vid) return;
+                      void fetch('/api/ai/song-quiz', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          videoId: vid,
+                          roomId,
+                          commentaryContext: commentarySingle,
+                        }),
+                      })
+                        .then((r) => (r.ok ? r.json() : null))
+                        .then((res) => {
+                          if (videoIdRef.current !== vid || !res?.quiz) return;
+                          addSongQuizMessage(res.quiz as SongQuizPayload, vid);
+                        });
+                    }, delayCommentary);
+                    freeCommentTimeoutsRef.current.push(timer);
+                  }
                   tidbitPreferMainArtistLeftRef.current = 2;
                 } else {
                   addSystemMessage(SYSTEM_MESSAGE_COMMENTARY_FETCH_FAILED);
@@ -3216,7 +3488,18 @@ export default function RoomWithSync({
           addSystemMessage(SYSTEM_MESSAGE_COMMENTARY_FETCH_FAILED);
         });
     },
-    [addAiMessage, addSystemMessage, touchActivity, roomId, messages, canRejectTidbit]
+    [
+      addAiMessage,
+      addSystemMessage,
+      addSongQuizMessage,
+      touchActivity,
+      roomId,
+      messages,
+      canRejectTidbit,
+      oldestParticipantClientId,
+      myClientId,
+      clearPendingSongQuizRoundState,
+    ]
   );
 
   const regenerateAiSongIntroAfterPlaybackTitleSave = useCallback(
@@ -3226,6 +3509,7 @@ export default function RoomWithSync({
 
       freeCommentTimeoutsRef.current.forEach((t) => clearTimeout(t));
       freeCommentTimeoutsRef.current = [];
+      clearPendingSongQuizRoundState();
 
       setMessages((prev) =>
         prev.filter((m) => {
@@ -3265,6 +3549,7 @@ export default function RoomWithSync({
       effectiveDisplayName,
       fetchAnnounceAndPublish,
       fetchCommentaryAndPublish,
+      clearPendingSongQuizRoundState,
     ]
   );
 
@@ -4512,6 +4797,7 @@ export default function RoomWithSync({
                 ? (q) => chatInputRef.current?.searchYoutubeWithQuery(q)
                 : undefined
             }
+            onSongQuizPick={publishSongQuizAnswer}
           />
         }
         rightTop={

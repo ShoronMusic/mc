@@ -48,12 +48,17 @@ const CONTEXT_HELP: Record<string, string> = {
   tidbit: '30秒無発言の豆知識（再生中・直前の曲に紐づくもののみ。洋楽全般の雑談はオフ）',
   commentary: '曲解説（曲を貼った直後の基本コメント）',
   get_song_style: '曲スタイル分類（Pop/Rock 等）',
+  get_song_era: '曲の年代ラベル分類',
   extract_song_search: '「曲を貼って」系の検索クエリ抽出',
   comment_pack_base: 'comment-pack の基本コメント',
   comment_pack_free_1: 'comment-pack 自由コメント1',
   comment_pack_free_2: 'comment-pack 自由コメント2',
   comment_pack_free_3: 'comment-pack 自由コメント3',
+  comment_pack_free_4: 'comment-pack 自由コメント4',
   comment_pack_session_bridge: 'comment-pack ライブラリ返却時の会話つなぎ（直近チャットあり）',
+  song_quiz: '曲解説後の三択クイズ生成（/api/ai/song-quiz）',
+  question_guard_classify: '「@」音楽関連の二次判定（質問ガード分類）',
+  user_taste_auto_profile: 'マイページ・履歴からの自動趣向プロフィール生成',
 };
 
 function formatTime(iso: string): string {

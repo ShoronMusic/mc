@@ -27,6 +27,7 @@ import {
   shouldRegenerateLibraryWhenMusicaichatSong,
   skipMusic8FactInjectEnv,
 } from '@/lib/music8-musicaichat';
+import { buildSongQuizApiExtension } from '@/lib/song-quiz-after-commentary';
 
 export const dynamic = 'force-dynamic';
 
@@ -61,6 +62,13 @@ export async function POST(request: Request) {
       resolvePackOpts,
     );
 
+    const songQuizExtension = buildSongQuizApiExtension({
+      channelId: snippet?.channelId ?? null,
+      channelTitle: snippet?.channelTitle ?? null,
+      videoTitle: rawYouTubeTitle,
+      channelAuthorName: authorName ?? null,
+    });
+
     const isJpEconomy = await resolveJapaneseEconomyWithMusicBrainz({
       title,
       artistDisplay,
@@ -73,7 +81,12 @@ export async function POST(request: Request) {
     const roomJpAiUnlock = roomId ? await isRoomJpAiUnlockEnabled(roomId) : false;
     const jpAiUnlockEnabled = roomJpAiUnlock;
     if (isJpEconomy && !isJpDomesticOfficialChannelAiException(snippet?.channelId) && !jpAiUnlockEnabled) {
-      return NextResponse.json({ skipAiCommentary: true, videoId, skipReason: 'jp_economy' });
+      return NextResponse.json({
+        skipAiCommentary: true,
+        videoId,
+        skipReason: 'jp_economy',
+        ...songQuizExtension,
+      });
     }
     if (
       shouldSkipAiCommentaryForUncertainArtistResolution({
@@ -88,6 +101,7 @@ export async function POST(request: Request) {
         skipAiCommentary: true,
         videoId,
         skipReason: 'uncertain_artist',
+        ...songQuizExtension,
       });
     }
 
@@ -104,6 +118,7 @@ export async function POST(request: Request) {
         skipAiCommentary: true,
         videoId,
         skipReason: 'promotional_metadata',
+        ...songQuizExtension,
       });
     }
 
@@ -147,6 +162,7 @@ export async function POST(request: Request) {
               snippet?.description,
               snippet?.channelTitle ?? null,
             ),
+            ...songQuizExtension,
           });
         }
         cachedCommentaryBody = bodyText;
@@ -190,7 +206,10 @@ export async function POST(request: Request) {
       music8FactsBlock: music8FactsBlock.length > 0 ? music8FactsBlock : null,
     });
     if (!text) {
-      return NextResponse.json({ error: 'AI is not configured or failed.' }, { status: 503 });
+      return NextResponse.json(
+        { error: 'AI is not configured or failed.', ...songQuizExtension },
+        { status: 503 },
+      );
     }
 
     let songTidbitId: string | null = null;
@@ -228,6 +247,7 @@ export async function POST(request: Request) {
         artistDisplay && song
           ? `${artistDisplay} - ${song}`
           : formatArtistTitle(title, authorName, snippet?.description, snippet?.channelTitle ?? null),
+      ...songQuizExtension,
     });
   } catch (e) {
     console.error('[api/ai/commentary]', e);
