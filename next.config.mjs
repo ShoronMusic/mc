@@ -18,6 +18,8 @@ const nextConfig = {
       '@supabase/functions-js',
       // vendor-chunks/ably.js 欠落（不完全ビルド・分割不整合）を避ける
       'ably',
+      // vendor-chunks/@heroicons.js 欠落（.next 不整合時に [roomId] SSR で再現することがある）
+      '@heroicons/react',
     ],
   },
 };

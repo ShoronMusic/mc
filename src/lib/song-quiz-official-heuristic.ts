@@ -39,6 +39,55 @@ export function resetSongQuizOfficialChannelEnvCacheForTests(): void {
   cachedEnvChannelIds = null;
 }
 
+/** タイトルに「(Official Music Video)」等の公式 MV／音源表記があるか（大文字小文字無視） */
+function hasOfficialStyleVideoTitle(videoTitle: string): boolean {
+  const t = videoTitle.toLowerCase();
+  return (
+    t.includes('(official music video)') ||
+    t.includes('(official video)') ||
+    t.includes('(official audio)') ||
+    t.includes('(official lyric video)') ||
+    t.includes('(official 4k)') ||
+    t.includes('(official hd)')
+  );
+}
+
+/** 「Artist - Title …」形式の先頭アーティスト部分（先頭の ` - ` の左） */
+export function parseLeadArtistFromYoutubeTitle(videoTitle: string): string | null {
+  const t = videoTitle.trim();
+  const idx = t.indexOf(' - ');
+  if (idx <= 0) return null;
+  const lead = t.slice(0, idx).trim();
+  return lead.length > 0 ? lead : null;
+}
+
+function normalizeArtistLabelForMatch(s: string): string {
+  return s
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .replace(/^the\s+/i, '');
+}
+
+/** チャンネル名（または oEmbed 投稿者名）がタイトル先頭のアーティストと実質一致するか */
+function channelArtistMatchesVideoLead(channelLabel: string, leadArtist: string): boolean {
+  const a = normalizeArtistLabelForMatch(channelLabel);
+  const b = normalizeArtistLabelForMatch(leadArtist);
+  if (!a || !b) return false;
+  if (a === b) return true;
+  /**
+   * 公式チャンネルが略称（Prince）で、タイトル先頭がフル名（Prince and the Revolution）のケース。
+   * 厳密一致のみだと `uncertain` → クイズ API が quiz を返さない。
+   */
+  if (b.length > a.length + 3 && (b.startsWith(`${a} and `) || b.startsWith(`${a} & `))) {
+    return true;
+  }
+  if (a.length > b.length + 3 && (a.startsWith(`${b} and `) || a.startsWith(`${b} & `))) {
+    return true;
+  }
+  return false;
+}
+
 /**
  * 曲解説後クイズ第一段階用: YouTube のチャンネル名・動画タイトル等から「公式っぽさ」をヒューリスティックに分類する。
  * - allow: クイズ出題可（第一段階はこの tier のみ）
@@ -92,6 +141,26 @@ export function evaluateSongQuizOfficialHeuristic(opts: {
 
   if (colorsStudiosTrustsOembedArtistFirst(author || null, vt) || colorsStudiosTrustsOembedArtistFirst(ch || null, vt)) {
     return { tier: 'allow', signals: ['allow:colors_show'] };
+  }
+
+  /** Prince 公式チャンネル等: タイトルに公式 MV 表記があり、投稿者名が「Artist - …」の先頭アーティストと一致 */
+  if (vt && hasOfficialStyleVideoTitle(vt) && channelLabel) {
+    const lead = parseLeadArtistFromYoutubeTitle(vt);
+    if (lead && channelArtistMatchesVideoLead(channelLabel, lead)) {
+      return { tier: 'allow', signals: ['allow:official_mv_title_artist_channel_match'] };
+    }
+  }
+
+  /**
+   * アップローダー名がアーティストと違う再投稿（例: The Codfather + 「Prince - Purple Rain (Official Video)」）でも、
+   * タイトルが公式表記＋「Artist - Title」形式ならクイズ可。従来はここで uncertain となり quiz が null だった。
+   * 厳格モード（チャンネル一致など強い信号のみ）: `SONG_QUIZ_STRICT_OFFICIAL_ONLY=1`
+   */
+  if (process.env.SONG_QUIZ_STRICT_OFFICIAL_ONLY !== '1' && vt && hasOfficialStyleVideoTitle(vt)) {
+    const lead = parseLeadArtistFromYoutubeTitle(vt);
+    if (lead && lead.length >= 2) {
+      return { tier: 'allow', signals: ['allow:official_style_title_lead_relax'] };
+    }
   }
 
   return { tier: 'uncertain', signals: ['uncertain:no_strong_official_signal'] };

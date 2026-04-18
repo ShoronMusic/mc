@@ -755,6 +755,11 @@ export default function MyPage({
   );
   const [publicListening, setPublicListening] = useState('');
   const [publicProfileMessage, setPublicProfileMessage] = useState<string | null>(null);
+  const [roomAiCommentaryEnabled, setRoomAiCommentaryEnabled] = useState(true);
+  const [roomAiSongQuizEnabled, setRoomAiSongQuizEnabled] = useState(true);
+  const [roomAiFeaturesLoading, setRoomAiFeaturesLoading] = useState(false);
+  const [roomAiFeaturesSaving, setRoomAiFeaturesSaving] = useState(false);
+  const [roomAiFeaturesMessage, setRoomAiFeaturesMessage] = useState<string | null>(null);
   const [mainTab, setMainTab] = useState<'owner' | 'user' | 'music' | 'mylist'>('user');
 
   const supabase = createClient();
@@ -867,6 +872,79 @@ export default function MyPage({
       cancelled = true;
     };
   }, [isGuest, user?.id]);
+
+  useEffect(() => {
+    if (isGuest || !user?.id) {
+      setRoomAiCommentaryEnabled(true);
+      setRoomAiSongQuizEnabled(true);
+      setRoomAiFeaturesLoading(false);
+      setRoomAiFeaturesMessage(null);
+      return;
+    }
+    let cancelled = false;
+    setRoomAiFeaturesLoading(true);
+    setRoomAiFeaturesMessage(null);
+    void fetch('/api/user/room-ai-features', { credentials: 'include' })
+      .then(async (r) => {
+        const data = (await r.json().catch(() => null)) as {
+          commentaryEnabled?: unknown;
+          songQuizEnabled?: unknown;
+          error?: string;
+        } | null;
+        if (cancelled) return;
+        if (!r.ok || !data || typeof data.error === 'string') {
+          setRoomAiCommentaryEnabled(true);
+          setRoomAiSongQuizEnabled(true);
+          if (typeof data?.error === 'string' && data.error.includes('user_room_ai_features')) {
+            setRoomAiFeaturesMessage(data.error);
+          }
+          return;
+        }
+        setRoomAiCommentaryEnabled(data.commentaryEnabled !== false);
+        setRoomAiSongQuizEnabled(data.songQuizEnabled !== false);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setRoomAiCommentaryEnabled(true);
+          setRoomAiSongQuizEnabled(true);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setRoomAiFeaturesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isGuest, user?.id]);
+
+  const saveRoomAiFeatures = useCallback(
+    async (next: { commentaryEnabled: boolean; songQuizEnabled: boolean }) => {
+      if (isGuest || !user?.id) return;
+      setRoomAiFeaturesSaving(true);
+      setRoomAiFeaturesMessage(null);
+      try {
+        const r = await fetch('/api/user/room-ai-features', {
+          method: 'PUT',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(next),
+        });
+        const data = (await r.json().catch(() => null)) as { error?: string } | null;
+        if (!r.ok) {
+          setRoomAiFeaturesMessage(typeof data?.error === 'string' ? data.error : '保存に失敗しました。');
+          return;
+        }
+        setRoomAiCommentaryEnabled(next.commentaryEnabled);
+        setRoomAiSongQuizEnabled(next.songQuizEnabled);
+        setRoomAiFeaturesMessage('保存しました。');
+      } catch {
+        setRoomAiFeaturesMessage('保存に失敗しました。');
+      } finally {
+        setRoomAiFeaturesSaving(false);
+      }
+    },
+    [isGuest, user?.id],
+  );
 
   const handleSavePublicProfile = useCallback(async () => {
     setPublicProfileSaving(true);
@@ -2355,6 +2433,98 @@ export default function MyPage({
                 }`}
               >
                 {publicProfileMessage}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+
+        {/* 部屋の AI 曲解説・曲クイズ（登録ユーザーのみ） */}
+        {!isGuest ? (
+          <div className="rounded border border-gray-700 bg-gray-800/50 p-3">
+            <label className="block text-xs text-gray-500">部屋の AI 曲解説・曲クイズ</label>
+            <p className="mt-1 text-xs text-gray-400">
+              同期チャットの部屋で選曲したあと、このアカウントのブラウザから AI 曲解説（豆知識）や三択クイズの生成 API
+              を呼ぶかを切り替えられます。オフにした端末では該当リクエストを送りません。ゲストは常にオン扱いです。
+            </p>
+            {roomAiFeaturesLoading ? (
+              <p className="mt-2 text-sm text-gray-500">読み込み中…</p>
+            ) : (
+              <>
+                <p className="mt-3 text-sm text-gray-300">AI曲解説</p>
+                <div className="mt-1 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={roomAiFeaturesSaving}
+                    onClick={() =>
+                      void saveRoomAiFeatures({
+                        commentaryEnabled: true,
+                        songQuizEnabled: roomAiSongQuizEnabled,
+                      })
+                    }
+                    className={`rounded px-3 py-1.5 text-sm ${
+                      roomAiCommentaryEnabled ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    } disabled:opacity-50`}
+                  >
+                    オン
+                  </button>
+                  <button
+                    type="button"
+                    disabled={roomAiFeaturesSaving}
+                    onClick={() =>
+                      void saveRoomAiFeatures({
+                        commentaryEnabled: false,
+                        songQuizEnabled: roomAiSongQuizEnabled,
+                      })
+                    }
+                    className={`rounded px-3 py-1.5 text-sm ${
+                      !roomAiCommentaryEnabled ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    } disabled:opacity-50`}
+                  >
+                    オフ
+                  </button>
+                </div>
+                <p className="mt-4 text-sm text-gray-300">AI曲クイズ</p>
+                <div className="mt-1 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={roomAiFeaturesSaving}
+                    onClick={() =>
+                      void saveRoomAiFeatures({
+                        commentaryEnabled: roomAiCommentaryEnabled,
+                        songQuizEnabled: true,
+                      })
+                    }
+                    className={`rounded px-3 py-1.5 text-sm ${
+                      roomAiSongQuizEnabled ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    } disabled:opacity-50`}
+                  >
+                    オン
+                  </button>
+                  <button
+                    type="button"
+                    disabled={roomAiFeaturesSaving}
+                    onClick={() =>
+                      void saveRoomAiFeatures({
+                        commentaryEnabled: roomAiCommentaryEnabled,
+                        songQuizEnabled: false,
+                      })
+                    }
+                    className={`rounded px-3 py-1.5 text-sm ${
+                      !roomAiSongQuizEnabled ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    } disabled:opacity-50`}
+                  >
+                    オフ
+                  </button>
+                </div>
+              </>
+            )}
+            {roomAiFeaturesMessage ? (
+              <p
+                className={`mt-2 text-xs ${
+                  roomAiFeaturesMessage.startsWith('保存しました') ? 'text-emerald-400' : 'text-amber-300'
+                }`}
+              >
+                {roomAiFeaturesMessage}
               </p>
             ) : null}
           </div>

@@ -26,6 +26,13 @@ import {
   CHAT_CONVERSATION_SNAPSHOT_AFTER,
   CHAT_CONVERSATION_SNAPSHOT_BEFORE,
 } from '@/lib/chat-conversation-snapshot';
+import { isAiTidbitToolbarMessage, stripDbPrefixForChatDisplay } from '@/lib/ai-commentary-chat-display';
+import {
+  coerceSongQuizCorrectIndex,
+  formatSongQuizFeedbackBody,
+  isValidSongQuizTheme,
+  SONG_QUIZ_THEME_UI_LABEL,
+} from '@/lib/song-quiz-types';
 
 /** 詳細フィードバック用モーダルの状態 */
 type FeedbackModalState =
@@ -107,6 +114,32 @@ function getSelectorNameFromBody(body: string): string | null {
 }
 
 const DEFAULT_MESSAGE_COLOR = '#e5e7eb';
+
+function isSongQuizFeedbackTarget(m: ChatMessageType): boolean {
+  return m.messageType === 'system' && m.systemKind === 'song_quiz' && Boolean(m.songQuiz);
+}
+
+function isAiCommentaryFeedbackTarget(m: ChatMessageType): boolean {
+  return m.messageType === 'ai' && (m.body.startsWith('[NEW]') || m.body.startsWith('[DB]'));
+}
+
+/** 親指・詳細フィードバック用の本文と source（comment_feedback） */
+function commentFeedbackPayloadForMessage(
+  message: ChatMessageType,
+): { commentBody: string; source: string } | null {
+  if (isSongQuizFeedbackTarget(message) && message.songQuiz) {
+    return { commentBody: formatSongQuizFeedbackBody(message.songQuiz), source: 'song_quiz' };
+  }
+  if (isAiCommentaryFeedbackTarget(message)) {
+    return { commentBody: message.body, source: message.aiSource ?? 'other' };
+  }
+  return null;
+}
+
+function tuningReportAnchorPreviewBody(m: ChatMessageType): string {
+  if (m.systemKind === 'song_quiz' && m.songQuiz) return formatSongQuizFeedbackBody(m.songQuiz);
+  return m.body;
+}
 
 /** AI 曲解説・comment-pack：固有名っぽい箇所を黄色（[NEW]・接続の「の」・括弧の外側は本文色） */
 const AI_ARTIST_SONG_HIGHLIGHT_CLASS = 'font-semibold text-yellow-300';
@@ -391,7 +424,8 @@ export default function Chat({
   }, [messages.length]);
 
   function sendFeedback(message: ChatMessageType, isUpvote: boolean) {
-    if (message.messageType !== 'ai') return;
+    const fbPayload = commentFeedbackPayloadForMessage(message);
+    if (!fbPayload) return;
     const current = feedbackState[message.id];
     // 同じアイコンを2回目クリックしたら解除（サーバーには再送しない）
     if ((isUpvote && current === 'up') || (!isUpvote && current === 'down')) {
@@ -420,8 +454,8 @@ export default function Chat({
         songId: message.songId ?? null,
         videoId: videoIdToSend,
         aiMessageId: message.id,
-        commentBody: message.body,
-        source: message.aiSource ?? 'other',
+        commentBody: fbPayload.commentBody,
+        source: fbPayload.source,
         isUpvote,
       }),
     }).catch(() => {});
@@ -483,6 +517,8 @@ export default function Chat({
   async function sendDetailFeedback() {
     if (!feedbackModal.open || feedbackModal.done || feedbackModal.sending) return;
     const message = feedbackModal.message;
+    const fbPayload = commentFeedbackPayloadForMessage(message);
+    if (!fbPayload) return;
     const videoIdToSend =
       (typeof message.videoId === 'string' && message.videoId.trim() ? message.videoId.trim() : undefined) ??
       (typeof currentVideoId === 'string' && currentVideoId?.trim() ? currentVideoId.trim() : undefined) ??
@@ -496,8 +532,8 @@ export default function Chat({
           songId: message.songId ?? null,
           videoId: videoIdToSend,
           aiMessageId: message.id,
-          commentBody: message.body,
-          source: message.aiSource ?? 'other',
+          commentBody: fbPayload.commentBody,
+          source: fbPayload.source,
           detailFeedback: {
             isDuplicate: detailChecks.duplicate,
             isDubious: detailChecks.dubious,
@@ -902,6 +938,11 @@ export default function Chat({
                       )}
                     {m.messageType === 'system' && m.systemKind === 'song_quiz' && m.songQuiz && (
                       <div className="mt-2 space-y-2 rounded-md border border-cyan-800/45 bg-gray-950/50 p-2.5">
+                        {m.songQuiz.theme && isValidSongQuizTheme(m.songQuiz.theme) ? (
+                          <p className="text-[10px] leading-tight text-cyan-500/80">
+                            出題の観点: {SONG_QUIZ_THEME_UI_LABEL[m.songQuiz.theme]}
+                          </p>
+                        ) : null}
                         <p className="text-sm font-medium leading-snug text-cyan-50/95">
                           {m.songQuiz.question}
                         </p>
@@ -909,7 +950,8 @@ export default function Chat({
                           {m.songQuiz.choices.map((label, idx) => {
                             const picked = songQuizPickedIndex[m.id];
                             const hasPicked = typeof picked === 'number';
-                            const isCorrect = hasPicked && idx === m.songQuiz!.correctIndex;
+                            const correctIdx = coerceSongQuizCorrectIndex(m.songQuiz!.correctIndex);
+                            const isCorrect = hasPicked && idx === correctIdx;
                             const isWrongPick = hasPicked && picked === idx && !isCorrect;
                             return (
                               <button
@@ -942,9 +984,70 @@ export default function Chat({
                             );
                           })}
                         </div>
-                        {typeof songQuizPickedIndex[m.id] === 'number' && (
-                          <p className="text-xs leading-relaxed text-gray-300">{m.songQuiz.explanation}</p>
-                        )}
+                        {typeof songQuizPickedIndex[m.id] === 'number' && m.songQuiz
+                          ? (() => {
+                              const pickedN = songQuizPickedIndex[m.id]!;
+                              const sq = m.songQuiz;
+                              const cIdx = coerceSongQuizCorrectIndex(sq.correctIndex);
+                              const cLabel = sq.choices[cIdx]?.trim() ?? '';
+                              const isHit = pickedN === cIdx;
+                              return (
+                                <div className="space-y-2">
+                                  <div className="rounded-md border border-emerald-700/55 bg-emerald-950/35 px-2.5 py-2">
+                                    <p className="text-[11px] font-semibold tracking-wide text-emerald-200/90">
+                                      正解発表
+                                    </p>
+                                    <p className="mt-1 text-sm font-medium leading-snug text-emerald-50">
+                                      正解は {cIdx + 1} 番{cLabel ? `「${cLabel}」` : ''}です。
+                                    </p>
+                                    <p className="mt-1 text-xs leading-snug text-emerald-100/85">
+                                      {isHit
+                                        ? 'お見事、正解です。'
+                                        : `あなたの回答は ${pickedN + 1} 番でした。`}
+                                    </p>
+                                  </div>
+                                  <p className="text-xs leading-relaxed text-gray-300">{sq.explanation}</p>
+                                </div>
+                              );
+                            })()
+                          : null}
+                        <div className="mt-2 flex flex-wrap items-center gap-1 border-t border-cyan-900/40 pt-2 text-xs">
+                          <button
+                            type="button"
+                            className={`flex items-center justify-center rounded border px-1.5 py-0.5 ${
+                              feedback === 'up'
+                                ? 'border-emerald-400 text-emerald-300'
+                                : 'border-gray-500 text-gray-400 hover:bg-gray-800'
+                            }`}
+                            onClick={() => sendFeedback(m, true)}
+                            title="出題が良い"
+                            aria-label="出題へのいいね"
+                          >
+                            <HandThumbUpIcon className="h-4 w-4" />
+                          </button>
+                          <button
+                            type="button"
+                            className={`flex items-center justify-center rounded border px-1.5 py-0.5 ${
+                              feedback === 'down'
+                                ? 'border-rose-400 text-rose-300'
+                                : 'border-gray-500 text-gray-400 hover:bg-gray-800'
+                            }`}
+                            onClick={() => sendFeedback(m, false)}
+                            title="出題が良くない"
+                            aria-label="出題へのよくない評価"
+                          >
+                            <HandThumbDownIcon className="h-4 w-4" />
+                          </button>
+                          <button
+                            type="button"
+                            className="flex items-center justify-center rounded border border-gray-500 px-1.5 py-0.5 text-gray-400 hover:bg-gray-800"
+                            onClick={() => openFeedbackModal(m)}
+                            title="出題の詳細フィードバック"
+                            aria-label="出題の詳細フィードバック"
+                          >
+                            <ChatBubbleLeftRightIcon className="h-4 w-4" />
+                          </button>
+                        </div>
                       </div>
                     )}
                     {canRejectTidbit && roomId?.trim() && (
@@ -1095,7 +1198,9 @@ export default function Chat({
             {feedbackModal.done ? (
               <>
                 <p id="feedback-modal-title" className="mb-4 text-sm text-gray-200">
-                  AIに対するご評価、貴重なご意見ありがとうございました。
+                  {isSongQuizFeedbackTarget(feedbackModal.message)
+                    ? '三択クイズの出題について、貴重なご意見ありがとうございました。'
+                    : 'AIに対するご評価、貴重なご意見ありがとうございました。'}
                 </p>
                 {feedbackModal.emailSent === false && (
                   <p className="mb-4 text-xs text-amber-200/90">
@@ -1122,6 +1227,11 @@ export default function Chat({
                 <h3 id="feedback-modal-title" className="mb-3 text-sm font-medium text-gray-200">
                   詳細フィードバック
                 </h3>
+                {isSongQuizFeedbackTarget(feedbackModal.message) ? (
+                  <p className="mb-3 text-xs leading-relaxed text-gray-400">
+                    問題文・選択肢・解説のバランスや難易度など、出題内容についてお知らせください。
+                  </p>
+                ) : null}
                 <div className="mb-3 space-y-2">
                   <label className="flex items-center gap-2 text-sm text-gray-300">
                     <input
@@ -1130,7 +1240,9 @@ export default function Chat({
                       onChange={(e) => setDetailChecks((c) => ({ ...c, duplicate: e.target.checked }))}
                       className="rounded border-gray-500"
                     />
-                    コメント内容が重複
+                    {isSongQuizFeedbackTarget(feedbackModal.message)
+                      ? '出題内容が重複・似た問題が続く'
+                      : 'コメント内容が重複'}
                   </label>
                   <label className="flex items-center gap-2 text-sm text-gray-300">
                     <input
@@ -1139,7 +1251,9 @@ export default function Chat({
                       onChange={(e) => setDetailChecks((c) => ({ ...c, dubious: e.target.checked }))}
                       className="rounded border-gray-500"
                     />
-                    コメント内容の真偽が怪しい
+                    {isSongQuizFeedbackTarget(feedbackModal.message)
+                      ? '出題の根拠・事実関係が怪しい'
+                      : 'コメント内容の真偽が怪しい'}
                   </label>
                   <label className="flex items-center gap-2 text-sm text-gray-300">
                     <input
@@ -1148,7 +1262,9 @@ export default function Chat({
                       onChange={(e) => setDetailChecks((c) => ({ ...c, ambiguous: e.target.checked }))}
                       className="rounded border-gray-500"
                     />
-                    コメント内容が曖昧、間違いではないが、ありきたり
+                    {isSongQuizFeedbackTarget(feedbackModal.message)
+                      ? '出題が曖昧・ありきたりで物足りない'
+                      : 'コメント内容が曖昧、間違いではないが、ありきたり'}
                   </label>
                 </div>
                 <div className="mb-3">
@@ -1325,8 +1441,16 @@ export default function Chat({
                     [{tuningReportModal.message.messageType}] {tuningReportModal.message.displayName ?? ''}:{' '}
                   </span>
                   <span className="whitespace-pre-wrap text-gray-400">
-                    {tuningReportModal.message.body.slice(0, 200)}
-                    {tuningReportModal.message.body.length > 200 ? '…' : ''}
+                    {(() => {
+                      const preview = tuningReportAnchorPreviewBody(tuningReportModal.message);
+                      const max = 400;
+                      return (
+                        <>
+                          {preview.slice(0, max)}
+                          {preview.length > max ? '…' : ''}
+                        </>
+                      );
+                    })()}
                   </span>
                 </div>
                 <div className="mb-3">

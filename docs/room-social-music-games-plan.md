@@ -160,6 +160,56 @@
 
 まとめると、**結果発表の文面は曲解説と同様にチャットログ DB に残る**が、**クイズ本体の構造化データや回答ログを DB にまとめて保存する**ところまでは、現状の MVP では行っていない。
 
+#### 8.3.2 現状実装の利用フロー（同期部屋 `RoomWithSync`・2026-04-18 時点）
+
+設計メモ（上記 8.1 節〜）と異なり、**いまコードで動いている範囲**だけを整理する。
+
+**出題まで**
+
+1. 曲解説（comment-pack の `packPhase` 連鎖、または commentary フォールバック）が進み、**最古入室者**のクライアントだけが `POST /api/ai/song-quiz` を呼ぶ（`commentaryContext` に曲解説テキストを渡す）。
+2. レスポンスに `quiz` があれば、同クライアントが **`addSongQuizMessage`** でシステム行を出す。本文は短い見出し（「三択クイズ（曲解説の内容のみを根拠に自動生成）」）、**設問・選択肢・正解等は `songQuiz` JSON**。`CHAT_MESSAGE_EVENT` で **全員に同期**される。
+
+**回答**
+
+3. 各参加者が UI で選択すると **`song-quiz:answer`**（実装名は定数 `SONG_QUIZ_ANSWER_EVENT`）が Ably で飛ぶ。
+4. **最古入室者**だけがイベントを処理し、**同一 `quizMessageId` につき `clientId` 単位で上書き集計**する（`RoomWithSync` の `recordSongQuizAnswer`）。他クライアントは集計しない。
+
+**自分の画面だけの「正解発表」（緑枠）**
+
+5. `Chat.tsx` 内の **ローカル state**（`songQuizPickedIndex`）により、**自分が選んだ直後**に正解／不正解の説明ブロックを出す。**他参加者の未回答は待たない**（各ブラウザ独立）。
+
+**全員向け「【クイズ結果】…」の AI 1行**
+
+6. 出題と同時に最古入室者側でタイマーが走る。本文は `buildSongQuizResultAnnouncement`（`src/lib/song-quiz-result-announcement.ts`）。
+7. **在室かつ選曲参加**（`participatesInSelection !== false`、かつ退席中空席枠でない参加者）が **2人以上**いるとき、まだ誰かが未回答なら、最初の待ち時間のあと **延長間隔**で再チェックし、**最大待ち**を超えたら未回答がいても必ず1本配信する。
+8. **全員が回答済み**になった瞬間は、**短い待ち**のあと早めに配信する（長い初期待ちを切り上げ）。
+9. **対象が1人以下**のときは、従来どおり「最初の待ち時間」経過後にそのまま配信する。
+10. 配信は **`addAiMessage` → `CHAT_MESSAGE_EVENT`** のため、**他参加者のチャットにも同じ AI 行が届く**（最古のタブが落ちていると発表が飛ぶ余地はある）。
+
+**待ち時間の環境変数（`NEXT_PUBLIC_*`・クライアント）**
+
+| 変数 | 既定 | 役割 |
+|------|------|------|
+| `NEXT_PUBLIC_SONG_QUIZ_REVEAL_MS` | 18000（最小 5000） | 最初の「全員向け発表」の判定まで |
+| `NEXT_PUBLIC_SONG_QUIZ_REVEAL_EXTEND_MS` | 12000（4000〜120000） | 未全員のときの再チェック間隔 |
+| `NEXT_PUBLIC_SONG_QUIZ_REVEAL_MAX_MS` | 120000（30000〜600000） | クイズ表示からの最長待ち（超えたら必ず発表） |
+| `NEXT_PUBLIC_SONG_QUIZ_REVEAL_FAST_MS` | 2000（500〜30000） | 全員回答済み後の短い待ち |
+
+**マイページとの関係**
+
+11. ログインユーザーは **`user_room_ai_features`**（`docs/supabase-setup.md` 第 17 章）で **AI曲解説**と **AI曲クイズ**を個別に OFF にできる。OFF のブラウザは `comment-pack`／`commentary` または `song-quiz` を呼ばない。**視聴専用**は「回答待ち人数」に含めない（在室かつ選曲参加のみカウント）。
+
+**Ably なしローカル部屋（`RoomWithoutSync`）**
+
+12. 同一タブ内のみ。集計・全員向け発表の延長ロジックは **同期部屋版より簡略**（`getSongQuizRevealDelayMs` の1本タイマー中心）。
+
+**主な参照コード**
+
+- `RoomWithSync.tsx` … `addSongQuizMessage`、`runSongQuizResultAnnounce`、`bumpSongQuizRevealIfAllAnswered`、`publishSongQuizAnswer`、Ably ハンドラの `SONG_QUIZ_ANSWER_EVENT`
+- `Chat.tsx` … 三択 UI とローカル「正解発表」
+- `src/lib/song-quiz-result-announcement.ts` … 発表文・待ち ms
+- `src/app/api/ai/song-quiz/route.ts` … 出題 API
+
 ### 8.4 オープン論点（決めると実装が楽になる）
 
 - [ ] 1 曲につき **同時に複数問**か、**常に 1 問**か。
@@ -177,3 +227,4 @@
 |------|------|
 | 2026-04-18 | 初版（背景・原則・アイデア・優先度・分岐 A/B/C）。表記修正（雑談）。§8 曲解説後クイズ案、§8.1a〜c、§8.1b に **チャンネル・タイトル等パターン＋三値スコア**（`allow_quiz` / `uncertain` / `deny`）の実務方針、§8.2〜§8.4 整合、優先度表。 |
 | 2026-04-18 | §8.3.1 追記：**クイズ結果 AI 行は `room_chat_log` に曲解説と同経路で保存**、三択 JSON・回答は現状ログに含めない旨を明記。 |
+| 2026-04-18 | §8.3.2 追記：**現状実装の利用フロー**（出題・回答・ローカル正解表示・全員向け AI 発表と待ち時間 env・マイページ OFF・`RoomWithoutSync`・参照コード）。 |

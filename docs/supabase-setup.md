@@ -551,3 +551,47 @@ create policy "user_public_profile_select_visible"
 ```
 
 `favorite_artists` は JSON 配列（文字列のリスト）。アプリ側で最大5件・各80文字程度に制限します。
+
+---
+
+## 17. 部屋の AI 曲解説・曲クイズ（`user_room_ai_features`）
+
+ログインユーザーがマイページで **AI曲解説**（comment-pack／従来の commentary）と **AI曲クイズ** を ON/OFF します。**未作成の行はどちらも ON** として扱います。
+
+- **マイページ**: 「ユーザー」タブの ON/OFF ボタン
+- **API**: `GET` / `PUT` → `/api/user/room-ai-features`（セッション必須）
+- **RLS**: 本人の行のみ SELECT / INSERT / UPDATE / DELETE
+
+Supabase の **SQL Editor** で実行:
+
+```sql
+create table if not exists public.user_room_ai_features (
+  user_id uuid primary key references auth.users (id) on delete cascade,
+  ai_commentary_enabled boolean not null default true,
+  ai_song_quiz_enabled boolean not null default true,
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists user_room_ai_features_updated_idx
+  on public.user_room_ai_features (updated_at desc);
+
+alter table public.user_room_ai_features enable row level security;
+
+create policy "user_room_ai_features_select_own"
+  on public.user_room_ai_features for select
+  using (auth.uid() = user_id);
+
+create policy "user_room_ai_features_insert_own"
+  on public.user_room_ai_features for insert
+  with check (auth.uid() = user_id);
+
+create policy "user_room_ai_features_update_own"
+  on public.user_room_ai_features for update
+  using (auth.uid() = user_id);
+
+create policy "user_room_ai_features_delete_own"
+  on public.user_room_ai_features for delete
+  using (auth.uid() = user_id);
+```
+
+テーブルが無い状態では API は 503 と案内文を返します。

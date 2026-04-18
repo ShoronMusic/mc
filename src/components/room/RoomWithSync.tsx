@@ -42,6 +42,9 @@ import type { SongQuizPayload } from '@/lib/song-quiz-types';
 import {
   buildSongQuizResultAnnouncement,
   getSongQuizRevealDelayMs,
+  getSongQuizRevealExtendMs,
+  getSongQuizRevealFastMs,
+  getSongQuizRevealMaxMs,
 } from '@/lib/song-quiz-result-announcement';
 import {
   buildTurnOrderClarificationReply,
@@ -516,6 +519,9 @@ export default function RoomWithSync({
   /** 三択クイズ: 最古入室者のみが回答を集計 */
   const songQuizAnswersByQuizIdRef = useRef<Map<string, SongQuizAnswerRow[]>>(new Map());
   const songQuizRoundMetaRef = useRef<Map<string, SongQuizRoundMetaLocal>>(new Map());
+  /** クイズ行が出た時刻（全員向け発表の最大待ち計算用） */
+  const songQuizRoundStartedAtRef = useRef<Map<string, number>>(new Map());
+  const songQuizAfterAnswerRecordedRef = useRef<(quizMessageId: string) => void>(() => {});
   /** 自由コメント待ちの間は一般豆知識を抑止 */
   const suppressTidbitRef = useRef(false);
   /** （邦楽）選曲アナウンス後〜次の曲が貼られるまで AI 発言を止める対象の videoId */
@@ -559,6 +565,9 @@ export default function RoomWithSync({
   const [guestDisplayName, setGuestDisplayName] = useState(displayNameProp);
   const effectiveDisplayName = isGuest ? guestDisplayName : displayNameProp;
   const authUserId = useSupabaseAuthUserId(isGuest);
+  /** マイページ設定: このクライアントが曲解説 API を呼ぶか・最古入室者のクイズ API を呼ぶか */
+  const userRoomAiCommentaryEnabledRef = useRef(true);
+  const userRoomAiSongQuizEnabledRef = useRef(true);
 
   useEffect(() => {
     if (isGuest || !authUserId) {
@@ -580,6 +589,41 @@ export default function RoomWithSync({
       cancelled = true;
     };
   }, [isGuest, authUserId, myPageOpen]);
+
+  useEffect(() => {
+    if (isGuest || !authUserId) {
+      userRoomAiCommentaryEnabledRef.current = true;
+      userRoomAiSongQuizEnabledRef.current = true;
+      return;
+    }
+    let cancelled = false;
+    void fetch('/api/user/room-ai-features', { credentials: 'include' })
+      .then(async (r) => {
+        const d = (await r.json().catch(() => null)) as {
+          commentaryEnabled?: unknown;
+          songQuizEnabled?: unknown;
+          error?: unknown;
+        } | null;
+        if (cancelled) return;
+        if (!r.ok || !d || typeof d !== 'object' || typeof d.error === 'string') {
+          userRoomAiCommentaryEnabledRef.current = true;
+          userRoomAiSongQuizEnabledRef.current = true;
+          return;
+        }
+        userRoomAiCommentaryEnabledRef.current = d.commentaryEnabled !== false;
+        userRoomAiSongQuizEnabledRef.current = d.songQuizEnabled !== false;
+      })
+      .catch(() => {
+        if (!cancelled) {
+          userRoomAiCommentaryEnabledRef.current = true;
+          userRoomAiSongQuizEnabledRef.current = true;
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isGuest, authUserId, myPageOpen]);
+
   /** 選曲に参加するか。false なら視聴専用。デフォルト true */
   const [participatesInSelection, setParticipatesInSelection] = useState(true);
   const [joinEntryChimeEnabled, setJoinEntryChimeEnabled] = useState(true);
@@ -962,6 +1006,8 @@ export default function RoomWithSync({
       return a.clientId.localeCompare(b.clientId);
     });
   }, [presenceData, yellowCardByClientId, joinOrderEpoch, vacantByClientId]);
+  const participantsRef = useRef(participants);
+  participantsRef.current = participants;
   /** 選曲に参加する人のみ・入室順（左から1,2,3...の番号に対応。一時退席枠を含む） */
   const participatingOrder = useMemo(
     () => participants.filter((p) => p.participatesInSelection),
@@ -1232,6 +1278,7 @@ export default function RoomWithSync({
     songQuizRevealTimersRef.current.clear();
     songQuizAnswersByQuizIdRef.current.clear();
     songQuizRoundMetaRef.current.clear();
+    songQuizRoundStartedAtRef.current.clear();
   }, []);
 
   const recordSongQuizAnswer = useCallback(
@@ -1244,6 +1291,7 @@ export default function RoomWithSync({
         pickedIndex,
       });
       songQuizAnswersByQuizIdRef.current.set(quizMessageId, filtered);
+      songQuizAfterAnswerRecordedRef.current(quizMessageId);
     },
     [],
   );
@@ -2340,6 +2388,93 @@ export default function RoomWithSync({
     [safePublish, aiFreeSpeechStopped]
   );
 
+  const runSongQuizResultAnnounce = useCallback(
+    (quizMsgId: string, videoIdForQuiz: string) => {
+      const cid = (myClientId ?? '').trim();
+      if (!cid || cid !== oldestRef.current) return;
+      const meta = songQuizRoundMetaRef.current.get(quizMsgId);
+      if (!meta) return;
+      songQuizRevealTimersRef.current.delete(quizMsgId);
+
+      const answers = songQuizAnswersByQuizIdRef.current.get(quizMsgId) ?? [];
+      const eligible = new Set<string>();
+      for (const p of participantsRef.current) {
+        if (p.isAway === true) continue;
+        if (p.participatesInSelection === false) continue;
+        eligible.add(p.clientId);
+      }
+      const expected = eligible.size;
+      const answeredIds = new Set(answers.map((a) => a.clientId));
+      const startedAt = songQuizRoundStartedAtRef.current.get(quizMsgId) ?? Date.now();
+      const elapsed = Date.now() - startedAt;
+      const maxMs = getSongQuizRevealMaxMs();
+
+      const everyoneAnsweredOrSolo =
+        expected === 0 ||
+        expected <= 1 ||
+        [...eligible].every((id) => answeredIds.has(id));
+      const forceDeadline = elapsed >= maxMs;
+
+      if (everyoneAnsweredOrSolo || forceDeadline) {
+        songQuizRoundMetaRef.current.delete(quizMsgId);
+        songQuizAnswersByQuizIdRef.current.delete(quizMsgId);
+        songQuizRoundStartedAtRef.current.delete(quizMsgId);
+        const bodyAnnounce = buildSongQuizResultAnnouncement(
+          meta.correctIndex,
+          meta.choices,
+          answers.map((a) => ({ displayName: a.displayName, pickedIndex: a.pickedIndex })),
+        );
+        addAiMessage(bodyAnnounce, {
+          allowWhenAiStopped: true,
+          videoId: videoIdForQuiz,
+          aiSource: 'tidbit',
+        });
+        return;
+      }
+      const nextDelay = getSongQuizRevealExtendMs();
+      const t = setTimeout(() => {
+        songQuizRevealTimersRef.current.delete(quizMsgId);
+        runSongQuizResultAnnounce(quizMsgId, videoIdForQuiz);
+      }, nextDelay);
+      songQuizRevealTimersRef.current.set(quizMsgId, t);
+    },
+    [myClientId, addAiMessage],
+  );
+
+  const bumpSongQuizRevealIfAllAnswered = useCallback(
+    (quizMessageId: string) => {
+      const cid = (myClientId ?? '').trim();
+      if (!cid || cid !== oldestRef.current) return;
+      const meta = songQuizRoundMetaRef.current.get(quizMessageId);
+      if (!meta) return;
+      const eligible = new Set<string>();
+      for (const p of participantsRef.current) {
+        if (p.isAway === true) continue;
+        if (p.participatesInSelection === false) continue;
+        eligible.add(p.clientId);
+      }
+      if (eligible.size <= 1) return;
+      const answers = songQuizAnswersByQuizIdRef.current.get(quizMessageId) ?? [];
+      const answered = new Set(answers.map((a) => a.clientId));
+      const allIn = [...eligible].every((id) => answered.has(id));
+      if (!allIn) return;
+      const prevT = songQuizRevealTimersRef.current.get(quizMessageId);
+      if (prevT) clearTimeout(prevT);
+      songQuizRevealTimersRef.current.delete(quizMessageId);
+      const fast = getSongQuizRevealFastMs();
+      const t = setTimeout(() => {
+        songQuizRevealTimersRef.current.delete(quizMessageId);
+        runSongQuizResultAnnounce(quizMessageId, meta.videoId);
+      }, fast);
+      songQuizRevealTimersRef.current.set(quizMessageId, t);
+    },
+    [myClientId, runSongQuizResultAnnounce],
+  );
+
+  useEffect(() => {
+    songQuizAfterAnswerRecordedRef.current = bumpSongQuizRevealIfAllAnswered;
+  }, [bumpSongQuizRevealIfAllAnswered]);
+
   useEffect(() => {
     if (!roomId || ownerStatePublishRef.current) return;
     const pub = publishRef.current;
@@ -2448,6 +2583,7 @@ export default function RoomWithSync({
       ]);
 
       const revealDelay = getSongQuizRevealDelayMs();
+      songQuizRoundStartedAtRef.current.set(id, Date.now());
       songQuizRoundMetaRef.current.set(id, {
         correctIndex: quiz.correctIndex,
         choices: quiz.choices,
@@ -2458,28 +2594,12 @@ export default function RoomWithSync({
       if (prevT) clearTimeout(prevT);
       const t = setTimeout(() => {
         songQuizRevealTimersRef.current.delete(id);
-        if (videoIdRef.current !== videoIdForQuiz) return;
-        const cid = (myClientId ?? '').trim();
-        if (!cid || cid !== oldestRef.current) return;
-        const meta = songQuizRoundMetaRef.current.get(id);
-        if (!meta) return;
-        const answers = songQuizAnswersByQuizIdRef.current.get(id) ?? [];
-        songQuizRoundMetaRef.current.delete(id);
-        songQuizAnswersByQuizIdRef.current.delete(id);
-        const bodyAnnounce = buildSongQuizResultAnnouncement(
-          meta.correctIndex,
-          meta.choices,
-          answers.map((a) => ({ displayName: a.displayName, pickedIndex: a.pickedIndex })),
-        );
-        addAiMessage(bodyAnnounce, {
-          allowWhenAiStopped: true,
-          videoId: videoIdForQuiz,
-          aiSource: 'tidbit',
-        });
+        /** 複数人在室で未回答者がいる間は延長。最長 getSongQuizRevealMaxMs で必ず発表（次曲進行時も run 側で処理） */
+        runSongQuizResultAnnounce(id, videoIdForQuiz);
       }, revealDelay);
       songQuizRevealTimersRef.current.set(id, t);
     },
-    [safePublish, addAiMessage, myClientId],
+    [safePublish, runSongQuizResultAnnounce],
   );
 
   const clearLocalAiQuestionGuardState = useCallback(() => {
@@ -3027,6 +3147,14 @@ export default function RoomWithSync({
         commentPackVideoIdRef.current = null;
         return;
       }
+      if (!userRoomAiCommentaryEnabledRef.current) {
+        if (freeCommentTimeoutsRef.current.length > 0) {
+          freeCommentTimeoutsRef.current.forEach((t) => clearTimeout(t));
+          freeCommentTimeoutsRef.current = [];
+        }
+        clearPendingSongQuizRoundState();
+        return;
+      }
       const skipPackCache = options?.skipCommentPackCache === true;
       const packHint = options?.adminPlaybackDisplayHint;
       const packBody = {
@@ -3117,6 +3245,7 @@ export default function RoomWithSync({
               const baseOnlyCtx = pack.baseComment.trim();
               const delayBaseOnly = 3500;
               if (
+                userRoomAiSongQuizEnabledRef.current &&
                 myClientId &&
                 oldestParticipantClientId &&
                 myClientId === oldestParticipantClientId &&
@@ -3278,6 +3407,7 @@ export default function RoomWithSync({
                     const delayMs =
                       freeIdxSorted.length * COMMENT_PACK_FREE_STAGGER_MS + 3500;
                     if (
+                      userRoomAiSongQuizEnabledRef.current &&
                       myClientId &&
                       oldestParticipantClientId &&
                       myClientId === oldestParticipantClientId &&
@@ -3383,6 +3513,7 @@ export default function RoomWithSync({
               .join('\n\n---\n\n');
             const delayMsSingle = shownIdx * COMMENT_PACK_FREE_STAGGER_MS + 3500;
             if (
+              userRoomAiSongQuizEnabledRef.current &&
               myClientId &&
               oldestParticipantClientId &&
               myClientId === oldestParticipantClientId &&
@@ -3452,6 +3583,7 @@ export default function RoomWithSync({
                   const commentarySingle = `${prefix}${data.text}`.trim();
                   const delayCommentary = 4000;
                   if (
+                    userRoomAiSongQuizEnabledRef.current &&
                     myClientId &&
                     oldestParticipantClientId &&
                     myClientId === oldestParticipantClientId &&

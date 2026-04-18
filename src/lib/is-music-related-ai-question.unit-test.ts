@@ -127,4 +127,10 @@ assert.equal(
 assert.equal(isMusicRelatedAiQuestion('この曲のコーラスは誰？'), true);
 assert.equal(isMusicRelatedAiQuestion('Who produced I Feel for You?'), true);
 
+assert.equal(
+  isMusicRelatedAiQuestion('MadonnaのHung Upのダンスのスタイルは？'),
+  true,
+);
+assert.equal(isMusicRelatedAiQuestion('このMVの振り付けは誰？'), true);
+
 console.log('is-music-related-ai-question unit tests: OK');

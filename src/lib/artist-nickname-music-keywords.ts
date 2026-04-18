@@ -94,6 +94,7 @@ export const ARTIST_NICKNAME_MUSIC_KEYWORDS = [
   'マイコー',
   '\\bmj\\b',
   'マドンナ',
+  '\\bmadonna\\b',
   'マコ様',
   '\\bmacca\\b',
   'ポールマッカートニー',

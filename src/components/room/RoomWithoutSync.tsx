@@ -258,6 +258,8 @@ export default function RoomWithoutSync({
   /** 開発簡略モードで comment-pack 基本を出した動画。豆知識を当該曲中は抑止 */
   const commentPackVideoIdRef = useRef<string | null>(null);
   const songQuizFetchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const userRoomAiCommentaryEnabledRef = useRef(true);
+  const userRoomAiSongQuizEnabledRef = useRef(true);
   type SongQuizRoundMetaLocal = { correctIndex: number; choices: string[]; videoId: string };
   type SongQuizAnswerRow = { clientId: string; displayName: string; pickedIndex: number };
   const songQuizLocalRevealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -266,6 +268,40 @@ export default function RoomWithoutSync({
   videoIdRef.current = videoId;
   playingRef.current = playing;
   useResumeYoutubeWhenTabVisible(playerRef, videoIdRef, playingRef);
+
+  useEffect(() => {
+    if (isGuest) {
+      userRoomAiCommentaryEnabledRef.current = true;
+      userRoomAiSongQuizEnabledRef.current = true;
+      return;
+    }
+    let cancelled = false;
+    void fetch('/api/user/room-ai-features', { credentials: 'include' })
+      .then(async (r) => {
+        const d = (await r.json().catch(() => null)) as {
+          commentaryEnabled?: unknown;
+          songQuizEnabled?: unknown;
+          error?: unknown;
+        } | null;
+        if (cancelled) return;
+        if (!r.ok || !d || typeof d !== 'object' || typeof d.error === 'string') {
+          userRoomAiCommentaryEnabledRef.current = true;
+          userRoomAiSongQuizEnabledRef.current = true;
+          return;
+        }
+        userRoomAiCommentaryEnabledRef.current = d.commentaryEnabled !== false;
+        userRoomAiSongQuizEnabledRef.current = d.songQuizEnabled !== false;
+      })
+      .catch(() => {
+        if (!cancelled) {
+          userRoomAiCommentaryEnabledRef.current = true;
+          userRoomAiSongQuizEnabledRef.current = true;
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isGuest, myPageOpen]);
 
   /** プレビュー中だけメイン再生音量を落とす */
   const previewActiveRef = useRef(false);
@@ -442,7 +478,7 @@ export default function RoomWithoutSync({
     songQuizLocalRevealTimerRef.current = setTimeout(() => {
       songQuizLocalRevealTimerRef.current = null;
       const meta = songQuizLocalMetaByIdRef.current.get(quizMessageId);
-      if (!meta || videoIdRef.current !== meta.videoId) return;
+      if (!meta) return;
       const answers = songQuizLocalAnswersByIdRef.current.get(quizMessageId) ?? [];
       songQuizLocalMetaByIdRef.current.delete(quizMessageId);
       songQuizLocalAnswersByIdRef.current.delete(quizMessageId);
@@ -707,6 +743,13 @@ export default function RoomWithoutSync({
 
   const fetchCommentaryAndPublish = useCallback(
     (vid: string) => {
+      if (!userRoomAiCommentaryEnabledRef.current) {
+        if (songQuizFetchTimeoutRef.current) {
+          clearTimeout(songQuizFetchTimeoutRef.current);
+          songQuizFetchTimeoutRef.current = null;
+        }
+        return;
+      }
       if (isDevMinimalSongAi()) {
         fetch('/api/ai/comment-pack', {
           method: 'POST',
@@ -748,7 +791,7 @@ export default function RoomWithoutSync({
               touchActivity();
               const commentaryCtx =
                 typeof pack.baseComment === 'string' ? pack.baseComment.trim() : '';
-              if (commentaryCtx.length >= 60) {
+              if (commentaryCtx.length >= 60 && userRoomAiSongQuizEnabledRef.current) {
                 if (songQuizFetchTimeoutRef.current) clearTimeout(songQuizFetchTimeoutRef.current);
                 songQuizFetchTimeoutRef.current = setTimeout(() => {
                   songQuizFetchTimeoutRef.current = null;
@@ -821,7 +864,7 @@ export default function RoomWithoutSync({
             addAiMessage(prefix + data.text, { videoId: vid });
             touchActivity();
             const commentarySingle = `${prefix}${data.text}`.trim();
-            if (commentarySingle.length >= 60) {
+            if (commentarySingle.length >= 60 && userRoomAiSongQuizEnabledRef.current) {
               if (songQuizFetchTimeoutRef.current) clearTimeout(songQuizFetchTimeoutRef.current);
               songQuizFetchTimeoutRef.current = setTimeout(() => {
                 songQuizFetchTimeoutRef.current = null;
