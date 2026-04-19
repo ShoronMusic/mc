@@ -50,6 +50,7 @@ import { isYoutubeKeywordSearchEnabled } from '@/lib/youtube-keyword-search-ui';
 import type { ChatMessage, SystemMessageOptions } from '@/types/chat';
 import { useIsLgViewport } from '@/hooks/useLgViewport';
 import { useRoomChatLogPersistence } from '@/hooks/useRoomChatLogPersistence';
+import { useRoomAccessLogReport } from '@/hooks/useRoomAccessLogReport';
 import { createClient } from '@/lib/supabase/client';
 import {
   clearAiQuestionWarnStorage,
@@ -126,6 +127,10 @@ export default function RoomWithoutSync({
   const playingRef = useRef(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   useRoomChatLogPersistence(roomId, messages, { isGuest, myClientId: '' });
+  useRoomAccessLogReport(roomId, {
+    isGuest,
+    displayName: displayNameProp.trim() || 'ゲスト',
+  });
   useEffect(() => {
     rememberRoomForGuideReturn(roomId);
   }, [roomId]);

@@ -56,6 +56,13 @@ export const ADMIN_SECTIONS: AdminSection[] = [
       '日付（JST）×部屋別の保存件数、テキスト・DL・＠Q&A（@と直後のAIをペア表示、異議付記）へのリンク',
   },
   {
+    href: '/admin/room-access-log',
+    title: '部屋入室アクセス',
+    description:
+      '日付（JST）×部屋別の入室数（ゲスト・会員内訳）。部屋を開いた記録（発言なしも可）の集計と明細',
+    activePathPrefix: '/admin/room-access-log',
+  },
+  {
     href: '/admin/room-music-summary',
     title: '部屋音楽サマリー',
     description: '直近1〜2時間の再生履歴＋会話傾向を集計してDB保存し、管理画面で確認',

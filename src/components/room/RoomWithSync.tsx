@@ -132,6 +132,7 @@ import { createClient } from '@/lib/supabase/client';
 import { DocumentTextIcon, EnvelopeIcon, LockClosedIcon, LockOpenIcon } from '@heroicons/react/24/outline';
 import { useIsLgViewport } from '@/hooks/useLgViewport';
 import { useRoomChatLogPersistence } from '@/hooks/useRoomChatLogPersistence';
+import { useRoomAccessLogReport } from '@/hooks/useRoomAccessLogReport';
 import { useSupabaseAuthUserId } from '@/hooks/useSupabaseAuthUserId';
 import { isAiQuestionGuardKickExemptUserId } from '@/lib/ai-question-guard-exempt-user-ids';
 import { lineFromJoinGreetingApi } from '@/lib/join-greeting-logic';
@@ -565,6 +566,10 @@ export default function RoomWithSync({
   /** ゲスト用の表示名（マイページで変更可能）。非ゲストは displayNameProp をそのまま使う */
   const [guestDisplayName, setGuestDisplayName] = useState(displayNameProp);
   const effectiveDisplayName = isGuest ? guestDisplayName : displayNameProp;
+  useRoomAccessLogReport(roomId, {
+    isGuest,
+    displayName: effectiveDisplayName.trim() || 'ゲスト',
+  });
   const authUserId = useSupabaseAuthUserId(isGuest);
   /** マイページ設定: このクライアントが曲解説 API を呼ぶか・最古入室者のクイズ API を呼ぶか */
   const userRoomAiCommentaryEnabledRef = useRef(true);

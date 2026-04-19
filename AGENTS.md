@@ -30,6 +30,7 @@
 ### 設計メモ（拡張予定）
 
 - **視聴履歴**: スタイル・時代・アーティスト抽出の整理と今後の DB/API 展開 → `docs/room-playback-history-style-era-artist-design.md`
+- **入室アクセス（ゲスト含む・発言なしも記録）**: `room_access_log`・`POST /api/room-access-log`・管理 `/admin/room-access-log` → `docs/supabase-room-access-log-table.md`
 - **DB に記録できる項目一覧**（テーブル別） → `docs/recorded-data-fields.md`
 - **Music8 曲 JSON**（WP 固定 `id`・URL 規則・マスタ連携メモ） → `docs/music8-song-json-schema.md`
 - **マイリスト**（チャット非依存・拡張連携・企画） → `docs/my-list-spec.md`。**実装**: `src/app/api/my-list/route.ts`、DB `docs/supabase-user-my-list-table.md`、アーティスト参照（正規化）用 `docs/supabase-user-my-library-artists-tables.md`
