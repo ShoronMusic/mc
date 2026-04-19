@@ -215,6 +215,19 @@ export const ARTIST_NICKNAME_MUSIC_KEYWORDS = [
   'ドロス',
   '\\balexandros\\b',
   'アレキサンドロス',
+  // DragonForce
+  '\\bdragonforce\\b',
+  'ドラゴンフォース',
+  'ドラフォ',
+  // Bob Dylan
+  'ボブディラン',
+  'ディラン',
+  'bob dylan',
+  '\\bdylan\\b',
+  // Whitesnake
+  'ホワイトスネイク',
+  'ホワイト・スネイク',
+  '\\bwhitesnake\\b',
   // One Direction メンバー（ハリー／ナイルは固有名フレーズで誤爆抑制）
   'harry styles',
   '\\bniall\\b',

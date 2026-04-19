@@ -111,6 +111,7 @@ const MUSIC_KEYWORD_SOURCES = [
   // アーティスト経歴・キャリア文脈（「@でもこの頃病気…」等。一般の健康相談は単語「病気」だけではヒットしにくい語を優先）
   '活動休止',
   '活動再開',
+  '活動',
   '闘病',
   '療養',
   '体調を崩',
@@ -122,6 +123,25 @@ const MUSIC_KEYWORD_SOURCES = [
   'メンバー脱退',
   '脱退した',
   '逝去',
+  // アーティストの健康・休止・復帰（「喉のリハビリ」等）
+  'リハビリ',
+  'リハビリテーション',
+  '怪我',
+  '病気',
+  '治療',
+  '手術',
+  '入院',
+  '復活',
+  '引退',
+  '休止',
+  '静養',
+  '休養',
+  '咽頭',
+  '喉',
+  '喉頭',
+  '声帯',
+  '発声',
+  'ボイトレ',
   'メロディ',
   '楽器',
   'ギター',
@@ -313,7 +333,7 @@ const MUSIC_KEYWORD_SOURCES = [
 const MUSIC_RELATED_RE = new RegExp(MUSIC_KEYWORD_SOURCES.join('|'), 'i');
 
 export function isMusicRelatedAiQuestion(text: string): boolean {
-  const t = text.trim().toLowerCase();
+  const t = text.trim().toLowerCase().normalize('NFKC');
   if (!t) return false;
   return MUSIC_RELATED_RE.test(t);
 }

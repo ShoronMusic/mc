@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { shouldShortCircuitSongRequestForAtPrompt } from '@/lib/ai-question-about-detail-heuristic';
 import { extractSongSearchQuery } from '@/lib/gemini';
 
 export const dynamic = 'force-dynamic';
@@ -18,9 +19,13 @@ export async function POST(request: Request) {
           body: typeof m.body === 'string' ? m.body : '',
           messageType: typeof m.messageType === 'string' ? m.messageType : undefined,
         }))
-      : undefined;
+      : [];
 
-    const intent = await extractSongSearchQuery(userMessage, recentMessages, {
+    if (shouldShortCircuitSongRequestForAtPrompt(userMessage, recentMessages)) {
+      return NextResponse.json({ ok: false }, { status: 200 });
+    }
+
+    const intent = await extractSongSearchQuery(userMessage, recentMessages.length ? recentMessages : undefined, {
       roomId: roomId || undefined,
     });
     if (!intent) {

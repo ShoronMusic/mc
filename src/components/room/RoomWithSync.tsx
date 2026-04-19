@@ -46,6 +46,7 @@ import {
   getSongQuizRevealFastMs,
   getSongQuizRevealMaxMs,
 } from '@/lib/song-quiz-result-announcement';
+import { shouldShortCircuitSongRequestForAtPrompt } from '@/lib/ai-question-about-detail-heuristic';
 import {
   buildTurnOrderClarificationReply,
   isAiTurnOrderClarificationText,
@@ -3244,13 +3245,9 @@ export default function RoomWithSync({
               suppressTidbitRef.current = equivalentBaseOnlySlots(commentPackSlotsRef.current);
               const baseOnlyCtx = pack.baseComment.trim();
               const delayBaseOnly = 3500;
-              if (
-                userRoomAiSongQuizEnabledRef.current &&
-                myClientId &&
-                oldestParticipantClientId &&
-                myClientId === oldestParticipantClientId &&
-                baseOnlyCtx.length >= 60
-              ) {
+              // 曲解説・comment-pack は選曲したクライアントのみが fetch する。クイズも同じクライアントでスケジュールする
+              //（「最古入室者のみ」にすると、選曲者が最古でないときクイズが永遠に出ない）。
+              if (userRoomAiSongQuizEnabledRef.current && baseOnlyCtx.length >= 60) {
                 const timer = setTimeout(() => {
                   if (videoIdRef.current !== vid) return;
                   void fetch('/api/ai/song-quiz', {
@@ -3406,13 +3403,7 @@ export default function RoomWithSync({
                       .join('\n\n---\n\n');
                     const delayMs =
                       freeIdxSorted.length * COMMENT_PACK_FREE_STAGGER_MS + 3500;
-                    if (
-                      userRoomAiSongQuizEnabledRef.current &&
-                      myClientId &&
-                      oldestParticipantClientId &&
-                      myClientId === oldestParticipantClientId &&
-                      commentaryContext.length >= 60
-                    ) {
+                    if (userRoomAiSongQuizEnabledRef.current && commentaryContext.length >= 60) {
                       const timer = setTimeout(() => {
                         if (videoIdRef.current !== vid) return;
                         void fetch('/api/ai/song-quiz', {
@@ -3512,13 +3503,7 @@ export default function RoomWithSync({
               .filter(Boolean)
               .join('\n\n---\n\n');
             const delayMsSingle = shownIdx * COMMENT_PACK_FREE_STAGGER_MS + 3500;
-            if (
-              userRoomAiSongQuizEnabledRef.current &&
-              myClientId &&
-              oldestParticipantClientId &&
-              myClientId === oldestParticipantClientId &&
-              commentaryContextSingle.length >= 60
-            ) {
+            if (userRoomAiSongQuizEnabledRef.current && commentaryContextSingle.length >= 60) {
               const timer = setTimeout(() => {
                 if (videoIdRef.current !== vid) return;
                 void fetch('/api/ai/song-quiz', {
@@ -3582,13 +3567,7 @@ export default function RoomWithSync({
                   touchActivity();
                   const commentarySingle = `${prefix}${data.text}`.trim();
                   const delayCommentary = 4000;
-                  if (
-                    userRoomAiSongQuizEnabledRef.current &&
-                    myClientId &&
-                    oldestParticipantClientId &&
-                    myClientId === oldestParticipantClientId &&
-                    commentarySingle.length >= 60
-                  ) {
+                  if (userRoomAiSongQuizEnabledRef.current && commentarySingle.length >= 60) {
                     const timer = setTimeout(() => {
                       if (videoIdRef.current !== vid) return;
                       void fetch('/api/ai/song-quiz', {
@@ -3628,8 +3607,6 @@ export default function RoomWithSync({
       roomId,
       messages,
       canRejectTidbit,
-      oldestParticipantClientId,
-      myClientId,
       clearPendingSongQuizRoundState,
     ]
   );
@@ -4322,17 +4299,25 @@ export default function RoomWithSync({
         return;
       }
 
+      const recentForSongResolve = messages.slice(-6).map((m) => ({
+        displayName: m.displayName,
+        body: m.body,
+        messageType: m.messageType ?? 'user',
+      }));
+
+      if (shouldShortCircuitSongRequestForAtPrompt(aiPromptText, recentForSongResolve)) {
+        doChatReply();
+        touchActivity();
+        return;
+      }
+
       fetch('/api/ai/resolve-song-request', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           userMessage: aiPromptText,
           roomId: roomId ?? undefined,
-          recentMessages: messages.slice(-6).map((m) => ({
-            displayName: m.displayName,
-            body: m.body,
-            messageType: m.messageType,
-          })),
+          recentMessages: recentForSongResolve,
         }),
       })
         .then((r) => (r.ok ? r.json() : null))

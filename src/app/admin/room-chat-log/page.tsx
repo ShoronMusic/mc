@@ -32,6 +32,11 @@ function logDownloadHref(roomId: string, dateJst: string): string {
   return `/api/room-chat-log?${q.toString()}`;
 }
 
+function atQaViewerHref(roomId: string, dateJst: string): string {
+  const q = new URLSearchParams({ roomId, date: dateJst });
+  return `/admin/room-chat-log/at-qa?${q.toString()}`;
+}
+
 export default function AdminRoomChatLogPage() {
   const [days, setDays] = useState(30);
   const [loading, setLoading] = useState(true);
@@ -117,7 +122,9 @@ export default function AdminRoomChatLogPage() {
             <strong className="text-gray-300">日本時間の日付</strong>×<strong className="text-gray-300">部屋ID</strong>です。
           </p>
           <p className="mt-2">
-            「テキスト」はブラウザで1日分のログを表示、「DL」は .txt ダウンロードです。部屋へは入室用リンクです。
+            「テキスト」はブラウザで1日分のログを表示、「DL」は .txt ダウンロード、「
+            <span className="text-sky-300">{'＠Q&A'}</span>
+            」は @ 質問と直後の AI 回答をペアで見る画面です（同日の質問ガード異議があれば付記）。部屋へは入室用リンクです。
           </p>
         </section>
 
@@ -183,6 +190,12 @@ export default function AdminRoomChatLogPage() {
                                   >
                                     DL
                                   </a>
+                                  <Link
+                                    href={atQaViewerHref(r.room_id, r.date_jst)}
+                                    className="text-amber-300 hover:underline"
+                                  >
+                                    ＠Q&A
+                                  </Link>
                                   <Link
                                     href={`/${encodeURIComponent(r.room_id)}`}
                                     className="text-gray-400 hover:text-gray-300 hover:underline"

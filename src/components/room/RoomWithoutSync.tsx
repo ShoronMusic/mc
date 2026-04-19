@@ -38,6 +38,7 @@ import {
   buildSongQuizResultAnnouncement,
   getSongQuizRevealDelayMs,
 } from '@/lib/song-quiz-result-announcement';
+import { shouldShortCircuitSongRequestForAtPrompt } from '@/lib/ai-question-about-detail-heuristic';
 import { resolveAiQuestionMusicRelated } from '@/lib/client-ai-question-guard-resolve';
 import { isDevMinimalSongAi } from '@/lib/dev-minimal-song-ai';
 import { formatMusic8ModeratorIntroPrefix } from '@/lib/music8-moderator-chat-prefix';
@@ -1292,17 +1293,25 @@ export default function RoomWithoutSync({
         return;
       }
 
+      const recentForSongResolve = messages.slice(-6).map((m) => ({
+        displayName: m.displayName,
+        body: m.body,
+        messageType: m.messageType ?? 'user',
+      }));
+
+      if (shouldShortCircuitSongRequestForAtPrompt(aiPromptText, recentForSongResolve)) {
+        doChatReply();
+        touchActivity();
+        return;
+      }
+
       fetch('/api/ai/resolve-song-request', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           userMessage: aiPromptText,
           roomId: roomId ?? undefined,
-          recentMessages: messages.slice(-6).map((m) => ({
-            displayName: m.displayName,
-            body: m.body,
-            messageType: m.messageType,
-          })),
+          recentMessages: recentForSongResolve,
         }),
       })
         .then((r) => (r.ok ? r.json() : null))

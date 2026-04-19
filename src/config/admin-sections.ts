@@ -52,7 +52,8 @@ export const ADMIN_SECTIONS: AdminSection[] = [
   {
     href: '/admin/room-chat-log',
     title: '部屋の会話ログ',
-    description: '日付（JST）×部屋別の保存件数、テキスト表示・ダウンロードへのリンク',
+    description:
+      '日付（JST）×部屋別の保存件数、テキスト・DL・＠Q&A（@と直後のAIをペア表示、異議付記）へのリンク',
   },
   {
     href: '/admin/room-music-summary',

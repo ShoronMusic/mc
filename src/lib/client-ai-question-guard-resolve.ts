@@ -2,6 +2,12 @@
  * ブラウザ用: 「@」本文がクライアントヒューリスティックで非音楽扱いのとき、API で再判定。
  */
 
+import {
+  isAboutDetailMusicFollowupQuestion,
+  isMusicLikelyKatakanaOrLatinWithStrongAnchors,
+  isOutlineTeachMusicFollowupQuestion,
+  isShortMusicBiographyFollowupQuestion,
+} from '@/lib/ai-question-about-detail-heuristic';
 import { isAiTurnOrderClarificationText } from '@/lib/ai-turn-order-clarification';
 import { isAiQuestionGuardDisabledClient } from '@/lib/chat-system-copy';
 import { isMusicRelatedAiQuestion } from '@/lib/is-music-related-ai-question';
@@ -37,6 +43,10 @@ export async function resolveAiQuestionMusicRelated(
   const q = aiPromptText.trim();
   if (!q) return { outcome: 'allow' };
   if (isAiTurnOrderClarificationText(q)) return { outcome: 'allow' };
+  if (isAboutDetailMusicFollowupQuestion(q, recentMessages)) return { outcome: 'allow' };
+  if (isOutlineTeachMusicFollowupQuestion(q, recentMessages)) return { outcome: 'allow' };
+  if (isShortMusicBiographyFollowupQuestion(q, recentMessages)) return { outcome: 'allow' };
+  if (isMusicLikelyKatakanaOrLatinWithStrongAnchors(q, recentMessages)) return { outcome: 'allow' };
   if (isMusicRelatedAiQuestion(q)) return { outcome: 'allow' };
 
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;

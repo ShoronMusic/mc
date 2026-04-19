@@ -14,6 +14,8 @@
     "test:policy": "tsx src/lib/ai-output-policy.unit-test.ts",
     "test:format": "tsx src/lib/format-song-display-feat.unit-test.ts",
     "test:ai-question-guard": "tsx src/lib/is-music-related-ai-question.unit-test.ts",
+    "test:about-detail-heuristic": "tsx src/lib/ai-question-about-detail-heuristic.unit-test.ts",
+    "test:room-chat-at-qa": "tsx src/lib/room-chat-at-qa-from-log.unit-test.ts",
     "test:turn-order-clarification": "tsx src/lib/ai-turn-order-clarification.unit-test.ts",
     "test:question-guard-classify": "tsx src/lib/gemini-question-guard-classify.unit-test.ts",
     "test:comment-pack-slots": "tsx src/lib/comment-pack-slots.unit-test.ts",
@@ -39,7 +41,7 @@
     "test:gemini-model-routing": "tsx src/lib/gemini-model-routing.unit-test.ts",
     "test:gemini-gemma-host": "tsx src/lib/gemini-gemma-host.unit-test.ts",
     "test:song-era-resolve": "tsx src/lib/song-era-resolve.unit-test.ts",
-    "test": "npm run test:mb && npm run test:policy && npm run test:format && npm run test:ai-question-guard && npm run test:turn-order-clarification && npm run test:question-guard-classify && npm run test:comment-pack-slots && npm run test:comment-pack-session && npm run test:comment-pack-jp-economy && npm run test:youtube-pv && npm run test:chat-rate && npm run test:yt-search-rate && npm run test:mb-facts && npm run test:ai-guard-objection && npm run test:chat-conversation-snapshot && npm run test:selection-round && npm run test:my-list-suggest && npm run test:join-greeting && npm run test:user-taste-context && npm run test:user-public-profile && npm run test:music8-musicaichat && npm run test:music8-moderator-prefix && npm run test:promo-metadata && npm run test:song-quiz-official && npm run test:song-quiz-shuffle && npm run test:song-quiz-result-announcement && npm run test:gemini-model-routing && npm run test:gemini-gemma-host && npm run test:song-era-resolve",
+    "test": "npm run test:mb && npm run test:policy && npm run test:format && npm run test:ai-question-guard && npm run test:about-detail-heuristic && npm run test:room-chat-at-qa && npm run test:turn-order-clarification && npm run test:question-guard-classify && npm run test:comment-pack-slots && npm run test:comment-pack-session && npm run test:comment-pack-jp-economy && npm run test:youtube-pv && npm run test:chat-rate && npm run test:yt-search-rate && npm run test:mb-facts && npm run test:ai-guard-objection && npm run test:chat-conversation-snapshot && npm run test:selection-round && npm run test:my-list-suggest && npm run test:join-greeting && npm run test:user-taste-context && npm run test:user-public-profile && npm run test:music8-musicaichat && npm run test:music8-moderator-prefix && npm run test:promo-metadata && npm run test:song-quiz-official && npm run test:song-quiz-shuffle && npm run test:song-quiz-result-announcement && npm run test:gemini-model-routing && npm run test:gemini-gemma-host && npm run test:song-era-resolve",
     "verify:utf8": "node scripts/verify-source-utf8.mjs",
     "verify:utf8:fix": "node scripts/verify-source-utf8.mjs --fix",
     "validate": "npm run verify:utf8 && npm run lint && npx tsc --noEmit && npm run test"
