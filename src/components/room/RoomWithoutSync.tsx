@@ -1757,3 +1757,8 @@ export default function RoomWithoutSync({
           onClearLocalAiQuestionGuard={
             chatStyleAdminTools ? clearLocalAiQuestionGuardState : undefined
           }
+        />
+      </section>
+    </main>
+  );
+}
