@@ -47,6 +47,7 @@ import { playbackLog } from '@/lib/playback-debug';
 import { rememberRoomForGuideReturn } from '@/lib/safe-return-path';
 import { extractVideoId, isStandaloneNonYouTubeUrl } from '@/lib/youtube';
 import { isYoutubeKeywordSearchEnabled } from '@/lib/youtube-keyword-search-ui';
+import { scheduleNextSongRecommendAfterCommentary } from '@/lib/schedule-next-song-recommend-client';
 import type { ChatMessage, SystemMessageOptions } from '@/types/chat';
 import { useIsLgViewport } from '@/hooks/useLgViewport';
 import { useRoomChatLogPersistence } from '@/hooks/useRoomChatLogPersistence';
@@ -264,6 +265,7 @@ export default function RoomWithoutSync({
   /** 開発簡略モードで comment-pack 基本を出した動画。豆知識を当該曲中は抑止 */
   const commentPackVideoIdRef = useRef<string | null>(null);
   const songQuizFetchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const nextSongRecommendTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const userRoomAiCommentaryEnabledRef = useRef(true);
   const userRoomAiSongQuizEnabledRef = useRef(true);
   type SongQuizRoundMetaLocal = { correctIndex: number; choices: string[]; videoId: string };
@@ -393,6 +395,28 @@ export default function RoomWithoutSync({
     [isGuest, fetchFavoritedIds, displayNameProp]
   );
 
+  const handleNextSongRecommendReject = useCallback(
+    async (messageId: string, recommendationId: string) => {
+      try {
+        const res = await fetch('/api/ai/reject-next-song-recommend', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ recommendationId }),
+        });
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        if (!res.ok) {
+          alert(typeof data?.error === 'string' ? data.error : 'おすすめ削除に失敗しました');
+          return;
+        }
+        setMessages((prev) => prev.filter((m) => m.id !== messageId));
+      } catch {
+        alert('おすすめ削除に失敗しました');
+      }
+    },
+    [],
+  );
+
   const openChatSummaryModal = useCallback(() => {
     if (!roomId) return;
     setChatSummaryModalOpen(true);
@@ -443,6 +467,7 @@ export default function RoomWithoutSync({
         bypassJpDomesticSilence?: boolean;
         videoId?: string | null;
         aiSource?: ChatMessage['aiSource'];
+        recommendationId?: string | null;
       }
     ) => {
       const jpS = jpDomesticSilenceVideoIdRef.current;
@@ -463,6 +488,7 @@ export default function RoomWithoutSync({
         createdAt: new Date().toISOString(),
         ...(options?.videoId != null ? { videoId: options.videoId } : {}),
         ...(options?.aiSource ? { aiSource: options.aiSource } : {}),
+        ...(options?.recommendationId ? { recommendationId: options.recommendationId } : {}),
       };
       setMessages((prev) => [...prev, msg]);
     },
@@ -754,6 +780,10 @@ export default function RoomWithoutSync({
           clearTimeout(songQuizFetchTimeoutRef.current);
           songQuizFetchTimeoutRef.current = null;
         }
+        if (nextSongRecommendTimeoutRef.current) {
+          clearTimeout(nextSongRecommendTimeoutRef.current);
+          nextSongRecommendTimeoutRef.current = null;
+        }
         return;
       }
       if (isDevMinimalSongAi()) {
@@ -834,6 +864,20 @@ export default function RoomWithoutSync({
                 }, 3500);
               }
               tidbitPreferMainArtistLeftRef.current = 2;
+              scheduleNextSongRecommendAfterCommentary({
+                videoId: vid,
+                roomId,
+                songQuizDelayMs: 3500,
+                isGuest,
+                videoIdRef,
+                registerTimer: (t) => {
+                  if (nextSongRecommendTimeoutRef.current) {
+                    clearTimeout(nextSongRecommendTimeoutRef.current);
+                  }
+                  nextSongRecommendTimeoutRef.current = t;
+                },
+                addAiMessage,
+              });
               return;
             }
             commentPackVideoIdRef.current = null;
@@ -907,13 +951,27 @@ export default function RoomWithoutSync({
               }, 4000);
             }
             tidbitPreferMainArtistLeftRef.current = 2;
+            scheduleNextSongRecommendAfterCommentary({
+              videoId: vid,
+              roomId,
+              songQuizDelayMs: 4000,
+              isGuest,
+              videoIdRef,
+              registerTimer: (t) => {
+                if (nextSongRecommendTimeoutRef.current) {
+                  clearTimeout(nextSongRecommendTimeoutRef.current);
+                }
+                nextSongRecommendTimeoutRef.current = t;
+              },
+              addAiMessage,
+            });
           } else addSystemMessage(SYSTEM_MESSAGE_COMMENTARY_FETCH_FAILED);
         })
         .catch(() => {
           addSystemMessage(SYSTEM_MESSAGE_COMMENTARY_FETCH_FAILED);
         });
     },
-    [addAiMessage, addSystemMessage, touchActivity, roomId, messages, canRejectTidbit, scheduleLocalSongQuizReveal]
+    [addAiMessage, addSystemMessage, touchActivity, roomId, messages, canRejectTidbit, scheduleLocalSongQuizReveal, isGuest]
   );
 
   const schedulePlaybackHistory = useCallback(
@@ -1541,6 +1599,7 @@ export default function RoomWithoutSync({
             myClientId="local-client"
             styleAdminChatTools={chatStyleAdminTools}
             canRejectTidbit={canRejectTidbit && !isGuest}
+            onNextSongRecommendReject={handleNextSongRecommendReject}
             onYoutubeSearchFromAi={
               isYoutubeKeywordSearchEnabled()
                 ? (q) => chatInputRef.current?.searchYoutubeWithQuery(q)

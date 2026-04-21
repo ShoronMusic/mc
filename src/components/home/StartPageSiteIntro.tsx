@@ -5,6 +5,9 @@ import { useEffect, useState } from 'react';
 import { GUEST_STORAGE_KEY } from '@/components/auth/JoinChoice';
 import { createClient, isSupabaseConfigured } from '@/lib/supabase/client';
 
+/** サイト紹介動画（トップ・ご利用にあたっての説明内） */
+const SITE_INTRO_YOUTUBE_VIDEO_ID = 'gtwgUAcV3rE';
+
 /**
  * 未ログイン・ゲスト未確定のときだけサービス説明とイメージを表示する。
  * ログイン後やゲスト参加確定後は TopPageAuthBar と同様に非表示。
@@ -94,6 +97,22 @@ export function StartPageSiteIntro({ forceShow = false }: StartPageSiteIntroProp
             AIの主な役割（進行・解説・質問対応）
           </figcaption>
         </figure>
+        <div className="space-y-1.5">
+          <div className="relative aspect-video w-full overflow-hidden rounded-lg border border-gray-700 bg-black">
+            <iframe
+              className="absolute inset-0 h-full w-full"
+              src={`https://www.youtube.com/embed/${SITE_INTRO_YOUTUBE_VIDEO_ID}`}
+              title="洋楽AIチャット（β版）の紹介動画"
+              loading="lazy"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              referrerPolicy="strict-origin-when-cross-origin"
+              allowFullScreen
+            />
+          </div>
+          <p className="text-center text-xs text-gray-500">
+            紹介動画（YouTubeで視聴できます）
+          </p>
+        </div>
       </div>
     </>
   );

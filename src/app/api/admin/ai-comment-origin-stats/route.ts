@@ -35,6 +35,7 @@ const GEMINI_CONTEXT_SONG_COMMENTARY = new Set([
   'comment_pack_free_4',
   'commentary',
   'song_quiz',
+  'next_song_recommend',
 ]);
 
 type DayTriplet = { date_jst: string; new: number; db: number; other: number };

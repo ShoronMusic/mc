@@ -32,6 +32,12 @@ export const ADMIN_SECTIONS: AdminSection[] = [
     description: '部屋画面から送信されたサイト評価（-2〜2）と自由コメントの一覧',
   },
   {
+    href: '/admin/next-song-recommendations',
+    title: 'おすすめ曲ストック',
+    description:
+      '次に聴くなら（試験）の当該曲ごとのストック（最大9件）、理由、評価件数、削除操作',
+  },
+  {
     href: '/admin/artist-title-parse-reports',
     title: '曲名表記スナップショット',
     description:

@@ -41,10 +41,7 @@ import {
 import type { SongQuizPayload } from '@/lib/song-quiz-types';
 import {
   buildSongQuizResultAnnouncement,
-  getSongQuizRevealDelayMs,
-  getSongQuizRevealExtendMs,
   getSongQuizRevealFastMs,
-  getSongQuizRevealMaxMs,
 } from '@/lib/song-quiz-result-announcement';
 import { shouldShortCircuitSongRequestForAtPrompt } from '@/lib/ai-question-about-detail-heuristic';
 import {
@@ -53,6 +50,7 @@ import {
 } from '@/lib/ai-turn-order-clarification';
 import { resolveAiQuestionMusicRelated } from '@/lib/client-ai-question-guard-resolve';
 import { isDevMinimalSongAi } from '@/lib/dev-minimal-song-ai';
+import { scheduleNextSongRecommendAfterCommentary } from '@/lib/schedule-next-song-recommend-client';
 import { COMMENT_PACK_MAX_FREE_COMMENTS } from '@/lib/song-tidbits';
 import { playbackLog } from '@/lib/playback-debug';
 import { useResumeYoutubeWhenTabVisible } from '@/hooks/useResumeYoutubeWhenTabVisible';
@@ -530,6 +528,8 @@ export default function RoomWithSync({
   const jpDomesticSilenceVideoIdRef = useRef<string | null>(null);
   /** 自分が発言したか（ステータスありでも発言あれば在席とみなして豆知識を出す） */
   const hasCurrentUserSentMessageSinceLastTidbitRef = useRef(false);
+  /** videoId 変化検出用（render 中の videoIdRef 代入とは分離） */
+  const previousVideoIdForQuizFlushRef = useRef<string | null>(null);
   const [aiFreeSpeechStopped, setAiFreeSpeechStopped] = useState(true);
   const [yellowCardByClientId, setYellowCardByClientId] = useState<Record<string, number>>({});
   const [ownerState, setOwnerState] = useState<{ ownerClientId: string; ownerLeftAt: number | null }>(() =>
@@ -1596,6 +1596,7 @@ export default function RoomWithSync({
             ...(p.songId != null ? { songId: p.songId } : {}),
             ...(p.videoId != null ? { videoId: p.videoId } : {}),
             ...(p.aiSource ? { aiSource: p.aiSource } : {}),
+            ...(p.recommendationId ? { recommendationId: p.recommendationId } : {}),
             ...(p.jpDomesticSilenceForVideoId
               ? { jpDomesticSilenceForVideoId: p.jpDomesticSilenceForVideoId }
               : {}),
@@ -2325,6 +2326,7 @@ export default function RoomWithSync({
         songId?: string | null;
         videoId?: string | null;
         aiSource?: ChatMessage['aiSource'];
+        recommendationId?: string | null;
         /** 選曲アナウンス（邦楽フラグ付きペイロード用）のみ true */
         bypassJpDomesticSilence?: boolean;
         jpDomesticSilenceForVideoId?: string;
@@ -2360,6 +2362,7 @@ export default function RoomWithSync({
         ...(options?.songId != null ? { songId: options.songId } : {}),
         ...(options?.videoId != null ? { videoId: options.videoId } : {}),
         ...(options?.aiSource ? { aiSource: options.aiSource } : {}),
+        ...(options?.recommendationId ? { recommendationId: options.recommendationId } : {}),
         ...(options?.jpDomesticSilenceForVideoId
           ? { jpDomesticSilenceForVideoId: options.jpDomesticSilenceForVideoId }
           : {}),
@@ -2382,6 +2385,7 @@ export default function RoomWithSync({
           ...(payload.songId != null ? { songId: payload.songId } : {}),
           ...(payload.videoId != null ? { videoId: payload.videoId } : {}),
           ...(payload.aiSource ? { aiSource: payload.aiSource } : {}),
+          ...(payload.recommendationId ? { recommendationId: payload.recommendationId } : {}),
           ...(payload.jpDomesticSilenceForVideoId
             ? { jpDomesticSilenceForVideoId: payload.jpDomesticSilenceForVideoId }
             : {}),
@@ -2411,17 +2415,13 @@ export default function RoomWithSync({
       }
       const expected = eligible.size;
       const answeredIds = new Set(answers.map((a) => a.clientId));
-      const startedAt = songQuizRoundStartedAtRef.current.get(quizMsgId) ?? Date.now();
-      const elapsed = Date.now() - startedAt;
-      const maxMs = getSongQuizRevealMaxMs();
 
       const everyoneAnsweredOrSolo =
         expected === 0 ||
         expected <= 1 ||
         [...eligible].every((id) => answeredIds.has(id));
-      const forceDeadline = elapsed >= maxMs;
 
-      if (everyoneAnsweredOrSolo || forceDeadline) {
+      if (everyoneAnsweredOrSolo) {
         songQuizRoundMetaRef.current.delete(quizMsgId);
         songQuizAnswersByQuizIdRef.current.delete(quizMsgId);
         songQuizRoundStartedAtRef.current.delete(quizMsgId);
@@ -2437,12 +2437,46 @@ export default function RoomWithSync({
         });
         return;
       }
-      const nextDelay = getSongQuizRevealExtendMs();
-      const t = setTimeout(() => {
-        songQuizRevealTimersRef.current.delete(quizMsgId);
-        runSongQuizResultAnnounce(quizMsgId, videoIdForQuiz);
-      }, nextDelay);
-      songQuizRevealTimersRef.current.set(quizMsgId, t);
+    },
+    [myClientId, addAiMessage],
+  );
+
+  /** 曲切替時: その曲のクイズを締める。回答者ゼロなら結果発表せず破棄。 */
+  const flushSongQuizOnTrackEnd = useCallback(
+    (endedVideoId: string | null) => {
+      const vid = (endedVideoId ?? '').trim();
+      if (!vid) return;
+      const cid = (myClientId ?? '').trim();
+      if (!cid || cid !== oldestRef.current) return;
+
+      const targets: string[] = [];
+      for (const [quizId, meta] of songQuizRoundMetaRef.current.entries()) {
+        if (meta.videoId === vid) targets.push(quizId);
+      }
+      for (const quizId of targets) {
+        const t = songQuizRevealTimersRef.current.get(quizId);
+        if (t) clearTimeout(t);
+        songQuizRevealTimersRef.current.delete(quizId);
+
+        const meta = songQuizRoundMetaRef.current.get(quizId);
+        const answers = songQuizAnswersByQuizIdRef.current.get(quizId) ?? [];
+        songQuizRoundMetaRef.current.delete(quizId);
+        songQuizAnswersByQuizIdRef.current.delete(quizId);
+        songQuizRoundStartedAtRef.current.delete(quizId);
+        if (!meta) continue;
+        if (answers.length === 0) continue;
+
+        const bodyAnnounce = buildSongQuizResultAnnouncement(
+          meta.correctIndex,
+          meta.choices,
+          answers.map((a) => ({ displayName: a.displayName, pickedIndex: a.pickedIndex })),
+        );
+        addAiMessage(bodyAnnounce, {
+          allowWhenAiStopped: true,
+          videoId: vid,
+          aiSource: 'tidbit',
+        });
+      }
     },
     [myClientId, addAiMessage],
   );
@@ -2587,8 +2621,6 @@ export default function RoomWithSync({
           ...(payload.songQuiz ? { songQuiz: payload.songQuiz } : {}),
         },
       ]);
-
-      const revealDelay = getSongQuizRevealDelayMs();
       songQuizRoundStartedAtRef.current.set(id, Date.now());
       songQuizRoundMetaRef.current.set(id, {
         correctIndex: quiz.correctIndex,
@@ -2596,16 +2628,8 @@ export default function RoomWithSync({
         videoId: videoIdForQuiz,
       });
       songQuizAnswersByQuizIdRef.current.set(id, []);
-      const prevT = songQuizRevealTimersRef.current.get(id);
-      if (prevT) clearTimeout(prevT);
-      const t = setTimeout(() => {
-        songQuizRevealTimersRef.current.delete(id);
-        /** 複数人在室で未回答者がいる間は延長。最長 getSongQuizRevealMaxMs で必ず発表（次曲進行時も run 側で処理） */
-        runSongQuizResultAnnounce(id, videoIdForQuiz);
-      }, revealDelay);
-      songQuizRevealTimersRef.current.set(id, t);
     },
-    [safePublish, runSongQuizResultAnnounce],
+    [safePublish],
   );
 
   const clearLocalAiQuestionGuardState = useCallback(() => {
@@ -3010,6 +3034,11 @@ export default function RoomWithSync({
 
   useEffect(() => {
     /* 曲開始時刻は applyImmediateChangeVideo / リモート changeVideo / 再生スナップショットで設定する */
+    const prevVideoId = previousVideoIdForQuizFlushRef.current;
+    if (prevVideoId && prevVideoId !== videoId) {
+      flushSongQuizOnTrackEnd(prevVideoId);
+    }
+    previousVideoIdForQuizFlushRef.current = videoId ?? null;
     if (!videoId) {
       currentTrackStartedAtMsRef.current = 0;
     }
@@ -3036,7 +3065,7 @@ export default function RoomWithSync({
     suppressTidbitRef.current = false;
     commentPackVideoIdRef.current = null;
     setSkipUsedForVideoId(null);
-  }, [videoId, clearPendingSongQuizRoundState]);
+  }, [videoId, clearPendingSongQuizRoundState, flushSongQuizOnTrackEnd]);
 
   const fetchAnnounceAndPublish = useCallback(
     (
@@ -3272,6 +3301,18 @@ export default function RoomWithSync({
                 }, delayBaseOnly);
                 freeCommentTimeoutsRef.current.push(timer);
               }
+              scheduleNextSongRecommendAfterCommentary({
+                videoId: vid,
+                roomId,
+                songQuizDelayMs: delayBaseOnly,
+                isGuest,
+                videoIdRef,
+                registerTimer: (t) => {
+                  freeCommentTimeoutsRef.current.push(t);
+                },
+                addAiMessage,
+                addAiMessageExtras: { allowWhenAiStopped: true },
+              });
               return null;
             }
 
@@ -3428,6 +3469,18 @@ export default function RoomWithSync({
                       }, delayMs);
                       freeCommentTimeoutsRef.current.push(timer);
                     }
+                    scheduleNextSongRecommendAfterCommentary({
+                      videoId: vid,
+                      roomId,
+                      songQuizDelayMs: delayMs,
+                      isGuest,
+                      videoIdRef,
+                      registerTimer: (t) => {
+                        freeCommentTimeoutsRef.current.push(t);
+                      },
+                      addAiMessage,
+                      addAiMessageExtras: { allowWhenAiStopped: true },
+                    });
                   }
                 });
             });
@@ -3528,6 +3581,18 @@ export default function RoomWithSync({
               }, delayMsSingle);
               freeCommentTimeoutsRef.current.push(timer);
             }
+            scheduleNextSongRecommendAfterCommentary({
+              videoId: vid,
+              roomId,
+              songQuizDelayMs: delayMsSingle,
+              isGuest,
+              videoIdRef,
+              registerTimer: (t) => {
+                freeCommentTimeoutsRef.current.push(t);
+              },
+              addAiMessage,
+              addAiMessageExtras: { allowWhenAiStopped: true },
+            });
           } else {
             if (isDevMinimalSongAi()) {
               addSystemMessage(SYSTEM_MESSAGE_COMMENTARY_FETCH_FAILED);
@@ -3592,6 +3657,18 @@ export default function RoomWithSync({
                     }, delayCommentary);
                     freeCommentTimeoutsRef.current.push(timer);
                   }
+                  scheduleNextSongRecommendAfterCommentary({
+                    videoId: vid,
+                    roomId,
+                    songQuizDelayMs: delayCommentary,
+                    isGuest,
+                    videoIdRef,
+                    registerTimer: (t) => {
+                      freeCommentTimeoutsRef.current.push(t);
+                    },
+                    addAiMessage,
+                    addAiMessageExtras: { allowWhenAiStopped: true },
+                  });
                   tidbitPreferMainArtistLeftRef.current = 2;
                 } else {
                   addSystemMessage(SYSTEM_MESSAGE_COMMENTARY_FETCH_FAILED);
@@ -3613,6 +3690,7 @@ export default function RoomWithSync({
       messages,
       canRejectTidbit,
       clearPendingSongQuizRoundState,
+      isGuest,
     ]
   );
 
@@ -3689,6 +3767,28 @@ export default function RoomWithSync({
       alert('ライブラリからの削除に失敗しました');
     }
   }, []);
+
+  const handleNextSongRecommendReject = useCallback(
+    async (messageId: string, recommendationId: string) => {
+      try {
+        const res = await fetch('/api/ai/reject-next-song-recommend', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ recommendationId }),
+        });
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        if (!res.ok) {
+          alert(typeof data?.error === 'string' ? data.error : 'おすすめ削除に失敗しました');
+          return;
+        }
+        setMessages((prev) => prev.filter((m) => m.id !== messageId));
+      } catch {
+        alert('おすすめ削除に失敗しました');
+      }
+    },
+    [],
+  );
 
   /** 視聴履歴の displayName / isGuest は「その曲を貼った人」。キュー適用を最古クライアントが行うときも食い違わないよう引数で渡す */
   const schedulePlaybackHistory = useCallback(
@@ -4909,6 +5009,7 @@ export default function RoomWithSync({
             currentVideoId={videoId}
             canRejectTidbit={canRejectTidbit && !isGuest}
             onTidbitLibraryReject={handleTidbitLibraryReject}
+            onNextSongRecommendReject={handleNextSongRecommendReject}
             onChatSummaryClick={roomId ? openChatSummaryModal : undefined}
             jpAiUnlockEnabled={jpAiUnlockEnabled}
             roomId={roomId ?? undefined}

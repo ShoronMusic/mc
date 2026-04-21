@@ -82,6 +82,8 @@ interface ChatProps {
   /** song_tidbits をライブラリから外す NG（最高管理者のみ） */
   canRejectTidbit?: boolean;
   onTidbitLibraryReject?: (messageId: string, tidbitId: string) => void | Promise<void>;
+  /** next_song_recommendations をライブラリから外す（最高管理者のみ） */
+  onNextSongRecommendReject?: (messageId: string, recommendationId: string) => void | Promise<void>;
   /** 途中参加向けチャットサマリーを開く */
   onChatSummaryClick?: () => void;
   /** オーナー設定: 邦楽AI解説を解禁中ならヘッダーに表示 */
@@ -120,7 +122,10 @@ function isSongQuizFeedbackTarget(m: ChatMessageType): boolean {
 }
 
 function isAiCommentaryFeedbackTarget(m: ChatMessageType): boolean {
-  return m.messageType === 'ai' && (m.body.startsWith('[NEW]') || m.body.startsWith('[DB]'));
+  return (
+    m.messageType === 'ai' &&
+    ((m.body.startsWith('[NEW]') || m.body.startsWith('[DB]')) || m.aiSource === 'next_song_recommend')
+  );
 }
 
 /** 親指・詳細フィードバック用の本文と source（comment_feedback） */
@@ -134,6 +139,10 @@ function commentFeedbackPayloadForMessage(
     return { commentBody: message.body, source: message.aiSource ?? 'other' };
   }
   return null;
+}
+
+function isNextSongRecommendFeedbackTarget(m: ChatMessageType): boolean {
+  return m.messageType === 'ai' && m.aiSource === 'next_song_recommend' && Boolean(m.recommendationId);
 }
 
 function tuningReportAnchorPreviewBody(m: ChatMessageType): string {
@@ -386,6 +395,7 @@ export default function Chat({
   currentVideoId,
   canRejectTidbit = false,
   onTidbitLibraryReject,
+  onNextSongRecommendReject,
   onChatSummaryClick,
   jpAiUnlockEnabled = false,
   roomId,
@@ -415,6 +425,7 @@ export default function Chat({
   const [detailChecks, setDetailChecks] = useState({ duplicate: false, dubious: false, ambiguous: false });
   const [detailComment, setDetailComment] = useState('');
   const [tidbitRejectingId, setTidbitRejectingId] = useState<string | null>(null);
+  const [nextSongRecRejectingId, setNextSongRecRejectingId] = useState<string | null>(null);
   const [artistTitleReportingId, setArtistTitleReportingId] = useState<string | null>(null);
   /** 三択クイズ: メッセージ id → 選んだ選択肢 index */
   const [songQuizPickedIndex, setSongQuizPickedIndex] = useState<Record<string, number>>({});
@@ -447,6 +458,17 @@ export default function Chat({
         ? currentVideoId.trim()
         : undefined) ??
       null;
+    if (isNextSongRecommendFeedbackTarget(message)) {
+      fetch('/api/next-song-recommend-feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recommendationId: message.recommendationId,
+          isUpvote,
+        }),
+      }).catch(() => {});
+      return;
+    }
     fetch('/api/comment-feedback', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -525,23 +547,33 @@ export default function Chat({
       null;
     setFeedbackModal((prev) => (prev.open ? { ...prev, sending: true } : prev));
     try {
-      const res = await fetch('/api/comment-feedback', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          songId: message.songId ?? null,
-          videoId: videoIdToSend,
-          aiMessageId: message.id,
-          commentBody: fbPayload.commentBody,
-          source: fbPayload.source,
-          detailFeedback: {
-            isDuplicate: detailChecks.duplicate,
-            isDubious: detailChecks.dubious,
-            isAmbiguous: detailChecks.ambiguous,
-            freeComment: detailComment.trim(),
-          },
-        }),
-      });
+      const res = isNextSongRecommendFeedbackTarget(message)
+        ? await fetch('/api/next-song-recommend-feedback', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              recommendationId: message.recommendationId,
+              isUpvote: false,
+              comment: detailComment.trim(),
+            }),
+          })
+        : await fetch('/api/comment-feedback', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              songId: message.songId ?? null,
+              videoId: videoIdToSend,
+              aiMessageId: message.id,
+              commentBody: fbPayload.commentBody,
+              source: fbPayload.source,
+              detailFeedback: {
+                isDuplicate: detailChecks.duplicate,
+                isDubious: detailChecks.dubious,
+                isAmbiguous: detailChecks.ambiguous,
+                freeComment: detailComment.trim(),
+              },
+            }),
+          });
       if (res.ok) {
         const data = (await res.json().catch(() => ({}))) as {
           emailSent?: boolean;
@@ -1074,7 +1106,9 @@ export default function Chat({
                     YouTubeで「{m.searchQuery}」を検索
                   </a>
                 )}
-                {m.messageType === 'ai' && (m.body.startsWith('[NEW]') || m.body.startsWith('[DB]')) && (
+                {m.messageType === 'ai' &&
+                  ((m.body.startsWith('[NEW]') || m.body.startsWith('[DB]')) ||
+                    m.aiSource === 'next_song_recommend') && (
                   <div className="mt-1 flex flex-wrap items-center gap-1 text-xs">
                     <button
                       type="button"
@@ -1131,6 +1165,28 @@ export default function Chat({
                     {m.tidbitLibraryRejected && (
                       <span className="text-amber-200/80">※ライブラリから削除済</span>
                     )}
+                    {canRejectTidbit &&
+                      onNextSongRecommendReject &&
+                      m.aiSource === 'next_song_recommend' &&
+                      m.recommendationId && (
+                        <button
+                          type="button"
+                          disabled={nextSongRecRejectingId === m.id}
+                          className="rounded border border-amber-700/80 bg-amber-950/40 px-2 py-0.5 font-medium text-amber-200/95 hover:bg-amber-900/50 disabled:opacity-50"
+                          title="このおすすめを next_song_recommendations から無効化"
+                          onClick={async () => {
+                            if (!m.recommendationId) return;
+                            setNextSongRecRejectingId(m.id);
+                            try {
+                              await onNextSongRecommendReject(m.id, m.recommendationId);
+                            } finally {
+                              setNextSongRecRejectingId((cur) => (cur === m.id ? null : cur));
+                            }
+                          }}
+                        >
+                          {nextSongRecRejectingId === m.id ? '処理中…' : 'NG（おすすめをDBから外す）'}
+                        </button>
+                      )}
                     {canRejectTidbit && roomId?.trim() && (
                       <button
                         type="button"

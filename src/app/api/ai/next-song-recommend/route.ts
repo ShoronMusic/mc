@@ -1,0 +1,194 @@
+import { NextResponse } from 'next/server';
+import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { fetchOEmbed } from '@/lib/youtube-oembed';
+import { formatArtistTitle } from '@/lib/format-song-display';
+import { fetchUserTasteContextForChat } from '@/lib/user-ai-taste-context';
+import { getVideoSnippet } from '@/lib/youtube-search';
+import { resolveArtistSongForPackAsync } from '@/lib/youtube-artist-song-for-pack';
+import { fetchPlaybackDisplayOverride } from '@/lib/video-playback-display-override';
+import { isNextSongRecommendAllowedForUser } from '@/lib/next-song-recommend-feature';
+import { checkNextSongRecommendRateLimit } from '@/lib/next-song-recommend-rate-limit';
+import { generateNextSongRecommendPicks } from '@/lib/next-song-recommend-generate';
+import {
+  countActiveNextSongRecommendBySeedVideo,
+  getActiveNextSongRecommendBySeedVideo,
+  insertNextSongRecommendRows,
+  NEXT_SONG_RECOMMEND_MAX_STOCK,
+} from '@/lib/next-song-recommend-store';
+import { upsertSongAndVideo } from '@/lib/song-entities';
+
+export const dynamic = 'force-dynamic';
+
+type OkDisabled = { enabled: false; reason?: string };
+type OkEnabled = { enabled: true; picks: import('@/lib/next-song-recommend-generate').NextSongPick[] };
+
+function isNextSongRecommendDebugLogEnabled(): boolean {
+  const raw = process.env.NEXT_SONG_RECOMMEND_DEBUG_LOG?.trim().toLowerCase();
+  return raw === '1' || raw === 'true';
+}
+
+export async function POST(request: Request): Promise<NextResponse<OkDisabled | OkEnabled>> {
+  try {
+    const body = await request.json().catch(() => ({}));
+    const videoId = typeof body?.videoId === 'string' ? body.videoId.trim() : '';
+    const roomId = typeof body?.roomId === 'string' ? body.roomId.trim() : '';
+    const commentarySnippet =
+      typeof body?.commentarySnippet === 'string' ? body.commentarySnippet.trim().slice(0, 2000) : '';
+
+    if (!videoId) {
+      return NextResponse.json({ enabled: false, reason: 'bad_request' }, { status: 200 });
+    }
+
+    const supabase = await createClient();
+    if (!supabase) {
+      return NextResponse.json({ enabled: false, reason: 'no_db' }, { status: 200 });
+    }
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    const uid = user?.id ?? null;
+    if (!isNextSongRecommendAllowedForUser(uid)) {
+      return NextResponse.json({ enabled: false }, { status: 200 });
+    }
+
+    const rl = checkNextSongRecommendRateLimit(uid!);
+    if (!rl.ok) {
+      return NextResponse.json({ enabled: false, reason: 'rate_limited' }, { status: 200 });
+    }
+
+    const reader = createAdminClient() ?? supabase;
+    const [oembed, snippet] = await Promise.all([fetchOEmbed(videoId), getVideoSnippet(videoId)]);
+    const rawYouTubeTitle = oembed?.title ?? snippet?.title ?? videoId;
+    const displayOverride = reader ? await fetchPlaybackDisplayOverride(reader, videoId) : null;
+    const title = displayOverride?.title ?? rawYouTubeTitle;
+    const authorName =
+      displayOverride?.artist_name?.trim()
+        ? displayOverride.artist_name.trim()
+        : oembed?.author_name ?? snippet?.channelTitle ?? null;
+
+    const { artist, artistDisplay, song } = await resolveArtistSongForPackAsync(
+      title,
+      authorName,
+      snippet,
+      videoId,
+      displayOverride ? { trustProvidedTitleOverFamousPv: true } : undefined,
+    );
+
+    const currentSongLabel =
+      artistDisplay && song
+        ? `${artistDisplay} — ${song}`
+        : formatArtistTitle(title, authorName, snippet?.description ?? null, snippet?.channelTitle ?? null);
+    const seedSongId =
+      artistDisplay && song
+        ? await upsertSongAndVideo({
+            supabase: reader,
+            videoId,
+            mainArtist: artistDisplay,
+            songTitle: song,
+          })
+        : artist && song
+          ? await upsertSongAndVideo({
+              supabase: reader,
+              videoId,
+              mainArtist: artist,
+              songTitle: song,
+            })
+          : null;
+
+    const existingCount = await countActiveNextSongRecommendBySeedVideo(reader, videoId);
+    if (existingCount >= NEXT_SONG_RECOMMEND_MAX_STOCK) {
+      const rows = await getActiveNextSongRecommendBySeedVideo(reader, videoId, 3);
+      const dbPicks = rows
+        .sort((a, b) => a.order_index - b.order_index)
+        .map((r) => ({
+          recommendationId: r.id,
+          source: 'db' as const,
+          artist: r.recommended_artist,
+          title: r.recommended_title,
+          reason: r.reason,
+          youtubeSearchQuery: r.youtube_search_query,
+        }));
+      if (dbPicks.length > 0) {
+        return NextResponse.json({ enabled: true, picks: dbPicks }, { status: 200 });
+      }
+    }
+
+    let userTasteBlock: string | null = null;
+    try {
+      userTasteBlock = await fetchUserTasteContextForChat(supabase, uid!);
+    } catch {
+      userTasteBlock = null;
+    }
+
+    const generated = await generateNextSongRecommendPicks(currentSongLabel, {
+      userTasteBlock,
+      commentarySnippet: commentarySnippet || null,
+      usageMeta: { roomId: roomId || null, videoId },
+    });
+
+    if (!generated || generated.length === 0) {
+      return NextResponse.json({ enabled: false, reason: 'generate_failed' }, { status: 200 });
+    }
+    const rest = Math.max(0, NEXT_SONG_RECOMMEND_MAX_STOCK - existingCount);
+    const toSave = generated.slice(0, Math.min(3, rest));
+    const insertedRows =
+      toSave.length > 0
+        ? await insertNextSongRecommendRows(reader, {
+            seedSongId,
+            seedVideoId: videoId,
+            seedLabel: currentSongLabel,
+            picks: toSave,
+          })
+        : [];
+    const picks: import('@/lib/next-song-recommend-generate').NextSongPick[] =
+      insertedRows.length > 0
+        ? insertedRows
+            .sort((a, b) => a.order_index - b.order_index)
+            .map((r) => ({
+              recommendationId: r.id,
+              source: 'new',
+              artist: r.recommended_artist,
+              title: r.recommended_title,
+              reason: r.reason,
+              youtubeSearchQuery: r.youtube_search_query,
+            }))
+        : generated.slice(0, 3).map((p) => ({ ...p, source: 'new' as const }));
+
+    if (isNextSongRecommendDebugLogEnabled()) {
+      console.log(
+        JSON.stringify({
+          t: 'next_song_recommend_debug',
+          ts: new Date().toISOString(),
+          roomId: roomId || null,
+          videoId,
+          userId: uid,
+          currentSongLabel,
+          hasUserTasteBlock: Boolean(userTasteBlock && userTasteBlock.trim()),
+          hasCommentarySnippet: Boolean(commentarySnippet),
+          seedSongId: seedSongId ?? null,
+          existingCount,
+          insertedCount: insertedRows.length,
+          picks: picks.map((p) => ({
+            recommendationId: p.recommendationId ?? null,
+            source: p.source ?? 'new',
+            artist: p.artist,
+            title: p.title,
+            reason: p.reason,
+            youtubeSearchQuery: p.youtubeSearchQuery,
+            whyTags: p.whyTags ?? [],
+            eraFit: p.eraFit ?? 'unknown',
+            popularityFit: p.popularityFit ?? 'unknown',
+            selectionNote: p.selectionNote ?? '',
+          })),
+        }),
+      );
+    }
+
+    return NextResponse.json({ enabled: true, picks }, { status: 200 });
+  } catch (e) {
+    console.error('[api/ai/next-song-recommend]', e);
+    return NextResponse.json({ enabled: false, reason: 'server_error' }, { status: 200 });
+  }
+}
