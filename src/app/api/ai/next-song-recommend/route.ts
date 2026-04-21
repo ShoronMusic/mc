@@ -28,6 +28,13 @@ function isNextSongRecommendDebugLogEnabled(): boolean {
   return raw === '1' || raw === 'true';
 }
 
+function isWithinOneYear(iso: string | null | undefined): boolean {
+  if (!iso) return false;
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return false;
+  return Date.now() - t <= 365 * 24 * 60 * 60 * 1000;
+}
+
 export async function POST(request: Request): Promise<NextResponse<OkDisabled | OkEnabled>> {
   try {
     const body = await request.json().catch(() => ({}));
@@ -122,17 +129,25 @@ export async function POST(request: Request): Promise<NextResponse<OkDisabled | 
       userTasteBlock = null;
     }
 
+    const recentWithinOneYear = isWithinOneYear(snippet?.publishedAt ?? null);
     const generated = await generateNextSongRecommendPicks(currentSongLabel, {
       userTasteBlock,
       commentarySnippet: commentarySnippet || null,
+      seedPublishedAtIso: snippet?.publishedAt ?? null,
       usageMeta: { roomId: roomId || null, videoId },
     });
 
     if (!generated || generated.length === 0) {
       return NextResponse.json({ enabled: false, reason: 'generate_failed' }, { status: 200 });
     }
+    const seedLikelyMinorByModel = generated.some((p) => p.popularityFit === 'niche_match');
+    const maxPicksByRule = recentWithinOneYear || seedLikelyMinorByModel ? 1 : 3;
+    const generatedCapped = generated.slice(0, maxPicksByRule);
+    if (generatedCapped.length === 0) {
+      return NextResponse.json({ enabled: false, reason: 'generate_failed' }, { status: 200 });
+    }
     const rest = Math.max(0, NEXT_SONG_RECOMMEND_MAX_STOCK - existingCount);
-    const toSave = generated.slice(0, Math.min(3, rest));
+    const toSave = generatedCapped.slice(0, Math.min(maxPicksByRule, rest));
     const insertedRows =
       toSave.length > 0
         ? await insertNextSongRecommendRows(reader, {
@@ -154,7 +169,7 @@ export async function POST(request: Request): Promise<NextResponse<OkDisabled | 
               reason: r.reason,
               youtubeSearchQuery: r.youtube_search_query,
             }))
-        : generated.slice(0, 3).map((p) => ({ ...p, source: 'new' as const }));
+        : generatedCapped.map((p) => ({ ...p, source: 'new' as const }));
 
     if (isNextSongRecommendDebugLogEnabled()) {
       console.log(
@@ -170,6 +185,9 @@ export async function POST(request: Request): Promise<NextResponse<OkDisabled | 
           seedSongId: seedSongId ?? null,
           existingCount,
           insertedCount: insertedRows.length,
+          recentWithinOneYear,
+          seedLikelyMinorByModel,
+          maxPicksByRule,
           picks: picks.map((p) => ({
             recommendationId: p.recommendationId ?? null,
             source: p.source ?? 'new',
