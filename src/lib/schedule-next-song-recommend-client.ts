@@ -19,7 +19,8 @@ function formatPickMessage(pick: NextSongPick, index: number, total: number): st
     index === 0
       ? `【次に聴くなら（試験）】 ${sourceLabel}${index + 1}/${total} ${pick.artist}「${pick.title}」`
       : `${sourceLabel}${index + 1}/${total} ${pick.artist}「${pick.title}」`;
-  const sub = [pick.reason, pick.youtubeSearchQuery ? `検索: ${pick.youtubeSearchQuery}` : '']
+  const normalizedQuery = `${pick.artist} - ${pick.title} (official video)`;
+  const sub = [pick.reason, normalizedQuery ? `検索: ${normalizedQuery}` : '']
     .filter(Boolean)
     .join(' ');
   return sub ? `${head}\n　${sub}` : head;

@@ -9,6 +9,8 @@ export const OWNER_FORCE_EXIT_EVENT = 'owner:forceExit';
 export const OWNER_SET_PARTICIPANT_SELECTION_EVENT = 'owner:setParticipantSelection';
 export const OWNER_AI_FREE_SPEECH_STOP_EVENT = 'owner:aiFreeSpeechStop';
 export const OWNER_STATE_EVENT = 'owner:state';
+export const OWNER_SONG_QUIZ_EVENT = 'owner:songQuiz';
+export const OWNER_NEXT_SONG_RECOMMEND_EVENT = 'owner:nextSongRecommend';
 
 export interface OwnerForceExitPayload {
   targetClientId: string;
@@ -23,6 +25,14 @@ export interface OwnerSetParticipantSelectionPayload {
 }
 
 export interface OwnerAiFreeSpeechStopPayload {
+  enabled: boolean;
+}
+
+export interface OwnerSongQuizPayload {
+  enabled: boolean;
+}
+
+export interface OwnerNextSongRecommendPayload {
   enabled: boolean;
 }
 

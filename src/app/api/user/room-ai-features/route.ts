@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import {
   DEFAULT_USER_ROOM_AI_COMMENTARY_ENABLED,
+  DEFAULT_USER_ROOM_AI_NEXT_SONG_RECOMMEND_ENABLED,
   DEFAULT_USER_ROOM_AI_SONG_QUIZ_ENABLED,
   parseUserRoomAiFeaturesPutBody,
 } from '@/lib/user-room-ai-features';
@@ -14,7 +15,7 @@ function isMissingTableError(message: string): boolean {
 
 /**
  * GET: 自分の部屋向け AI 設定（行なしはデフォルト ON）
- * PUT: { commentaryEnabled, songQuizEnabled } で upsert
+ * PUT: { commentaryEnabled, songQuizEnabled, nextSongRecommendEnabled } で upsert
  */
 export async function GET() {
   try {
@@ -32,7 +33,7 @@ export async function GET() {
 
     const { data, error } = await supabase
       .from('user_room_ai_features')
-      .select('ai_commentary_enabled, ai_song_quiz_enabled')
+      .select('ai_commentary_enabled, ai_song_quiz_enabled, ai_next_song_recommend_enabled')
       .eq('user_id', user.id)
       .maybeSingle();
 
@@ -56,8 +57,12 @@ export async function GET() {
         : Boolean(data.ai_commentary_enabled);
     const songQuizEnabled =
       data == null ? DEFAULT_USER_ROOM_AI_SONG_QUIZ_ENABLED : Boolean(data.ai_song_quiz_enabled);
+    const nextSongRecommendEnabled =
+      data == null
+        ? DEFAULT_USER_ROOM_AI_NEXT_SONG_RECOMMEND_ENABLED
+        : Boolean((data as { ai_next_song_recommend_enabled?: unknown }).ai_next_song_recommend_enabled);
 
-    return NextResponse.json({ commentaryEnabled, songQuizEnabled });
+    return NextResponse.json({ commentaryEnabled, songQuizEnabled, nextSongRecommendEnabled });
   } catch (e) {
     console.error('[api/user/room-ai-features GET]', e);
     return NextResponse.json({ error: 'Server error' }, { status: 500 });
@@ -90,6 +95,7 @@ export async function PUT(request: Request) {
         user_id: user.id,
         ai_commentary_enabled: v.commentaryEnabled,
         ai_song_quiz_enabled: v.songQuizEnabled,
+        ai_next_song_recommend_enabled: v.nextSongRecommendEnabled,
         updated_at: new Date().toISOString(),
       },
       { onConflict: 'user_id' },
@@ -113,6 +119,7 @@ export async function PUT(request: Request) {
       ok: true,
       commentaryEnabled: v.commentaryEnabled,
       songQuizEnabled: v.songQuizEnabled,
+      nextSongRecommendEnabled: v.nextSongRecommendEnabled,
     });
   } catch (e) {
     console.error('[api/user/room-ai-features PUT]', e);

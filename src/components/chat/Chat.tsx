@@ -863,6 +863,8 @@ export default function Chat({
               const isSelectionAnnounce = selectorName != null;
               const isNextPromptMessage =
                 m.messageType === 'ai' && m.body.includes('再生が終了したら次の選曲をどうぞ');
+              const isNextSongRecommendMessage =
+                m.messageType === 'ai' && m.aiSource === 'next_song_recommend';
               const isYellowEmphasisAi = m.messageType === 'ai' && m.aiBodyEmphasis === 'yellow';
               const messageColor =
                 m.messageType === 'user' && m.clientId
@@ -886,7 +888,9 @@ export default function Chat({
                 key={m.id}
                 className={`rounded-lg px-3 py-2 text-sm ${
                   m.messageType === 'ai'
-                    ? 'border border-gray-600 bg-gray-700/80'
+                    ? isNextSongRecommendMessage
+                      ? 'border border-violet-700/70 bg-gray-950'
+                      : 'border border-gray-600 bg-gray-700/80'
                     : m.messageType === 'system'
                       ? 'border border-amber-700/40 bg-amber-900/10 text-amber-200/90'
                       : 'bg-gray-800/80'

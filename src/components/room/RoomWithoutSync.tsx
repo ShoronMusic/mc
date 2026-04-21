@@ -268,6 +268,7 @@ export default function RoomWithoutSync({
   const nextSongRecommendTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const userRoomAiCommentaryEnabledRef = useRef(true);
   const userRoomAiSongQuizEnabledRef = useRef(true);
+  const userRoomAiRecommendEnabledRef = useRef(true);
   type SongQuizRoundMetaLocal = { correctIndex: number; choices: string[]; videoId: string };
   type SongQuizAnswerRow = { clientId: string; displayName: string; pickedIndex: number };
   const songQuizLocalRevealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -281,6 +282,7 @@ export default function RoomWithoutSync({
     if (isGuest) {
       userRoomAiCommentaryEnabledRef.current = true;
       userRoomAiSongQuizEnabledRef.current = true;
+      userRoomAiRecommendEnabledRef.current = true;
       return;
     }
     let cancelled = false;
@@ -289,21 +291,25 @@ export default function RoomWithoutSync({
         const d = (await r.json().catch(() => null)) as {
           commentaryEnabled?: unknown;
           songQuizEnabled?: unknown;
+          nextSongRecommendEnabled?: unknown;
           error?: unknown;
         } | null;
         if (cancelled) return;
         if (!r.ok || !d || typeof d !== 'object' || typeof d.error === 'string') {
           userRoomAiCommentaryEnabledRef.current = true;
           userRoomAiSongQuizEnabledRef.current = true;
+          userRoomAiRecommendEnabledRef.current = true;
           return;
         }
         userRoomAiCommentaryEnabledRef.current = d.commentaryEnabled !== false;
         userRoomAiSongQuizEnabledRef.current = d.songQuizEnabled !== false;
+        userRoomAiRecommendEnabledRef.current = d.nextSongRecommendEnabled !== false;
       })
       .catch(() => {
         if (!cancelled) {
           userRoomAiCommentaryEnabledRef.current = true;
           userRoomAiSongQuizEnabledRef.current = true;
+          userRoomAiRecommendEnabledRef.current = true;
         }
       });
     return () => {
@@ -864,20 +870,22 @@ export default function RoomWithoutSync({
                 }, 3500);
               }
               tidbitPreferMainArtistLeftRef.current = 2;
-              scheduleNextSongRecommendAfterCommentary({
-                videoId: vid,
-                roomId,
-                songQuizDelayMs: 3500,
-                isGuest,
-                videoIdRef,
-                registerTimer: (t) => {
-                  if (nextSongRecommendTimeoutRef.current) {
-                    clearTimeout(nextSongRecommendTimeoutRef.current);
-                  }
-                  nextSongRecommendTimeoutRef.current = t;
-                },
-                addAiMessage,
-              });
+              if (userRoomAiRecommendEnabledRef.current) {
+                scheduleNextSongRecommendAfterCommentary({
+                  videoId: vid,
+                  roomId,
+                  songQuizDelayMs: 3500,
+                  isGuest,
+                  videoIdRef,
+                  registerTimer: (t) => {
+                    if (nextSongRecommendTimeoutRef.current) {
+                      clearTimeout(nextSongRecommendTimeoutRef.current);
+                    }
+                    nextSongRecommendTimeoutRef.current = t;
+                  },
+                  addAiMessage,
+                });
+              }
               return;
             }
             commentPackVideoIdRef.current = null;
@@ -951,20 +959,22 @@ export default function RoomWithoutSync({
               }, 4000);
             }
             tidbitPreferMainArtistLeftRef.current = 2;
-            scheduleNextSongRecommendAfterCommentary({
-              videoId: vid,
-              roomId,
-              songQuizDelayMs: 4000,
-              isGuest,
-              videoIdRef,
-              registerTimer: (t) => {
-                if (nextSongRecommendTimeoutRef.current) {
-                  clearTimeout(nextSongRecommendTimeoutRef.current);
-                }
-                nextSongRecommendTimeoutRef.current = t;
-              },
-              addAiMessage,
-            });
+            if (userRoomAiRecommendEnabledRef.current) {
+              scheduleNextSongRecommendAfterCommentary({
+                videoId: vid,
+                roomId,
+                songQuizDelayMs: 4000,
+                isGuest,
+                videoIdRef,
+                registerTimer: (t) => {
+                  if (nextSongRecommendTimeoutRef.current) {
+                    clearTimeout(nextSongRecommendTimeoutRef.current);
+                  }
+                  nextSongRecommendTimeoutRef.current = t;
+                },
+                addAiMessage,
+              });
+            }
           } else addSystemMessage(SYSTEM_MESSAGE_COMMENTARY_FETCH_FAILED);
         })
         .catch(() => {

@@ -524,6 +524,12 @@ interface MyPageProps {
   /** オーナー時のみ。AI 自由発言が停止中か */
   aiFreeSpeechStopped?: boolean;
   onAiFreeSpeechStopToggle?: () => void;
+  /** オーナー時のみ。曲クイズの全体ON/OFF */
+  ownerSongQuizEnabled?: boolean;
+  onOwnerSongQuizToggle?: () => void;
+  /** オーナー時のみ。おすすめ曲の全体ON/OFF */
+  ownerNextSongRecommendEnabled?: boolean;
+  onOwnerNextSongRecommendToggle?: () => void;
   /** オーナー時のみ。[基本, ヒット/受賞, 歌詞, サウンド, アーティスト情報] */
   commentPackSlots?: CommentPackSlotSelection;
   onCommentPackSlotsChange?: (slots: CommentPackSlotSelection) => void;
@@ -613,6 +619,10 @@ export default function MyPage({
   onSongLimit5MinToggle,
   aiFreeSpeechStopped = true,
   onAiFreeSpeechStopToggle,
+  ownerSongQuizEnabled = true,
+  onOwnerSongQuizToggle,
+  ownerNextSongRecommendEnabled = true,
+  onOwnerNextSongRecommendToggle,
   commentPackSlots = DEFAULT_COMMENT_PACK_SLOTS,
   onCommentPackSlotsChange,
   jpAiUnlockEnabled = false,
@@ -687,6 +697,8 @@ export default function MyPage({
     Boolean(
       onTransferOwner ||
         onAiFreeSpeechStopToggle ||
+        onOwnerSongQuizToggle ||
+        onOwnerNextSongRecommendToggle ||
         onCommentPackSlotsChange ||
         onJpAiUnlockToggle ||
         onForceExit ||
@@ -757,6 +769,7 @@ export default function MyPage({
   const [publicProfileMessage, setPublicProfileMessage] = useState<string | null>(null);
   const [roomAiCommentaryEnabled, setRoomAiCommentaryEnabled] = useState(true);
   const [roomAiSongQuizEnabled, setRoomAiSongQuizEnabled] = useState(true);
+  const [roomAiNextSongRecommendEnabled, setRoomAiNextSongRecommendEnabled] = useState(true);
   const [roomAiFeaturesLoading, setRoomAiFeaturesLoading] = useState(false);
   const [roomAiFeaturesSaving, setRoomAiFeaturesSaving] = useState(false);
   const [roomAiFeaturesMessage, setRoomAiFeaturesMessage] = useState<string | null>(null);
@@ -877,6 +890,7 @@ export default function MyPage({
     if (isGuest || !user?.id) {
       setRoomAiCommentaryEnabled(true);
       setRoomAiSongQuizEnabled(true);
+      setRoomAiNextSongRecommendEnabled(true);
       setRoomAiFeaturesLoading(false);
       setRoomAiFeaturesMessage(null);
       return;
@@ -889,12 +903,14 @@ export default function MyPage({
         const data = (await r.json().catch(() => null)) as {
           commentaryEnabled?: unknown;
           songQuizEnabled?: unknown;
+          nextSongRecommendEnabled?: unknown;
           error?: string;
         } | null;
         if (cancelled) return;
         if (!r.ok || !data || typeof data.error === 'string') {
           setRoomAiCommentaryEnabled(true);
           setRoomAiSongQuizEnabled(true);
+          setRoomAiNextSongRecommendEnabled(true);
           if (typeof data?.error === 'string' && data.error.includes('user_room_ai_features')) {
             setRoomAiFeaturesMessage(data.error);
           }
@@ -902,11 +918,13 @@ export default function MyPage({
         }
         setRoomAiCommentaryEnabled(data.commentaryEnabled !== false);
         setRoomAiSongQuizEnabled(data.songQuizEnabled !== false);
+        setRoomAiNextSongRecommendEnabled(data.nextSongRecommendEnabled !== false);
       })
       .catch(() => {
         if (!cancelled) {
           setRoomAiCommentaryEnabled(true);
           setRoomAiSongQuizEnabled(true);
+          setRoomAiNextSongRecommendEnabled(true);
         }
       })
       .finally(() => {
@@ -918,7 +936,11 @@ export default function MyPage({
   }, [isGuest, user?.id]);
 
   const saveRoomAiFeatures = useCallback(
-    async (next: { commentaryEnabled: boolean; songQuizEnabled: boolean }) => {
+    async (next: {
+      commentaryEnabled: boolean;
+      songQuizEnabled: boolean;
+      nextSongRecommendEnabled: boolean;
+    }) => {
       if (isGuest || !user?.id) return;
       setRoomAiFeaturesSaving(true);
       setRoomAiFeaturesMessage(null);
@@ -936,6 +958,7 @@ export default function MyPage({
         }
         setRoomAiCommentaryEnabled(next.commentaryEnabled);
         setRoomAiSongQuizEnabled(next.songQuizEnabled);
+        setRoomAiNextSongRecommendEnabled(next.nextSongRecommendEnabled);
         setRoomAiFeaturesMessage('保存しました。');
       } catch {
         setRoomAiFeaturesMessage('保存に失敗しました。');
@@ -2079,6 +2102,60 @@ export default function MyPage({
             </div>
           )}
 
+          {onOwnerSongQuizToggle && (
+            <div className="rounded border border-amber-700/50 bg-amber-900/20 p-3">
+              <h4 className="mb-2 text-xs font-medium text-gray-300">曲クイズ（オーナー設定）</h4>
+              <p className="mb-2 text-xs text-gray-400">
+                部屋全体の曲クイズON/OFFです。オーナーがOFFの場合、ユーザー側がONでもクイズは出ません。
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={ownerSongQuizEnabled ? undefined : onOwnerSongQuizToggle}
+                  className={`rounded px-3 py-1.5 text-sm ${ownerSongQuizEnabled ? 'bg-amber-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                >
+                  ON
+                </button>
+                <button
+                  type="button"
+                  onClick={!ownerSongQuizEnabled ? undefined : onOwnerSongQuizToggle}
+                  className={`rounded px-3 py-1.5 text-sm ${!ownerSongQuizEnabled ? 'bg-gray-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                >
+                  OFF
+                </button>
+              </div>
+            </div>
+          )}
+
+          {onOwnerNextSongRecommendToggle && (
+            <div className="rounded border border-amber-700/50 bg-amber-900/20 p-3">
+              <h4 className="mb-2 text-xs font-medium text-gray-300">おすすめ曲（オーナー設定）</h4>
+              <p className="mb-2 text-xs text-gray-400">
+                部屋全体のおすすめ曲ON/OFFです。オーナーがOFFの場合、ユーザー側がONでもおすすめは出ません。
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={
+                    ownerNextSongRecommendEnabled ? undefined : onOwnerNextSongRecommendToggle
+                  }
+                  className={`rounded px-3 py-1.5 text-sm ${ownerNextSongRecommendEnabled ? 'bg-amber-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                >
+                  ON
+                </button>
+                <button
+                  type="button"
+                  onClick={
+                    !ownerNextSongRecommendEnabled ? undefined : onOwnerNextSongRecommendToggle
+                  }
+                  className={`rounded px-3 py-1.5 text-sm ${!ownerNextSongRecommendEnabled ? 'bg-gray-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                >
+                  OFF
+                </button>
+              </div>
+            </div>
+          )}
+
           {onCommentPackSlotsChange && (
             <div className="rounded border border-amber-700/50 bg-amber-900/20 p-3">
               <h4 className="mb-2 text-xs font-medium text-gray-300">曲紹介コメント</h4>
@@ -2441,10 +2518,10 @@ export default function MyPage({
         {/* 部屋の AI 曲解説・曲クイズ（登録ユーザーのみ） */}
         {!isGuest ? (
           <div className="rounded border border-gray-700 bg-gray-800/50 p-3">
-            <label className="block text-xs text-gray-500">部屋の AI 曲解説・曲クイズ</label>
+            <label className="block text-xs text-gray-500">部屋の AI 機能（曲解説・曲クイズ・おすすめ曲）</label>
             <p className="mt-1 text-xs text-gray-400">
               同期チャットの部屋で選曲したあと、このアカウントのブラウザから AI 曲解説（豆知識）や三択クイズの生成 API
-              を呼ぶかを切り替えられます。オフにした端末では該当リクエストを送りません。ゲストは常にオン扱いです。
+              やおすすめ曲の生成 API を呼ぶかを切り替えられます。オフにした端末では該当リクエストを送りません。ゲストは常にオン扱いです。
             </p>
             {roomAiFeaturesLoading ? (
               <p className="mt-2 text-sm text-gray-500">読み込み中…</p>
@@ -2459,6 +2536,7 @@ export default function MyPage({
                       void saveRoomAiFeatures({
                         commentaryEnabled: true,
                         songQuizEnabled: roomAiSongQuizEnabled,
+                        nextSongRecommendEnabled: roomAiNextSongRecommendEnabled,
                       })
                     }
                     className={`rounded px-3 py-1.5 text-sm ${
@@ -2474,6 +2552,7 @@ export default function MyPage({
                       void saveRoomAiFeatures({
                         commentaryEnabled: false,
                         songQuizEnabled: roomAiSongQuizEnabled,
+                        nextSongRecommendEnabled: roomAiNextSongRecommendEnabled,
                       })
                     }
                     className={`rounded px-3 py-1.5 text-sm ${
@@ -2492,6 +2571,7 @@ export default function MyPage({
                       void saveRoomAiFeatures({
                         commentaryEnabled: roomAiCommentaryEnabled,
                         songQuizEnabled: true,
+                        nextSongRecommendEnabled: roomAiNextSongRecommendEnabled,
                       })
                     }
                     className={`rounded px-3 py-1.5 text-sm ${
@@ -2507,10 +2587,50 @@ export default function MyPage({
                       void saveRoomAiFeatures({
                         commentaryEnabled: roomAiCommentaryEnabled,
                         songQuizEnabled: false,
+                        nextSongRecommendEnabled: roomAiNextSongRecommendEnabled,
                       })
                     }
                     className={`rounded px-3 py-1.5 text-sm ${
                       !roomAiSongQuizEnabled ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    } disabled:opacity-50`}
+                  >
+                    オフ
+                  </button>
+                </div>
+                <p className="mt-4 text-sm text-gray-300">AIおすすめ曲</p>
+                <div className="mt-1 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={roomAiFeaturesSaving}
+                    onClick={() =>
+                      void saveRoomAiFeatures({
+                        commentaryEnabled: roomAiCommentaryEnabled,
+                        songQuizEnabled: roomAiSongQuizEnabled,
+                        nextSongRecommendEnabled: true,
+                      })
+                    }
+                    className={`rounded px-3 py-1.5 text-sm ${
+                      roomAiNextSongRecommendEnabled
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    } disabled:opacity-50`}
+                  >
+                    オン
+                  </button>
+                  <button
+                    type="button"
+                    disabled={roomAiFeaturesSaving}
+                    onClick={() =>
+                      void saveRoomAiFeatures({
+                        commentaryEnabled: roomAiCommentaryEnabled,
+                        songQuizEnabled: roomAiSongQuizEnabled,
+                        nextSongRecommendEnabled: false,
+                      })
+                    }
+                    className={`rounded px-3 py-1.5 text-sm ${
+                      !roomAiNextSongRecommendEnabled
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
                     } disabled:opacity-50`}
                   >
                     オフ
