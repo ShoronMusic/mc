@@ -137,6 +137,28 @@ function hasSupergroupContext(text: string): boolean {
   return /スーパーグループ|結成|メンバー|元メンバー|参加/.test(t);
 }
 
+function isLikelyLiveVersionLabel(title: string): boolean {
+  const t = (title ?? '').trim();
+  if (!t) return false;
+  return /\b(live|unplugged|acoustic\s+live|tiny\s+desk|first\s+take|a\s+colors\s+show|mtv\s+unplugged)\b|ライブ|生演奏|公開収録|弾き語り|ライヴ/i.test(
+    t,
+  );
+}
+
+function isLikelyCoverVersionLabel(title: string): boolean {
+  const t = (title ?? '').trim();
+  if (!t) return false;
+  return /\b(cover|covered\s+by|tribute|トリビュート|カバー|セルフカバー|reimagined|reinterpretation)\b/i.test(
+    t,
+  );
+}
+
+function isLikelyRemixVersionLabel(title: string): boolean {
+  const t = (title ?? '').trim();
+  if (!t) return false;
+  return /\b(remix|mix|edit|version|bootleg)\b|リミックス|別ミックス/i.test(t);
+}
+
 /** [DB] 返却時のみ。固定本文の前に会話つなぎを付ける（失敗時は元の本文）。 */
 async function prependLibrarySessionBridge(
   baseComment: string,
@@ -323,6 +345,7 @@ export async function POST(request: Request) {
       channelTitle: snippet?.channelTitle ?? null,
       videoTitle: rawYouTubeTitleForPrompt,
       channelAuthorName: authorName ?? null,
+      viewCount: snippet?.viewCount ?? null,
     });
 
     const isNewRelease = isPublishedWithinLastDays(snippet?.publishedAt, NEW_RELEASE_DAYS);
@@ -542,6 +565,12 @@ export async function POST(request: Request) {
     const artistLabel = artistLabelPre;
     const songLabel = songLabelForAiPrompt;
     const rawYouTubeTitle = rawYouTubeTitleForPrompt;
+    const isLikelyLiveVersion =
+      isLikelyLiveVersionLabel(rawYouTubeTitle) || isLikelyLiveVersionLabel(songLabel);
+    const isLikelyCoverVersion =
+      isLikelyCoverVersionLabel(rawYouTubeTitle) || isLikelyCoverVersionLabel(songLabel);
+    const isLikelyRemixVersion =
+      isLikelyRemixVersionLabel(rawYouTubeTitle) || isLikelyRemixVersionLabel(songLabel);
 
     const colorsOfficialLock = colorsStudiosTrustsOembedArtistFirst(authorName, title)
       ? `・COLORS（A COLORS SHOW）公式配信: 「${artistLabel}」＝アーティスト、「${songLabel}」＝曲名で確定。逆の対応・別読み・言い逃れは禁止。\n`
@@ -724,7 +753,7 @@ ${basePromptTail}`;
       }
     }
 
-    // 2. 自由コメント4本（基本情報のあと。1本目＝栄誉・チャート／スーパーグループ時はメンバー紹介、2＝歌詞、3＝サウンド、4＝アーティスト情報）
+    // 2. 自由コメント4本（基本情報のあと。1本目＝栄誉・チャート／LIVE版ではライブ文脈、スーパーグループ時はメンバー紹介、2＝歌詞、3＝サウンド、4＝アーティスト情報）
     const topics = isSupergroupArtist
       ? ([
           'スーパーグループの**主要メンバー紹介**（**氏名**を通称またはフルネームで**複数**必ず出し、それぞれに**世に知られる元所属バンド名・ソロ名・役割**を本文中で対応づける。結成経緯が分かれば1文に収めてよい。**チャート・売上・受賞・「大ヒット」「バズ」「反響」はこのスロットでも後続でも主題にしない**。不確実な人名・関係性は断定しない）',
@@ -733,7 +762,13 @@ ${basePromptTail}`;
           'アーティスト情報（当該曲リリース時点の文脈で、**メインアーティスト中心**に紹介。国籍・ソロ/バンド/グループ種別、当時のフェーズ（デビュー期/転換期/人気絶頂期/円熟期など）を優先。複数名義の場合は**最大3人まで具体名**、4人以上はメイン中心＋他メンバーは軽く触れる。コラボ曲なら、関係性・組み合わせの異色性・話題性・接点が分かる範囲で1文添える。断定困難な経歴は避ける）',
         ] as const)
       : ([
-          '商業的成功と社会的な話題性（このスロット専用。**必ず**次のいずれかを含めること：①主要チャートでの**定性的**な成功（西暦の年を明記。**1位・9位・33位など順位の数字は書かない**。例：1983年頃に全英シングルチャートで大きなヒット、翌年には米ビルボードでもチャート入り）②グラミー等の主要ノミネート・受賞（分かる場合のみ。**Rap/Sung Collaboration 等、共演枠の賞がある場合はその性質に触れてよい**）③複数国で広く再生・話題となったことなど、年とともに触れられる事実。④**タイトル等からリミックス版と分かる曲**では、オリジナルよりこのミックスの方が後からヒット・定着した、といった文脈を**定性・年**で触れてよい（断定できないときは弱い表現）。**禁止**：○位・最高○位・第○位・「〜週1位」など順位や週数の具体数字、作詞者の私人話、伝聞だけの表現、歌詞の読み下し。マイナー曲はライブ定番やカバーの多さにとどめる）',
+          isLikelyLiveVersion
+            ? 'ライブ版の文脈解説（このスロット専用。**優先**：①ライブ録音とスタジオ版の違い（会場・テイク差・テンポ/アレンジ・観客反応など）②企画趣旨（ツアー年、トリビュート/チャリティ/番組収録、A COLORS SHOW・THE FIRST TAKE など独自番組文脈）③当時のアーティストの状態（活動フェーズ・編成・体制変更・ゲスト参加）。**可能な範囲で西暦を入れる**。ライブ固有情報が弱い場合は、無理に捏造せずオリジナル曲に近い解説へ自然に寄せてよい。**禁止**：順位や週数の具体数字、チャート/受賞/売上/社会的反響を主題にすること、裏付けのない私人話・伝聞）'
+            : isLikelyRemixVersion
+              ? 'リミックス版の文脈解説（このスロット専用。**優先**：①原曲の概要は短く②リミックス版のサウンドの要点（テンポ、ビート、構成、クラブ/ダンス文脈など）③リミキサー/DJアーティストの紹介（名義・当時の立ち位置・共作文脈）④原曲との差分（歌い方の見え方、展開、空気感）を具体化。**可能な範囲で西暦を入れる**。リミックス版の方が圧倒的に定着・ヒットしたケースは、通常曲に近い扱いでリミックス版を主軸にし、原曲説明は短く添える。固有情報が弱い場合は捏造せず、リミックスの聴きどころ中心でよい。**禁止**：順位や週数の具体数字、チャート/受賞/売上/社会的反響を主題にすること、裏付けのない私人話・伝聞）'
+            : isLikelyCoverVersion
+              ? 'カバー版の文脈解説（このスロット専用。**優先**：①原曲の概要（原曲アーティスト・時代感・代表的な位置づけを短く）②カバーアーティストの紹介（当時の活動フェーズ・編成・ゲスト等）③原曲との差分（アレンジ・テンポ・キー感・歌い方/声質の違い）④企画趣旨（カバーアルバム、トリビュート企画、番組/ライブ企画等）。**可能な範囲で西暦を入れる**。ただし、カバー版の方が原曲より圧倒的に定着・ヒットしたと判断できる場合は、**通常曲に近い扱いでカバー版を主軸に紹介**し、原曲紹介は短く添える程度でよい。固有情報が弱い場合は、無理に捏造せず「カバー版としての聴きどころ」中心に述べてよい。**禁止**：順位や週数の具体数字、チャート/受賞/売上/社会的反響を主題にすること、裏付けのない私人話・伝聞。原曲の歌詞メッセージの詳細読解は優先しない）'
+            : '商業的成功と社会的な話題性（このスロット専用。**必ず**次のいずれかを含めること：①主要チャートでの**定性的**な成功（西暦の年を明記。**1位・9位・33位など順位の数字は書かない**。例：1983年頃に全英シングルチャートで大きなヒット、翌年には米ビルボードでもチャート入り）②グラミー等の主要ノミネート・受賞（分かる場合のみ。**Rap/Sung Collaboration 等、共演枠の賞がある場合はその性質に触れてよい**）③複数国で広く再生・話題となったことなど、年とともに触れられる事実。④**タイトル等からリミックス版と分かる曲**では、オリジナルよりこのミックスの方が後からヒット・定着した、といった文脈を**定性・年**で触れてよい（断定できないときは弱い表現）。**禁止**：○位・最高○位・第○位・「〜週1位」など順位や週数の具体数字、作詞者の私人話、伝聞だけの表現、歌詞の読み下し。マイナー曲はライブ定番やカバーの多さにとどめる）',
           '歌詞テーマやメッセージ（共演・フィーチャリングでは**客演側のパートが担う役割**（例：ラップ対メインヴォーカル）を必ず含め、双方の対比を1〜2文で。パートの長い列挙は禁止）',
           'サウンドの特徴（メロディ・リズム・アレンジの**うち1点**に絞って具体化。共演がある場合は**声質やパートの違いがサウンドに与える効果**を一言入れてよい。「耳に残るフック」など抽象語の積み重ねだけは禁止）',
           'アーティスト情報（当該曲リリース時点の文脈で、**メインアーティスト中心**に紹介。国籍・ソロ/バンド/グループ種別、当時のフェーズ（デビュー期/転換期/人気絶頂期/円熟期など）を優先。複数名義の場合は**最大3人まで具体名**、4人以上はメイン中心＋他メンバーは軽く触れる。コラボ曲なら、関係性・組み合わせの異色性・話題性・接点が分かる範囲で1文添える。断定困難な経歴は避ける）',
@@ -789,6 +824,31 @@ ${basePromptTail}`;
   - マイナー曲・インディーで明確な大ヒットでないと判断したら、チャート/グラミーに触れず「ライブ定番」「カバーが多い」などにとどめる
   - 制作期間の断定（「数日で」等）、録音工程の断定、TikTokバズや若者文化の誇張はしない
   - 「恋人からインスピレーションを得た」等の私人話・作詞秘話に逃げない（その内容は2本目以降でも推測口調は禁止）`;
+      const banBlockLiveFocus = `・この1本だけの必須・禁止:
+  - **必須**：ライブ版として、スタジオ版との差分（会場/テイク/アレンジ/観客反応のいずれか）を1点以上含める
+  - **推奨**：ツアー年・企画趣旨（トリビュート/チャリティ/番組収録、A COLORS SHOW・THE FIRST TAKE 等）に触れる
+  - **推奨**：当時のアーティスト状態（活動フェーズ、編成、ゲスト参加）を1文添える
+  - **許容**：ライブ固有情報が弱い場合は、捏造せずオリジナル寄りの解説に寄せる
+  - **禁止**：チャート順位・週数・受賞・売上・社会的反響を主題にすること
+  - **禁止**：裏付けのない私人話・伝聞、制作期間/録音工程の断定、誇張表現`;
+      const banBlockCoverFocus = `・この1本だけの必須・禁止:
+  - **必須**：原曲の概要（原曲アーティスト・時代感・位置づけ）を短く入れる
+  - **必須**：カバーアーティスト側の紹介（当時の活動フェーズ、編成、ゲスト等）を主役にする
+  - **推奨**：原曲との差分（アレンジ・テンポ・歌い方/声質）を1点以上具体化する
+  - **推奨**：企画趣旨（カバーアルバム、トリビュート、番組/ライブ企画等）に触れる
+  - **例外**：カバー版の方が圧倒的に定着・ヒットしたケースでは、通常曲に近い扱いでカバー版を主軸にしてよい（原曲説明は短く添える）
+  - **許容**：固有情報が弱い場合は捏造せず、カバー版としての聴きどころ中心にする
+  - **禁止**：チャート順位・週数・受賞・売上・社会的反響を主題にすること
+  - **禁止**：原曲の歌詞メッセージの細かな読解を主題にすること
+  - **禁止**：裏付けのない私人話・伝聞、制作期間/録音工程の断定、誇張表現`;
+      const banBlockRemixFocus = `・この1本だけの必須・禁止:
+  - **必須**：原曲の説明は短く、リミックス版の聴きどころ（ビート/展開/空気感）を主役にする
+  - **必須**：リミキサー/DJアーティストが分かる場合は必ず触れる
+  - **推奨**：原曲との差分（テンポ、構成、歌の見え方）を1点以上具体化する
+  - **例外**：リミックス版の方が圧倒的に定着・ヒットしたケースでは、通常曲に近い扱いでリミックス版を主軸にしてよい
+  - **許容**：固有情報が弱い場合は捏造せず、サウンド面の比較中心にする
+  - **禁止**：チャート順位・週数・受賞・売上・社会的反響を主題にすること
+  - **禁止**：裏付けのない私人話・伝聞、制作期間/録音工程の断定、誇張表現`;
 
       const banBlockArtistInfo = `・この1本だけの必須・禁止:
   - **必須**：当該曲のリリース時点に寄せて、アーティストの概要（国籍、ソロ/バンド/グループ種別、当時の活動フェーズ）を含める
@@ -803,7 +863,10 @@ ${basePromptTail}`;
         extraRoleLeadingLines: string,
       ): string => {
         const topic = topics[i];
-        const isHonorsTopic = i === 0 && !isSupergroupArtist;
+        const isHonorsTopic = i === 0 && !isSupergroupArtist && !isLikelyLiveVersion;
+        const isRemixFocusTopic = i === 0 && !isSupergroupArtist && isLikelyRemixVersion;
+        const isCoverFocusTopic = i === 0 && !isSupergroupArtist && isLikelyCoverVersion;
+        const isLiveFocusTopic = i === 0 && !isSupergroupArtist && isLikelyLiveVersion;
         const isSupergroupMemberTopic = i === 0 && isSupergroupArtist;
         const isArtistInfoTopic = i === 3;
         return `以下の曲について、すでに「基本情報」と他の自由コメントが存在します。
@@ -827,7 +890,7 @@ ${
             : ''
         }
 
-${isHonorsTopic ? banBlockHonors : isSupergroupMemberTopic ? banBlockSupergroupMemberIntro : isArtistInfoTopic ? banBlockArtistInfo : isSupergroupArtist ? banBlockStandardSupergroup : banBlockStandard}
+${isRemixFocusTopic ? banBlockRemixFocus : isCoverFocusTopic ? banBlockCoverFocus : isLiveFocusTopic ? banBlockLiveFocus : isHonorsTopic ? banBlockHonors : isSupergroupMemberTopic ? banBlockSupergroupMemberIntro : isArtistInfoTopic ? banBlockArtistInfo : isSupergroupArtist ? banBlockStandardSupergroup : banBlockStandard}
 
 出力ルール:
 ・日本語、です・ます調。
@@ -882,7 +945,10 @@ ${isHonorsTopic ? banBlockHonors : isSupergroupMemberTopic ? banBlockSupergroupM
         freeComments.map((s) => (typeof s === 'string' ? s.trim() : '')).filter((s) => s.length > 0);
 
       for (const i of filteredFreeIndices) {
-        const isHonorsTopic = i === 0 && !isSupergroupArtist;
+        const isHonorsTopic = i === 0 && !isSupergroupArtist && !isLikelyLiveVersion;
+        const isRemixFocusTopic = i === 0 && !isSupergroupArtist && isLikelyRemixVersion;
+        const isCoverFocusTopic = i === 0 && !isSupergroupArtist && isLikelyCoverVersion;
+        const isLiveFocusTopic = i === 0 && !isSupergroupArtist && isLikelyLiveVersion;
         const isSupergroupMemberTopic = i === 0 && isSupergroupArtist;
         const isArtistInfoTopic = i === 3;
         const parallelTxt = (draftTexts[i] ?? '').trim();
@@ -935,6 +1001,15 @@ ${isHonorsTopic ? banBlockHonors : isSupergroupMemberTopic ? banBlockSupergroupM
               prompt = isHonorsTopic
                 ? prompt +
                   '\n（追加指示）チャートは**順位の数字を出さず**（9位・33位・1位など禁止）、西暦＋国またはチャート種＋大ヒット・チャート入りなど定性的に。グラミーは正式名が確かなときだけ。英国と米国の両方に触れる場合も数字順位は使わない。'
+                : isLiveFocusTopic
+                  ? prompt +
+                    '\n（追加指示）ライブ版として、スタジオ版との差分（会場/テイク/アレンジ/観客反応）を1点以上入れ、可能なら企画趣旨（ツアー年、番組収録、トリビュート/チャリティ、COLORS/THE FIRST TAKE等）と当時の編成・ゲストに触れてください。チャート/受賞/反響を主題にしないでください。'
+                : isRemixFocusTopic
+                  ? prompt +
+                    '\n（追加指示）リミックス版として、原曲説明は短くし、リミックス版の聴きどころ（ビート/展開/空気感）を主役にしてください。リミキサー/DJ名義が分かる場合は必ず触れ、原曲との差分（テンポ/構成/歌の見え方）を1点以上入れてください。'
+                : isCoverFocusTopic
+                  ? prompt +
+                    '\n（追加指示）カバー版として、原曲の概要を短く示したうえで、カバーアーティスト側の紹介を主役にしてください。原曲との差分（アレンジ/テンポ/歌い方）を1点以上入れ、可能なら企画趣旨（カバーアルバム、トリビュート、番組企画等）にも触れてください。原曲の歌詞メッセージ読解は主題にしないでください。'
                 : isSupergroupMemberTopic
                   ? prompt +
                     '\n（追加指示）**主要メンバー氏名を複数**と元所属を本文の中心に置き、チャート・ヒット規模・反響・受賞には触れずに書き直してください。前の文と同じ内容・言い換えのみは避けてください。'
@@ -947,6 +1022,15 @@ ${isHonorsTopic ? banBlockHonors : isSupergroupMemberTopic ? banBlockSupergroupM
               prompt = isHonorsTopic
                 ? prompt +
                   '\n（3回目・最終）ビルボード・グラミー・順位・週数・「〜週連続」は書かないこと。リリース年以降に**広く聴かれ、当時のポップ・シーンで話題となった**など、穏やかな位置づけを1〜2文・60〜100字で。誇張・バズ表現は禁止。前に出た文の焼き直しは不可。'
+                : isLiveFocusTopic
+                  ? prompt +
+                    '\n（3回目・最終）ライブ版の解説だけに絞り、1〜2文・60〜110字。会場/テイク/アレンジ差を1点は入れる。分かる範囲で企画趣旨や当時の編成・ゲストを添えてよい。固有情報が弱ければ無理に捏造せずオリジナル寄りの説明で可。'
+                : isRemixFocusTopic
+                  ? prompt +
+                    '\n（3回目・最終）リミックス版として1〜2文・60〜120字。原曲説明は短く、リミックス版の聴きどころを主役にする。リミキサー/DJ名義が分かれば必ず触れ、原曲との差分を1点入れる。情報不足時は捏造せず比較中心で可。'
+                : isCoverFocusTopic
+                  ? prompt +
+                    '\n（3回目・最終）カバー版として、1〜2文・60〜120字。原曲概要を短く入れつつ、カバー側の紹介を主役にし、アレンジ/歌い方の差分を1点以上入れる。企画趣旨が分かれば添える。情報不足時は捏造せず、カバーの聴きどころ中心で可。'
                 : isSupergroupMemberTopic
                   ? prompt +
                     '\n（3回目・最終）**メンバー氏名＋元所属**だけに絞り、60〜120字。チャート・反響・受賞は禁止。前の文の焼き直しは不可。'

@@ -138,6 +138,7 @@ export default function RoomWithoutSync({
   const [myPageOpen, setMyPageOpen] = useState(false);
   const [guestRegisterModalOpen, setGuestRegisterModalOpen] = useState(false);
   const [siteFeedbackOpen, setSiteFeedbackOpen] = useState(false);
+  const [inviteModalOpen, setInviteModalOpen] = useState(false);
   const [leaveFeedbackPending, setLeaveFeedbackPending] = useState(false);
   const [playbackHistoryModalOpen, setPlaybackHistoryModalOpen] = useState(false);
   const [chatSummaryModalOpen, setChatSummaryModalOpen] = useState(false);
@@ -166,6 +167,26 @@ export default function RoomWithoutSync({
     setLeaveFeedbackPending(false);
     setSiteFeedbackOpen(true);
   }, []);
+  const handleInviteFriends = useCallback(() => {
+    setInviteModalOpen(true);
+  }, []);
+  const inviteRoomUrl =
+    typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}` : '';
+  const inviteDateTime =
+    typeof window !== 'undefined'
+      ? new Date().toLocaleString('ja-JP', {
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+        })
+      : '';
+  const inviteSubject = '洋楽AIチャットにご招待';
+  const inviteBody = `洋楽AIチャットにご招待します\nこの部屋でチャットしています（${inviteDateTime}）\n${inviteRoomUrl}`;
+  const inviteGmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&su=${encodeURIComponent(inviteSubject)}&body=${encodeURIComponent(inviteBody)}`;
+  const inviteOutlookUrl = `https://outlook.live.com/mail/0/deeplink/compose?subject=${encodeURIComponent(inviteSubject)}&body=${encodeURIComponent(inviteBody)}`;
+  const inviteLineUrl = `https://social-plugins.line.me/lineit/share?url=${encodeURIComponent(inviteRoomUrl)}`;
   useEffect(() => {
     setRoomDisplayTitleCurrent(roomDisplayTitle);
   }, [roomDisplayTitle]);
@@ -829,11 +850,13 @@ export default function RoomWithoutSync({
                 canRejectTidbit,
                 pack.music8ModeratorHints,
               );
-              addAiMessage(packPrefix + modIntro + pack.baseComment, { videoId: vid });
+              addAiMessage(`【AI解説01】 ${packPrefix + modIntro + pack.baseComment}`, { videoId: vid });
               touchActivity();
               const commentaryCtx =
                 typeof pack.baseComment === 'string' ? pack.baseComment.trim() : '';
-              if (commentaryCtx.length >= 60 && userRoomAiSongQuizEnabledRef.current) {
+              const shouldGateRecommendByQuiz =
+                commentaryCtx.length >= 60 && userRoomAiSongQuizEnabledRef.current;
+              if (shouldGateRecommendByQuiz) {
                 if (songQuizFetchTimeoutRef.current) clearTimeout(songQuizFetchTimeoutRef.current);
                 songQuizFetchTimeoutRef.current = setTimeout(() => {
                   songQuizFetchTimeoutRef.current = null;
@@ -856,7 +879,7 @@ export default function RoomWithoutSync({
                         ...prev,
                         {
                           id,
-                          body: '三択クイズ（曲解説の内容のみを根拠に自動生成）',
+                          body: '【AIクイズ】 三択クイズ（曲解説の内容のみを根拠に自動生成）',
                           displayName: 'クイズ',
                           messageType: 'system',
                           createdAt: new Date().toISOString(),
@@ -866,11 +889,28 @@ export default function RoomWithoutSync({
                         },
                       ]);
                       scheduleLocalSongQuizReveal(id, q, vid);
+                    })
+                    .finally(() => {
+                      if (!userRoomAiRecommendEnabledRef.current) return;
+                      scheduleNextSongRecommendAfterCommentary({
+                        videoId: vid,
+                        roomId,
+                        songQuizDelayMs: 0,
+                        isGuest,
+                        videoIdRef,
+                        registerTimer: (t) => {
+                          if (nextSongRecommendTimeoutRef.current) {
+                            clearTimeout(nextSongRecommendTimeoutRef.current);
+                          }
+                          nextSongRecommendTimeoutRef.current = t;
+                        },
+                        addAiMessage,
+                      });
                     });
                 }, 3500);
               }
               tidbitPreferMainArtistLeftRef.current = 2;
-              if (userRoomAiRecommendEnabledRef.current) {
+              if (userRoomAiRecommendEnabledRef.current && !shouldGateRecommendByQuiz) {
                 scheduleNextSongRecommendAfterCommentary({
                   videoId: vid,
                   roomId,
@@ -919,10 +959,12 @@ export default function RoomWithoutSync({
           }
           if (data?.text) {
             const prefix = data.source === 'library' ? '[DB] ' : '[NEW] ';
-            addAiMessage(prefix + data.text, { videoId: vid });
+            addAiMessage(`【AI解説01】 ${prefix + data.text}`, { videoId: vid });
             touchActivity();
             const commentarySingle = `${prefix}${data.text}`.trim();
-            if (commentarySingle.length >= 60 && userRoomAiSongQuizEnabledRef.current) {
+            const shouldGateRecommendByQuiz =
+              commentarySingle.length >= 60 && userRoomAiSongQuizEnabledRef.current;
+            if (shouldGateRecommendByQuiz) {
               if (songQuizFetchTimeoutRef.current) clearTimeout(songQuizFetchTimeoutRef.current);
               songQuizFetchTimeoutRef.current = setTimeout(() => {
                 songQuizFetchTimeoutRef.current = null;
@@ -945,7 +987,7 @@ export default function RoomWithoutSync({
                       ...prev,
                       {
                         id,
-                        body: '三択クイズ（曲解説の内容のみを根拠に自動生成）',
+                        body: '【AIクイズ】 三択クイズ（曲解説の内容のみを根拠に自動生成）',
                         displayName: 'クイズ',
                         messageType: 'system',
                         createdAt: new Date().toISOString(),
@@ -955,11 +997,28 @@ export default function RoomWithoutSync({
                       },
                     ]);
                     scheduleLocalSongQuizReveal(id, q, vid);
+                  })
+                  .finally(() => {
+                    if (!userRoomAiRecommendEnabledRef.current) return;
+                    scheduleNextSongRecommendAfterCommentary({
+                      videoId: vid,
+                      roomId,
+                      songQuizDelayMs: 0,
+                      isGuest,
+                      videoIdRef,
+                      registerTimer: (t) => {
+                        if (nextSongRecommendTimeoutRef.current) {
+                          clearTimeout(nextSongRecommendTimeoutRef.current);
+                        }
+                        nextSongRecommendTimeoutRef.current = t;
+                      },
+                      addAiMessage,
+                    });
                   });
               }, 4000);
             }
             tidbitPreferMainArtistLeftRef.current = 2;
-            if (userRoomAiRecommendEnabledRef.current) {
+            if (userRoomAiRecommendEnabledRef.current && !shouldGateRecommendByQuiz) {
               scheduleNextSongRecommendAfterCommentary({
                 videoId: vid,
                 roomId,
@@ -1279,7 +1338,8 @@ export default function RoomWithoutSync({
               return;
             }
             if (data?.text) {
-              addAiMessage(data.text);
+              const body = data.text.startsWith('【AI回答】') ? data.text : `【AI回答】 ${data.text}`;
+              addAiMessage(body, { aiSource: 'chat_reply' });
               touchActivity();
             } else if (data?.skipped === true) {
               // 雑談時はサーバー側で意図的に無応答（エラー表示しない）
@@ -1478,6 +1538,16 @@ export default function RoomWithoutSync({
             </button>
             <button
               type="button"
+              onClick={handleInviteFriends}
+              className="h-10 w-10 rounded border border-sky-700 bg-sky-900/35 px-0 py-0 text-[11px] font-medium leading-none text-sky-200 hover:bg-sky-800/55 sm:w-auto sm:px-3 sm:py-2 sm:text-sm"
+              title="この部屋の招待リンクを共有"
+              aria-label="友達を招待"
+            >
+              <span className="sm:hidden">招待</span>
+              <span className="hidden sm:inline">友達を招待</span>
+            </button>
+            <button
+              type="button"
               onClick={handleLeaveClick}
               className="h-10 w-10 rounded border border-gray-600 bg-gray-800 px-0 py-0 text-[11px] font-medium leading-none text-gray-200 hover:bg-gray-700 hover:text-white sm:w-auto sm:px-4 sm:py-2 sm:text-sm"
               aria-label="部屋を退室して最初の画面に戻る"
@@ -1513,6 +1583,38 @@ export default function RoomWithoutSync({
         roomId={roomId}
         displayName={displayNameProp}
       />
+
+      {inviteModalOpen && (
+        <div
+          className="fixed inset-0 z-[85] flex items-center justify-center bg-black/65 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="友達を招待"
+          onClick={() => setInviteModalOpen(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-lg border border-gray-600 bg-gray-900 p-4 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="mb-2 text-base font-semibold text-white">友達を招待</h2>
+            <p className="mb-3 text-xs text-gray-300">送信先を選んでください</p>
+            <div className="grid grid-cols-1 gap-2">
+              <a href={inviteGmailUrl} target="_blank" rel="noopener noreferrer" className="rounded border border-gray-500 bg-gray-800 px-3 py-2 text-sm text-gray-100 hover:bg-gray-700">Gmailで送る</a>
+              <a href={inviteOutlookUrl} target="_blank" rel="noopener noreferrer" className="rounded border border-gray-500 bg-gray-800 px-3 py-2 text-sm text-gray-100 hover:bg-gray-700">Outlookで送る</a>
+              <a href={inviteLineUrl} target="_blank" rel="noopener noreferrer" className="rounded border border-gray-500 bg-gray-800 px-3 py-2 text-sm text-gray-100 hover:bg-gray-700">LINEで送る</a>
+            </div>
+            <div className="mt-3 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setInviteModalOpen(false)}
+                className="rounded border border-gray-600 bg-gray-800 px-3 py-1.5 text-sm text-gray-200 hover:bg-gray-700"
+              >
+                閉じる
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <GuestRegisterPromptModal
         open={guestRegisterModalOpen}
@@ -1655,8 +1757,3 @@ export default function RoomWithoutSync({
           onClearLocalAiQuestionGuard={
             chatStyleAdminTools ? clearLocalAiQuestionGuardState : undefined
           }
-        />
-      </section>
-    </main>
-  );
-}

@@ -17,6 +17,11 @@ export interface NextSongRecommendRow {
   created_at: string;
 }
 
+export interface NextSongRecommendRecentRow {
+  recommended_artist: string;
+  recommended_title: string;
+}
+
 export async function countActiveNextSongRecommendBySeedVideo(
   supabase: SupabaseClient | null,
   seedVideoId: string,
@@ -57,6 +62,26 @@ export async function getActiveNextSongRecommendBySeedVideo(
     return [];
   }
   return Array.isArray(data) ? (data as NextSongRecommendRow[]) : [];
+}
+
+export async function getRecentActiveNextSongRecommendations(
+  supabase: SupabaseClient | null,
+  limit = 9,
+): Promise<NextSongRecommendRecentRow[]> {
+  if (!supabase) return [];
+  const capped = Math.max(1, Math.min(30, limit));
+  const { data, error } = await supabase
+    .from('next_song_recommendations')
+    .select('recommended_artist, recommended_title')
+    .eq('is_active', true)
+    .order('created_at', { ascending: false })
+    .limit(capped);
+  if (error) {
+    if (error.code === '42P01') return [];
+    console.error('[next-song-recommend-store] recent select', error.message);
+    return [];
+  }
+  return Array.isArray(data) ? (data as NextSongRecommendRecentRow[]) : [];
 }
 
 export async function insertNextSongRecommendRows(

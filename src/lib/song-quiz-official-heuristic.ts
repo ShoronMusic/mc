@@ -29,14 +29,32 @@ function parseSongQuizOfficialChannelIdsFromEnv(): Set<string> {
 }
 
 let cachedEnvChannelIds: Set<string> | null = null;
+let cachedMinViewsFallback: number | null = null;
 function envOfficialChannelIdSet(): Set<string> {
   if (!cachedEnvChannelIds) cachedEnvChannelIds = parseSongQuizOfficialChannelIdsFromEnv();
   return cachedEnvChannelIds;
 }
 
+function parseSongQuizMinViewsFallbackFromEnv(): number {
+  const raw = process.env.SONG_QUIZ_MIN_VIEWS_FALLBACK;
+  if (typeof raw !== 'string' || !raw.trim()) return 1_000_000;
+  const n = Number(raw.trim());
+  if (!Number.isFinite(n)) return 1_000_000;
+  const floored = Math.floor(n);
+  return floored >= 0 ? floored : 1_000_000;
+}
+
+function songQuizMinViewsFallback(): number {
+  if (cachedMinViewsFallback === null) {
+    cachedMinViewsFallback = parseSongQuizMinViewsFallbackFromEnv();
+  }
+  return cachedMinViewsFallback;
+}
+
 /** テスト用 */
 export function resetSongQuizOfficialChannelEnvCacheForTests(): void {
   cachedEnvChannelIds = null;
+  cachedMinViewsFallback = null;
 }
 
 /** タイトルに「(Official Music Video)」等の公式 MV／音源表記があるか（大文字小文字無視） */
@@ -99,6 +117,8 @@ export function evaluateSongQuizOfficialHeuristic(opts: {
   videoTitle: string | null | undefined;
   /** oEmbed の author_name（COLORS／Genius 判定でチャンネル名と併用） */
   channelAuthorName?: string | null | undefined;
+  /** videos.list statistics.viewCount */
+  viewCount?: number | null | undefined;
 }): SongQuizOfficialHeuristicResult {
   const ch = (opts.channelTitle ?? '').trim();
   const vt = (opts.videoTitle ?? '').trim();
@@ -161,6 +181,15 @@ export function evaluateSongQuizOfficialHeuristic(opts: {
     if (lead && lead.length >= 2) {
       return { tier: 'allow', signals: ['allow:official_style_title_lead_relax'] };
     }
+  }
+
+  const views = typeof opts.viewCount === 'number' && Number.isFinite(opts.viewCount) ? opts.viewCount : null;
+  const minViewsFallback = songQuizMinViewsFallback();
+  if (views !== null && views >= minViewsFallback) {
+    return {
+      tier: 'allow',
+      signals: [`allow:view_count_fallback>=${minViewsFallback}`],
+    };
   }
 
   return { tier: 'uncertain', signals: ['uncertain:no_strong_official_signal'] };

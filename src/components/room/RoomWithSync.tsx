@@ -366,6 +366,7 @@ export default function RoomWithSync({
   const headerRoomSub = (roomDisplayTitleCurrent || roomTitle || '').trim();
   const [termsModalOpen, setTermsModalOpen] = useState(false);
   const [siteFeedbackOpen, setSiteFeedbackOpen] = useState(false);
+  const [inviteModalOpen, setInviteModalOpen] = useState(false);
   const [feedbackExitAction, setFeedbackExitAction] = useState<'none' | 'leave' | 'logout'>('none');
   const [cancelReservationModalOpen, setCancelReservationModalOpen] = useState(false);
   const [joinLocked, setJoinLocked] = useState(false);
@@ -413,6 +414,26 @@ export default function RoomWithSync({
     setFeedbackExitAction('none');
     setSiteFeedbackOpen(true);
   }, []);
+  const handleInviteFriends = useCallback(() => {
+    setInviteModalOpen(true);
+  }, []);
+  const inviteRoomUrl =
+    typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}` : '';
+  const inviteDateTime =
+    typeof window !== 'undefined'
+      ? new Date().toLocaleString('ja-JP', {
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+        })
+      : '';
+  const inviteSubject = '洋楽AIチャットにご招待';
+  const inviteBody = `洋楽AIチャットにご招待します\nこの部屋でチャットしています（${inviteDateTime}）\n${inviteRoomUrl}`;
+  const inviteGmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&su=${encodeURIComponent(inviteSubject)}&body=${encodeURIComponent(inviteBody)}`;
+  const inviteOutlookUrl = `https://outlook.live.com/mail/0/deeplink/compose?subject=${encodeURIComponent(inviteSubject)}&body=${encodeURIComponent(inviteBody)}`;
+  const inviteLineUrl = `https://social-plugins.line.me/lineit/share?url=${encodeURIComponent(inviteRoomUrl)}`;
   useEffect(() => {
     setRoomDisplayTitleCurrent(roomDisplayTitle);
   }, [roomDisplayTitle]);
@@ -2664,7 +2685,7 @@ export default function RoomWithSync({
   const addSongQuizMessage = useCallback(
     (quiz: SongQuizPayload, videoIdForQuiz: string) => {
       const id = createMessageId();
-      const body = '三択クイズ（曲解説の内容のみを根拠に自動生成）';
+      const body = '【AIクイズ】 三択クイズ（曲解説の内容のみを根拠に自動生成）';
       const payload: ChatMessagePayload = {
         id,
         body,
@@ -3323,7 +3344,7 @@ export default function RoomWithSync({
               canRejectTidbit,
               pack.music8ModeratorHints,
             );
-            addAiMessage(packPrefixPhase + modIntroPhase + pack.baseComment.trim(), {
+            addAiMessage(`【AI解説01】 ${packPrefixPhase + modIntroPhase + pack.baseComment.trim()}`, {
               allowWhenAiStopped: true,
               tidbitId: tid0Phase,
               songId: pack.songId ?? null,
@@ -3347,13 +3368,13 @@ export default function RoomWithSync({
               suppressTidbitRef.current = equivalentBaseOnlySlots(commentPackSlotsRef.current);
               const baseOnlyCtx = pack.baseComment.trim();
               const delayBaseOnly = 3500;
-              // 曲解説・comment-pack は選曲したクライアントのみが fetch する。クイズも同じクライアントでスケジュールする
-              //（「最古入室者のみ」にすると、選曲者が最古でないときクイズが永遠に出ない）。
-              if (
+              const shouldGateRecommendByQuiz =
                 ownerSongQuizEnabledRef.current &&
                 userRoomAiSongQuizEnabledRef.current &&
-                baseOnlyCtx.length >= 60
-              ) {
+                baseOnlyCtx.length >= 60;
+              // 曲解説・comment-pack は選曲したクライアントのみが fetch する。クイズも同じクライアントでスケジュールする
+              //（「最古入室者のみ」にすると、選曲者が最古でないときクイズが永遠に出ない）。
+              if (shouldGateRecommendByQuiz) {
                 const timer = setTimeout(() => {
                   if (videoIdRef.current !== vid) return;
                   void fetch('/api/ai/song-quiz', {
@@ -3369,11 +3390,34 @@ export default function RoomWithSync({
                     .then((res) => {
                       if (videoIdRef.current !== vid || !res?.quiz) return;
                       addSongQuizMessage(res.quiz as SongQuizPayload, vid);
+                    })
+                    .finally(() => {
+                      if (
+                        ownerNextSongRecommendEnabledRef.current &&
+                        userRoomAiRecommendEnabledRef.current
+                      ) {
+                        scheduleNextSongRecommendAfterCommentary({
+                          videoId: vid,
+                          roomId,
+                          songQuizDelayMs: 0,
+                          isGuest,
+                          videoIdRef,
+                          registerTimer: (t) => {
+                            freeCommentTimeoutsRef.current.push(t);
+                          },
+                          addAiMessage,
+                          addAiMessageExtras: { allowWhenAiStopped: true },
+                        });
+                      }
                     });
                 }, delayBaseOnly);
                 freeCommentTimeoutsRef.current.push(timer);
               }
-              if (ownerNextSongRecommendEnabledRef.current && userRoomAiRecommendEnabledRef.current) {
+              if (
+                ownerNextSongRecommendEnabledRef.current &&
+                userRoomAiRecommendEnabledRef.current &&
+                !shouldGateRecommendByQuiz
+              ) {
                 scheduleNextSongRecommendAfterCommentary({
                   videoId: vid,
                   roomId,
@@ -3436,12 +3480,14 @@ export default function RoomWithSync({
                 }
                 scheduledForSlot[i] = true;
                 const delayMs = (shownIdx2 + 1) * COMMENT_PACK_FREE_STAGGER_MS;
+                const labelNoForThisMessage = shownIdx2 + 2;
                 shownIdx2 += 1;
                 const tidN = tidForSlot[i] ?? parseTidbitIdFromPack(idsPhase[i + 1]);
                 const prefixI = prefixForSlot[i];
                 const timer = setTimeout(() => {
                   if (videoIdRef.current !== vid) return;
-                  addAiMessage(prefixI + c, {
+                  const freeLabelNo = String(labelNoForThisMessage).padStart(2, '0');
+                  addAiMessage(`【AI解説${freeLabelNo}】 ${prefixI + c}`, {
                     allowWhenAiStopped: true,
                     tidbitId: tidN,
                     songId: baseSongId,
@@ -3523,11 +3569,11 @@ export default function RoomWithSync({
                       .join('\n\n---\n\n');
                     const delayMs =
                       freeIdxSorted.length * COMMENT_PACK_FREE_STAGGER_MS + 3500;
-                    if (
+                    const shouldGateRecommendByQuiz =
                       ownerSongQuizEnabledRef.current &&
                       userRoomAiSongQuizEnabledRef.current &&
-                      commentaryContext.length >= 60
-                    ) {
+                      commentaryContext.length >= 60;
+                    if (shouldGateRecommendByQuiz) {
                       const timer = setTimeout(() => {
                         if (videoIdRef.current !== vid) return;
                         void fetch('/api/ai/song-quiz', {
@@ -3543,11 +3589,34 @@ export default function RoomWithSync({
                           .then((res) => {
                             if (videoIdRef.current !== vid || !res?.quiz) return;
                             addSongQuizMessage(res.quiz as SongQuizPayload, vid);
+                          })
+                          .finally(() => {
+                            if (
+                              ownerNextSongRecommendEnabledRef.current &&
+                              userRoomAiRecommendEnabledRef.current
+                            ) {
+                              scheduleNextSongRecommendAfterCommentary({
+                                videoId: vid,
+                                roomId,
+                                songQuizDelayMs: 0,
+                                isGuest,
+                                videoIdRef,
+                                registerTimer: (t) => {
+                                  freeCommentTimeoutsRef.current.push(t);
+                                },
+                                addAiMessage,
+                                addAiMessageExtras: { allowWhenAiStopped: true },
+                              });
+                            }
                           });
                       }, delayMs);
                       freeCommentTimeoutsRef.current.push(timer);
                     }
-                    if (ownerNextSongRecommendEnabledRef.current && userRoomAiRecommendEnabledRef.current) {
+                    if (
+                      ownerNextSongRecommendEnabledRef.current &&
+                      userRoomAiRecommendEnabledRef.current &&
+                      !shouldGateRecommendByQuiz
+                    ) {
                       scheduleNextSongRecommendAfterCommentary({
                         videoId: vid,
                         roomId,
@@ -3588,7 +3657,7 @@ export default function RoomWithSync({
                 canRejectTidbit,
                 pack.music8ModeratorHints,
               );
-              addAiMessage(packPrefix + modIntro + baseStr, {
+              addAiMessage(`【AI解説01】 ${packPrefix + modIntro + baseStr}`, {
                 allowWhenAiStopped: true,
                 tidbitId: tid0,
                 songId: pack.songId ?? null,
@@ -3613,10 +3682,12 @@ export default function RoomWithSync({
               equivalentBaseOnlySlots(commentPackSlotsRef.current) || pendingFreeBodies.length > 0;
 
             let shownIdx = 0;
+            const freeLabelBaseOffset = hasBase ? 1 : 0;
             for (let i = 0; i < COMMENT_PACK_MAX_FREE_COMMENTS; i++) {
               const c = freeArr[i]?.trim() ?? '';
               if (!c) continue;
               const delayMs = (shownIdx + 1) * COMMENT_PACK_FREE_STAGGER_MS;
+              const labelNoForThisMessage = shownIdx + 1 + freeLabelBaseOffset;
               shownIdx += 1;
               const tidN =
                 parseTidbitIdFromPack(freeTidbitIdsRaw[i]) ??
@@ -3625,7 +3696,8 @@ export default function RoomWithSync({
                 if (videoIdRef.current !== vid) return;
                 /* 次曲案内後も同一 videoId なら出す。ここで nextPromptShown を見ると、
                    comment-pack が遅いとき曲終了→「次の曲」で自由4本が全スキップされる */
-                addAiMessage(packPrefix + c, {
+                const freeLabelNo = String(labelNoForThisMessage).padStart(2, '0');
+                addAiMessage(`【AI解説${freeLabelNo}】 ${packPrefix + c}`, {
                   allowWhenAiStopped: true,
                   tidbitId: tidN,
                   songId: pack.songId ?? null,
@@ -3641,11 +3713,11 @@ export default function RoomWithSync({
               .filter(Boolean)
               .join('\n\n---\n\n');
             const delayMsSingle = shownIdx * COMMENT_PACK_FREE_STAGGER_MS + 3500;
-            if (
+            const shouldGateRecommendByQuiz =
               ownerSongQuizEnabledRef.current &&
               userRoomAiSongQuizEnabledRef.current &&
-              commentaryContextSingle.length >= 60
-            ) {
+              commentaryContextSingle.length >= 60;
+            if (shouldGateRecommendByQuiz) {
               const timer = setTimeout(() => {
                 if (videoIdRef.current !== vid) return;
                 void fetch('/api/ai/song-quiz', {
@@ -3661,11 +3733,34 @@ export default function RoomWithSync({
                   .then((res) => {
                     if (videoIdRef.current !== vid || !res?.quiz) return;
                     addSongQuizMessage(res.quiz as SongQuizPayload, vid);
+                  })
+                  .finally(() => {
+                    if (
+                      ownerNextSongRecommendEnabledRef.current &&
+                      userRoomAiRecommendEnabledRef.current
+                    ) {
+                      scheduleNextSongRecommendAfterCommentary({
+                        videoId: vid,
+                        roomId,
+                        songQuizDelayMs: 0,
+                        isGuest,
+                        videoIdRef,
+                        registerTimer: (t) => {
+                          freeCommentTimeoutsRef.current.push(t);
+                        },
+                        addAiMessage,
+                        addAiMessageExtras: { allowWhenAiStopped: true },
+                      });
+                    }
                   });
               }, delayMsSingle);
               freeCommentTimeoutsRef.current.push(timer);
             }
-            if (ownerNextSongRecommendEnabledRef.current && userRoomAiRecommendEnabledRef.current) {
+            if (
+              ownerNextSongRecommendEnabledRef.current &&
+              userRoomAiRecommendEnabledRef.current &&
+              !shouldGateRecommendByQuiz
+            ) {
               scheduleNextSongRecommendAfterCommentary({
                 videoId: vid,
                 roomId,
@@ -3713,7 +3808,7 @@ export default function RoomWithSync({
                   const prefix = data.source === 'library' ? '[DB] ' : '[NEW] ';
                   const songRowId =
                     typeof data.songTidbitId === 'string' ? data.songTidbitId : undefined;
-                  addAiMessage(prefix + data.text, {
+                  addAiMessage(`【AI解説01】 ${prefix + data.text}`, {
                     allowWhenAiStopped: true,
                     ...(songRowId ? { tidbitId: songRowId } : {}),
                     songId: typeof data.songId === 'string' ? data.songId : null,
@@ -3723,11 +3818,11 @@ export default function RoomWithSync({
                   touchActivity();
                   const commentarySingle = `${prefix}${data.text}`.trim();
                   const delayCommentary = 4000;
-                  if (
+                  const shouldGateRecommendByQuiz =
                     ownerSongQuizEnabledRef.current &&
                     userRoomAiSongQuizEnabledRef.current &&
-                    commentarySingle.length >= 60
-                  ) {
+                    commentarySingle.length >= 60;
+                  if (shouldGateRecommendByQuiz) {
                     const timer = setTimeout(() => {
                       if (videoIdRef.current !== vid) return;
                       void fetch('/api/ai/song-quiz', {
@@ -3743,11 +3838,34 @@ export default function RoomWithSync({
                         .then((res) => {
                           if (videoIdRef.current !== vid || !res?.quiz) return;
                           addSongQuizMessage(res.quiz as SongQuizPayload, vid);
+                        })
+                        .finally(() => {
+                          if (
+                            ownerNextSongRecommendEnabledRef.current &&
+                            userRoomAiRecommendEnabledRef.current
+                          ) {
+                            scheduleNextSongRecommendAfterCommentary({
+                              videoId: vid,
+                              roomId,
+                              songQuizDelayMs: 0,
+                              isGuest,
+                              videoIdRef,
+                              registerTimer: (t) => {
+                                freeCommentTimeoutsRef.current.push(t);
+                              },
+                              addAiMessage,
+                              addAiMessageExtras: { allowWhenAiStopped: true },
+                            });
+                          }
                         });
                     }, delayCommentary);
                     freeCommentTimeoutsRef.current.push(timer);
                   }
-                  if (ownerNextSongRecommendEnabledRef.current && userRoomAiRecommendEnabledRef.current) {
+                  if (
+                    ownerNextSongRecommendEnabledRef.current &&
+                    userRoomAiRecommendEnabledRef.current &&
+                    !shouldGateRecommendByQuiz
+                  ) {
                     scheduleNextSongRecommendAfterCommentary({
                       videoId: vid,
                       roomId,
@@ -4397,7 +4515,8 @@ export default function RoomWithSync({
             }
             if (data?.text) {
               // @で明示的に呼び出した応答は、AI自由発言停止中でも返す
-              addAiMessage(data.text, { allowWhenAiStopped: true });
+              const body = data.text.startsWith('【AI回答】') ? data.text : `【AI回答】 ${data.text}`;
+              addAiMessage(body, { allowWhenAiStopped: true, aiSource: 'chat_reply' });
               touchActivity();
             } else if (data?.skipped === true) {
               // 雑談時はサーバー側で意図的に無応答（エラー表示しない）
@@ -4687,6 +4806,16 @@ export default function RoomWithSync({
                 </button>
                 <button
                   type="button"
+                  onClick={handleInviteFriends}
+                  className="h-10 w-10 rounded border border-sky-700 bg-sky-900/35 px-0 py-0 text-[11px] font-medium leading-none text-sky-200 hover:bg-sky-800/55 sm:w-auto sm:px-3 sm:py-2 sm:text-sm"
+                  title="この部屋の招待リンクを共有"
+                  aria-label="友達を招待"
+                >
+                  <span className="sm:hidden">招待</span>
+                  <span className="hidden sm:inline">友達を招待</span>
+                </button>
+                <button
+                  type="button"
                   onClick={handleLogoutClick}
                   className="inline-flex h-10 w-10 items-center justify-center rounded border border-amber-700 bg-amber-900/40 px-0 py-0 text-xs text-amber-200 hover:bg-amber-800/60 sm:w-auto sm:px-3 sm:py-2 sm:text-sm"
                   aria-label="ログアウトして最初の画面に戻る"
@@ -4698,6 +4827,18 @@ export default function RoomWithSync({
                   <span className="hidden sm:inline">ログアウト</span>
                 </button>
               </>
+            )}
+            {isGuest && (
+              <button
+                type="button"
+                onClick={handleInviteFriends}
+                className="h-10 w-10 rounded border border-sky-700 bg-sky-900/35 px-0 py-0 text-[11px] font-medium leading-none text-sky-200 hover:bg-sky-800/55 sm:w-auto sm:px-3 sm:py-2 sm:text-sm"
+                title="この部屋の招待リンクを共有"
+                aria-label="友達を招待"
+              >
+                <span className="sm:hidden">招待</span>
+                <span className="hidden sm:inline">友達を招待</span>
+              </button>
             )}
             {isGuest && (
               <button
@@ -4818,6 +4959,38 @@ export default function RoomWithSync({
         roomId={roomId}
         displayName={effectiveDisplayName}
       />
+
+      {inviteModalOpen && (
+        <div
+          className="fixed inset-0 z-[85] flex items-center justify-center bg-black/65 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="友達を招待"
+          onClick={() => setInviteModalOpen(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-lg border border-gray-600 bg-gray-900 p-4 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="mb-2 text-base font-semibold text-white">友達を招待</h2>
+            <p className="mb-3 text-xs text-gray-300">送信先を選んでください</p>
+            <div className="grid grid-cols-1 gap-2">
+              <a href={inviteGmailUrl} target="_blank" rel="noopener noreferrer" className="rounded border border-gray-500 bg-gray-800 px-3 py-2 text-sm text-gray-100 hover:bg-gray-700">Gmailで送る</a>
+              <a href={inviteOutlookUrl} target="_blank" rel="noopener noreferrer" className="rounded border border-gray-500 bg-gray-800 px-3 py-2 text-sm text-gray-100 hover:bg-gray-700">Outlookで送る</a>
+              <a href={inviteLineUrl} target="_blank" rel="noopener noreferrer" className="rounded border border-gray-500 bg-gray-800 px-3 py-2 text-sm text-gray-100 hover:bg-gray-700">LINEで送る</a>
+            </div>
+            <div className="mt-3 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setInviteModalOpen(false)}
+                className="rounded border border-gray-600 bg-gray-800 px-3 py-1.5 text-sm text-gray-200 hover:bg-gray-700"
+              >
+                閉じる
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <GuestRegisterPromptModal
         open={guestRegisterModalOpen}

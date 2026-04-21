@@ -67,6 +67,7 @@ export async function POST(request: Request) {
       channelTitle: snippet?.channelTitle ?? null,
       videoTitle: rawYouTubeTitle,
       channelAuthorName: authorName ?? null,
+      viewCount: snippet?.viewCount ?? null,
     });
 
     const isJpEconomy = await resolveJapaneseEconomyWithMusicBrainz({

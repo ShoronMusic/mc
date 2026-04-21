@@ -13,6 +13,7 @@ import { generateNextSongRecommendPicks } from '@/lib/next-song-recommend-genera
 import {
   countActiveNextSongRecommendBySeedVideo,
   getActiveNextSongRecommendBySeedVideo,
+  getRecentActiveNextSongRecommendations,
   insertNextSongRecommendRows,
   NEXT_SONG_RECOMMEND_MAX_STOCK,
 } from '@/lib/next-song-recommend-store';
@@ -33,6 +34,12 @@ function isWithinOneYear(iso: string | null | undefined): boolean {
   const t = Date.parse(iso);
   if (!Number.isFinite(t)) return false;
   return Date.now() - t <= 365 * 24 * 60 * 60 * 1000;
+}
+
+function normalizeSongKey(artist: string, title: string): string {
+  const a = artist.toLowerCase().replace(/\s+/g, ' ').trim();
+  const t = title.toLowerCase().replace(/\s+/g, ' ').trim();
+  return `${a}__${t}`;
 }
 
 export async function POST(request: Request): Promise<NextResponse<OkDisabled | OkEnabled>> {
@@ -105,9 +112,9 @@ export async function POST(request: Request): Promise<NextResponse<OkDisabled | 
           : null;
 
     const existingCount = await countActiveNextSongRecommendBySeedVideo(reader, videoId);
+    const existingBySeed = await getActiveNextSongRecommendBySeedVideo(reader, videoId, 9);
     if (existingCount >= NEXT_SONG_RECOMMEND_MAX_STOCK) {
-      const rows = await getActiveNextSongRecommendBySeedVideo(reader, videoId, 3);
-      const dbPicks = rows
+      const dbPicks = existingBySeed
         .sort((a, b) => a.order_index - b.order_index)
         .map((r) => ({
           recommendationId: r.id,
@@ -122,6 +129,18 @@ export async function POST(request: Request): Promise<NextResponse<OkDisabled | 
       }
     }
 
+    const recentGlobal = await getRecentActiveNextSongRecommendations(reader, 12);
+    const excludeKeySet = new Set<string>();
+    if (artistDisplay && song) excludeKeySet.add(normalizeSongKey(artistDisplay, song));
+    else if (artist && song) excludeKeySet.add(normalizeSongKey(artist, song));
+    existingBySeed.forEach((r) => excludeKeySet.add(normalizeSongKey(r.recommended_artist, r.recommended_title)));
+    recentGlobal.forEach((r) => excludeKeySet.add(normalizeSongKey(r.recommended_artist, r.recommended_title)));
+    const excludeSongLabels = [
+      ...(artistDisplay && song ? [`${artistDisplay} - ${song}`] : []),
+      ...existingBySeed.map((r) => `${r.recommended_artist} - ${r.recommended_title}`),
+      ...recentGlobal.map((r) => `${r.recommended_artist} - ${r.recommended_title}`),
+    ];
+
     let userTasteBlock: string | null = null;
     try {
       userTasteBlock = await fetchUserTasteContextForChat(supabase, uid!);
@@ -134,15 +153,22 @@ export async function POST(request: Request): Promise<NextResponse<OkDisabled | 
       userTasteBlock,
       commentarySnippet: commentarySnippet || null,
       seedPublishedAtIso: snippet?.publishedAt ?? null,
+      excludeSongLabels,
       usageMeta: { roomId: roomId || null, videoId },
     });
 
     if (!generated || generated.length === 0) {
       return NextResponse.json({ enabled: false, reason: 'generate_failed' }, { status: 200 });
     }
-    const seedLikelyMinorByModel = generated.some((p) => p.popularityFit === 'niche_match');
+    const generatedDeduped = generated.filter(
+      (p) => !excludeKeySet.has(normalizeSongKey(p.artist, p.title)),
+    );
+    if (generatedDeduped.length === 0) {
+      return NextResponse.json({ enabled: false, reason: 'all_filtered_as_duplicate' }, { status: 200 });
+    }
+    const seedLikelyMinorByModel = generatedDeduped.some((p) => p.popularityFit === 'niche_match');
     const maxPicksByRule = recentWithinOneYear || seedLikelyMinorByModel ? 1 : 3;
-    const generatedCapped = generated.slice(0, maxPicksByRule);
+    const generatedCapped = generatedDeduped.slice(0, maxPicksByRule);
     if (generatedCapped.length === 0) {
       return NextResponse.json({ enabled: false, reason: 'generate_failed' }, { status: 200 });
     }

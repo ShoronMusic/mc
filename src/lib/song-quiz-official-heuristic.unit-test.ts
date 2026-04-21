@@ -75,6 +75,26 @@ try {
   assert.equal(
     evaluateSongQuizOfficialHeuristic({
       channelId: null,
+      channelTitle: 'Indie Band Name',
+      videoTitle: 'Our new single',
+      viewCount: 1_250_000,
+    }).tier,
+    'allow',
+  );
+
+  assert.equal(
+    evaluateSongQuizOfficialHeuristic({
+      channelId: null,
+      channelTitle: 'Random Fan Covers',
+      videoTitle: 'Cover of Hit Song',
+      viewCount: 9_999_999,
+    }).tier,
+    'deny',
+  );
+
+  assert.equal(
+    evaluateSongQuizOfficialHeuristic({
+      channelId: null,
       channelTitle: 'The Codfather',
       videoTitle: 'Prince - Purple Rain (Official Video)',
       channelAuthorName: 'The Codfather',

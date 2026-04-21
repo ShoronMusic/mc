@@ -4,7 +4,7 @@
  * チャット表示エリア（メッセージ一覧・末尾へスクロール）
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -115,6 +115,50 @@ function getSelectorNameFromBody(body: string): string | null {
   return match ? match[1].trim() : null;
 }
 
+function extractUiLabelFromBody(body: string): { label: string | null; text: string } {
+  const m = body.match(/^【(AI解説\d{2}|AIクイズ|AIオススメ\d{2})】\s*/);
+  if (!m) return { label: null, text: body };
+  return { label: m[1] ?? null, text: body.slice(m[0].length) };
+}
+
+function uiLabelClassName(label: string | null): string {
+  if (!label) return 'border-gray-500/70 bg-gray-800/65 text-gray-200';
+  if (label.startsWith('AI解説')) return 'border-sky-500/70 bg-sky-900/35 text-sky-200';
+  if (label.startsWith('AIクイズ')) return 'border-emerald-500/70 bg-emerald-900/35 text-emerald-200';
+  if (label.startsWith('AIオススメ')) return 'border-violet-500/70 bg-violet-900/35 text-violet-200';
+  return 'border-gray-500/70 bg-gray-800/65 text-gray-200';
+}
+
+function stripUiLabelPrefix(body: string): string {
+  return extractUiLabelFromBody(body).text;
+}
+
+function renderSelectionAnnounceBodyWithMusicNote(body: string): ReactNode {
+  const lines = body.split('\n');
+  if (lines.length < 2) return body;
+  const head = lines[0] ?? '';
+  const artistLine = lines[1] ?? '';
+  const rest = lines.slice(2).join('\n');
+  return (
+    <>
+      <span className="animate-song-intro-fade-in">{head}</span>
+      {'\n'}
+      <span className="animate-song-intro-fade-in">
+        <span className="mr-1 inline-flex items-center rounded border border-orange-400/75 bg-orange-900/35 px-1.5 py-0.5 text-[10px] font-semibold text-orange-200">
+          ♪
+        </span>
+      </span>
+      <span className="animate-song-intro-fade-in animate-song-line-fade-delayed">{artistLine}</span>
+      {rest ? (
+        <>
+          {'\n'}
+          <span className="animate-song-intro-fade-in">{rest}</span>
+        </>
+      ) : null}
+    </>
+  );
+}
+
 const DEFAULT_MESSAGE_COLOR = '#e5e7eb';
 
 function isSongQuizFeedbackTarget(m: ChatMessageType): boolean {
@@ -122,9 +166,10 @@ function isSongQuizFeedbackTarget(m: ChatMessageType): boolean {
 }
 
 function isAiCommentaryFeedbackTarget(m: ChatMessageType): boolean {
+  const body = stripUiLabelPrefix(m.body);
   return (
     m.messageType === 'ai' &&
-    ((m.body.startsWith('[NEW]') || m.body.startsWith('[DB]')) || m.aiSource === 'next_song_recommend')
+    ((body.startsWith('[NEW]') || body.startsWith('[DB]')) || m.aiSource === 'next_song_recommend')
   );
 }
 
@@ -182,6 +227,34 @@ type PlainHighlightSeg = {
   end: number;
   nodes: ReactNode[];
 };
+
+function renderSearchBadgeInPlain(text: string, key: () => string): ReactNode[] {
+  if (!text) return [];
+  const parts = text.split('【キーワード】');
+  if (parts.length <= 1) return [text];
+  const out: ReactNode[] = [];
+  for (let i = 0; i < parts.length; i++) {
+    if (i > 0) {
+      out.push(
+        <span
+          key={key()}
+          className="mx-1 inline-flex items-center rounded border border-gray-500/70 bg-gray-800/70 px-1.5 py-0.5 text-[10px] font-semibold text-gray-200"
+        >
+          キーワード
+        </span>,
+      );
+    }
+    if (parts[i]) out.push(parts[i]);
+  }
+  return out;
+}
+
+function extractKeywordQuery(body: string): string | null {
+  const m = body.match(/【キーワード】\s*(.+)$/);
+  if (!m) return null;
+  const q = (m[1] ?? '').trim();
+  return q ? q : null;
+}
 
 function highlightPlainSegment(rest: string, key: () => string): ReactNode[] {
   if (!rest) return [];
@@ -253,15 +326,15 @@ function highlightPlainSegment(rest: string, key: () => string): ReactNode[] {
       prevEnd = s.end;
     }
   }
-  if (kept.length === 0) return [rest];
+  if (kept.length === 0) return renderSearchBadgeInPlain(rest, key);
   const out: ReactNode[] = [];
   let last = 0;
   for (const s of kept) {
-    if (s.start > last) out.push(rest.slice(last, s.start));
+    if (s.start > last) out.push(...renderSearchBadgeInPlain(rest.slice(last, s.start), key));
     out.push(...s.nodes);
     last = s.end;
   }
-  if (last < rest.length) out.push(rest.slice(last));
+  if (last < rest.length) out.push(...renderSearchBadgeInPlain(rest.slice(last), key));
   return out;
 }
 
@@ -308,6 +381,11 @@ function renderAiBodyWithArtistSongHighlight(
     ? extractTrailingAiYoutubeSearchLines(rest)
     : { mainRest: rest, tailLines: [] as string[] };
   const hasSearchTailRows = tailLines.length > 0;
+  const keywordMatch = mainRest.match(/^([\s\S]*?)(?:\s*)(?:【キーワード】|検索用[:：])\s*(.+)$/);
+  const mainRestWithoutKeyword = keywordMatch ? (keywordMatch[1] ?? '').trimEnd() : mainRest;
+  const keywordQuery = keywordMatch
+    ? (keywordMatch[2] ?? '').trim()
+    : extractKeywordQuery(body);
 
   let k = 0;
   const key = () => `${opts?.keyPrefix ?? 'ai'}-hl-${k++}`;
@@ -316,9 +394,9 @@ function renderAiBodyWithArtistSongHighlight(
   let last = 0;
   let m: RegExpExecArray | null;
   const primary = new RegExp(ARTIST_NO_TITLE_RE.source, ARTIST_NO_TITLE_RE.flags);
-  while ((m = primary.exec(mainRest)) !== null) {
+  while ((m = primary.exec(mainRestWithoutKeyword)) !== null) {
     if (m.index > last) {
-      out.push(...highlightPlainSegment(mainRest.slice(last, m.index), key));
+      out.push(...highlightPlainSegment(mainRestWithoutKeyword.slice(last, m.index), key));
     }
     const artist = m[1];
     const song = (m[3] ?? m[4] ?? '').trim();
@@ -333,8 +411,8 @@ function renderAiBodyWithArtistSongHighlight(
     last = m.index + m[0].length;
   }
 
-  if (last < mainRest.length) {
-    out.push(...highlightPlainSegment(mainRest.slice(last), key));
+  if (last < mainRestWithoutKeyword.length) {
+    out.push(...highlightPlainSegment(mainRestWithoutKeyword.slice(last), key));
   }
 
   if (!hasSearchTailRows) {
@@ -347,7 +425,23 @@ function renderAiBodyWithArtistSongHighlight(
         {music8Line ? (
           <span className={AI_MUSIC8_HIT_LINE_CLASS}>{music8Line}</span>
         ) : null}
-        {out.length > 0 ? out : mainRest}
+        {out.length > 0 ? out : mainRestWithoutKeyword}
+        {keywordQuery ? (
+          <span className="mt-1 block">
+            <span className="mr-1 inline-flex items-center rounded border border-gray-500/70 bg-gray-800/70 px-1.5 py-0.5 text-[10px] font-semibold text-gray-200">
+              キーワード
+            </span>
+            <span className="mr-2 align-middle">{keywordQuery}</span>
+            <a
+              href={`https://www.youtube.com/results?search_query=${encodeURIComponent(keywordQuery)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center rounded-md border border-slate-400/60 bg-slate-200/85 px-2 py-0.5 text-[10px] font-semibold text-slate-900 shadow-sm transition hover:-translate-y-[1px] hover:bg-slate-100 hover:shadow"
+            >
+              検索
+            </a>
+          </span>
+        ) : null}
       </>
     );
   }
@@ -358,7 +452,7 @@ function renderAiBodyWithArtistSongHighlight(
       {music8Line ? (
         <span className={AI_MUSIC8_HIT_LINE_CLASS}>{music8Line}</span>
       ) : null}
-      <span className="whitespace-pre-wrap">{out.length > 0 ? out : mainRest}</span>
+      <span className="whitespace-pre-wrap">{out.length > 0 ? out : mainRestWithoutKeyword}</span>
       {tailLines.map((line, idx) => {
         const q = parseAiYoutubeSearchQuery(line);
         return (
@@ -382,6 +476,22 @@ function renderAiBodyWithArtistSongHighlight(
           </span>
         );
       })}
+      {keywordQuery ? (
+        <span className="mt-1 block">
+          <span className="mr-1 inline-flex items-center rounded border border-gray-500/70 bg-gray-800/70 px-1.5 py-0.5 text-[10px] font-semibold text-gray-200">
+            キーワード
+          </span>
+          <span className="mr-2 align-middle">{keywordQuery}</span>
+          <a
+            href={`https://www.youtube.com/results?search_query=${encodeURIComponent(keywordQuery)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center rounded-md border border-slate-400/60 bg-slate-200/85 px-2 py-0.5 text-[10px] font-semibold text-slate-900 shadow-sm transition hover:-translate-y-[1px] hover:bg-slate-100 hover:shadow"
+          >
+            検索
+          </a>
+        </span>
+      ) : null}
     </>
   );
 }
@@ -413,6 +523,9 @@ export default function Chat({
       : '/guide/ai';
 
   const bottomRef = useRef<HTMLDivElement>(null);
+  const aiCommentaryObserverRef = useRef<IntersectionObserver | null>(null);
+  const aiCommentaryNodeRefs = useRef<Map<string, HTMLLIElement>>(new Map());
+  const [visibleAiCommentaryIds, setVisibleAiCommentaryIds] = useState<Record<string, true>>({});
   const [feedbackState, setFeedbackState] = useState<Record<string, 'up' | 'down'>>({});
   const [feedbackModal, setFeedbackModal] = useState<FeedbackModalState>({ open: false });
   const [objectionModal, setObjectionModal] = useState<ObjectionModalState>({ open: false });
@@ -433,6 +546,45 @@ export default function Chat({
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages.length]);
+
+  const registerAiCommentaryNode = useCallback((id: string, node: HTMLLIElement | null) => {
+    const map = aiCommentaryNodeRefs.current;
+    const prev = map.get(id);
+    if (prev && prev !== node && aiCommentaryObserverRef.current) {
+      aiCommentaryObserverRef.current.unobserve(prev);
+      map.delete(id);
+    }
+    if (!node) return;
+    map.set(id, node);
+    if (aiCommentaryObserverRef.current) {
+      aiCommentaryObserverRef.current.observe(node);
+    }
+  }, []);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (!entry.isIntersecting) return;
+          const id = (entry.target as HTMLElement).dataset.messageId;
+          if (!id) return;
+          setVisibleAiCommentaryIds((prev) => (prev[id] ? prev : { ...prev, [id]: true }));
+          observer.unobserve(entry.target);
+        });
+      },
+      {
+        root: null,
+        rootMargin: '0px 0px -8% 0px',
+        threshold: 0.2,
+      },
+    );
+    aiCommentaryObserverRef.current = observer;
+    aiCommentaryNodeRefs.current.forEach((node) => observer.observe(node));
+    return () => {
+      observer.disconnect();
+      aiCommentaryObserverRef.current = null;
+    };
+  }, []);
 
   function sendFeedback(message: ChatMessageType, isUpvote: boolean) {
     const fbPayload = commentFeedbackPayloadForMessage(message);
@@ -491,16 +643,19 @@ export default function Chat({
 
   function canSaveArtistTitleMeta(m: ChatMessageType): boolean {
     if (m.messageType !== 'ai' || !m.videoId?.trim()) return false;
-    if (m.body.includes('再生が終了したら次の曲をどうぞ')) return false;
+    const body = stripUiLabelPrefix(m.body);
+    if (body.includes('再生が終了したら次の曲をどうぞ')) return false;
     return (
-      getSelectorNameFromBody(m.body) != null ||
-      m.body.startsWith('[NEW]') ||
-      m.body.startsWith('[DB]')
+      getSelectorNameFromBody(body) != null ||
+      body.startsWith('[NEW]') ||
+      body.startsWith('[DB]')
     );
   }
 
   function artistTitleReportMessageKind(m: ChatMessageType): 'announce_song' | 'song_commentary' {
-    return getSelectorNameFromBody(m.body) != null ? 'announce_song' : 'song_commentary';
+    return getSelectorNameFromBody(stripUiLabelPrefix(m.body)) != null
+      ? 'announce_song'
+      : 'song_commentary';
   }
 
   async function submitArtistTitleReport(m: ChatMessageType) {
@@ -858,13 +1013,23 @@ export default function Chat({
         ) : (
           <ul className="flex flex-col gap-2">
             {messages.map((m) => {
+              const parsedUiLabel = extractUiLabelFromBody(m.body);
+              const renderedBodyText = parsedUiLabel.text;
+              const bodyTextForDisplay =
+                parsedUiLabel.label != null ? renderedBodyText.replace(/^\[DB\]\s*/, '') : renderedBodyText;
               const selectorName =
-                m.messageType === 'ai' ? getSelectorNameFromBody(m.body) : null;
+                m.messageType === 'ai' ? getSelectorNameFromBody(bodyTextForDisplay) : null;
               const isSelectionAnnounce = selectorName != null;
               const isNextPromptMessage =
-                m.messageType === 'ai' && m.body.includes('再生が終了したら次の選曲をどうぞ');
+                m.messageType === 'ai' && renderedBodyText.includes('再生が終了したら次の選曲をどうぞ');
               const isNextSongRecommendMessage =
                 m.messageType === 'ai' && m.aiSource === 'next_song_recommend';
+              const isAiCommentaryLabeled =
+                m.messageType === 'ai' &&
+                typeof parsedUiLabel.label === 'string' &&
+                parsedUiLabel.label.startsWith('AI解説');
+              const shouldAnimateAiCommentary =
+                isAiCommentaryLabeled && !visibleAiCommentaryIds[m.id];
               const isYellowEmphasisAi = m.messageType === 'ai' && m.aiBodyEmphasis === 'yellow';
               const messageColor =
                 m.messageType === 'user' && m.clientId
@@ -877,15 +1042,19 @@ export default function Chat({
               const feedback = feedbackState[m.id];
               const bodyContent: ReactNode =
                 m.messageType === 'ai'
-                  ? renderAiBodyWithArtistSongHighlight(m.body, {
-                      keyPrefix: m.id,
-                      onYoutubeSearch: onYoutubeSearchFromAi,
-                    })
-                  : m.body;
+                  ? isSelectionAnnounce
+                    ? renderSelectionAnnounceBodyWithMusicNote(bodyTextForDisplay)
+                    : renderAiBodyWithArtistSongHighlight(bodyTextForDisplay, {
+                        keyPrefix: m.id,
+                        onYoutubeSearch: onYoutubeSearchFromAi,
+                      })
+                  : bodyTextForDisplay;
 
               return (
               <li
                 key={m.id}
+                ref={isAiCommentaryLabeled ? (node) => registerAiCommentaryNode(m.id, node) : undefined}
+                data-message-id={isAiCommentaryLabeled ? m.id : undefined}
                 className={`rounded-lg px-3 py-2 text-sm ${
                   m.messageType === 'ai'
                     ? isNextSongRecommendMessage
@@ -894,6 +1063,13 @@ export default function Chat({
                     : m.messageType === 'system'
                       ? 'border border-amber-700/40 bg-amber-900/10 text-amber-200/90'
                       : 'bg-gray-800/80'
+                } ${
+                  shouldAnimateAiCommentary
+                    ? 'opacity-0'
+                    : isAiCommentaryLabeled
+                      ? 'animate-ai-commentary-fade-in'
+                      : ''
+                } ${isNextSongRecommendMessage ? 'animate-next-recommend-fade-in' : ''}
                 }`}
               >
                 {m.messageType === 'ai' ? (
@@ -902,7 +1078,7 @@ export default function Chat({
                       className={`min-w-0 flex-1 break-words whitespace-pre-wrap ${
                         isYellowEmphasisAi
                           ? 'font-semibold text-yellow-300'
-                          : `text-gray-200 ${isSelectionAnnounce || isNextPromptMessage ? 'font-bold' : ''}`
+                          : `${isSelectionAnnounce ? 'text-gray-300' : 'text-gray-200'} ${isSelectionAnnounce || isNextPromptMessage ? 'font-bold' : ''}`
                       }`}
                       style={
                         !isYellowEmphasisAi && isSelectionAnnounce && selectionAnnounceColor
@@ -910,7 +1086,16 @@ export default function Chat({
                           : undefined
                       }
                     >
-                      <span className="mr-2 font-medium text-gray-300">{m.displayName ?? 'ユーザー'}</span>
+                      {parsedUiLabel.label == null && !isSelectionAnnounce ? (
+                        <span className="mr-2 font-medium text-gray-300">{m.displayName ?? 'ユーザー'}</span>
+                      ) : null}
+                      {parsedUiLabel.label ? (
+                        <span
+                          className={`mr-2 inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-semibold ${uiLabelClassName(parsedUiLabel.label)}`}
+                        >
+                          {parsedUiLabel.label}
+                        </span>
+                      ) : null}
                       {bodyContent}
                       <span className="ml-1 inline text-[11px] text-gray-500 sm:hidden">
                         {formatTime(m.createdAt)}
@@ -947,6 +1132,13 @@ export default function Chat({
                             : undefined
                       }
                     >
+                      {parsedUiLabel.label ? (
+                        <span
+                          className={`mr-2 inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-semibold ${uiLabelClassName(parsedUiLabel.label)}`}
+                        >
+                          {parsedUiLabel.label}
+                        </span>
+                      ) : null}
                       {bodyContent}
                       <span className="ml-1 inline text-[11px] text-gray-500 sm:hidden">
                         {formatTime(m.createdAt)}
@@ -1111,7 +1303,7 @@ export default function Chat({
                   </a>
                 )}
                 {m.messageType === 'ai' &&
-                  ((m.body.startsWith('[NEW]') || m.body.startsWith('[DB]')) ||
+                  ((renderedBodyText.startsWith('[NEW]') || renderedBodyText.startsWith('[DB]')) ||
                     m.aiSource === 'next_song_recommend') && (
                   <div className="mt-1 flex flex-wrap items-center gap-1 text-xs">
                     <button
@@ -1223,7 +1415,7 @@ export default function Chat({
                 {m.messageType === 'ai' &&
                   canRejectTidbit &&
                   roomId?.trim() &&
-                  !(m.body.startsWith('[NEW]') || m.body.startsWith('[DB]')) && (
+                  !(renderedBodyText.startsWith('[NEW]') || renderedBodyText.startsWith('[DB]')) && (
                     <div className="mt-1 flex justify-end">
                       <button
                         type="button"

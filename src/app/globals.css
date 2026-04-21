@@ -51,3 +51,43 @@ body {
 .mc-scrollbar-stable::-webkit-scrollbar-track {
   background-color: rgba(0, 0, 0, 0.25);
 }
+
+/* AI解説ブロックの表示時フェードイン */
+@keyframes ai-commentary-fade-in {
+  0% {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-ai-commentary-fade-in {
+  animation: ai-commentary-fade-in 520ms ease-out both;
+}
+
+.animate-next-recommend-fade-in {
+  animation: ai-commentary-fade-in 980ms ease-out both;
+}
+
+@keyframes song-intro-fade-in {
+  0% {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-song-intro-fade-in {
+  display: inline-block;
+  animation: song-intro-fade-in 980ms ease-out both;
+}
+
+.animate-song-line-fade-delayed {
+  animation-delay: 420ms;
+}

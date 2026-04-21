@@ -41,6 +41,7 @@ export async function POST(request: Request) {
       channelTitle: snippet?.channelTitle ?? null,
       videoTitle: rawTitle,
       channelAuthorName: authorName,
+      viewCount: snippet?.viewCount ?? null,
     });
 
     const sq = songQuizExtension.songQuiz;

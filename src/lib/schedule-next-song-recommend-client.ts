@@ -8,6 +8,8 @@ import type { NextSongPick } from '@/lib/next-song-recommend-generate';
 
 /** クイズ fetch 遅延より後ろにずらすオフセット（ミリ秒） */
 const AFTER_COMMENTARY_EXTRA_MS = 4500;
+/** おすすめ3件の表示を段階的に出す間隔（ミリ秒） */
+const NEXT_SONG_RECOMMEND_STAGGER_MS = 900;
 
 export function getNextSongRecommendScheduleDelayMs(songQuizDelayMs: number): number {
   return songQuizDelayMs + AFTER_COMMENTARY_EXTRA_MS;
@@ -15,12 +17,14 @@ export function getNextSongRecommendScheduleDelayMs(songQuizDelayMs: number): nu
 
 function formatPickMessage(pick: NextSongPick, index: number, total: number): string {
   const sourceLabel = pick.source === 'db' ? '[DB] ' : '[NEW] ';
+  const aiLabel = `【AIオススメ${String(index + 1).padStart(2, '0')}】`;
+  const numberedHead = `${sourceLabel}${index + 1}/${total} ♪ ${pick.artist}「${pick.title}」`;
   const head =
     index === 0
-      ? `【次に聴くなら（試験）】 ${sourceLabel}${index + 1}/${total} ${pick.artist}「${pick.title}」`
-      : `${sourceLabel}${index + 1}/${total} ${pick.artist}「${pick.title}」`;
+      ? `${aiLabel} 【次に聴くなら（試験）】 ${numberedHead}`
+      : `${aiLabel} ${numberedHead}`;
   const normalizedQuery = `${pick.artist} - ${pick.title} (official video)`;
-  const sub = [pick.reason, normalizedQuery ? `検索: ${normalizedQuery}` : '']
+  const sub = [pick.reason, normalizedQuery ? `【キーワード】 ${normalizedQuery}` : '']
     .filter(Boolean)
     .join(' ');
   return sub ? `${head}\n　${sub}` : head;
@@ -71,15 +75,24 @@ export function scheduleNextSongRecommendAfterCommentary(options: {
         );
         if (!ok) return;
         picks.forEach((pick, idx) => {
-          options.addAiMessage(formatPickMessage(pick, idx, picks.length), {
-            videoId: options.videoId,
-            aiSource: 'next_song_recommend',
-            recommendationId:
-              typeof pick.recommendationId === 'string' && pick.recommendationId.trim()
-                ? pick.recommendationId.trim()
-                : null,
-            ...(options.addAiMessageExtras ?? {}),
-          });
+          const emit = () => {
+            if (options.videoIdRef.current !== options.videoId) return;
+            options.addAiMessage(formatPickMessage(pick, idx, picks.length), {
+              videoId: options.videoId,
+              aiSource: 'next_song_recommend',
+              recommendationId:
+                typeof pick.recommendationId === 'string' && pick.recommendationId.trim()
+                  ? pick.recommendationId.trim()
+                  : null,
+              ...(options.addAiMessageExtras ?? {}),
+            });
+          };
+          if (idx === 0) {
+            emit();
+            return;
+          }
+          const staggerTimer = setTimeout(emit, idx * NEXT_SONG_RECOMMEND_STAGGER_MS);
+          options.registerTimer(staggerTimer);
         });
       });
   }, delayMs);

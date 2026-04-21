@@ -26,6 +26,7 @@ export function buildSongQuizApiExtension(args: {
   channelTitle: string | null | undefined;
   videoTitle: string | null | undefined;
   channelAuthorName?: string | null | undefined;
+  viewCount?: number | null | undefined;
 }): { songQuiz: SongQuizApiBlock } {
   if (!isSongQuizAfterCommentaryEnabled()) {
     return { songQuiz: { enabled: false } };
