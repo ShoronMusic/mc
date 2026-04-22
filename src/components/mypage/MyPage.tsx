@@ -31,6 +31,7 @@ import { USER_SONG_HISTORY_UPDATED_EVENT } from '@/lib/user-song-history-events'
 import { suggestMyListArtistTitleFromYoutubeStyle } from '@/lib/my-list-youtube-title-suggest';
 import { MUSICAI_EXTENSION_SET_CHAT_TEXT_EVENT } from '@/lib/musicai-extension-events';
 import MainArtistTabPanel from '@/components/room/MainArtistTabPanel';
+import ThemePlaylistMissionPanel from '@/components/mypage/ThemePlaylistMissionPanel';
 import { SONG_STYLE_OPTIONS } from '@/lib/song-styles';
 import { SONG_ERA_OPTIONS } from '@/lib/song-era-options';
 import { USER_AI_TASTE_SUMMARY_MAX_CHARS } from '@/lib/user-ai-taste-summary';
@@ -773,7 +774,9 @@ export default function MyPage({
   const [roomAiFeaturesLoading, setRoomAiFeaturesLoading] = useState(false);
   const [roomAiFeaturesSaving, setRoomAiFeaturesSaving] = useState(false);
   const [roomAiFeaturesMessage, setRoomAiFeaturesMessage] = useState<string | null>(null);
-  const [mainTab, setMainTab] = useState<'owner' | 'user' | 'music' | 'mylist'>('user');
+  const [mainTab, setMainTab] = useState<'owner' | 'user' | 'music' | 'mylist' | 'themeMission'>(
+    'user',
+  );
 
   const supabase = createClient();
   const router = useRouter();
@@ -905,6 +908,7 @@ export default function MyPage({
           songQuizEnabled?: unknown;
           nextSongRecommendEnabled?: unknown;
           error?: string;
+          persistHint?: string;
         } | null;
         if (cancelled) return;
         if (!r.ok || !data || typeof data.error === 'string') {
@@ -919,6 +923,9 @@ export default function MyPage({
         setRoomAiCommentaryEnabled(data.commentaryEnabled !== false);
         setRoomAiSongQuizEnabled(data.songQuizEnabled !== false);
         setRoomAiNextSongRecommendEnabled(data.nextSongRecommendEnabled !== false);
+        if (typeof data.persistHint === 'string' && data.persistHint.trim()) {
+          setRoomAiFeaturesMessage(data.persistHint.trim());
+        }
       })
       .catch(() => {
         if (!cancelled) {
@@ -1989,7 +1996,9 @@ export default function MyPage({
         </button>
       </div>
       <p className="mb-4 text-sm text-gray-500">登録情報の確認と変更ができます。</p>
-      <p className="mb-3 text-xs text-gray-500">オーナー向けの部屋運用・ユーザー向けの登録情報・曲の履歴・マイリストをタブで切り替えます。</p>
+      <p className="mb-3 text-xs text-gray-500">
+        オーナー向けの部屋運用・ユーザー向けの登録情報・曲の履歴・マイリスト・お題プレイリストをタブで切り替えます。
+      </p>
       <div className="mb-4 flex flex-wrap gap-2">
         {showOwnerTab ? (
           <button
@@ -2028,6 +2037,17 @@ export default function MyPage({
           }`}
         >
           マイリスト
+        </button>
+        <button
+          type="button"
+          onClick={() => setMainTab('themeMission')}
+          className={`rounded px-3 py-1.5 text-sm font-medium ${
+            mainTab === 'themeMission'
+              ? 'bg-gray-700 text-white'
+              : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'
+          }`}
+        >
+          お題プレイリスト
         </button>
       </div>
 
@@ -2844,8 +2864,8 @@ export default function MyPage({
           </>
         ) : null}
 
-        {/* 選曲リスト / お気に入り（タブ切り替え） */}
-        {mainTab === 'music' || mainTab === 'mylist' ? (
+        {/* 選曲リスト / お気に入り / お題プレイリスト（タブ切り替え） */}
+        {mainTab === 'music' || mainTab === 'mylist' || mainTab === 'themeMission' ? (
         <div className="mt-6 border-t border-gray-700 pt-4">
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
             <div className="flex flex-wrap gap-2">
@@ -2879,7 +2899,10 @@ export default function MyPage({
               type="button"
               onClick={historyTab === 'songs' ? exportSongHistoryAsText : exportFavoritesAsText}
               disabled={
-                mainTab === 'mylist' || historyTab === 'participation' || historyTab === 'mylist'
+                mainTab === 'themeMission' ||
+                mainTab === 'mylist' ||
+                historyTab === 'participation' ||
+                historyTab === 'mylist'
                   ? true
                   : historyTab === 'songs'
                   ? songHistoryLoading || songHistory.length === 0
@@ -2887,7 +2910,10 @@ export default function MyPage({
               }
               className="shrink-0 rounded border border-emerald-700/60 bg-emerald-900/30 px-3 py-1.5 text-sm font-medium text-emerald-200 hover:bg-emerald-900/50 disabled:cursor-not-allowed disabled:opacity-40"
               title={
-                mainTab === 'mylist' || historyTab === 'participation' || historyTab === 'mylist'
+                mainTab === 'themeMission' ||
+                mainTab === 'mylist' ||
+                historyTab === 'participation' ||
+                historyTab === 'mylist'
                   ? 'このタブのTEXT保存は後続対応です'
                   : historyTab === 'songs'
                   ? '貼った曲リストをUTF-8テキストで保存'
@@ -3267,6 +3293,12 @@ export default function MyPage({
                 </>
               )}
             </>
+          )}
+          {mainTab === 'themeMission' && (
+            <div className="mb-6">
+              <h3 className="mb-2 text-sm font-semibold text-gray-200">お題プレイリスト（β）</h3>
+              <ThemePlaylistMissionPanel isGuest={isGuest} />
+            </div>
           )}
           {mainTab === 'mylist' && (
             <>

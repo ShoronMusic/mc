@@ -33,6 +33,8 @@ import {
   isValidSongQuizTheme,
   SONG_QUIZ_THEME_UI_LABEL,
 } from '@/lib/song-quiz-types';
+import { THEME_PLAYLIST_SLOT_TARGET } from '@/lib/theme-playlist-definitions';
+import type { ThemePlaylistRoomSubmitBanner } from '@/hooks/useThemePlaylistRoomSubmitMission';
 
 /** 詳細フィードバック用モーダルの状態 */
 type FeedbackModalState =
@@ -98,6 +100,8 @@ interface ChatProps {
   onYoutubeSearchFromAi?: (query: string) => void;
   /** 曲解説後三択クイズの選択（同期部屋では Ably で共有） */
   onSongQuizPick?: (quizMessageId: string, videoId: string, pickedIndex: number) => void;
+  /** マイページで進行中のお題ミッションがあるとき、ヘッダー2段目に進捗を表示 */
+  themePlaylistActiveMission?: ThemePlaylistRoomSubmitBanner | null;
 }
 
 function formatTime(createdAt: string): string {
@@ -116,7 +120,7 @@ function getSelectorNameFromBody(body: string): string | null {
 }
 
 function extractUiLabelFromBody(body: string): { label: string | null; text: string } {
-  const m = body.match(/^【(AI解説\d{2}|AIクイズ|AIオススメ\d{2})】\s*/);
+  const m = body.match(/^【(AI解説\d{2}|AIクイズ|AIオススメ\d{2}|お題講評)】\s*/);
   if (!m) return { label: null, text: body };
   return { label: m[1] ?? null, text: body.slice(m[0].length) };
 }
@@ -126,6 +130,7 @@ function uiLabelClassName(label: string | null): string {
   if (label.startsWith('AI解説')) return 'border-sky-500/70 bg-sky-900/35 text-sky-200';
   if (label.startsWith('AIクイズ')) return 'border-emerald-500/70 bg-emerald-900/35 text-emerald-200';
   if (label.startsWith('AIオススメ')) return 'border-violet-500/70 bg-violet-900/35 text-violet-200';
+  if (label === 'お題講評') return 'border-amber-500/70 bg-amber-900/40 text-amber-100';
   return 'border-gray-500/70 bg-gray-800/65 text-gray-200';
 }
 
@@ -513,6 +518,7 @@ export default function Chat({
   styleAdminChatTools = false,
   onYoutubeSearchFromAi,
   onSongQuizPick,
+  themePlaylistActiveMission = null,
 }: ChatProps) {
   const pathname = usePathname();
   const pathSegs = pathname?.split('/').filter(Boolean) ?? [];
@@ -1005,6 +1011,27 @@ export default function Chat({
           </button>
         </div>
       </div>
+      {themePlaylistActiveMission ? (
+        <div
+          className="flex shrink-0 flex-wrap items-center gap-2 border-b border-amber-900/45 bg-amber-950/35 px-3 py-1.5"
+          role="status"
+          aria-label={`お題 ${themePlaylistActiveMission.themeLabel} 進行中`}
+        >
+          <span className="shrink-0 rounded border border-amber-600/65 bg-amber-900/45 px-1.5 py-0.5 text-[10px] font-semibold text-amber-100">
+            お題
+          </span>
+          <span className="min-w-0 flex-1 text-xs font-medium leading-snug text-amber-50">
+            <span className="break-words">{themePlaylistActiveMission.themeLabel}</span>
+            <span className="whitespace-nowrap text-amber-200/95">
+              {' '}
+              （{themePlaylistActiveMission.entryCount}/{THEME_PLAYLIST_SLOT_TARGET}）
+            </span>
+            <span className="ml-1.5 shrink-0 rounded border border-amber-700/50 bg-amber-900/30 px-1.5 py-0.5 text-[10px] font-semibold text-amber-100/95">
+              実施中
+            </span>
+          </span>
+        </div>
+      ) : null}
       <div className="flex-1 overflow-y-auto p-2">
         {messages.length === 0 ? (
           <p className="py-4 text-center text-sm text-gray-500">
@@ -1024,6 +1051,9 @@ export default function Chat({
                 m.messageType === 'ai' && renderedBodyText.includes('再生が終了したら次の選曲をどうぞ');
               const isNextSongRecommendMessage =
                 m.messageType === 'ai' && m.aiSource === 'next_song_recommend';
+              const isThemePlaylistRoomReview =
+                m.messageType === 'ai' &&
+                (parsedUiLabel.label === 'お題講評' || m.aiSource === 'theme_playlist_room');
               const isAiCommentaryLabeled =
                 m.messageType === 'ai' &&
                 typeof parsedUiLabel.label === 'string' &&
@@ -1044,10 +1074,14 @@ export default function Chat({
                 m.messageType === 'ai'
                   ? isSelectionAnnounce
                     ? renderSelectionAnnounceBodyWithMusicNote(bodyTextForDisplay)
-                    : renderAiBodyWithArtistSongHighlight(bodyTextForDisplay, {
-                        keyPrefix: m.id,
-                        onYoutubeSearch: onYoutubeSearchFromAi,
-                      })
+                    : isThemePlaylistRoomReview
+                      ? (
+                          <span className="whitespace-pre-wrap break-words">{bodyTextForDisplay}</span>
+                        )
+                      : renderAiBodyWithArtistSongHighlight(bodyTextForDisplay, {
+                          keyPrefix: m.id,
+                          onYoutubeSearch: onYoutubeSearchFromAi,
+                        })
                   : bodyTextForDisplay;
 
               return (
@@ -1059,7 +1093,9 @@ export default function Chat({
                   m.messageType === 'ai'
                     ? isNextSongRecommendMessage
                       ? 'border border-violet-700/70 bg-gray-950'
-                      : 'border border-gray-600 bg-gray-700/80'
+                      : isThemePlaylistRoomReview
+                        ? 'border border-amber-700/55 bg-amber-950/20'
+                        : 'border border-gray-600 bg-gray-700/80'
                     : m.messageType === 'system'
                       ? 'border border-amber-700/40 bg-amber-900/10 text-amber-200/90'
                       : 'bg-gray-800/80'
@@ -1069,8 +1105,7 @@ export default function Chat({
                     : isAiCommentaryLabeled
                       ? 'animate-ai-commentary-fade-in'
                       : ''
-                } ${isNextSongRecommendMessage ? 'animate-next-recommend-fade-in' : ''}
-                }`}
+                } ${isNextSongRecommendMessage ? 'animate-next-recommend-fade-in' : ''}`}
               >
                 {m.messageType === 'ai' ? (
                   <div className="flex items-baseline justify-between gap-2">

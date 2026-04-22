@@ -20,6 +20,12 @@ function getDisplayNameFromUser(user: { user_metadata?: { display_name?: string;
   return 'ユーザー';
 }
 
+function isRenderableComponent(value: unknown): boolean {
+  if (typeof value === 'function') return true;
+  if (!value || typeof value !== 'object') return false;
+  return '$$typeof' in (value as Record<string, unknown>);
+}
+
 interface JoinGateProps {
   roomId: string;
 }
@@ -157,6 +163,13 @@ export function JoinGate({ roomId }: JoinGateProps) {
   }
 
   if (status === 'choice') {
+    if (!isRenderableComponent(JoinChoice)) {
+      return (
+        <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-gray-950 p-4 text-gray-200">
+          <p>入室UIの読み込みに失敗しました。再読込してください。</p>
+        </div>
+      );
+    }
     return <JoinChoice onJoin={handleJoin} roomId={roomId} joinVerifying={joinVerifying} />;
   }
 
@@ -197,6 +210,14 @@ export function JoinGate({ roomId }: JoinGateProps) {
     );
   }
 
+  if (!isRenderableComponent(AblyProviderWrapper)) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-gray-950 p-4 text-gray-200">
+        <p>部屋の初期化に失敗しました。再読込してください。</p>
+      </div>
+    );
+  }
+
   return (
     <AblyProviderWrapper
       displayName={displayName}
@@ -208,3 +229,5 @@ export function JoinGate({ roomId }: JoinGateProps) {
     />
   );
 }
+
+export default JoinGate;

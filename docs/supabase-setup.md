@@ -595,3 +595,189 @@ create policy "user_room_ai_features_delete_own"
 ```
 
 テーブルが無い状態では API は 503 と案内文を返します。
+
+---
+
+## 18. テーマプレイリスト・ミッション（お題に沿って最大10曲・AIコメント）
+
+マイページ「お題プレイリスト」用。**ログインユーザー本人のみ**が行を参照・更新します。  
+API: `GET` / `POST` → `/api/user/theme-playlist-mission`、曲追加 `POST` → `/api/user/theme-playlist-mission/entry`。  
+実装メモ: `src/lib/theme-playlist-definitions.ts`、`docs/collaborative-playlist-mission-plan.md`。
+
+Supabase の **SQL Editor** で実行:
+
+```sql
+-- ミッション（お題ごとのセッション。同一お題で進行中はユーザーあたり1件まで）
+create table if not exists public.user_theme_playlist_missions (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  theme_id text not null,
+  room_id text,
+  room_title text,
+  room_owner_user_id uuid references auth.users (id) on delete set null,
+  status text not null default 'active' check (status in ('active', 'paused', 'completed')),
+  completed_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+-- ユーザーのオリジナルお題（新規作成タブ）
+create table if not exists public.user_theme_playlist_custom_themes (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  title text not null,
+  description text,
+  is_active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists idx_user_theme_playlist_missions_user_updated
+  on public.user_theme_playlist_missions (user_id, updated_at desc);
+
+create unique index if not exists user_theme_playlist_missions_active_per_theme
+  on public.user_theme_playlist_missions (user_id, theme_id)
+  where (status = 'active');
+
+alter table public.user_theme_playlist_missions enable row level security;
+alter table public.user_theme_playlist_custom_themes enable row level security;
+
+create policy "theme_missions_select_own"
+  on public.user_theme_playlist_missions for select
+  using (auth.uid() = user_id);
+
+create policy "theme_missions_insert_own"
+  on public.user_theme_playlist_missions for insert
+  with check (auth.uid() = user_id);
+
+create policy "theme_missions_update_own"
+  on public.user_theme_playlist_missions for update
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+create policy "theme_missions_delete_own"
+  on public.user_theme_playlist_missions for delete
+  using (auth.uid() = user_id);
+
+create policy "theme_custom_themes_select_own"
+  on public.user_theme_playlist_custom_themes for select
+  using (auth.uid() = user_id);
+
+create policy "theme_custom_themes_insert_own"
+  on public.user_theme_playlist_custom_themes for insert
+  with check (auth.uid() = user_id);
+
+create policy "theme_custom_themes_update_own"
+  on public.user_theme_playlist_custom_themes for update
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+create policy "theme_custom_themes_delete_own"
+  on public.user_theme_playlist_custom_themes for delete
+  using (auth.uid() = user_id);
+
+-- エントリ（1〜10曲目。同一ミッション内で同一 video_id は1回まで）
+create table if not exists public.user_theme_playlist_entries (
+  id uuid primary key default gen_random_uuid(),
+  mission_id uuid not null references public.user_theme_playlist_missions (id) on delete cascade,
+  slot_index integer not null check (slot_index >= 1 and slot_index <= 10),
+  video_id text not null,
+  url text not null,
+  title text,
+  artist text,
+  ai_comment text not null,
+  ai_overall_comment text,
+  selector_display_name text,
+  created_at timestamptz not null default now(),
+  unique (mission_id, slot_index),
+  unique (mission_id, video_id)
+);
+
+create index if not exists idx_user_theme_playlist_entries_mission_slot
+  on public.user_theme_playlist_entries (mission_id, slot_index);
+
+alter table public.user_theme_playlist_entries enable row level security;
+
+create policy "theme_entries_select_own"
+  on public.user_theme_playlist_entries for select
+  using (
+    exists (
+      select 1 from public.user_theme_playlist_missions m
+      where m.id = mission_id and m.user_id = auth.uid()
+    )
+  );
+
+create policy "theme_entries_insert_own"
+  on public.user_theme_playlist_entries for insert
+  with check (
+    exists (
+      select 1 from public.user_theme_playlist_missions m
+      where m.id = mission_id and m.user_id = auth.uid()
+    )
+  );
+
+create policy "theme_entries_update_own"
+  on public.user_theme_playlist_entries for update
+  using (
+    exists (
+      select 1 from public.user_theme_playlist_missions m
+      where m.id = mission_id and m.user_id = auth.uid()
+    )
+  );
+
+create policy "theme_entries_delete_own"
+  on public.user_theme_playlist_entries for delete
+  using (
+    exists (
+      select 1 from public.user_theme_playlist_missions m
+      where m.id = mission_id and m.user_id = auth.uid()
+    )
+  );
+```
+
+既存環境ですでに 18 章を適用済みの場合は、次の追補 SQL も実行:
+
+```sql
+alter table public.user_theme_playlist_missions
+  drop constraint if exists user_theme_playlist_missions_status_check;
+
+alter table public.user_theme_playlist_missions
+  add constraint user_theme_playlist_missions_status_check
+  check (status in ('active', 'paused', 'completed'));
+
+alter table public.user_theme_playlist_missions
+  add column if not exists room_id text;
+
+alter table public.user_theme_playlist_missions
+  add column if not exists room_title text;
+
+alter table public.user_theme_playlist_missions
+  add column if not exists room_owner_user_id uuid references auth.users (id) on delete set null;
+
+create table if not exists public.user_theme_playlist_custom_themes (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  title text not null,
+  description text,
+  is_active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.user_theme_playlist_custom_themes
+  add column if not exists title text;
+
+alter table public.user_theme_playlist_custom_themes
+  add column if not exists description text;
+
+alter table public.user_theme_playlist_custom_themes
+  add column if not exists is_active boolean not null default true;
+
+alter table public.user_theme_playlist_entries
+  add column if not exists selector_display_name text;
+
+alter table public.user_theme_playlist_entries
+  add column if not exists ai_overall_comment text;
+```
+
+テーブルが無い状態では上記 API は **503** と案内文を返します。

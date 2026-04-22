@@ -5,6 +5,7 @@ import {
   isNextSongRecommendAllowedForUser,
   isNextSongRecommendMasterEnabled,
 } from '@/lib/next-song-recommend-feature';
+import { parseSeedLabelToArtistTitle } from '@/lib/next-song-recommend-store';
 
 test('isNextSongRecommendMasterEnabled: 1 のときのみ true', () => {
   const prev = process.env.NEXT_SONG_RECOMMEND_ENABLED;
@@ -53,4 +54,24 @@ test('getNextSongRecommendBetaUserIds がカンマ区切りを正規化', () => 
   assert.deepEqual(getNextSongRecommendBetaUserIds(), ['x', 'y']);
   if (prev === undefined) delete process.env.NEXT_SONG_RECOMMEND_BETA_USER_IDS;
   else process.env.NEXT_SONG_RECOMMEND_BETA_USER_IDS = prev;
+});
+
+test('parseSeedLabelToArtistTitle: em dash（種曲ラベル）', () => {
+  assert.deepEqual(parseSeedLabelToArtistTitle('Olivia Rodrigo — drivers license'), {
+    artist: 'Olivia Rodrigo',
+    title: 'drivers license',
+  });
+});
+
+test('parseSeedLabelToArtistTitle: ASCII ハイフン', () => {
+  assert.deepEqual(parseSeedLabelToArtistTitle('Billie Eilish - Happier Than Ever'), {
+    artist: 'Billie Eilish',
+    title: 'Happier Than Ever',
+  });
+});
+
+test('parseSeedLabelToArtistTitle: 空・解析不能は null', () => {
+  assert.equal(parseSeedLabelToArtistTitle(''), null);
+  assert.equal(parseSeedLabelToArtistTitle('   '), null);
+  assert.equal(parseSeedLabelToArtistTitle('no separator here'), null);
 });

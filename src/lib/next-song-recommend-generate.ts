@@ -124,7 +124,7 @@ export async function generateNextSongRecommendPicks(
   const commentary = (options?.commentarySnippet ?? '').trim().slice(0, 2000);
   const seedPublishedAtIso = (options?.seedPublishedAtIso ?? '').trim().slice(0, 60);
   const excludeSongLabels = Array.isArray(options?.excludeSongLabels)
-    ? options!.excludeSongLabels!.map((s) => (typeof s === 'string' ? s.trim() : '')).filter(Boolean).slice(0, 20)
+    ? options!.excludeSongLabels!.map((s) => (typeof s === 'string' ? s.trim() : '')).filter(Boolean).slice(0, 48)
     : [];
   const label = currentSongLabel.trim().slice(0, 400);
 
@@ -133,7 +133,7 @@ export async function generateNextSongRecommendPicks(
 【いま聴いている曲】
 ${label}
 ${seedPublishedAtIso ? `\n【参考: 種曲の動画公開日時（ISO）】\n${seedPublishedAtIso}\n` : ''}${taste ? `\n【このユーザーの趣向メモ（参考。押しつけない）】\n${taste.slice(0, 3500)}\n` : ''}${commentary ? `\n【直近の曲解説の抜粋（参考）】\n${commentary}\n` : ''}
-${excludeSongLabels.length > 0 ? `\n【今回の提案で除外する既出候補（重複禁止）】\n${excludeSongLabels.map((s) => `- ${s}`).join('\n')}\n` : ''}
+${excludeSongLabels.length > 0 ? `\n【今回の提案で除外する既出候補（重複禁止。直近フローで「種曲」だった曲も含む）】\n${excludeSongLabels.map((s) => `- ${s}`).join('\n')}\n` : ''}
 【厳守】
 ・実在する楽曲・実在するアーティスト名のみ。自信がない曲は入れない。
 ・**ヒット度（世間的スケール）をできるだけ近づける**。入力曲が広く知られたヒット曲なら、候補も同程度に一般認知が高い曲を優先する。

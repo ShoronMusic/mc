@@ -35,6 +35,7 @@
 - **DB に記録できる項目一覧**（テーブル別） → `docs/recorded-data-fields.md`
 - **Music8 曲 JSON**（WP 固定 `id`・URL 規則・マスタ連携メモ） → `docs/music8-song-json-schema.md`
 - **マイリスト**（チャット非依存・拡張連携・企画） → `docs/my-list-spec.md`。**実装**: `src/app/api/my-list/route.ts`、DB `docs/supabase-user-my-list-table.md`、アーティスト参照（正規化）用 `docs/supabase-user-my-library-artists-tables.md`
+- **お題プレイリスト・ミッション**（固定お題・最大10曲・曲ごと AI 短文・完了表示） → `docs/collaborative-playlist-mission-plan.md`（実装節）。**ルーム**: 進行中ミッション時はチャット **ヘッダー2段目**にお題進捗、**送信の上に「お題曲送信（β）」**；そのボタン＋URL で選曲すると通常 AI 解説の後に **お題講評**（`POST /api/user/theme-playlist-mission/room-blurb`）。通常「送信」の URL 選曲はお題非連動。**一旦解除/再開**: `/api/user/theme-playlist-mission` `action=pause` と同お題の `開始/再開`。**エントリ保存項目**: `selector_display_name`・`created_at`。**API**: `GET`/`POST` `/api/user/theme-playlist-mission`、`POST` `/api/user/theme-playlist-mission/entry`。**フック** `useThemePlaylistRoomSubmitMission`、進捗更新イベント `src/lib/theme-playlist-mission-client-events.ts`。**テーマ定義** `src/lib/theme-playlist-definitions.ts`、**Gemini** `theme_playlist_comment`（`src/lib/theme-playlist-ai-blurb.ts`）。DB `docs/supabase-setup.md` 第 18 章
 - **曲・アーティスト DB 項目**（基本／拡張） → `docs/song-artist-db-fields.md`
 - **次に聴くなら（試験）**: `docs/next-song-recommend-beta-spec.md`
 

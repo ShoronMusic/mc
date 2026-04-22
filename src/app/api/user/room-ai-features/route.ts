@@ -7,6 +7,9 @@ import {
   parseUserRoomAiFeaturesPutBody,
 } from '@/lib/user-room-ai-features';
 
+const PERSIST_UNAVAILABLE_HINT =
+  '部屋AI設定の保存用テーブル（user_room_ai_features）がありません。docs/supabase-setup.md 第 17 章の SQL を実行すると保存できます。';
+
 export const dynamic = 'force-dynamic';
 
 function isMissingTableError(message: string): boolean {
@@ -39,13 +42,13 @@ export async function GET() {
 
     if (error) {
       if (isMissingTableError(error.message)) {
-        return NextResponse.json(
-          {
-            error:
-              'user_room_ai_features テーブルがありません。docs/supabase-setup.md 第 17 章を実行してください。',
-          },
-          { status: 503 },
-        );
+        /** 部屋クライアントは !r.ok 時に既定 ON と同じ挙動のため、GET は 200 で返してネットワークエラーを避ける */
+        return NextResponse.json({
+          commentaryEnabled: DEFAULT_USER_ROOM_AI_COMMENTARY_ENABLED,
+          songQuizEnabled: DEFAULT_USER_ROOM_AI_SONG_QUIZ_ENABLED,
+          nextSongRecommendEnabled: DEFAULT_USER_ROOM_AI_NEXT_SONG_RECOMMEND_ENABLED,
+          persistHint: PERSIST_UNAVAILABLE_HINT,
+        });
       }
       console.error('[api/user/room-ai-features GET]', error);
       return NextResponse.json({ error: 'Failed to load.' }, { status: 500 });

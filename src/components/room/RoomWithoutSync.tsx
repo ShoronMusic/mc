@@ -14,6 +14,7 @@ import MyPage from '@/components/mypage/MyPage';
 import NowPlaying from '@/components/room/NowPlaying';
 import RoomMainLayout from '@/components/room/RoomMainLayout';
 import RoomPlaybackHistory from '@/components/room/RoomPlaybackHistory';
+import { useThemePlaylistRoomSubmitMission } from '@/hooks/useThemePlaylistRoomSubmitMission';
 import { SiteFeedbackModal } from '@/components/room/SiteFeedbackModal';
 import UserBar from '@/components/room/UserBar';
 import { getLastExitStorageKey } from '@/components/providers/AblyProviderWrapper';
@@ -48,6 +49,7 @@ import { rememberRoomForGuideReturn } from '@/lib/safe-return-path';
 import { extractVideoId, isStandaloneNonYouTubeUrl } from '@/lib/youtube';
 import { isYoutubeKeywordSearchEnabled } from '@/lib/youtube-keyword-search-ui';
 import { scheduleNextSongRecommendAfterCommentary } from '@/lib/schedule-next-song-recommend-client';
+import { scheduleThemePlaylistRoomBlurbAfterPack } from '@/lib/schedule-theme-playlist-room-blurb';
 import type { ChatMessage, SystemMessageOptions } from '@/types/chat';
 import { useIsLgViewport } from '@/hooks/useLgViewport';
 import { useRoomChatLogPersistence } from '@/hooks/useRoomChatLogPersistence';
@@ -136,6 +138,7 @@ export default function RoomWithoutSync({
     rememberRoomForGuideReturn(roomId);
   }, [roomId]);
   const [myPageOpen, setMyPageOpen] = useState(false);
+  const themePlaylistRoomSubmit = useThemePlaylistRoomSubmitMission(isGuest, myPageOpen);
   const [guestRegisterModalOpen, setGuestRegisterModalOpen] = useState(false);
   const [siteFeedbackOpen, setSiteFeedbackOpen] = useState(false);
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
@@ -287,6 +290,8 @@ export default function RoomWithoutSync({
   const commentPackVideoIdRef = useRef<string | null>(null);
   const songQuizFetchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const nextSongRecommendTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const themePlaylistBlurbTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingThemePlaylistBlurbRef = useRef<{ videoId: string; themeId: string } | null>(null);
   const userRoomAiCommentaryEnabledRef = useRef(true);
   const userRoomAiSongQuizEnabledRef = useRef(true);
   const userRoomAiRecommendEnabledRef = useRef(true);
@@ -752,6 +757,11 @@ export default function RoomWithoutSync({
       clearTimeout(songQuizFetchTimeoutRef.current);
       songQuizFetchTimeoutRef.current = null;
     }
+    if (themePlaylistBlurbTimeoutRef.current) {
+      clearTimeout(themePlaylistBlurbTimeoutRef.current);
+      themePlaylistBlurbTimeoutRef.current = null;
+    }
+    pendingThemePlaylistBlurbRef.current = null;
     if (songQuizLocalRevealTimerRef.current) {
       clearTimeout(songQuizLocalRevealTimerRef.current);
       songQuizLocalRevealTimerRef.current = null;
@@ -803,6 +813,7 @@ export default function RoomWithoutSync({
   const fetchCommentaryAndPublish = useCallback(
     (vid: string) => {
       if (!userRoomAiCommentaryEnabledRef.current) {
+        pendingThemePlaylistBlurbRef.current = null;
         if (songQuizFetchTimeoutRef.current) {
           clearTimeout(songQuizFetchTimeoutRef.current);
           songQuizFetchTimeoutRef.current = null;
@@ -810,6 +821,10 @@ export default function RoomWithoutSync({
         if (nextSongRecommendTimeoutRef.current) {
           clearTimeout(nextSongRecommendTimeoutRef.current);
           nextSongRecommendTimeoutRef.current = null;
+        }
+        if (themePlaylistBlurbTimeoutRef.current) {
+          clearTimeout(themePlaylistBlurbTimeoutRef.current);
+          themePlaylistBlurbTimeoutRef.current = null;
         }
         return;
       }
@@ -829,7 +844,11 @@ export default function RoomWithoutSync({
         })
           .then((r) => (r.ok ? r.json() : null))
           .then((pack) => {
+            const skipQuizRecommendForTheme =
+              pendingThemePlaylistBlurbRef.current?.videoId === vid &&
+              Boolean(pendingThemePlaylistBlurbRef.current?.themeId);
             if (pack?.skipAiCommentary) {
+              pendingThemePlaylistBlurbRef.current = null;
               commentPackVideoIdRef.current = null;
               const isJpSilenceVideo =
                 jpDomesticSilenceVideoIdRef.current != null &&
@@ -856,7 +875,7 @@ export default function RoomWithoutSync({
                 typeof pack.baseComment === 'string' ? pack.baseComment.trim() : '';
               const shouldGateRecommendByQuiz =
                 commentaryCtx.length >= 60 && userRoomAiSongQuizEnabledRef.current;
-              if (shouldGateRecommendByQuiz) {
+              if (shouldGateRecommendByQuiz && !skipQuizRecommendForTheme) {
                 if (songQuizFetchTimeoutRef.current) clearTimeout(songQuizFetchTimeoutRef.current);
                 songQuizFetchTimeoutRef.current = setTimeout(() => {
                   songQuizFetchTimeoutRef.current = null;
@@ -910,7 +929,11 @@ export default function RoomWithoutSync({
                 }, 3500);
               }
               tidbitPreferMainArtistLeftRef.current = 2;
-              if (userRoomAiRecommendEnabledRef.current && !shouldGateRecommendByQuiz) {
+              if (
+                userRoomAiRecommendEnabledRef.current &&
+                !shouldGateRecommendByQuiz &&
+                !skipQuizRecommendForTheme
+              ) {
                 scheduleNextSongRecommendAfterCommentary({
                   videoId: vid,
                   roomId,
@@ -926,6 +949,23 @@ export default function RoomWithoutSync({
                   addAiMessage,
                 });
               }
+              scheduleThemePlaylistRoomBlurbAfterPack({
+                videoId: vid,
+                roomId,
+                selectorDisplayName: displayNameProp,
+                packEndDelayMs: 3500,
+                commentaryContext: commentaryCtx,
+                isGuest,
+                pendingRef: pendingThemePlaylistBlurbRef,
+                videoIdRef,
+                registerTimer: (t) => {
+                  if (themePlaylistBlurbTimeoutRef.current) {
+                    clearTimeout(themePlaylistBlurbTimeoutRef.current);
+                  }
+                  themePlaylistBlurbTimeoutRef.current = t;
+                },
+                addAiMessage,
+              });
               return;
             }
             commentPackVideoIdRef.current = null;
@@ -944,7 +984,11 @@ export default function RoomWithoutSync({
       })
         .then((r) => (r.ok ? r.json() : null))
         .then((data) => {
+          const skipQuizRecommendForTheme =
+            pendingThemePlaylistBlurbRef.current?.videoId === vid &&
+            Boolean(pendingThemePlaylistBlurbRef.current?.themeId);
           if (data?.skipAiCommentary) {
+            pendingThemePlaylistBlurbRef.current = null;
             const isJpSilenceVideo =
               jpDomesticSilenceVideoIdRef.current != null &&
               jpDomesticSilenceVideoIdRef.current === vid;
@@ -964,7 +1008,7 @@ export default function RoomWithoutSync({
             const commentarySingle = `${prefix}${data.text}`.trim();
             const shouldGateRecommendByQuiz =
               commentarySingle.length >= 60 && userRoomAiSongQuizEnabledRef.current;
-            if (shouldGateRecommendByQuiz) {
+            if (shouldGateRecommendByQuiz && !skipQuizRecommendForTheme) {
               if (songQuizFetchTimeoutRef.current) clearTimeout(songQuizFetchTimeoutRef.current);
               songQuizFetchTimeoutRef.current = setTimeout(() => {
                 songQuizFetchTimeoutRef.current = null;
@@ -1018,7 +1062,11 @@ export default function RoomWithoutSync({
               }, 4000);
             }
             tidbitPreferMainArtistLeftRef.current = 2;
-            if (userRoomAiRecommendEnabledRef.current && !shouldGateRecommendByQuiz) {
+            if (
+              userRoomAiRecommendEnabledRef.current &&
+              !shouldGateRecommendByQuiz &&
+              !skipQuizRecommendForTheme
+            ) {
               scheduleNextSongRecommendAfterCommentary({
                 videoId: vid,
                 roomId,
@@ -1034,13 +1082,40 @@ export default function RoomWithoutSync({
                 addAiMessage,
               });
             }
+            scheduleThemePlaylistRoomBlurbAfterPack({
+              videoId: vid,
+              roomId,
+              selectorDisplayName: displayNameProp,
+              packEndDelayMs: 4000,
+              commentaryContext: commentarySingle,
+              isGuest,
+              pendingRef: pendingThemePlaylistBlurbRef,
+              videoIdRef,
+              registerTimer: (t) => {
+                if (themePlaylistBlurbTimeoutRef.current) {
+                  clearTimeout(themePlaylistBlurbTimeoutRef.current);
+                }
+                themePlaylistBlurbTimeoutRef.current = t;
+              },
+              addAiMessage,
+            });
           } else addSystemMessage(SYSTEM_MESSAGE_COMMENTARY_FETCH_FAILED);
         })
         .catch(() => {
           addSystemMessage(SYSTEM_MESSAGE_COMMENTARY_FETCH_FAILED);
         });
     },
-    [addAiMessage, addSystemMessage, touchActivity, roomId, messages, canRejectTidbit, scheduleLocalSongQuizReveal, isGuest]
+    [
+      addAiMessage,
+      addSystemMessage,
+      touchActivity,
+      roomId,
+      messages,
+      canRejectTidbit,
+      scheduleLocalSongQuizReveal,
+      isGuest,
+      displayNameProp,
+    ]
   );
 
   const schedulePlaybackHistory = useCallback(
@@ -1169,9 +1244,16 @@ export default function RoomWithoutSync({
   );
 
   const handleVideoUrlFromChat = useCallback(
-    (url: string) => {
+    (url: string, opts?: { themePlaylistThemeId?: string | null }) => {
       const id = extractVideoId(url);
       if (!id) return;
+      const themePick =
+        typeof opts?.themePlaylistThemeId === 'string' ? opts.themePlaylistThemeId.trim() : '';
+      if (!isGuest && themePick) {
+        pendingThemePlaylistBlurbRef.current = { videoId: id, themeId: themePick };
+      } else {
+        pendingThemePlaylistBlurbRef.current = null;
+      }
       const prevId = videoIdRef.current;
       const sameReplay = Boolean(prevId && prevId === id);
       jpDomesticSilenceVideoIdRef.current = null;
@@ -1193,6 +1275,7 @@ export default function RoomWithoutSync({
       roomId,
       schedulePlaybackHistory,
       scheduleLocalAutoPlayAfterLoad,
+      isGuest,
     ]
   );
 
@@ -1718,6 +1801,7 @@ export default function RoomWithoutSync({
                 : undefined
             }
             onSongQuizPick={handleSongQuizPick}
+            themePlaylistActiveMission={themePlaylistRoomSubmit}
           />
         }
         rightTop={
@@ -1745,11 +1829,12 @@ export default function RoomWithoutSync({
         onPlaybackHistoryModalClose={() => setPlaybackHistoryModalOpen(false)}
       />
 
-      <section className="mt-2 shrink-0">
+      <section className="mt-2 shrink-0 space-y-2">
         <ChatInput
           ref={chatInputRef}
           onSendMessage={handleSendMessage}
           onVideoUrl={handleVideoUrlFromChat}
+          themePlaylistRoomSubmit={themePlaylistRoomSubmit}
           isGuest={isGuest}
           onSystemMessage={addSystemMessage}
           onPreviewStart={handlePreviewStart}

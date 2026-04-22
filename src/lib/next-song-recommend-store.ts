@@ -20,6 +20,30 @@ export interface NextSongRecommendRow {
 export interface NextSongRecommendRecentRow {
   recommended_artist: string;
   recommended_title: string;
+  seed_label: string | null;
+}
+
+/**
+ * `next_song_recommendations.seed_label` をアーティスト・曲名に分解（除外キー用）。
+ * 保存形式は `formatArtistTitle` の ` - ` または種曲解決時の ` — `（U+2014）。
+ */
+export function parseSeedLabelToArtistTitle(seedLabel: string | null | undefined): {
+  artist: string;
+  title: string;
+} | null {
+  const s = (seedLabel ?? '').trim();
+  if (!s) return null;
+  const emParts = s.split(/\s*\u2014\s*/);
+  if (emParts.length === 2 && emParts[0]!.trim() && emParts[1]!.trim()) {
+    return { artist: emParts[0].trim(), title: emParts[1].trim() };
+  }
+  const m = /\s+-\s+/.exec(s);
+  if (m && m.index > 0) {
+    const artist = s.slice(0, m.index).trim();
+    const title = s.slice(m.index + m[0].length).trim();
+    if (artist && title) return { artist, title };
+  }
+  return null;
 }
 
 export async function countActiveNextSongRecommendBySeedVideo(
@@ -69,10 +93,10 @@ export async function getRecentActiveNextSongRecommendations(
   limit = 9,
 ): Promise<NextSongRecommendRecentRow[]> {
   if (!supabase) return [];
-  const capped = Math.max(1, Math.min(30, limit));
+  const capped = Math.max(1, Math.min(80, limit));
   const { data, error } = await supabase
     .from('next_song_recommendations')
-    .select('recommended_artist, recommended_title')
+    .select('recommended_artist, recommended_title, seed_label')
     .eq('is_active', true)
     .order('created_at', { ascending: false })
     .limit(capped);

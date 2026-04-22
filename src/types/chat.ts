@@ -41,7 +41,13 @@ export interface ChatMessage {
   /** AIコメントに紐づく videoId（どの動画で出たか） */
   videoId?: string | null;
   /** AIコメントの種別（曲解説 / 豆知識 / 通常応答など） */
-  aiSource?: 'commentary' | 'tidbit' | 'chat_reply' | 'next_song_recommend' | 'other';
+  aiSource?:
+    | 'commentary'
+    | 'tidbit'
+    | 'chat_reply'
+    | 'next_song_recommend'
+    | 'theme_playlist_room'
+    | 'other';
   /** next_song_recommendations.id（おすすめ曲単位の評価・管理者削除用） */
   recommendationId?: string | null;
   /** AI 本文の強調（入室直後の選曲案内など。未設定は通常色） */
@@ -91,7 +97,13 @@ export interface ChatMessagePayload {
   /** AIコメントに紐づく videoId（どの動画で出たか） */
   videoId?: string | null;
   /** AIコメントの種別（曲解説 / 豆知識 / 通常応答など） */
-  aiSource?: 'commentary' | 'tidbit' | 'chat_reply' | 'next_song_recommend' | 'other';
+  aiSource?:
+    | 'commentary'
+    | 'tidbit'
+    | 'chat_reply'
+    | 'next_song_recommend'
+    | 'theme_playlist_room'
+    | 'other';
   recommendationId?: string | null;
   /** AI 本文の強調（入室直後の選曲案内など） */
   aiBodyEmphasis?: 'yellow';

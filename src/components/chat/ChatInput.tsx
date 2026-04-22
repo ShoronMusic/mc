@@ -49,7 +49,7 @@ export interface ChatInputHandle {
 
 interface ChatInputProps {
   onSendMessage: (text: string) => void;
-  onVideoUrl?: (url: string) => void;
+  onVideoUrl?: (url: string, opts?: { themePlaylistThemeId?: string | null }) => void;
   /** ゲスト時は検索APIの制限を低めにするために送る */
   isGuest?: boolean;
   onSystemMessage?: (text: string, opts?: SystemMessageOptions) => void;
@@ -67,6 +67,11 @@ interface ChatInputProps {
   onOpenTerms?: () => void;
   /** モバイル下段リンク: サイトご意見を開く */
   onOpenSiteFeedback?: () => void;
+  /**
+   * マイページで進行中のお題ミッションがあるときのみ渡す。
+   * 送信ボタンの上に「お題曲送信」が出現し、そのボタン経由でのみ themeId を付与する。
+   */
+  themePlaylistRoomSubmit?: { themeId: string; themeLabel: string } | null;
 }
 
 const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput(
@@ -82,6 +87,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
     onClearLocalAiQuestionGuard,
     onOpenTerms,
     onOpenSiteFeedback,
+    themePlaylistRoomSubmit = null,
   },
   ref
 ) {
@@ -275,6 +281,15 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
     }
 
     onSendMessage(trimmed);
+    setValue('');
+  };
+
+  const handleThemePlaylistVideoSubmit = () => {
+    const trimmed = value.trim();
+    if (!trimmed || !onVideoUrl || !themePlaylistRoomSubmit) return;
+    const vid = extractVideoId(trimmed);
+    if (!vid) return;
+    onVideoUrl(trimmed, { themePlaylistThemeId: themePlaylistRoomSubmit.themeId });
     setValue('');
   };
 
@@ -609,6 +624,13 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                 を入れて押すと、部屋のプレイヤーにその動画が表示されます。URL
                 <span className="text-gray-200">以外</span>（感想・会話など）はチャットに表示されます。
               </li>
+              {themePlaylistRoomSubmit ? (
+                <li>
+                  <span className="font-medium text-gray-200">お題曲送信（β）</span>
+                  ：マイページでお題ミッションを進行中のとき、URL を入れたうえでこちらを押すと、通常の AI
+                  曲解説のあとにお題に沿った講評が続きます（通常の「送信」ではお題には紐づきません）。
+                </li>
+              ) : null}
               <li>
                 自分の順番が回ってきて選曲をパスする場合は、発言欄に
                 <span className="text-gray-200"> パス </span>
@@ -756,15 +778,38 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
               aria-label="チャット入力"
             />
           </div>
-          <button
-            type="button"
-            onClick={handleSubmit}
-            title="YouTubeのURLならプレイヤーに反映。それ以外はチャットに表示"
-            className="box-border flex h-[3.75rem] shrink-0 items-center justify-center rounded bg-blue-600 px-4 text-sm font-medium text-white hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50"
-            disabled={!value.trim()}
-          >
-            送信
-          </button>
+          {themePlaylistRoomSubmit && onVideoUrl ? (
+            <div className="flex h-[3.75rem] shrink-0 flex-col justify-center gap-1">
+              <button
+                type="button"
+                onClick={handleThemePlaylistVideoSubmit}
+                title={`お題「${themePlaylistRoomSubmit.themeLabel}」として記録し、曲解説のあとにお題講評が付きます`}
+                className="box-border flex min-h-0 flex-1 items-center justify-center rounded border border-amber-500/80 bg-amber-900/50 px-2 text-[11px] font-semibold leading-tight text-amber-50 hover:bg-amber-800/60 disabled:opacity-50"
+                disabled={!value.trim() || !extractVideoId(value.trim())}
+              >
+                お題曲送信（β）
+              </button>
+              <button
+                type="button"
+                onClick={handleSubmit}
+                title="YouTubeのURLならプレイヤーに反映（お題には紐づけません）。それ以外はチャットに表示"
+                className="box-border flex min-h-0 flex-1 items-center justify-center rounded bg-blue-600 px-3 text-xs font-medium text-white hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50"
+                disabled={!value.trim()}
+              >
+                送信
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={handleSubmit}
+              title="YouTubeのURLならプレイヤーに反映。それ以外はチャットに表示"
+              className="box-border flex h-[3.75rem] shrink-0 items-center justify-center rounded bg-blue-600 px-4 text-sm font-medium text-white hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50"
+              disabled={!value.trim()}
+            >
+              送信
+            </button>
+          )}
           <div className="hidden h-[3.75rem] shrink-0 items-center gap-2 sm:flex">
             <div className="flex min-h-0 flex-col items-start justify-center gap-0.5">
               <button

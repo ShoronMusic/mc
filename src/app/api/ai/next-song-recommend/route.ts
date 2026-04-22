@@ -16,6 +16,7 @@ import {
   getRecentActiveNextSongRecommendations,
   insertNextSongRecommendRows,
   NEXT_SONG_RECOMMEND_MAX_STOCK,
+  parseSeedLabelToArtistTitle,
 } from '@/lib/next-song-recommend-store';
 import { upsertSongAndVideo } from '@/lib/song-entities';
 
@@ -129,17 +130,44 @@ export async function POST(request: Request): Promise<NextResponse<OkDisabled | 
       }
     }
 
-    const recentGlobal = await getRecentActiveNextSongRecommendations(reader, 12);
+    const recentRows = await getRecentActiveNextSongRecommendations(reader, 48);
+    const recentSeedLabelsOrdered: string[] = [];
+    const seenSeedLabel = new Set<string>();
+    for (const r of recentRows) {
+      const sl = (r.seed_label ?? '').trim();
+      if (!sl || seenSeedLabel.has(sl)) continue;
+      seenSeedLabel.add(sl);
+      recentSeedLabelsOrdered.push(sl);
+      if (recentSeedLabelsOrdered.length >= 16) break;
+    }
+
     const excludeKeySet = new Set<string>();
-    if (artistDisplay && song) excludeKeySet.add(normalizeSongKey(artistDisplay, song));
-    else if (artist && song) excludeKeySet.add(normalizeSongKey(artist, song));
-    existingBySeed.forEach((r) => excludeKeySet.add(normalizeSongKey(r.recommended_artist, r.recommended_title)));
-    recentGlobal.forEach((r) => excludeKeySet.add(normalizeSongKey(r.recommended_artist, r.recommended_title)));
-    const excludeSongLabels = [
-      ...(artistDisplay && song ? [`${artistDisplay} - ${song}`] : []),
-      ...existingBySeed.map((r) => `${r.recommended_artist} - ${r.recommended_title}`),
-      ...recentGlobal.map((r) => `${r.recommended_artist} - ${r.recommended_title}`),
-    ];
+    const excludeSongLabels: string[] = [];
+    const addExclude = (a: string, t: string) => {
+      const artist = a.trim();
+      const title = t.trim();
+      if (!artist || !title) return;
+      const k = normalizeSongKey(artist, title);
+      if (excludeKeySet.has(k)) return;
+      excludeKeySet.add(k);
+      excludeSongLabels.push(`${artist} - ${title}`);
+    };
+
+    if (artistDisplay && song) addExclude(artistDisplay, song);
+    else if (artist && song) addExclude(artist, song);
+
+    for (const sl of recentSeedLabelsOrdered) {
+      const p = parseSeedLabelToArtistTitle(sl);
+      if (p) addExclude(p.artist, p.title);
+    }
+
+    for (const r of existingBySeed) {
+      addExclude(r.recommended_artist, r.recommended_title);
+    }
+
+    for (const r of recentRows) {
+      addExclude(r.recommended_artist, r.recommended_title);
+    }
 
     let userTasteBlock: string | null = null;
     try {

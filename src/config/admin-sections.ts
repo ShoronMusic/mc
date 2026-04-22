@@ -90,6 +90,11 @@ export const ADMIN_SECTIONS: AdminSection[] = [
     description: '日別/月別/年別・アーティスト別選曲数・時代/スタイル分布・人気曲を部屋横断で集計',
   },
   {
+    href: '/admin/theme-playlist-completed',
+    title: 'お題実施一覧（完了）',
+    description: '完了したお題ミッションの日時・部屋名・オーナー・参加者・曲（選曲者）を確認',
+  },
+  {
     href: '/admin/songs',
     title: '曲ダッシュボード',
     description: '曲の検索、詳細ページ（動画・コメント・豆知識・フィードバック）',

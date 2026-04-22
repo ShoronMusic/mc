@@ -46,5 +46,6 @@ alter table public.gemini_usage_logs enable row level security;
 | `extract_song_search` | 「曲を貼って」系のクエリ抽出 |
 | `comment_pack_base` | comment-pack API の基本コメント |
 | `comment_pack_free_1`〜`3` | comment-pack の自由コメント |
+| `theme_playlist_comment` | マイページ「お題プレイリスト」1曲あたりの短い AI コメント |
 
 **料金の目安**: 公式料金ページの **入力トークン単価 × prompt_token_count 合計**、**出力単価 × output_token_count 合計** で概算できます。
