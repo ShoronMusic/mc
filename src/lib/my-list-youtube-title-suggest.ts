@@ -185,6 +185,17 @@ export function splitTitleAtFirstDashLoose(title: string): { left: string; right
   return { left, right };
 }
 
+/** 「Artist | Song」形式（パイプの前後に空白あり） */
+export function splitTitleAtFirstPipe(title: string): { left: string; right: string } | null {
+  const t = title.trim();
+  const idx = t.indexOf(' | ');
+  if (idx <= 0) return null;
+  const left = t.slice(0, idx).trim();
+  const right = t.slice(idx + 3).trim();
+  if (left.length < 2 || right.length < 2) return null;
+  return { left, right };
+}
+
 /** 左片に [Official Music Video] 等（曲名側の付帯）が含まれる */
 function titleSegmentHasOfficialMediaBracket(segment: string): boolean {
   return /\[[^\]]*\b(?:official|music\s+video|lyric|lyrics|video|audio|visualizer|hd|4k)\b[^\]]*\]/i.test(
@@ -245,7 +256,8 @@ export function suggestMyListArtistTitleFromYoutubeStyle(
     return { artists: fromStored.length > 0 ? fromStored : a ? [a] : [''], title: t };
   }
 
-  const splitRaw = splitTitleAtFirstSpacedDash(t) ?? splitTitleAtFirstDashLoose(t);
+  const splitRaw =
+    splitTitleAtFirstSpacedDash(t) ?? splitTitleAtFirstDashLoose(t) ?? splitTitleAtFirstPipe(t);
   if (!splitRaw) {
     const quotedPair = splitArtistQuotedSongFromYoutubeTitle(t);
     if (quotedPair) {

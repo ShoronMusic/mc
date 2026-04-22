@@ -213,4 +213,9 @@ assert(
   `p17 song: ${p17.song}`,
 );
 
+// パイプ区切り（Artist | Song）を正しく分解する（RBumgq5yVrA）
+const p18 = resolveOEmbedToMyListStylePack('Passenger | Let Her Go (Official Video)', 'Passenger');
+assert(p18.artistDisplay === 'Passenger', `p18 artistDisplay: ${p18.artistDisplay}`);
+assert(p18.song === 'Let Her Go', `p18 song: ${p18.song}`);
+
 console.log('my-list-youtube-title-suggest unit tests: OK');

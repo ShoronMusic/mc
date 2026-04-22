@@ -32,6 +32,12 @@ export const ADMIN_SECTIONS: AdminSection[] = [
     description: '部屋画面から送信されたサイト評価（-2〜2）と自由コメントの一覧',
   },
   {
+    href: '/admin/monetization-simulation',
+    title: '収支シミュレーション（案）',
+    description:
+      'シナリオA・月1,000円・300曲上限の諸条件と5〜10月の想定表（docs/monetization-options.md と同一前提）',
+  },
+  {
     href: '/admin/next-song-recommendations',
     title: 'おすすめ曲ストック',
     description:
