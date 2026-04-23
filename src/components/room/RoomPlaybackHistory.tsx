@@ -10,8 +10,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { RoomPlaybackHistoryRow } from '@/app/api/room-playback-history/route';
 import { getArtistAndSong, getMainArtist, repairQuotedSongArtistPackInversion } from '@/lib/format-song-display';
 import { resolveFamousPvArtistSongPack } from '@/lib/youtube-famous-pv-override';
-import { getMusic8ArtistJsonUrl } from '@/lib/music8-artist-display';
-import { fetchMusic8SongDataForPlaybackRow } from '@/lib/music8-song-lookup';
 import { SONG_STYLE_OPTIONS } from '@/lib/song-styles';
 import MainArtistTabPanel from './MainArtistTabPanel';
 import SongDataTabPanel from './SongDataTabPanel';
@@ -400,12 +398,14 @@ export default function RoomPlaybackHistory({
     const controller = new AbortController();
 
     (async () => {
-      // 1) メインアーティストJSONの存在チェック
+      // 1) メインアーティストJSONの存在チェック（サーバー経由）
       try {
-        const url = getMusic8ArtistJsonUrl(artistName);
-        if (!url) throw new Error('no_music8_url');
-        const res = await fetch(url, { signal: controller.signal });
-        artistOk = res.ok;
+        const ar = await fetch(
+          `/api/music8/artist-by-name?artistName=${encodeURIComponent(artistName)}`,
+          { signal: controller.signal, credentials: 'include' },
+        );
+        const aj = (await ar.json().catch(() => ({}))) as { artist?: unknown };
+        artistOk = Boolean(aj?.artist && typeof aj.artist === 'object');
         if (!cancelled) setHasMainArtistData(artistOk);
       } catch {
         artistOk = false;
@@ -430,8 +430,12 @@ export default function RoomPlaybackHistory({
           }
         }
         if (!songOk) {
-          const d = await fetchMusic8SongDataForPlaybackRow(artistName, songTitle);
-          songOk = !!d;
+          const sr = await fetch(
+            `/api/music8/song-by-playback?artistName=${encodeURIComponent(artistName)}&songTitle=${encodeURIComponent(songTitle)}`,
+            { signal: controller.signal, credentials: 'include' },
+          );
+          const sj = (await sr.json().catch(() => ({}))) as { song?: unknown };
+          songOk = Boolean(sj?.song && typeof sj.song === 'object');
         }
         if (cancelled) return;
         setHasSongData(songOk);

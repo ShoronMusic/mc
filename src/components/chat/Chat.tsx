@@ -120,7 +120,7 @@ function formatTime(createdAt: string): string {
 
 /** 「〇〇さんの選曲です！」形式なら投稿者名を返す */
 function getSelectorNameFromBody(body: string): string | null {
-  const match = body.match(/^(.+?)さんの選曲です！/);
+  const match = body.match(/^(.+?)さんの選曲(?:\s+お題（[^）]+）チャレンジ)?です！/);
   return match ? match[1].trim() : null;
 }
 
@@ -198,6 +198,10 @@ function commentFeedbackPayloadForMessage(
 
 function isNextSongRecommendFeedbackTarget(m: ChatMessageType): boolean {
   return m.messageType === 'ai' && m.aiSource === 'next_song_recommend' && Boolean(m.recommendationId);
+}
+
+function isDeferredNextSongRecommendMessage(m: ChatMessageType): boolean {
+  return m.messageType === 'ai' && m.aiSource === 'next_song_recommend' && m.deferToPanel === true;
 }
 
 function tuningReportAnchorPreviewBody(m: ChatMessageType): string {
@@ -555,6 +559,8 @@ export default function Chat({
   const [themeMissionModalOpen, setThemeMissionModalOpen] = useState(false);
   /** 三択クイズ: メッセージ id → 選んだ選択肢 index */
   const [songQuizPickedIndex, setSongQuizPickedIndex] = useState<Record<string, number>>({});
+  const deferredNextSongRecommendMessages = messages.filter(isDeferredNextSongRecommendMessage);
+  const visibleMessages = messages.filter((m) => !isDeferredNextSongRecommendMessage(m));
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -1059,7 +1065,7 @@ export default function Chat({
           </p>
         ) : (
           <ul className="flex flex-col gap-2">
-            {messages.map((m) => {
+            {visibleMessages.map((m) => {
               const parsedUiLabel = extractUiLabelFromBody(m.body);
               const renderedBodyText = parsedUiLabel.text;
               const bodyTextForDisplay =
@@ -1486,6 +1492,32 @@ export default function Chat({
             })}
           </ul>
         )}
+        {deferredNextSongRecommendMessages.length > 0 ? (
+          <details className="mt-3 rounded-md border border-violet-700/55 bg-violet-950/15 p-2">
+            <summary className="cursor-pointer list-none text-xs font-semibold text-violet-200">
+              あとで見るAIおすすめ ({deferredNextSongRecommendMessages.length})
+            </summary>
+            <ul className="mt-2 flex flex-col gap-2">
+              {deferredNextSongRecommendMessages.map((m) => (
+                <li
+                  key={`deferred-${m.id}`}
+                  className="rounded border border-violet-700/50 bg-gray-950 px-2.5 py-2 text-xs text-gray-200"
+                >
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <span className="text-violet-200">遅延表示</span>
+                    <span className="text-[10px] text-gray-500">{formatTime(m.createdAt)}</span>
+                  </div>
+                  <div className="whitespace-pre-wrap break-words">
+                    {renderAiBodyWithArtistSongHighlight(stripUiLabelPrefix(m.body), {
+                      keyPrefix: `deferred-${m.id}`,
+                      onYoutubeSearch: onYoutubeSearchFromAi,
+                    })}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </details>
+        ) : null}
         <div ref={bottomRef} aria-hidden />
       </div>
 

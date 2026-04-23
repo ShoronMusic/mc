@@ -49,7 +49,10 @@ export interface ChatInputHandle {
 
 interface ChatInputProps {
   onSendMessage: (text: string) => void;
-  onVideoUrl?: (url: string, opts?: { themePlaylistThemeId?: string | null }) => void;
+  onVideoUrl?: (
+    url: string,
+    opts?: { themePlaylistThemeId?: string | null; themePlaylistThemeLabel?: string | null },
+  ) => void;
   /** ゲスト時は検索APIの制限を低めにするために送る */
   isGuest?: boolean;
   onSystemMessage?: (text: string, opts?: SystemMessageOptions) => void;
@@ -303,7 +306,10 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
       setThemePlaylistConfirmOpen(false);
       return;
     }
-    onVideoUrl(trimmed, { themePlaylistThemeId: themePlaylistRoomSubmit.themeId });
+    onVideoUrl(trimmed, {
+      themePlaylistThemeId: themePlaylistRoomSubmit.themeId,
+      themePlaylistThemeLabel: themePlaylistRoomSubmit.themeLabel,
+    });
     setValue('');
     setThemePlaylistConfirmOpen(false);
   };

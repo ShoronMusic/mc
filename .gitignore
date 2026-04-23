@@ -36,6 +36,9 @@ NUsic_Chat_サーバー関連.txt
 # Google Cloud / OAuth クライアント JSON（client_secret を含むため絶対にコミットしない）
 client_secret*.json
 **/client_secret*.json
+_work/
+videosozai/
+log/
 
 # vercel
 .vercel

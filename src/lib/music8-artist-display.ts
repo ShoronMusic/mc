@@ -64,7 +64,13 @@ function getArtistMember(
   return m as false | Music8MemberItem[] | Music8MemberItem;
 }
 
-const MUSIC8_ARTISTS_BASE = 'https://xs867261.xsrv.jp/data/data/artists';
+const MUSIC8_ARTISTS_BASE = 'https://storage.googleapis.com/music8-json-prod/data/artists';
+
+export function getMusic8ArtistJsonUrlCandidates(artistName: string): string[] {
+  const slug = artistNameToMusic8Slug(resolveArtistNameForMusic8Lookup(artistName));
+  if (!slug) return [];
+  return [`${MUSIC8_ARTISTS_BASE}/${slug}.json`];
+}
 
 /**
  * アーティスト名を music8 の JSON URL 用 slug に変換。
@@ -102,23 +108,25 @@ export function artistNameToMusic8Slug(artistName: string): string {
 
 /** music8 アーティスト JSON の URL */
 export function getMusic8ArtistJsonUrl(artistName: string): string {
-  const slug = artistNameToMusic8Slug(resolveArtistNameForMusic8Lookup(artistName));
-  return slug ? `${MUSIC8_ARTISTS_BASE}/${slug}.json` : '';
+  return getMusic8ArtistJsonUrlCandidates(artistName)[0] ?? '';
 }
 
-/** `data/data/artists/{slug}.json` が存在するか（HEAD → 非 OK なら GET で再試行） */
+/** `music8-json-prod/data/artists/{slug}.json` が存在するか（HEAD → 非 OK なら GET で再試行） */
 export async function checkMusic8ArtistJsonUrlExists(artistName: string): Promise<boolean> {
-  const url = getMusic8ArtistJsonUrl(artistName);
-  if (!url) return false;
-  try {
-    let res = await fetch(url, { method: 'HEAD', cache: 'no-store' });
-    if (!res.ok) {
-      res = await fetch(url, { method: 'GET', cache: 'no-store' });
+  const urls = getMusic8ArtistJsonUrlCandidates(artistName);
+  if (!urls.length) return false;
+  for (const url of urls) {
+    try {
+      let res = await fetch(url, { method: 'HEAD', cache: 'no-store' });
+      if (!res.ok) {
+        res = await fetch(url, { method: 'GET', cache: 'no-store' });
+      }
+      if (res.ok) return true;
+    } catch {
+      continue;
     }
-    return res.ok;
-  } catch {
-    return false;
   }
+  return false;
 }
 
 /**

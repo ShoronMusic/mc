@@ -7,7 +7,6 @@
 
 import { useEffect, useState } from 'react';
 import {
-  fetchMusic8SongDataForPlaybackRow,
   resolveSongTitleForMusic8,
 } from '@/lib/music8-song-lookup';
 import { extractMusic8SongFields, type Music8SongExtract } from '@/lib/music8-song-fields';
@@ -93,9 +92,13 @@ export default function SongDataTabPanel({
             return;
           }
         }
-        const data = await fetchMusic8SongDataForPlaybackRow(artistName, songTitle ?? '');
-        if (data) {
-          setFields(extractMusic8SongFields(data));
+        const sr = await fetch(
+          `/api/music8/song-by-playback?artistName=${encodeURIComponent(artistName)}&songTitle=${encodeURIComponent(songTitle ?? '')}`,
+          { credentials: 'include' },
+        );
+        const sj = (await sr.json().catch(() => ({}))) as { song?: unknown };
+        if (sj?.song && typeof sj.song === 'object') {
+          setFields(extractMusic8SongFields(sj.song));
           setError(false);
         } else {
           setFields(null);

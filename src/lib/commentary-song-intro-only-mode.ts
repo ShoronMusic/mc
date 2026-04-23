@@ -8,7 +8,7 @@ import { extractMusic8SongFields } from '@/lib/music8-song-fields';
 
 const YEAR_IN_TEXT_RE = /\b(19[5-9]\d|20[0-3]\d)\b|\b(19[5-9]\d|20[0-3]\d)年/;
 
-function musicaichatSongHasStructuredReleaseYear(song: MusicaichatSongJson | null): boolean {
+function musicaichatSongHasStructuredReleaseYear(song: MusicaichatSongJson | unknown | null): boolean {
   if (!song) return false;
   const rd = (extractMusic8SongFields(song).releaseDate ?? '').trim();
   return /^\d{4}/.test(rd);
@@ -36,7 +36,7 @@ function factsTextHasAlbumOrSingleReleaseContext(text: string): boolean {
  * Music8 曲 JSON の releases に日付がある、または事実テキストに盤・シングル文脈がある＝出自が参照データで示せる。
  */
 function hasTrustedReleaseProvenance(
-  song: MusicaichatSongJson | null,
+  song: MusicaichatSongJson | unknown | null,
   combinedFactsText: string,
 ): boolean {
   return (
@@ -49,14 +49,19 @@ function hasTrustedReleaseProvenance(
  * 確証あるリリース年と、収録／シングル等の出自の両方が参照データで示せない場合に true（曲紹介のみへ）。
  */
 export function shouldUseSongIntroOnlyDiscographyMode(params: {
-  musicaichatSong: MusicaichatSongJson | null;
+  music8Song: MusicaichatSongJson | unknown | null;
   /** Music8 事実ブロック・MusicBrainz 事実などを連結したテキスト */
   combinedFactsText: string;
 }): boolean {
   const combined = (params.combinedFactsText ?? '').trim();
+  const hasAnyReference = params.music8Song != null || combined.length > 0;
+  if (!hasAnyReference) {
+    // 参照データがゼロのときは intro-only に固定せず通常解説へ。
+    return false;
+  }
   const hasYear =
-    musicaichatSongHasStructuredReleaseYear(params.musicaichatSong) || factsTextHasConcreteYear(combined);
-  const hasProvenance = hasTrustedReleaseProvenance(params.musicaichatSong, combined);
+    musicaichatSongHasStructuredReleaseYear(params.music8Song) || factsTextHasConcreteYear(combined);
+  const hasProvenance = hasTrustedReleaseProvenance(params.music8Song, combined);
   return !(hasYear && hasProvenance);
 }
 

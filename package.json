@@ -48,6 +48,7 @@
     "validate": "npm run verify:utf8 && npm run lint && npx tsc --noEmit && npm run test"
   },
   "dependencies": {
+    "@google-cloud/storage": "^7.19.0",
     "@google/generative-ai": "^0.21.0",
     "@heroicons/react": "^2.2.0",
     "@supabase/ssr": "^0.9.0",

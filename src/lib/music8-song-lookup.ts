@@ -11,9 +11,23 @@ import {
   parseArtistTitle,
 } from '@/lib/format-song-display';
 
-const MUSIC8_SONGS_BASE = 'https://xs867261.xsrv.jp/data/data/songs';
-const MUSIC8_ARTISTS_BASE = 'https://xs867261.xsrv.jp/data/data/artists';
+const MUSIC8_SONGS_BASE = 'https://storage.googleapis.com/music8-json-prod/data/songs';
+const MUSIC8_ARTISTS_BASE = 'https://storage.googleapis.com/music8-json-prod/data/artists';
 const ARTIST_PAGES_MAX = 6;
+
+export type Music8JsonFetcher = <T = Record<string, unknown>>(url: string) => Promise<T | null>;
+
+const defaultMusic8JsonFetcher: Music8JsonFetcher = async <T = Record<string, unknown>>(
+  url: string
+): Promise<T | null> => {
+  try {
+    const res = await fetch(url, { next: { revalidate: 300 } });
+    if (!res.ok) return null;
+    return (await res.json()) as T;
+  } catch {
+    return null;
+  }
+};
 
 /** ローマ数字をアラビア数字に（Music8 の slug は synchronicity2 のように数字） */
 function romanNumeralToDigit(title: string): string {
@@ -135,21 +149,16 @@ function slugMatches(want: string, have: string): boolean {
  */
 async function findSongInArtistPages(
   artistSlug: string,
-  titleSlug: string
+  titleSlug: string,
+  fetchJson: Music8JsonFetcher
 ): Promise<Music8ArtistSongItem | null> {
   for (let page = 1; page <= ARTIST_PAGES_MAX; page++) {
-    const url = getMusic8ArtistPageUrl(artistSlug, page);
-    if (!url) continue;
-    try {
-      const res = await fetch(url, { next: { revalidate: 300 } });
-      if (!res.ok) continue;
-      const data = (await res.json()) as Music8ArtistPageJson;
-      const songs = data?.songs ?? [];
-      const found = songs.find((s) => slugMatches(titleSlug, (s.slug ?? '').trim()));
-      if (found) return found;
-    } catch {
-      continue;
-    }
+    const url = `${MUSIC8_ARTISTS_BASE}/${artistSlug}/${page}.json`;
+    const data = await fetchJson<Music8ArtistPageJson>(url);
+    if (!data) continue;
+    const songs = data.songs ?? [];
+    const found = songs.find((s) => slugMatches(titleSlug, (s.slug ?? '').trim()));
+    if (found) return found;
   }
   return null;
 }
@@ -165,7 +174,10 @@ async function findSongInArtistPages(
  */
 export async function fetchMusic8SongData(
   artistNameOrSlug: string,
-  songTitle: string
+  songTitle: string,
+  options?: {
+    fetchJson?: Music8JsonFetcher;
+  }
 ): Promise<Record<string, unknown> | null> {
   const nameForMusic8 = resolveArtistNameForMusic8Lookup(artistNameOrSlug ?? '');
   const artistSlug =
@@ -175,20 +187,12 @@ export async function fetchMusic8SongData(
   const titleSlug = songTitleToMusic8Slug(normalizedTitle || (songTitle ?? '').trim());
   if (!artistSlug || !titleSlug) return null;
 
-  const directUrl = getMusic8SongJsonUrl(artistSlug, titleSlug);
-  if (directUrl) {
-    try {
-      const res = await fetch(directUrl, { next: { revalidate: 300 } });
-      if (res.ok) {
-        const data = (await res.json()) as Record<string, unknown>;
-        if (data && typeof data === 'object') return data;
-      }
-    } catch {
-      // フォールバックへ
-    }
-  }
+  const fetchJson = options?.fetchJson ?? defaultMusic8JsonFetcher;
+  const directUrl = `${MUSIC8_SONGS_BASE}/${artistSlug}_${titleSlug}.json`;
+  const direct = await fetchJson<Record<string, unknown>>(directUrl);
+  if (direct && typeof direct === 'object') return direct;
 
-  const fromArtist = await findSongInArtistPages(artistSlug, titleSlug);
+  const fromArtist = await findSongInArtistPages(artistSlug, titleSlug, fetchJson);
   if (fromArtist) return fromArtist as unknown as Record<string, unknown>;
   return null;
 }
@@ -281,12 +285,15 @@ export function listArtistCandidatesForMusic8(
  */
 export async function fetchMusic8SongDataForPlaybackRow(
   mainArtist: string,
-  fullVideoTitle: string
+  fullVideoTitle: string,
+  options?: {
+    fetchJson?: Music8JsonFetcher;
+  }
 ): Promise<Record<string, unknown> | null> {
   const songLookup = resolveSongTitleForMusic8(mainArtist, fullVideoTitle);
   if (!songLookup) return null;
   for (const artist of listArtistCandidatesForMusic8(mainArtist, fullVideoTitle)) {
-    const data = await fetchMusic8SongData(artist, songLookup);
+    const data = await fetchMusic8SongData(artist, songLookup, options);
     if (data) return data;
   }
   return null;

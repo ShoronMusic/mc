@@ -29,6 +29,8 @@ export async function POST(request: Request) {
     const videoId = typeof body?.videoId === 'string' ? body.videoId.trim() : '';
     const roomId = typeof body?.roomId === 'string' ? body.roomId.trim() : '';
     const displayName = typeof body?.displayName === 'string' ? body.displayName.trim() || 'ゲスト' : 'ゲスト';
+    const themePlaylistThemeLabel =
+      typeof body?.themePlaylistThemeLabel === 'string' ? body.themePlaylistThemeLabel.trim() : '';
     if (!videoId) {
       return NextResponse.json({ error: 'videoId is required' }, { status: 400 });
     }
@@ -116,7 +118,10 @@ export async function POST(request: Request) {
     const showJpDomesticTag =
       isJapaneseDomestic && !suppressJpDomesticAnnounceTagForArtist({ artist, artistDisplay });
     const artistTitle = showJpDomesticTag ? `${artistTitleBase}（邦楽）` : artistTitleBase;
-    const text = `${displayName}さんの選曲です！\n${artistTitle}`;
+    const announceHead = themePlaylistThemeLabel
+      ? `${displayName}さんの選曲 お題（${themePlaylistThemeLabel}）チャレンジです！`
+      : `${displayName}さんの選曲です！`;
+    const text = `${announceHead}\n${artistTitle}`;
 
     return NextResponse.json({
       text,

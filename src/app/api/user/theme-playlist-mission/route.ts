@@ -49,6 +49,35 @@ type CustomThemeRow = {
   updated_at: string;
 };
 
+function buildMissionLabelById(
+  missions: MissionRow[],
+  baseLabelByThemeId: Map<string, string>,
+): Map<string, string> {
+  const grouped = new Map<string, MissionRow[]>();
+  for (const m of missions) {
+    const key = (m.theme_id ?? '').trim();
+    if (!key) continue;
+    const list = grouped.get(key) ?? [];
+    list.push(m);
+    grouped.set(key, list);
+  }
+  const out = new Map<string, string>();
+  for (const [themeId, list] of grouped.entries()) {
+    const sorted = [...list].sort((a, b) => {
+      const ta = new Date(a.created_at).getTime();
+      const tb = new Date(b.created_at).getTime();
+      if (ta !== tb) return ta - tb;
+      return a.id.localeCompare(b.id);
+    });
+    const base = (baseLabelByThemeId.get(themeId) ?? themeId).trim() || themeId;
+    sorted.forEach((m, idx) => {
+      const vol = idx + 1;
+      out.set(m.id, vol >= 2 ? `${base} Vol.${vol}` : base);
+    });
+  }
+  return out;
+}
+
 function toCustomThemeId(rawId: string): string {
   return `custom:${rawId}`;
 }
@@ -174,13 +203,18 @@ export async function GET() {
 
   const customLabelByThemeId = new Map<string, string>();
   for (const t of customThemes) customLabelByThemeId.set(t.id, t.label);
-  const missionsOut = missions.map((m) => {
+  const baseLabelByThemeId = new Map<string, string>();
+  for (const m of missions) {
     const def = getThemePlaylistDefinition(m.theme_id);
     const customLabel = customLabelByThemeId.get(m.theme_id);
+    baseLabelByThemeId.set(m.theme_id, def?.labelJa ?? customLabel ?? m.theme_id);
+  }
+  const missionLabelById = buildMissionLabelById(missions, baseLabelByThemeId);
+  const missionsOut = missions.map((m) => {
     return {
       id: m.id,
       theme_id: m.theme_id,
-      theme_label: def?.labelJa ?? customLabel ?? m.theme_id,
+      theme_label: missionLabelById.get(m.id) ?? baseLabelByThemeId.get(m.theme_id) ?? m.theme_id,
       status: m.status,
       completed_at: m.completed_at,
       created_at: m.created_at,

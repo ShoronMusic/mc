@@ -5,10 +5,10 @@ import {
   shouldUseSongIntroOnlyDiscographyMode,
 } from '@/lib/commentary-song-intro-only-mode';
 
-test('intro-only: no Music8 song and empty facts → true', () => {
+test('intro-only: no Music8 song and empty facts → false (fallback to normal commentary)', () => {
   assert.equal(
-    shouldUseSongIntroOnlyDiscographyMode({ musicaichatSong: null, combinedFactsText: '' }),
-    true,
+    shouldUseSongIntroOnlyDiscographyMode({ music8Song: null, combinedFactsText: '' }),
+    false,
   );
 });
 
@@ -21,7 +21,7 @@ test('intro-only: Music8 releases year but facts lack album/single wording → f
   const block =
     '【Music8 参照事実（外部マスタ。本文はこれと矛盾させない。推測で補わない）】\n・ジャンル： New wave\n・stable_key: a_b';
   assert.equal(
-    shouldUseSongIntroOnlyDiscographyMode({ musicaichatSong: song, combinedFactsText: block }),
+    shouldUseSongIntroOnlyDiscographyMode({ music8Song: song, combinedFactsText: block }),
     false,
   );
 });
@@ -29,7 +29,7 @@ test('intro-only: Music8 releases year but facts lack album/single wording → f
 test('intro-only: facts with year in text but no provenance → true', () => {
   assert.equal(
     shouldUseSongIntroOnlyDiscographyMode({
-      musicaichatSong: null,
+      music8Song: null,
       combinedFactsText: '・1979年頃に話題となった',
     }),
     true,
@@ -39,7 +39,7 @@ test('intro-only: facts with year in text but no provenance → true', () => {
 test('intro-only: facts with year + シングル → false', () => {
   assert.equal(
     shouldUseSongIntroOnlyDiscographyMode({
-      musicaichatSong: null,
+      music8Song: null,
       combinedFactsText: '・1979年のシングルとしてリリース',
     }),
     false,

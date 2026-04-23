@@ -291,7 +291,11 @@ export default function RoomWithoutSync({
   const songQuizFetchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const nextSongRecommendTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const themePlaylistBlurbTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingThemePlaylistBlurbRef = useRef<{ videoId: string; themeId: string } | null>(null);
+  const pendingThemePlaylistBlurbRef = useRef<{
+    videoId: string;
+    themeId: string;
+    themeLabel?: string;
+  } | null>(null);
   const userRoomAiCommentaryEnabledRef = useRef(true);
   const userRoomAiSongQuizEnabledRef = useRef(true);
   const userRoomAiRecommendEnabledRef = useRef(true);
@@ -500,6 +504,7 @@ export default function RoomWithoutSync({
         videoId?: string | null;
         aiSource?: ChatMessage['aiSource'];
         recommendationId?: string | null;
+        deferToPanel?: boolean;
       }
     ) => {
       const jpS = jpDomesticSilenceVideoIdRef.current;
@@ -521,10 +526,19 @@ export default function RoomWithoutSync({
         ...(options?.videoId != null ? { videoId: options.videoId } : {}),
         ...(options?.aiSource ? { aiSource: options.aiSource } : {}),
         ...(options?.recommendationId ? { recommendationId: options.recommendationId } : {}),
+        ...(options?.deferToPanel ? { deferToPanel: true as const } : {}),
       };
       setMessages((prev) => [...prev, msg]);
     },
     []
+  );
+
+  const buildNextSongRecommendExtras = useCallback(
+    (targetVideoId: string): Record<string, unknown> => {
+      if (nextPromptShownForVideoIdRef.current !== targetVideoId) return {};
+      return { deferToPanel: true };
+    },
+    [],
   );
 
   const scheduleLocalSongQuizReveal = useCallback((quizMessageId: string, q: SongQuizPayload, vid: string) => {
@@ -771,12 +785,26 @@ export default function RoomWithoutSync({
   }, [videoId]);
 
   const fetchAnnounceAndPublish = useCallback(
-    (vid: string, options?: { silent?: boolean }) => {
+    (vid: string, options?: { silent?: boolean; themePlaylistThemeLabel?: string | null }) => {
       const silent = options?.silent === true;
+      const themeLabelRaw =
+        typeof options?.themePlaylistThemeLabel === 'string'
+          ? options.themePlaylistThemeLabel.trim()
+          : '';
+      const themeLabelFromPending =
+        pendingThemePlaylistBlurbRef.current?.videoId === vid
+          ? (pendingThemePlaylistBlurbRef.current?.themeLabel ?? '').trim()
+          : '';
+      const themePlaylistThemeLabel = themeLabelRaw || themeLabelFromPending;
       fetch('/api/ai/announce-song', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ videoId: vid, displayName: displayNameProp, roomId }),
+        body: JSON.stringify({
+          videoId: vid,
+          displayName: displayNameProp,
+          roomId,
+          ...(themePlaylistThemeLabel ? { themePlaylistThemeLabel } : {}),
+        }),
       })
         .then((r) => (r.ok ? r.json() : null))
         .then((data) => {
@@ -927,6 +955,7 @@ export default function RoomWithoutSync({
                           nextSongRecommendTimeoutRef.current = t;
                         },
                         addAiMessage,
+                        buildAddAiMessageExtras: () => buildNextSongRecommendExtras(vid),
                       });
                     });
                 }, 3500);
@@ -951,6 +980,7 @@ export default function RoomWithoutSync({
                     nextSongRecommendTimeoutRef.current = t;
                   },
                   addAiMessage,
+                  buildAddAiMessageExtras: () => buildNextSongRecommendExtras(vid),
                 });
               }
               scheduleThemePlaylistRoomBlurbAfterPack({
@@ -1064,6 +1094,7 @@ export default function RoomWithoutSync({
                         nextSongRecommendTimeoutRef.current = t;
                       },
                       addAiMessage,
+                      buildAddAiMessageExtras: () => buildNextSongRecommendExtras(vid),
                     });
                   });
               }, 4000);
@@ -1088,6 +1119,7 @@ export default function RoomWithoutSync({
                   nextSongRecommendTimeoutRef.current = t;
                 },
                 addAiMessage,
+                buildAddAiMessageExtras: () => buildNextSongRecommendExtras(vid),
               });
             }
             scheduleThemePlaylistRoomBlurbAfterPack({
@@ -1123,6 +1155,7 @@ export default function RoomWithoutSync({
       scheduleLocalSongQuizReveal,
       isGuest,
       displayNameProp,
+      buildNextSongRecommendExtras,
     ]
   );
 
@@ -1252,13 +1285,22 @@ export default function RoomWithoutSync({
   );
 
   const handleVideoUrlFromChat = useCallback(
-    (url: string, opts?: { themePlaylistThemeId?: string | null }) => {
+    (
+      url: string,
+      opts?: { themePlaylistThemeId?: string | null; themePlaylistThemeLabel?: string | null },
+    ) => {
       const id = extractVideoId(url);
       if (!id) return;
       const themePick =
         typeof opts?.themePlaylistThemeId === 'string' ? opts.themePlaylistThemeId.trim() : '';
+      const themeLabel =
+        typeof opts?.themePlaylistThemeLabel === 'string' ? opts.themePlaylistThemeLabel.trim() : '';
       if (!isGuest && themePick) {
-        pendingThemePlaylistBlurbRef.current = { videoId: id, themeId: themePick };
+        pendingThemePlaylistBlurbRef.current = {
+          videoId: id,
+          themeId: themePick,
+          ...(themeLabel ? { themeLabel } : {}),
+        };
       } else {
         pendingThemePlaylistBlurbRef.current = null;
       }
@@ -1270,7 +1312,10 @@ export default function RoomWithoutSync({
       scheduleLocalAutoPlayAfterLoad();
       fetchAnnounceAndPublish(
         id,
-        (sameReplay || isDevMinimalSongAi()) ? { silent: true } : undefined,
+        {
+          ...((sameReplay || isDevMinimalSongAi()) ? { silent: true } : {}),
+          ...(themeLabel ? { themePlaylistThemeLabel: themeLabel } : {}),
+        },
       );
       if (!sameReplay) fetchCommentaryAndPublish(id);
       saveSongHistory(id);

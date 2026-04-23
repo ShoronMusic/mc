@@ -5,10 +5,15 @@
  * youtube_to_song.json は数 MB 級のため、プロセス内メモリに TTL キャッシュする。
  */
 
-import { checkMusic8ArtistJsonUrlExists } from '@/lib/music8-artist-display';
+import { getMusic8ArtistJsonUrlCandidates } from '@/lib/music8-artist-display';
+import {
+  checkUrlExistsWithOptionalGcsAuth,
+  fetchJsonWithOptionalGcsAuth,
+} from '@/lib/music8-gcs-server';
+import { fetchMusic8SongData } from '@/lib/music8-song-lookup';
 import { filterMusicaichatFactsBoilerplateLines } from '@/lib/music8-song-fields';
 
-const DEFAULT_BASE_URL = 'https://xs867261.xsrv.jp/data/data/musicaichat/v1';
+const DEFAULT_BASE_URL = 'https://storage.googleapis.com/music8-json-prod/data/musicaichat/v1';
 
 const DEFAULT_INDEX_TTL_MS = 60 * 60 * 1000;
 
@@ -103,13 +108,7 @@ export function clearMusicaichatYoutubeIndexCacheForTests(): void {
 export async function fetchMusicaichatManifest(): Promise<MusicaichatManifest | null> {
   const base = getMusic8MusicaichatBaseUrl();
   if (!base) return null;
-  try {
-    const res = await fetch(`${base}/manifest.json`, { cache: 'no-store' });
-    if (!res.ok) return null;
-    return (await res.json()) as MusicaichatManifest;
-  } catch {
-    return null;
-  }
+  return fetchJsonWithOptionalGcsAuth<MusicaichatManifest>(`${base}/manifest.json`);
 }
 
 async function ensureYoutubeIndexLoaded(): Promise<Record<string, MusicaichatYoutubeIndexEntry> | null> {
@@ -120,11 +119,10 @@ async function ensureYoutubeIndexLoaded(): Promise<Record<string, MusicaichatYou
     return cachedYoutubeIndex;
   }
   try {
-    const res = await fetch(`${base}/index/youtube_to_song.json`, { cache: 'no-store' });
-    if (!res.ok) {
-      return null;
-    }
-    const json = (await res.json()) as Record<string, unknown>;
+    const json = await fetchJsonWithOptionalGcsAuth<Record<string, unknown>>(
+      `${base}/index/youtube_to_song.json`,
+    );
+    if (!json) return null;
     const out: Record<string, MusicaichatYoutubeIndexEntry> = {};
     for (const [k, v] of Object.entries(json)) {
       if (!k.trim()) continue;
@@ -170,11 +168,10 @@ export async function fetchMusicaichatSongJson(
   const s = (songSlug ?? '').trim();
   if (!base || !a || !s) return null;
   try {
-    const res = await fetch(`${base}/songs/${encodeURIComponent(a)}_${encodeURIComponent(s)}.json`, {
-      cache: 'no-store',
-    });
-    if (!res.ok) return null;
-    const json = (await res.json()) as MusicaichatSongJson;
+    const json = await fetchJsonWithOptionalGcsAuth<MusicaichatSongJson>(
+      `${base}/songs/${encodeURIComponent(a)}_${encodeURIComponent(s)}.json`,
+    );
+    if (!json) return null;
     const sk = json?.stable_key;
     if (
       !sk ||
@@ -283,6 +280,8 @@ export type Music8CommentPackContext = {
   songJsonHit: boolean;
   /** musicaichat 曲 JSON（取得済み。プロンプト注入にそのまま使う） */
   musicaichatSong: MusicaichatSongJson | null;
+  /** videoId 索引で取れないときの artist+song フォールバック（intro-only 判定用） */
+  fallbackMusic8Song: Record<string, unknown> | null;
 };
 
 /**
@@ -291,18 +290,31 @@ export type Music8CommentPackContext = {
 export async function resolveMusic8ContextForCommentPack(
   videoId: string,
   artistLookupName: string,
+  songLookupTitle: string,
 ): Promise<Music8CommentPackContext> {
   const vid = (videoId ?? '').trim();
   const name = (artistLookupName ?? '').trim();
+  const songTitle = (songLookupTitle ?? '').trim();
+  const artistUrlCandidates = name ? getMusic8ArtistJsonUrlCandidates(name) : [];
   const [musicaichatSong, artistJsonHit] = await Promise.all([
     getMusic8MusicaichatBaseUrl() && vid
       ? fetchMusicaichatSongJsonForVideoId(vid)
       : Promise.resolve(null),
-    name ? checkMusic8ArtistJsonUrlExists(name) : Promise.resolve(false),
+    (async () => {
+      for (const candidate of artistUrlCandidates) {
+        if (await checkUrlExistsWithOptionalGcsAuth(candidate)) return true;
+      }
+      return false;
+    })(),
   ]);
+  const fallbackMusic8Song =
+    musicaichatSong == null && name && songTitle
+      ? await fetchMusic8SongData(name, songTitle, { fetchJson: fetchJsonWithOptionalGcsAuth })
+      : null;
   return {
     artistJsonHit,
-    songJsonHit: musicaichatSong != null,
+    songJsonHit: musicaichatSong != null || fallbackMusic8Song != null,
     musicaichatSong,
+    fallbackMusic8Song,
   };
 }

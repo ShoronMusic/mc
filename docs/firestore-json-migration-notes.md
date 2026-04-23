@@ -50,6 +50,17 @@
 - ローカル生成後の自動アップロード（CLI/API）へ一本化
 - 圧縮JSONのまま取り扱う設計にしやすい
 
+## アーティスト / ソング参照JSONの切り替え
+
+- 変更対象:
+  - アーティストデータ / ソングデータで参照検索するJSON
+- 旧参照先（Xサーバー）:
+  - `https://xs867261.xsrv.jp/data/data/`
+- 新参照先（GCS）:
+  - `gs://music8-json-prod/data/`（運用上の基準パス）
+  - 公開HTTPで参照する場合は `https://storage.googleapis.com/music8-json-prod/data/`
+- パス構成（`artistlist/`, `artists/`, `genres/`, `musicaichat/`, `songs/`, `styles/`）は従来のまま維持し、ベースパスのみ差し替える
+
 ## 別PCでも使える GCSアップロード手順（PowerShell）
 
 前提:
@@ -112,10 +123,59 @@ gcloud storage ls gs://music8-json-prod/data/** | Measure-Object
 ### 7. 運用メモ
 
 - 生成フロー（WP APIでローカル生成）は従来通り維持
-- 変更点は「アップロード先をXサーバーからGCSに変更」のみ
+- 変更点は「アップロード先 / 参照先をXサーバーからGCSに変更」のみ
 - 将来的に安全性を上げる場合は、公開配信をCloud Run API経由に寄せる
 
 ## 参照URL
 
 - musicai.jp: https://www.musicai.jp/
 - 現行WP側（music8）: https://xs867261.xsrv.jp/md/
+
+---
+
+## 2026-04 追記: 非公開GCS + Vercelサービスアカウント運用（確定）
+
+本番方針は以下で固定する。
+
+- GCSバケット `music8-json-prod` は **公開しない**
+- ブラウザから `storage.googleapis.com` を直接参照しない
+- Next.jsサーバー（Vercel）がサービスアカウントで認証してJSONを取得し、API経由で返す
+
+### Vercel 環境変数（必須）
+
+- `GOOGLE_APPLICATION_CREDENTIALS_JSON`
+  - 値: サービスアカウント鍵JSON全文（`{...}` を丸ごと）
+- `GOOGLE_CLOUD_PROJECT`
+  - 値: `music8-a161a`
+
+補足:
+
+- `Sensitive` を ON のまま登録する
+- 反映には再デプロイが必要
+- `GOOGLE_APPLICATION_CREDENTIALS_JSON` にプロジェクトID文字列だけを入れないこと
+
+### サービスアカウント推奨設定
+
+- 用途専用アカウントを作る（例: `music8-json-reader@music8-a161a.iam.gserviceaccount.com`）
+- 権限は最小化する
+  - 対象バケット: `music8-json-prod`
+  - ロール: `Storage Object Viewer`
+- プロジェクト全体ロールは原則付与しない
+
+### 鍵ローテーション手順（運用）
+
+1. 新しい鍵（JSON）を発行する
+2. Vercel の `GOOGLE_APPLICATION_CREDENTIALS_JSON` を新鍵に更新する
+3. 再デプロイする
+4. 動作確認（Music8アーティスト/ソングデータ表示、comment-pack）
+5. 旧鍵を削除する
+
+### インシデント時の即時対応（鍵露出含む）
+
+- 鍵が画面共有・スクリーンショット・チャット等に露出した場合は **漏えい扱い**にする
+- 対応順:
+  1. 該当鍵を即時無効化/削除
+  2. 新鍵発行
+  3. Vercel更新 + 再デプロイ
+  4. 動作確認
+- 鍵ファイルはGit管理しない（リポジトリ、Issue、PR添付に置かない）

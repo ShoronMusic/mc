@@ -50,6 +50,8 @@ export interface ChatMessage {
     | 'other';
   /** next_song_recommendations.id（おすすめ曲単位の評価・管理者削除用） */
   recommendationId?: string | null;
+  /** 次曲案内後に完了したおすすめはチャット本流へ割り込ませず折りたたみパネルへ送る */
+  deferToPanel?: boolean;
   /** AI 本文の強調（入室直後の選曲案内など。未設定は通常色） */
   aiBodyEmphasis?: 'yellow';
   /** song_tidbits の行ID（comment-pack 由来のみ。モデレーターNG用） */
@@ -105,6 +107,7 @@ export interface ChatMessagePayload {
     | 'theme_playlist_room'
     | 'other';
   recommendationId?: string | null;
+  deferToPanel?: boolean;
   /** AI 本文の強調（入室直後の選曲案内など） */
   aiBodyEmphasis?: 'yellow';
   /** song_tidbits の行ID（comment-pack 由来） */

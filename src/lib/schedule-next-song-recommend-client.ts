@@ -45,6 +45,8 @@ export function scheduleNextSongRecommendAfterCommentary(options: {
   addAiMessage: AddAiMessageFn;
   /** 同期部屋では AI 発言停止中でも出すため true */
   addAiMessageExtras?: Record<string, unknown>;
+  /** 送信直前に追加オプションを決める（次曲案内後の遅延パネル送り判定など） */
+  buildAddAiMessageExtras?: () => Record<string, unknown> | undefined;
 }): void {
   if (options.isGuest) return;
 
@@ -77,6 +79,7 @@ export function scheduleNextSongRecommendAfterCommentary(options: {
         picks.forEach((pick, idx) => {
           const emit = () => {
             if (options.videoIdRef.current !== options.videoId) return;
+            const dynamicExtras = options.buildAddAiMessageExtras?.() ?? {};
             options.addAiMessage(formatPickMessage(pick, idx, picks.length), {
               videoId: options.videoId,
               aiSource: 'next_song_recommend',
@@ -85,6 +88,7 @@ export function scheduleNextSongRecommendAfterCommentary(options: {
                   ? pick.recommendationId.trim()
                   : null,
               ...(options.addAiMessageExtras ?? {}),
+              ...dynamicExtras,
             });
           };
           if (idx === 0) {

@@ -541,7 +541,11 @@ export default function RoomWithSync({
   /** comment-pack の自由コメントを遅延表示するタイマー（次の曲案内で必ずクリア） */
   const freeCommentTimeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   /** 発言欄から YouTube 貼り付け時にお題が付いていれば、曲解説後に room-blurb API へ送る */
-  const pendingThemePlaylistBlurbRef = useRef<{ videoId: string; themeId: string } | null>(null);
+  const pendingThemePlaylistBlurbRef = useRef<{
+    videoId: string;
+    themeId: string;
+    themeLabel?: string;
+  } | null>(null);
   type SongQuizAnswerRow = { clientId: string; displayName: string; pickedIndex: number };
   type SongQuizRoundMetaLocal = { correctIndex: number; choices: string[]; videoId: string };
   /** 三択クイズ: 締め切り後に正解者を発表するタイマー（quiz メッセージ id キー） */
@@ -2421,6 +2425,7 @@ export default function RoomWithSync({
         videoId?: string | null;
         aiSource?: ChatMessage['aiSource'];
         recommendationId?: string | null;
+        deferToPanel?: boolean;
         /** 選曲アナウンス（邦楽フラグ付きペイロード用）のみ true */
         bypassJpDomesticSilence?: boolean;
         jpDomesticSilenceForVideoId?: string;
@@ -2457,6 +2462,7 @@ export default function RoomWithSync({
         ...(options?.videoId != null ? { videoId: options.videoId } : {}),
         ...(options?.aiSource ? { aiSource: options.aiSource } : {}),
         ...(options?.recommendationId ? { recommendationId: options.recommendationId } : {}),
+        ...(options?.deferToPanel ? { deferToPanel: true as const } : {}),
         ...(options?.jpDomesticSilenceForVideoId
           ? { jpDomesticSilenceForVideoId: options.jpDomesticSilenceForVideoId }
           : {}),
@@ -2480,6 +2486,7 @@ export default function RoomWithSync({
           ...(payload.videoId != null ? { videoId: payload.videoId } : {}),
           ...(payload.aiSource ? { aiSource: payload.aiSource } : {}),
           ...(payload.recommendationId ? { recommendationId: payload.recommendationId } : {}),
+          ...(payload.deferToPanel ? { deferToPanel: true as const } : {}),
           ...(payload.jpDomesticSilenceForVideoId
             ? { jpDomesticSilenceForVideoId: payload.jpDomesticSilenceForVideoId }
             : {}),
@@ -2490,6 +2497,16 @@ export default function RoomWithSync({
       ]);
     },
     [safePublish, aiFreeSpeechStopped]
+  );
+
+  const buildNextSongRecommendExtras = useCallback(
+    (targetVideoId: string): Record<string, unknown> => {
+      if (nextPromptShownForVideoIdRef.current !== targetVideoId) {
+        return { allowWhenAiStopped: true };
+      }
+      return { allowWhenAiStopped: true, deferToPanel: true };
+    },
+    [],
   );
 
   const runSongQuizResultAnnounce = useCallback(
@@ -3168,6 +3185,7 @@ export default function RoomWithSync({
         silent?: boolean;
         displayNameOverride?: string;
         adminPlaybackDisplayHint?: { title: string; artist_name: string | null };
+        themePlaylistThemeLabel?: string | null;
       },
     ) => {
       const silent = options?.silent === true;
@@ -3177,6 +3195,15 @@ export default function RoomWithSync({
           ? options.displayNameOverride.trim()
           : effectiveDisplayName;
       const hint = options?.adminPlaybackDisplayHint;
+      const themeLabelRaw =
+        typeof options?.themePlaylistThemeLabel === 'string'
+          ? options.themePlaylistThemeLabel.trim()
+          : '';
+      const themeLabelFromPending =
+        pendingThemePlaylistBlurbRef.current?.videoId === vid
+          ? (pendingThemePlaylistBlurbRef.current?.themeLabel ?? '').trim()
+          : '';
+      const themePlaylistThemeLabel = themeLabelRaw || themeLabelFromPending;
       fetch('/api/ai/announce-song', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -3185,6 +3212,7 @@ export default function RoomWithSync({
           displayName: announceDisplayName,
           roomId,
           jpAiUnlockEnabled: jpAiUnlockEnabledRef.current,
+          ...(themePlaylistThemeLabel ? { themePlaylistThemeLabel } : {}),
           ...(hint?.title?.trim()
             ? {
                 adminPlaybackDisplayHint: {
@@ -3419,7 +3447,7 @@ export default function RoomWithSync({
                             freeCommentTimeoutsRef.current.push(t);
                           },
                           addAiMessage,
-                          addAiMessageExtras: { allowWhenAiStopped: true },
+                          buildAddAiMessageExtras: () => buildNextSongRecommendExtras(vid),
                         });
                       }
                     });
@@ -3443,7 +3471,7 @@ export default function RoomWithSync({
                     freeCommentTimeoutsRef.current.push(t);
                   },
                   addAiMessage,
-                  addAiMessageExtras: { allowWhenAiStopped: true },
+                  buildAddAiMessageExtras: () => buildNextSongRecommendExtras(vid),
                 });
               }
               scheduleThemePlaylistRoomBlurbAfterPack({
@@ -3636,7 +3664,7 @@ export default function RoomWithSync({
                                   freeCommentTimeoutsRef.current.push(t);
                                 },
                                 addAiMessage,
-                                addAiMessageExtras: { allowWhenAiStopped: true },
+                                buildAddAiMessageExtras: () => buildNextSongRecommendExtras(vid),
                               });
                             }
                           });
@@ -3660,7 +3688,7 @@ export default function RoomWithSync({
                           freeCommentTimeoutsRef.current.push(t);
                         },
                         addAiMessage,
-                        addAiMessageExtras: { allowWhenAiStopped: true },
+                        buildAddAiMessageExtras: () => buildNextSongRecommendExtras(vid),
                       });
                     }
                     scheduleThemePlaylistRoomBlurbAfterPack({
@@ -3798,7 +3826,7 @@ export default function RoomWithSync({
                           freeCommentTimeoutsRef.current.push(t);
                         },
                         addAiMessage,
-                        addAiMessageExtras: { allowWhenAiStopped: true },
+                        buildAddAiMessageExtras: () => buildNextSongRecommendExtras(vid),
                       });
                     }
                   });
@@ -3822,7 +3850,7 @@ export default function RoomWithSync({
                   freeCommentTimeoutsRef.current.push(t);
                 },
                 addAiMessage,
-                addAiMessageExtras: { allowWhenAiStopped: true },
+                buildAddAiMessageExtras: () => buildNextSongRecommendExtras(vid),
               });
             }
             scheduleThemePlaylistRoomBlurbAfterPack({
@@ -3922,7 +3950,7 @@ export default function RoomWithSync({
                                 freeCommentTimeoutsRef.current.push(t);
                               },
                               addAiMessage,
-                              addAiMessageExtras: { allowWhenAiStopped: true },
+                              buildAddAiMessageExtras: () => buildNextSongRecommendExtras(vid),
                             });
                           }
                         });
@@ -3946,7 +3974,7 @@ export default function RoomWithSync({
                         freeCommentTimeoutsRef.current.push(t);
                       },
                       addAiMessage,
-                      addAiMessageExtras: { allowWhenAiStopped: true },
+                      buildAddAiMessageExtras: () => buildNextSongRecommendExtras(vid),
                     });
                   }
                   scheduleThemePlaylistRoomBlurbAfterPack({
@@ -3986,6 +4014,7 @@ export default function RoomWithSync({
       clearPendingSongQuizRoundState,
       isGuest,
       effectiveDisplayName,
+      buildNextSongRecommendExtras,
     ]
   );
 
@@ -4318,7 +4347,10 @@ export default function RoomWithSync({
   }, [myClientId, applyImmediateChangeVideo, syncSongReservationQueueHead]);
 
   const handleVideoUrlFromChat = useCallback(
-    (url: string, opts?: { themePlaylistThemeId?: string | null }) => {
+    (
+      url: string,
+      opts?: { themePlaylistThemeId?: string | null; themePlaylistThemeLabel?: string | null },
+    ) => {
       const id = extractVideoId(url);
       if (!id) return;
 
@@ -4373,8 +4405,14 @@ export default function RoomWithSync({
 
       const themePick =
         typeof opts?.themePlaylistThemeId === 'string' ? opts.themePlaylistThemeId.trim() : '';
+      const themeLabel =
+        typeof opts?.themePlaylistThemeLabel === 'string' ? opts.themePlaylistThemeLabel.trim() : '';
       if (!isGuest && themePick) {
-        pendingThemePlaylistBlurbRef.current = { videoId: id, themeId: themePick };
+        pendingThemePlaylistBlurbRef.current = {
+          videoId: id,
+          themeId: themePick,
+          ...(themeLabel ? { themeLabel } : {}),
+        };
       } else {
         pendingThemePlaylistBlurbRef.current = null;
       }

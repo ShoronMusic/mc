@@ -105,13 +105,13 @@ export async function getOrAssignStyle(
   fullVideoTitleForMusic8?: string | null,
   usageMeta?: { roomId?: string | null; videoId?: string | null }
 ): Promise<SongStyle> {
-  const music8Style = await trySongStyleFromMusic8(
+  const music8Result = await trySongStyleFromMusic8(
     artistName,
     fullVideoTitleForMusic8 ?? title
   );
-  if (music8Style) {
-    if (supabase) await setStyleInDb(supabase, videoId, music8Style);
-    return music8Style;
+  if (music8Result.style) {
+    if (supabase) await setStyleInDb(supabase, videoId, music8Result.style);
+    return music8Result.style;
   }
 
   const cached = supabase ? await getStyleFromDb(supabase, videoId) : null;

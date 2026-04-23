@@ -135,15 +135,19 @@ export async function POST(request: Request) {
       (artist && artist.trim()) ||
       (authorName && authorName.trim()) ||
       '';
-    const music8Ctx = await resolveMusic8ContextForCommentPack(videoId, artistLookupForMusic8);
-    const { musicaichatSong } = music8Ctx;
+    const music8Ctx = await resolveMusic8ContextForCommentPack(
+      videoId,
+      artistLookupForMusic8,
+      song || title,
+    );
+    const { musicaichatSong, fallbackMusic8Song } = music8Ctx;
     const skipMusic8FactInject = skipMusic8FactInjectEnv();
     const music8FactsBlock =
       !skipMusic8FactInject && musicaichatSong != null
         ? buildMusicaichatFactsForAiPromptBlock(musicaichatSong).trim()
         : '';
     const songIntroOnlyDiscography = shouldUseSongIntroOnlyDiscographyMode({
-      musicaichatSong,
+      music8Song: musicaichatSong ?? fallbackMusic8Song,
       combinedFactsText: music8FactsBlock,
     });
     const songQuizExtensionFinal = songIntroOnlyDiscography

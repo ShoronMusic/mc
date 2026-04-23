@@ -7,7 +7,6 @@
 import { useEffect, useState } from 'react';
 import {
   formatMusic8ArtistDisplayLines,
-  getMusic8ArtistJsonUrl,
   type Music8ArtistJson,
 } from '@/lib/music8-artist-display';
 import { ReferencedMusicDataDisclaimer } from '@/components/room/ReferencedMusicDataDisclaimer';
@@ -29,19 +28,21 @@ export default function MainArtistTabPanel({ artistName, songTitle }: MainArtist
       setError(false);
       return;
     }
-    const url = getMusic8ArtistJsonUrl(artistName);
-    if (!url) {
-      setData(null);
-      setLoading(false);
-      return;
-    }
     setLoading(true);
     setError(false);
-    fetch(url)
+    fetch(`/api/music8/artist-by-name?artistName=${encodeURIComponent(artistName)}`, {
+      credentials: 'include',
+    })
       .then((res) => (res.ok ? res.json() : Promise.reject(new Error('Not found'))))
       .then((json) => {
-        setData(json as Music8ArtistJson);
-        setError(false);
+        const artist = (json as { artist?: unknown })?.artist;
+        if (artist && typeof artist === 'object') {
+          setData(artist as Music8ArtistJson);
+          setError(false);
+          return;
+        }
+        setData(null);
+        setError(true);
       })
       .catch(() => {
         setData(null);

@@ -79,6 +79,12 @@ function displayMissionForTheme(themeId: string, missions: MissionApi[]): Missio
   return done[0] ?? null;
 }
 
+function nextMissionLabelForTheme(themeId: string, baseLabel: string, missions: MissionApi[]): string {
+  const count = missions.filter((m) => m.theme_id === themeId).length;
+  const nextVol = count + 1;
+  return nextVol >= 2 ? `${baseLabel} Vol.${nextVol}` : baseLabel;
+}
+
 export default function ThemePlaylistMissionPanel({ isGuest, canDeleteRecordedEntries }: Props) {
   const allowRecordedDelete = canDeleteRecordedEntries ?? !isGuest;
   const [presetThemes, setPresetThemes] = useState<ThemeRow[]>([]);
@@ -313,13 +319,17 @@ export default function ThemePlaylistMissionPanel({ isGuest, canDeleteRecordedEn
   const toggleThemeRow = async (themeId: string) => {
     if (busy) return;
     const targetTheme = [...customThemes, ...presetThemes].find((t) => t.id === themeId);
-    const themeLabel = targetTheme?.label ?? 'このお題';
+    const baseThemeLabel = targetTheme?.label ?? 'このお題';
     const dm = displayMissionForTheme(themeId, missions);
+    const startThemeLabel =
+      dm?.status === 'completed'
+        ? nextMissionLabelForTheme(themeId, baseThemeLabel, missions)
+        : baseThemeLabel;
     if (dm?.status === 'active') {
       setToggleConfirmModal({
         open: true,
         themeId,
-        themeLabel,
+        themeLabel: baseThemeLabel,
         action: 'pause',
         otherActiveThemeLabel: null,
       });
@@ -329,7 +339,7 @@ export default function ThemePlaylistMissionPanel({ isGuest, canDeleteRecordedEn
     setToggleConfirmModal({
       open: true,
       themeId,
-      themeLabel,
+        themeLabel: startThemeLabel,
       action: 'start',
       otherActiveThemeLabel: otherActive?.theme_label ?? null,
     });
