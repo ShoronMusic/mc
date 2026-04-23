@@ -81,6 +81,7 @@ async function main(): Promise<void> {
   let updated = 0;
   let skippedNoMeta = 0;
   let skippedNoMusic8 = 0;
+  let skippedNoStyleInMusic8 = 0;
 
   for (const row of byVideo.values()) {
     const videoId = row.video_id.trim();
@@ -93,23 +94,28 @@ async function main(): Promise<void> {
     }
     checked += 1;
     const resolved = await trySongStyleFromMusic8(artist, title);
-    if (!resolved) {
+    if (!resolved.songDataFound) {
       skippedNoMusic8 += 1;
       continue;
     }
-    if (current === resolved) continue;
+    const nextStyle = resolved.style;
+    if (!nextStyle) {
+      skippedNoStyleInMusic8 += 1;
+      continue;
+    }
+    if (current === nextStyle) continue;
 
     const { error: histErr } = await admin
       .from('room_playback_history')
-      .update({ style: resolved })
+      .update({ style: nextStyle })
       .eq('video_id', videoId);
     if (histErr) {
       console.warn('[update room_playback_history]', videoId, histErr.code, histErr.message);
       continue;
     }
-    await setStyleInDb(admin, videoId, resolved);
+    await setStyleInDb(admin, videoId, nextStyle);
     updated += 1;
-    console.log(`updated ${videoId}: ${current ?? '(null)'} -> ${resolved}`);
+    console.log(`updated ${videoId}: ${current ?? '(null)'} -> ${nextStyle}`);
   }
 
   console.log(
@@ -122,6 +128,7 @@ async function main(): Promise<void> {
         updated,
         skippedNoMeta,
         skippedNoMusic8,
+        skippedNoStyleInMusic8,
       },
       null,
       2,
