@@ -8,7 +8,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { RoomPlaybackHistoryRow } from '@/app/api/room-playback-history/route';
 import { getArtistAndSong, repairQuotedSongArtistPackInversion } from '@/lib/format-song-display';
 
-const COL_PARTICIPANT = '参加者名';
+const COL_NO = 'No';
+const COL_PARTICIPANT = '選曲者';
 const COL_TIME = '時間';
 const COL_ARTIST_TITLE = 'アーティスト - タイトル';
 const COL_STYLE = 'スタイル';
@@ -16,6 +17,7 @@ const COL_ERA = '年代';
 const COL_LINK = 'リンク';
 const COL_FAV = '♡';
 
+const COL_WIDTH_NO = 34;
 const COL_WIDTH_PARTICIPANT = 68;
 const COL_WIDTH_TIME = 72;
 const COL_MIN_WIDTH_ARTIST_TITLE = 80;
@@ -349,6 +351,17 @@ export default function ThemePlaylistMissionEntriesModal({ open, onClose, themeI
                 <thead>
                   <tr>
                     <th
+                      className="border-b border-gray-600 py-1 pr-1 text-center font-medium text-gray-400"
+                      style={{
+                        width: COL_WIDTH_NO,
+                        minWidth: COL_WIDTH_NO,
+                        maxWidth: COL_WIDTH_NO,
+                      }}
+                      scope="col"
+                    >
+                      <span className="block truncate">{COL_NO}</span>
+                    </th>
+                    <th
                       className="border-b border-gray-600 py-1 pr-1 font-medium text-gray-400"
                       style={{
                         width: COL_WIDTH_PARTICIPANT,
@@ -406,18 +419,18 @@ export default function ThemePlaylistMissionEntriesModal({ open, onClose, themeI
                 <tbody>
                   {loading && entries.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="py-4 text-center text-gray-500">
+                      <td colSpan={8} className="py-4 text-center text-gray-500">
                         読み込み中...
                       </td>
                     </tr>
                   ) : entries.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="py-4 text-center text-gray-500">
+                      <td colSpan={8} className="py-4 text-center text-gray-500">
                         まだ登録された曲がありません
                       </td>
                     </tr>
                   ) : (
-                    entries.map((entry) => {
+                    entries.map((entry, rowIndex) => {
                       const vid = entry.video_id.trim();
                       const enrich = enrichByVideoId.get(vid);
                       const displayName = (entry.selector_display_name ?? '').trim() || '—';
@@ -434,6 +447,16 @@ export default function ThemePlaylistMissionEntriesModal({ open, onClose, themeI
 
                       return (
                         <tr key={entry.id} className={isActive ? 'bg-blue-900/30' : ''}>
+                          <td
+                            className="border-b border-gray-700/80 py-0.5 pr-1 text-center tabular-nums text-gray-400"
+                            style={{
+                              width: COL_WIDTH_NO,
+                              minWidth: COL_WIDTH_NO,
+                              maxWidth: COL_WIDTH_NO,
+                            }}
+                          >
+                            {rowIndex + 1}
+                          </td>
                           <td
                             className="truncate border-b border-gray-700/80 py-0.5 pr-1"
                             style={{

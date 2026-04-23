@@ -91,6 +91,19 @@ export default function ThemePlaylistMissionPanel({ isGuest, canDeleteRecordedEn
   const [loadError, setLoadError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [toggleConfirmModal, setToggleConfirmModal] = useState<{
+    open: boolean;
+    themeId: string;
+    themeLabel: string;
+    action: 'start' | 'pause';
+    otherActiveThemeLabel?: string | null;
+  }>({
+    open: false,
+    themeId: '',
+    themeLabel: '',
+    action: 'start',
+    otherActiveThemeLabel: null,
+  });
   const [deleteModal, setDeleteModal] = useState<{
     open: boolean;
     theme: ThemeRow | null;
@@ -299,8 +312,36 @@ export default function ThemePlaylistMissionPanel({ isGuest, canDeleteRecordedEn
   /** お題行クリック: 進行中なら一旦解除（OFF）、それ以外は開始/再開（ON）。他テーマの進行は startMission 側で解除 */
   const toggleThemeRow = async (themeId: string) => {
     if (busy) return;
+    const targetTheme = [...customThemes, ...presetThemes].find((t) => t.id === themeId);
+    const themeLabel = targetTheme?.label ?? 'このお題';
     const dm = displayMissionForTheme(themeId, missions);
     if (dm?.status === 'active') {
+      setToggleConfirmModal({
+        open: true,
+        themeId,
+        themeLabel,
+        action: 'pause',
+        otherActiveThemeLabel: null,
+      });
+      return;
+    }
+    const otherActive = missions.find((m) => m.status === 'active' && m.theme_id !== themeId);
+    setToggleConfirmModal({
+      open: true,
+      themeId,
+      themeLabel,
+      action: 'start',
+      otherActiveThemeLabel: otherActive?.theme_label ?? null,
+    });
+  };
+
+  const confirmToggleThemeRow = async () => {
+    if (busy || !toggleConfirmModal.open) return;
+    const { themeId, action } = toggleConfirmModal;
+    setToggleConfirmModal((prev) => ({ ...prev, open: false }));
+    if (action === 'pause') {
+      const dm = displayMissionForTheme(themeId, missions);
+      if (!dm || dm.status !== 'active') return;
       setActionMessage(null);
       const ok = await pauseMissionById(dm.id);
       if (ok) {
@@ -741,6 +782,61 @@ export default function ThemePlaylistMissionPanel({ isGuest, canDeleteRecordedEn
           )}
         </div>
       )}
+
+      {toggleConfirmModal.open ? (
+        <div
+          className="fixed inset-0 z-[78] flex items-center justify-center bg-black/65 p-4"
+          role="presentation"
+          onClick={() => {
+            if (!busy) {
+              setToggleConfirmModal((prev) => ({ ...prev, open: false }));
+            }
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="toggle-theme-mission-title"
+            className="w-full max-w-md rounded-lg border border-gray-600 bg-gray-900 p-4 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 id="toggle-theme-mission-title" className="text-sm font-semibold text-white">
+              {toggleConfirmModal.action === 'pause' ? 'お題を一時解除' : 'お題を開始'}
+            </h3>
+            <p className="mt-3 text-xs leading-relaxed text-gray-300">
+              「<span className="font-medium text-gray-100">{toggleConfirmModal.themeLabel}</span>」を
+              {toggleConfirmModal.action === 'pause' ? '一時解除しますか？' : '開始しますか？'}
+            </p>
+            {toggleConfirmModal.action === 'start' && toggleConfirmModal.otherActiveThemeLabel ? (
+              <p className="mt-2 text-xs leading-relaxed text-amber-200/90">
+                開始すると、現在進行中の「
+                <span className="font-medium text-amber-100">{toggleConfirmModal.otherActiveThemeLabel}</span>
+                」は自動で一時解除されます。
+              </p>
+            ) : null}
+            <div className="mt-4 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => setToggleConfirmModal((prev) => ({ ...prev, open: false }))}
+                className="rounded border border-gray-600 bg-gray-800 px-3 py-1.5 text-xs text-gray-200 hover:bg-gray-700 disabled:opacity-40"
+              >
+                キャンセル
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void confirmToggleThemeRow()}
+                className={`rounded px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40 ${
+                  toggleConfirmModal.action === 'pause' ? 'bg-gray-600 hover:bg-gray-500' : 'bg-violet-700 hover:bg-violet-600'
+                }`}
+              >
+                {toggleConfirmModal.action === 'pause' ? '一時解除する' : '開始する'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {deleteModal.open && deleteModal.theme ? (
         <div

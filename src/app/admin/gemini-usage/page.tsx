@@ -57,6 +57,8 @@ const CONTEXT_HELP: Record<string, string> = {
   comment_pack_free_4: 'comment-pack 自由コメント4',
   comment_pack_session_bridge: 'comment-pack ライブラリ返却時の会話つなぎ（直近チャットあり）',
   song_quiz: '曲解説後の三択クイズ生成（/api/ai/song-quiz）',
+  theme_playlist_comment:
+    'お題のAI講評（お題プレイリスト／ルームお題ミッションの選曲がお題に合う観点の短文）',
   next_song_recommend: '「次に聴くなら（試験）」のおすすめ曲生成',
   next_song_recomend: '「次に聴くなら（試験）」のおすすめ曲生成（旧キー）',
   question_guard_classify: '「@」音楽関連の二次判定（質問ガード分類）',

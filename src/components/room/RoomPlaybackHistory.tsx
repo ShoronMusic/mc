@@ -1,8 +1,8 @@
 'use client';
 
 /**
- * 部屋の視聴履歴（プレイヤー下）。参加者名・時間・年代・スタイル・アーティスト-タイトル・YouTubeリンク。
- * 固定列幅・はみ出しは...、ソート（時間デフォルト／参加者名）、アクティブ行表示。
+ * 部屋の視聴履歴（プレイヤー下）。選曲者・時間・年代・スタイル・アーティスト-タイトル・YouTubeリンク。
+ * 固定列幅・はみ出しは...、ソート（時間デフォルト／選曲者）、アクティブ行表示。
  */
 
 import { CalendarDaysIcon, ChartBarIcon, ClockIcon } from '@heroicons/react/24/outline';
@@ -21,7 +21,7 @@ import StyleDistributionModal from './StyleDistributionModal';
 type SortKey = 'played_at' | 'display_name';
 type SortOrder = 'desc' | 'asc';
 
-const COL_PARTICIPANT = '参加者名';
+const COL_PARTICIPANT = '選曲者';
 const COL_TIME = '時間';
 const COL_ARTIST_TITLE = 'アーティスト - タイトル';
 const COL_STYLE = 'スタイル';
@@ -262,7 +262,7 @@ interface RoomPlaybackHistoryProps {
   currentVideoId: string | null;
   /** 変更されると再取得する（部屋側で10秒後にPOSTしたあと更新用） */
   refreshKey?: number;
-  /** 参加者名の色（チャット・UserBar と同じ。表示名一致で選曲者列に適用） */
+  /** 選曲者列の色（チャット・UserBar と同じ。表示名一致で適用） */
   participantsWithColor?: { displayName: string; textColor: string }[];
   /** ゲストでないときのみお気に入り利用可 */
   isGuest?: boolean;
@@ -801,7 +801,7 @@ export default function RoomPlaybackHistory({
                 className="cursor-pointer border-b border-gray-600 py-1 pr-1 font-medium text-gray-400"
                 style={{ width: COL_WIDTH_PARTICIPANT, minWidth: COL_WIDTH_PARTICIPANT, maxWidth: COL_WIDTH_PARTICIPANT }}
                 scope="col"
-                title="参加者名でソート"
+                title="選曲者でソート"
                 onClick={setSortByParticipant}
               >
                 <span className="block truncate">{COL_PARTICIPANT}</span>
