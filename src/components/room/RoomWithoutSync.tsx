@@ -35,10 +35,7 @@ import {
   shouldShowJpNoCommentarySystemMessage,
 } from '@/lib/chat-system-copy';
 import type { SongQuizPayload } from '@/lib/song-quiz-types';
-import {
-  buildSongQuizResultAnnouncement,
-  getSongQuizRevealDelayMs,
-} from '@/lib/song-quiz-result-announcement';
+import { getSongQuizRevealDelayMs } from '@/lib/song-quiz-result-announcement';
 import { shouldShortCircuitSongRequestForAtPrompt } from '@/lib/ai-question-about-detail-heuristic';
 import { resolveAiQuestionMusicRelated } from '@/lib/client-ai-question-guard-resolve';
 import { isDevMinimalSongAi } from '@/lib/dev-minimal-song-ai';
@@ -555,17 +552,11 @@ export default function RoomWithoutSync({
     const revealDelay = getSongQuizRevealDelayMs();
     songQuizLocalRevealTimerRef.current = setTimeout(() => {
       songQuizLocalRevealTimerRef.current = null;
-      const meta = songQuizLocalMetaByIdRef.current.get(quizMessageId);
-      if (!meta) return;
-      const answers = songQuizLocalAnswersByIdRef.current.get(quizMessageId) ?? [];
+      if (!songQuizLocalMetaByIdRef.current.get(quizMessageId)) return;
       songQuizLocalMetaByIdRef.current.delete(quizMessageId);
       songQuizLocalAnswersByIdRef.current.delete(quizMessageId);
-      addAiMessage(buildSongQuizResultAnnouncement(meta.correctIndex, meta.choices, answers), {
-        bypassJpDomesticSilence: true,
-        videoId: meta.videoId,
-      });
     }, revealDelay);
-  }, [addAiMessage]);
+  }, []);
 
   const handleSongQuizPick = useCallback((quizMessageId: string, _vid: string, pickedIndex: number) => {
     const list = songQuizLocalAnswersByIdRef.current.get(quizMessageId) ?? [];

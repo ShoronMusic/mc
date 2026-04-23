@@ -9,7 +9,7 @@ import type { NextSongPick } from '@/lib/next-song-recommend-generate';
 /** クイズ fetch 遅延より後ろにずらすオフセット（ミリ秒） */
 const AFTER_COMMENTARY_EXTRA_MS = 4500;
 /** クイズ出題後におすすめを素早く出す短縮オフセット（ミリ秒） */
-const AFTER_QUIZ_FAST_EXTRA_MS = 800;
+const AFTER_QUIZ_FAST_EXTRA_MS = 0;
 /** おすすめ3件の表示を段階的に出す間隔（ミリ秒） */
 const NEXT_SONG_RECOMMEND_STAGGER_MS = 900;
 

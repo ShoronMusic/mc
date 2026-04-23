@@ -41,7 +41,6 @@ import {
 } from '@/lib/chat-system-copy';
 import type { SongQuizPayload } from '@/lib/song-quiz-types';
 import {
-  buildSongQuizResultAnnouncement,
   getSongQuizRevealFastMs,
 } from '@/lib/song-quiz-result-announcement';
 import { shouldShortCircuitSongRequestForAtPrompt } from '@/lib/ai-question-about-detail-heuristic';
@@ -2536,20 +2535,10 @@ export default function RoomWithSync({
         songQuizRoundMetaRef.current.delete(quizMsgId);
         songQuizAnswersByQuizIdRef.current.delete(quizMsgId);
         songQuizRoundStartedAtRef.current.delete(quizMsgId);
-        const bodyAnnounce = buildSongQuizResultAnnouncement(
-          meta.correctIndex,
-          meta.choices,
-          answers.map((a) => ({ displayName: a.displayName, pickedIndex: a.pickedIndex })),
-        );
-        addAiMessage(bodyAnnounce, {
-          allowWhenAiStopped: true,
-          videoId: videoIdForQuiz,
-          aiSource: 'tidbit',
-        });
         return;
       }
     },
-    [myClientId, addAiMessage],
+    [myClientId],
   );
 
   /** 曲切替時: その曲のクイズを締める。回答者ゼロなら結果発表せず破棄。 */
@@ -2577,19 +2566,9 @@ export default function RoomWithSync({
         if (!meta) continue;
         if (answers.length === 0) continue;
 
-        const bodyAnnounce = buildSongQuizResultAnnouncement(
-          meta.correctIndex,
-          meta.choices,
-          answers.map((a) => ({ displayName: a.displayName, pickedIndex: a.pickedIndex })),
-        );
-        addAiMessage(bodyAnnounce, {
-          allowWhenAiStopped: true,
-          videoId: vid,
-          aiSource: 'tidbit',
-        });
       }
     },
-    [myClientId, addAiMessage],
+    [myClientId],
   );
 
   const bumpSongQuizRevealIfAllAnswered = useCallback(
