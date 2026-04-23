@@ -957,6 +957,7 @@ export default function RoomWithoutSync({
                         },
                         addAiMessage,
                         buildAddAiMessageExtras: () => buildNextSongRecommendExtras(vid),
+                        allowAfterVideoChange: true,
                       });
                     });
                 }, 3500);
@@ -982,6 +983,7 @@ export default function RoomWithoutSync({
                   },
                   addAiMessage,
                   buildAddAiMessageExtras: () => buildNextSongRecommendExtras(vid),
+                  allowAfterVideoChange: true,
                 });
               }
               scheduleThemePlaylistRoomBlurbAfterPack({
@@ -1097,6 +1099,7 @@ export default function RoomWithoutSync({
                       },
                       addAiMessage,
                       buildAddAiMessageExtras: () => buildNextSongRecommendExtras(vid),
+                      allowAfterVideoChange: true,
                     });
                   });
               }, 4000);
@@ -1122,6 +1125,7 @@ export default function RoomWithoutSync({
                 },
                 addAiMessage,
                 buildAddAiMessageExtras: () => buildNextSongRecommendExtras(vid),
+                allowAfterVideoChange: true,
               });
             }
             scheduleThemePlaylistRoomBlurbAfterPack({

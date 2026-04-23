@@ -54,6 +54,8 @@ export function scheduleNextSongRecommendAfterCommentary(options: {
   buildAddAiMessageExtras?: () => Record<string, unknown> | undefined;
   /** 三択クイズ出題後は待ち時間を短縮しておすすめを出す */
   preferFastAfterQuiz?: boolean;
+  /** 曲が切り替わっても前曲のおすすめを遅延表示へ回して出す */
+  allowAfterVideoChange?: boolean;
 }): void {
   if (options.isGuest) return;
 
@@ -62,7 +64,7 @@ export function scheduleNextSongRecommendAfterCommentary(options: {
     options.preferFastAfterQuiz,
   );
   const timer = setTimeout(() => {
-    if (options.videoIdRef.current !== options.videoId) return;
+    if (!options.allowAfterVideoChange && options.videoIdRef.current !== options.videoId) return;
     void fetch('/api/ai/next-song-recommend', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -74,7 +76,7 @@ export function scheduleNextSongRecommendAfterCommentary(options: {
     })
       .then((r) => (r.ok ? r.json() : null))
       .then((data: { enabled?: unknown; picks?: unknown } | null) => {
-        if (options.videoIdRef.current !== options.videoId) return;
+        if (!options.allowAfterVideoChange && options.videoIdRef.current !== options.videoId) return;
         if (!data || data.enabled !== true || !Array.isArray(data.picks) || data.picks.length === 0) return;
         const picks = data.picks as NextSongPick[];
         const ok = picks.every(
@@ -88,7 +90,7 @@ export function scheduleNextSongRecommendAfterCommentary(options: {
         if (!ok) return;
         picks.forEach((pick, idx) => {
           const emit = () => {
-            if (options.videoIdRef.current !== options.videoId) return;
+            if (!options.allowAfterVideoChange && options.videoIdRef.current !== options.videoId) return;
             const dynamicExtras = options.buildAddAiMessageExtras?.() ?? {};
             options.addAiMessage(formatPickMessage(pick, idx, picks.length), {
               videoId: options.videoId,

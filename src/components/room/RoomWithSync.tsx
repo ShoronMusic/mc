@@ -3449,6 +3449,7 @@ export default function RoomWithSync({
                           },
                           addAiMessage,
                           buildAddAiMessageExtras: () => buildNextSongRecommendExtras(vid),
+                          allowAfterVideoChange: true,
                         });
                       }
                     });
@@ -3473,6 +3474,7 @@ export default function RoomWithSync({
                   },
                   addAiMessage,
                   buildAddAiMessageExtras: () => buildNextSongRecommendExtras(vid),
+                  allowAfterVideoChange: true,
                 });
               }
               scheduleThemePlaylistRoomBlurbAfterPack({
@@ -3667,6 +3669,7 @@ export default function RoomWithSync({
                                 },
                                 addAiMessage,
                                 buildAddAiMessageExtras: () => buildNextSongRecommendExtras(vid),
+                                allowAfterVideoChange: true,
                               });
                             }
                           });
@@ -3691,6 +3694,7 @@ export default function RoomWithSync({
                         },
                         addAiMessage,
                         buildAddAiMessageExtras: () => buildNextSongRecommendExtras(vid),
+                        allowAfterVideoChange: true,
                       });
                     }
                     scheduleThemePlaylistRoomBlurbAfterPack({
@@ -3830,6 +3834,7 @@ export default function RoomWithSync({
                         },
                         addAiMessage,
                         buildAddAiMessageExtras: () => buildNextSongRecommendExtras(vid),
+                        allowAfterVideoChange: true,
                       });
                     }
                   });
@@ -3854,6 +3859,7 @@ export default function RoomWithSync({
                 },
                 addAiMessage,
                 buildAddAiMessageExtras: () => buildNextSongRecommendExtras(vid),
+                allowAfterVideoChange: true,
               });
             }
             scheduleThemePlaylistRoomBlurbAfterPack({
@@ -3955,6 +3961,7 @@ export default function RoomWithSync({
                               },
                               addAiMessage,
                               buildAddAiMessageExtras: () => buildNextSongRecommendExtras(vid),
+                              allowAfterVideoChange: true,
                             });
                           }
                         });
@@ -3979,6 +3986,7 @@ export default function RoomWithSync({
                       },
                       addAiMessage,
                       buildAddAiMessageExtras: () => buildNextSongRecommendExtras(vid),
+                      allowAfterVideoChange: true,
                     });
                   }
                   scheduleThemePlaylistRoomBlurbAfterPack({
