@@ -8,11 +8,16 @@ import type { NextSongPick } from '@/lib/next-song-recommend-generate';
 
 /** クイズ fetch 遅延より後ろにずらすオフセット（ミリ秒） */
 const AFTER_COMMENTARY_EXTRA_MS = 4500;
+/** クイズ出題後におすすめを素早く出す短縮オフセット（ミリ秒） */
+const AFTER_QUIZ_FAST_EXTRA_MS = 800;
 /** おすすめ3件の表示を段階的に出す間隔（ミリ秒） */
 const NEXT_SONG_RECOMMEND_STAGGER_MS = 900;
 
-export function getNextSongRecommendScheduleDelayMs(songQuizDelayMs: number): number {
-  return songQuizDelayMs + AFTER_COMMENTARY_EXTRA_MS;
+export function getNextSongRecommendScheduleDelayMs(
+  songQuizDelayMs: number,
+  preferFastAfterQuiz?: boolean,
+): number {
+  return songQuizDelayMs + (preferFastAfterQuiz ? AFTER_QUIZ_FAST_EXTRA_MS : AFTER_COMMENTARY_EXTRA_MS);
 }
 
 function formatPickMessage(pick: NextSongPick, index: number, total: number): string {
@@ -47,10 +52,15 @@ export function scheduleNextSongRecommendAfterCommentary(options: {
   addAiMessageExtras?: Record<string, unknown>;
   /** 送信直前に追加オプションを決める（次曲案内後の遅延パネル送り判定など） */
   buildAddAiMessageExtras?: () => Record<string, unknown> | undefined;
+  /** 三択クイズ出題後は待ち時間を短縮しておすすめを出す */
+  preferFastAfterQuiz?: boolean;
 }): void {
   if (options.isGuest) return;
 
-  const delayMs = getNextSongRecommendScheduleDelayMs(options.songQuizDelayMs);
+  const delayMs = getNextSongRecommendScheduleDelayMs(
+    options.songQuizDelayMs,
+    options.preferFastAfterQuiz,
+  );
   const timer = setTimeout(() => {
     if (options.videoIdRef.current !== options.videoId) return;
     void fetch('/api/ai/next-song-recommend', {

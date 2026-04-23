@@ -946,6 +946,7 @@ export default function RoomWithoutSync({
                         videoId: vid,
                         roomId,
                         songQuizDelayMs: 0,
+                        preferFastAfterQuiz: true,
                         isGuest,
                         videoIdRef,
                         registerTimer: (t) => {
@@ -1085,6 +1086,7 @@ export default function RoomWithoutSync({
                       videoId: vid,
                       roomId,
                       songQuizDelayMs: 0,
+                      preferFastAfterQuiz: true,
                       isGuest,
                       videoIdRef,
                       registerTimer: (t) => {

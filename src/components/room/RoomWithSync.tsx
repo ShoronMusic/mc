@@ -3441,6 +3441,7 @@ export default function RoomWithSync({
                           videoId: vid,
                           roomId,
                           songQuizDelayMs: 0,
+                          preferFastAfterQuiz: true,
                           isGuest,
                           videoIdRef,
                           registerTimer: (t) => {
@@ -3658,6 +3659,7 @@ export default function RoomWithSync({
                                 videoId: vid,
                                 roomId,
                                 songQuizDelayMs: 0,
+                                preferFastAfterQuiz: true,
                                 isGuest,
                                 videoIdRef,
                                 registerTimer: (t) => {
@@ -3820,6 +3822,7 @@ export default function RoomWithSync({
                         videoId: vid,
                         roomId,
                         songQuizDelayMs: 0,
+                        preferFastAfterQuiz: true,
                         isGuest,
                         videoIdRef,
                         registerTimer: (t) => {
@@ -3944,6 +3947,7 @@ export default function RoomWithSync({
                               videoId: vid,
                               roomId,
                               songQuizDelayMs: 0,
+                              preferFastAfterQuiz: true,
                               isGuest,
                               videoIdRef,
                               registerTimer: (t) => {
