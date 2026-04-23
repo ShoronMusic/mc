@@ -3418,6 +3418,25 @@ export default function RoomWithSync({
               if (shouldGateRecommendByQuiz && !skipQuizRecommendForTheme) {
                 const timer = setTimeout(() => {
                   if (videoIdRef.current !== vid) return;
+                  if (
+                    ownerNextSongRecommendEnabledRef.current &&
+                    userRoomAiRecommendEnabledRef.current
+                  ) {
+                    scheduleNextSongRecommendAfterCommentary({
+                      videoId: vid,
+                      roomId,
+                      songQuizDelayMs: 0,
+                      preferFastAfterQuiz: true,
+                      isGuest,
+                      videoIdRef,
+                      registerTimer: (t) => {
+                        freeCommentTimeoutsRef.current.push(t);
+                      },
+                      addAiMessage,
+                      buildAddAiMessageExtras: () => buildNextSongRecommendExtras(vid),
+                      allowAfterVideoChange: true,
+                    });
+                  }
                   void fetch('/api/ai/song-quiz', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -3431,27 +3450,6 @@ export default function RoomWithSync({
                     .then((res) => {
                       if (videoIdRef.current !== vid || !res?.quiz) return;
                       addSongQuizMessage(res.quiz as SongQuizPayload, vid);
-                    })
-                    .finally(() => {
-                      if (
-                        ownerNextSongRecommendEnabledRef.current &&
-                        userRoomAiRecommendEnabledRef.current
-                      ) {
-                        scheduleNextSongRecommendAfterCommentary({
-                          videoId: vid,
-                          roomId,
-                          songQuizDelayMs: 0,
-                          preferFastAfterQuiz: true,
-                          isGuest,
-                          videoIdRef,
-                          registerTimer: (t) => {
-                            freeCommentTimeoutsRef.current.push(t);
-                          },
-                          addAiMessage,
-                          buildAddAiMessageExtras: () => buildNextSongRecommendExtras(vid),
-                          allowAfterVideoChange: true,
-                        });
-                      }
                     });
                 }, delayBaseOnly);
                 freeCommentTimeoutsRef.current.push(timer);
@@ -3638,6 +3636,25 @@ export default function RoomWithSync({
                     if (shouldGateRecommendByQuiz && !skipQuizRecommendForTheme) {
                       const timer = setTimeout(() => {
                         if (videoIdRef.current !== vid) return;
+                        if (
+                          ownerNextSongRecommendEnabledRef.current &&
+                          userRoomAiRecommendEnabledRef.current
+                        ) {
+                          scheduleNextSongRecommendAfterCommentary({
+                            videoId: vid,
+                            roomId,
+                            songQuizDelayMs: 0,
+                            preferFastAfterQuiz: true,
+                            isGuest,
+                            videoIdRef,
+                            registerTimer: (t) => {
+                              freeCommentTimeoutsRef.current.push(t);
+                            },
+                            addAiMessage,
+                            buildAddAiMessageExtras: () => buildNextSongRecommendExtras(vid),
+                            allowAfterVideoChange: true,
+                          });
+                        }
                         void fetch('/api/ai/song-quiz', {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
@@ -3651,27 +3668,6 @@ export default function RoomWithSync({
                           .then((res) => {
                             if (videoIdRef.current !== vid || !res?.quiz) return;
                             addSongQuizMessage(res.quiz as SongQuizPayload, vid);
-                          })
-                          .finally(() => {
-                            if (
-                              ownerNextSongRecommendEnabledRef.current &&
-                              userRoomAiRecommendEnabledRef.current
-                            ) {
-                              scheduleNextSongRecommendAfterCommentary({
-                                videoId: vid,
-                                roomId,
-                                songQuizDelayMs: 0,
-                                preferFastAfterQuiz: true,
-                                isGuest,
-                                videoIdRef,
-                                registerTimer: (t) => {
-                                  freeCommentTimeoutsRef.current.push(t);
-                                },
-                                addAiMessage,
-                                buildAddAiMessageExtras: () => buildNextSongRecommendExtras(vid),
-                                allowAfterVideoChange: true,
-                              });
-                            }
                           });
                       }, delayMs);
                       freeCommentTimeoutsRef.current.push(timer);
@@ -3803,6 +3799,25 @@ export default function RoomWithSync({
             if (shouldGateRecommendByQuiz && !skipQuizRecommendForTheme) {
               const timer = setTimeout(() => {
                 if (videoIdRef.current !== vid) return;
+                if (
+                  ownerNextSongRecommendEnabledRef.current &&
+                  userRoomAiRecommendEnabledRef.current
+                ) {
+                  scheduleNextSongRecommendAfterCommentary({
+                    videoId: vid,
+                    roomId,
+                    songQuizDelayMs: 0,
+                    preferFastAfterQuiz: true,
+                    isGuest,
+                    videoIdRef,
+                    registerTimer: (t) => {
+                      freeCommentTimeoutsRef.current.push(t);
+                    },
+                    addAiMessage,
+                    buildAddAiMessageExtras: () => buildNextSongRecommendExtras(vid),
+                    allowAfterVideoChange: true,
+                  });
+                }
                 void fetch('/api/ai/song-quiz', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
@@ -3816,27 +3831,6 @@ export default function RoomWithSync({
                   .then((res) => {
                     if (videoIdRef.current !== vid || !res?.quiz) return;
                     addSongQuizMessage(res.quiz as SongQuizPayload, vid);
-                  })
-                  .finally(() => {
-                    if (
-                      ownerNextSongRecommendEnabledRef.current &&
-                      userRoomAiRecommendEnabledRef.current
-                    ) {
-                      scheduleNextSongRecommendAfterCommentary({
-                        videoId: vid,
-                        roomId,
-                        songQuizDelayMs: 0,
-                        preferFastAfterQuiz: true,
-                        isGuest,
-                        videoIdRef,
-                        registerTimer: (t) => {
-                          freeCommentTimeoutsRef.current.push(t);
-                        },
-                        addAiMessage,
-                        buildAddAiMessageExtras: () => buildNextSongRecommendExtras(vid),
-                        allowAfterVideoChange: true,
-                      });
-                    }
                   });
               }, delayMsSingle);
               freeCommentTimeoutsRef.current.push(timer);
@@ -3930,6 +3924,25 @@ export default function RoomWithSync({
                   if (shouldGateRecommendByQuiz && !skipQuizRecommendForTheme) {
                     const timer = setTimeout(() => {
                       if (videoIdRef.current !== vid) return;
+                      if (
+                        ownerNextSongRecommendEnabledRef.current &&
+                        userRoomAiRecommendEnabledRef.current
+                      ) {
+                        scheduleNextSongRecommendAfterCommentary({
+                          videoId: vid,
+                          roomId,
+                          songQuizDelayMs: 0,
+                          preferFastAfterQuiz: true,
+                          isGuest,
+                          videoIdRef,
+                          registerTimer: (t) => {
+                            freeCommentTimeoutsRef.current.push(t);
+                          },
+                          addAiMessage,
+                          buildAddAiMessageExtras: () => buildNextSongRecommendExtras(vid),
+                          allowAfterVideoChange: true,
+                        });
+                      }
                       void fetch('/api/ai/song-quiz', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -3943,27 +3956,6 @@ export default function RoomWithSync({
                         .then((res) => {
                           if (videoIdRef.current !== vid || !res?.quiz) return;
                           addSongQuizMessage(res.quiz as SongQuizPayload, vid);
-                        })
-                        .finally(() => {
-                          if (
-                            ownerNextSongRecommendEnabledRef.current &&
-                            userRoomAiRecommendEnabledRef.current
-                          ) {
-                            scheduleNextSongRecommendAfterCommentary({
-                              videoId: vid,
-                              roomId,
-                              songQuizDelayMs: 0,
-                              preferFastAfterQuiz: true,
-                              isGuest,
-                              videoIdRef,
-                              registerTimer: (t) => {
-                                freeCommentTimeoutsRef.current.push(t);
-                              },
-                              addAiMessage,
-                              buildAddAiMessageExtras: () => buildNextSongRecommendExtras(vid),
-                              allowAfterVideoChange: true,
-                            });
-                          }
                         });
                     }, delayCommentary);
                     freeCommentTimeoutsRef.current.push(timer);
