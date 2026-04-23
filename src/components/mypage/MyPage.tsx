@@ -3297,7 +3297,10 @@ export default function MyPage({
           {mainTab === 'themeMission' && (
             <div className="mb-6">
               <h3 className="mb-2 text-sm font-semibold text-gray-200">お題プレイリスト（β）</h3>
-              <ThemePlaylistMissionPanel isGuest={isGuest} />
+              <ThemePlaylistMissionPanel
+                isGuest={isGuest}
+                canDeleteRecordedEntries={!isGuest && (!effectiveRoomId.trim() || isChatOwner)}
+              />
             </div>
           )}
           {mainTab === 'mylist' && (

@@ -13,6 +13,11 @@ import {
   type ThemePlaylistDefinition,
   THEME_PLAYLIST_SLOT_TARGET,
 } from '@/lib/theme-playlist-definitions';
+import {
+  buildAiCommentaryPromptLabels,
+  getArtistAndSong,
+  isGarbageArtistSongParse,
+} from '@/lib/format-song-display';
 
 function watchUrl(videoId: string): string {
   return `https://www.youtube.com/watch?v=${videoId}`;
@@ -200,8 +205,35 @@ export async function appendThemePlaylistRoomEntry(
   let title: string | null = null;
   let artist: string | null = null;
   const oembed = await fetchOEmbed(vid);
-  if (oembed?.title) title = oembed.title.slice(0, 500);
-  if (oembed?.author_name) artist = oembed.author_name.slice(0, 500);
+  const titleRaw = oembed?.title ? oembed.title.trim().slice(0, 500) : '';
+  const authorRaw = oembed?.author_name ? oembed.author_name.trim().slice(0, 500) : '';
+  title = titleRaw || null;
+  artist = authorRaw || null;
+  if (titleRaw) {
+    const resolved = getArtistAndSong(titleRaw, authorRaw || null);
+    const songPart = (resolved.song ?? '').trim();
+    const artistPart =
+      (resolved.artistDisplay ?? resolved.artist ?? '').trim();
+    if (
+      songPart &&
+      artistPart &&
+      !isGarbageArtistSongParse({ artist: artistPart, song: songPart })
+    ) {
+      const labels = buildAiCommentaryPromptLabels({
+        artistDisplay: resolved.artistDisplay,
+        artist: resolved.artist,
+        authorName: authorRaw || null,
+        song: resolved.song,
+        titleFallback: titleRaw,
+      });
+      const al = labels.artistLabel.trim();
+      const sl = labels.songLabel.trim();
+      if (al && sl) {
+        artist = al.slice(0, 500);
+        title = sl.slice(0, 500);
+      }
+    }
+  }
 
   const rawCtx =
     typeof commentaryContext === 'string' && commentaryContext.trim()

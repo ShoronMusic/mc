@@ -873,8 +873,11 @@ export default function RoomWithoutSync({
               touchActivity();
               const commentaryCtx =
                 typeof pack.baseComment === 'string' ? pack.baseComment.trim() : '';
+              const skipQuizRecommendIntroOnly = Boolean(pack.songIntroOnlyDiscography);
               const shouldGateRecommendByQuiz =
-                commentaryCtx.length >= 60 && userRoomAiSongQuizEnabledRef.current;
+                commentaryCtx.length >= 60 &&
+                userRoomAiSongQuizEnabledRef.current &&
+                !skipQuizRecommendIntroOnly;
               if (shouldGateRecommendByQuiz && !skipQuizRecommendForTheme) {
                 if (songQuizFetchTimeoutRef.current) clearTimeout(songQuizFetchTimeoutRef.current);
                 songQuizFetchTimeoutRef.current = setTimeout(() => {
@@ -932,7 +935,8 @@ export default function RoomWithoutSync({
               if (
                 userRoomAiRecommendEnabledRef.current &&
                 !shouldGateRecommendByQuiz &&
-                !skipQuizRecommendForTheme
+                !skipQuizRecommendForTheme &&
+                !skipQuizRecommendIntroOnly
               ) {
                 scheduleNextSongRecommendAfterCommentary({
                   videoId: vid,
@@ -1006,8 +1010,11 @@ export default function RoomWithoutSync({
             addAiMessage(`【AI解説01】 ${prefix + data.text}`, { videoId: vid });
             touchActivity();
             const commentarySingle = `${prefix}${data.text}`.trim();
+            const skipQuizRecommendIntroOnly = Boolean(data?.songIntroOnlyDiscography);
             const shouldGateRecommendByQuiz =
-              commentarySingle.length >= 60 && userRoomAiSongQuizEnabledRef.current;
+              commentarySingle.length >= 60 &&
+              userRoomAiSongQuizEnabledRef.current &&
+              !skipQuizRecommendIntroOnly;
             if (shouldGateRecommendByQuiz && !skipQuizRecommendForTheme) {
               if (songQuizFetchTimeoutRef.current) clearTimeout(songQuizFetchTimeoutRef.current);
               songQuizFetchTimeoutRef.current = setTimeout(() => {
@@ -1065,7 +1072,8 @@ export default function RoomWithoutSync({
             if (
               userRoomAiRecommendEnabledRef.current &&
               !shouldGateRecommendByQuiz &&
-              !skipQuizRecommendForTheme
+              !skipQuizRecommendForTheme &&
+              !skipQuizRecommendIntroOnly
             ) {
               scheduleNextSongRecommendAfterCommentary({
                 videoId: vid,
@@ -1802,6 +1810,14 @@ export default function RoomWithoutSync({
             }
             onSongQuizPick={handleSongQuizPick}
             themePlaylistActiveMission={themePlaylistRoomSubmit}
+            themePlaylistMissionRoom={{
+              roomId: roomId?.trim() || undefined,
+              isGuest,
+              favoritedVideoIds,
+              onFavoriteClick: handleFavoriteClick,
+              participantsWithColor: [{ displayName: displayNameProp, textColor: userTextColor }],
+              currentVideoId: videoId,
+            }}
           />
         }
         rightTop={

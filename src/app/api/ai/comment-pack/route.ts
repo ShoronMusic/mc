@@ -64,6 +64,11 @@ import {
   shouldRegenerateLibraryWhenMusicaichatSong,
   skipMusic8FactInjectEnv,
 } from '@/lib/music8-musicaichat';
+import {
+  buildSongIntroOnlyBaseComment,
+  shouldUseSongIntroOnlyDiscographyMode,
+} from '@/lib/commentary-song-intro-only-mode';
+import { insertAiCommentaryUnavailableEntry } from '@/lib/ai-commentary-unavailable-log';
 import { buildSongQuizApiExtension } from '@/lib/song-quiz-after-commentary';
 
 export const dynamic = 'force-dynamic';
@@ -301,6 +306,11 @@ export async function POST(request: Request) {
     const adminPlaybackHintRaw = parseAdminPlaybackDisplayHint(body?.adminPlaybackDisplayHint);
 
     const supabase = await createClient();
+    let selectorUserId: string | null = null;
+    if (supabase) {
+      const { data: authData } = await supabase.auth.getUser();
+      selectorUserId = authData.user?.id ?? null;
+    }
     if (skipCommentPackCacheRequested) {
       const allowed = await sessionMayEditRoomPlaybackHistoryFields(supabase);
       if (!allowed) {
@@ -362,7 +372,7 @@ export async function POST(request: Request) {
     const roomJpAiUnlock = roomId ? await isRoomJpAiUnlockEnabled(roomId) : false;
     const jpAiUnlockEnabled = roomJpAiUnlock;
     /** 新曲のみ基本1本（自由4本なし）。開発フラグ時も同様。邦楽は公式チャンネル例外を除き生成しない */
-    const baseOnlyPack = equivalentBaseOnlySlots(slots) || isNewRelease || devMinimalSongAi;
+    const baseOnlyPackCore = equivalentBaseOnlySlots(slots) || isNewRelease || devMinimalSongAi;
 
     if (isCommentPackFullyOff(slots)) {
       return NextResponse.json({
@@ -456,6 +466,19 @@ export async function POST(request: Request) {
           }
         : {};
 
+    const music8FactsBlockTrimmed =
+      !skipMusic8FactInject && musicaichatSong != null
+        ? buildMusicaichatFactsForAiPromptBlock(musicaichatSong).trim()
+        : '';
+    const songIntroOnlyDiscography = shouldUseSongIntroOnlyDiscographyMode({
+      musicaichatSong,
+      combinedFactsText: music8FactsBlockTrimmed,
+    });
+    const baseOnlyPack = baseOnlyPackCore || songIntroOnlyDiscography;
+    const songQuizExtensionFinal = songIntroOnlyDiscography
+      ? { songQuiz: { enabled: false as const } }
+      : songQuizExtension;
+
     const aiPromptLabels = buildAiCommentaryPromptLabels({
       artistDisplay,
       artist,
@@ -509,7 +532,8 @@ export async function POST(request: Request) {
               newReleaseOnly: true,
               ...(nrCached.tidbitIds?.length ? { tidbitIds: nrCached.tidbitIds } : {}),
               ...music8ModeratorHintsPayload,
-              ...songQuizExtension,
+              ...songQuizExtensionFinal,
+              ...(songIntroOnlyDiscography ? { songIntroOnlyDiscography: true } : {}),
             });
           }
         }
@@ -549,16 +573,12 @@ export async function POST(request: Request) {
               ...(tidbitIdsFull.length ? { tidbitIds: tidbitIdsFull } : {}),
               ...(freeCommentTidbitIds.length > 0 ? { freeCommentTidbitIds } : {}),
               ...music8ModeratorHintsPayload,
-              ...songQuizExtension,
+              ...songQuizExtensionFinal,
+              ...(songIntroOnlyDiscography ? { songIntroOnlyDiscography: true } : {}),
             });
           }
         }
       }
-    }
-
-    const model = getGeminiModel('comment_pack_base');
-    if (!model) {
-      return NextResponse.json({ error: 'Gemini is not configured', ...songQuizExtension }, { status: 503 });
     }
 
     const currentYear = new Date().getFullYear();
@@ -591,10 +611,14 @@ export async function POST(request: Request) {
       ? `・**アーティスト名・曲名の正**: 視聴履歴の管理者修正（DB）の表記「${title}」を前提に分解した【アーティスト】【曲名】を使っています。YouTube 原文と異なる場合は必ずこちらに従うこと。\n`
       : '';
 
-    const music8FactsBlockTrimmed =
-      !skipMusic8FactInject && musicaichatSong != null
-        ? buildMusicaichatFactsForAiPromptBlock(musicaichatSong).trim()
-        : '';
+    const model = getGeminiModel('comment_pack_base');
+    if (!model) {
+      const okWithoutGemini =
+        songIntroOnlyDiscography && (packPhase !== 'frees' || baseOnlyPack);
+      if (!okWithoutGemini) {
+        return NextResponse.json({ error: 'Gemini is not configured', ...songQuizExtensionFinal }, { status: 503 });
+      }
+    }
     const music8FactsSection =
       music8FactsBlockTrimmed.length > 0 ? `\n${music8FactsBlockTrimmed}\n` : '';
     const music8SourcePolicyLine =
@@ -690,13 +714,18 @@ ${basePromptTail}`;
         return NextResponse.json(
           {
             error: 'baseComment または DB の ai_commentary が必要です（先に packPhase=base を実行してください）',
-            ...songQuizExtension,
+            ...songQuizExtensionFinal,
           },
           { status: 400 },
         );
       }
       baseText = fromClient;
+    } else if (songIntroOnlyDiscography) {
+      baseText = buildSongIntroOnlyBaseComment(artistLabel, songLabel);
     } else {
+      if (!model) {
+        return NextResponse.json({ error: 'Gemini is not configured', ...songQuizExtensionFinal }, { status: 503 });
+      }
       const baseResult = await model.generateContent(basePrompt);
       logGeminiUsage('comment_pack_base', baseResult.response);
       await persistGeminiUsageLog('comment_pack_base', baseResult.response.usageMetadata, { videoId });
@@ -748,7 +777,8 @@ ${basePromptTail}`;
           packPhase: 'base',
           ...(tid0 ? { tidbitIds: [tid0] } : {}),
           ...music8ModeratorHintsPayload,
-          ...songQuizExtension,
+          ...songQuizExtensionFinal,
+          ...(songIntroOnlyDiscography ? { songIntroOnlyDiscography: true } : {}),
         });
       }
     }
@@ -789,6 +819,9 @@ ${basePromptTail}`;
     );
 
     if (!baseOnlyPack) {
+      if (!model) {
+        return NextResponse.json({ error: 'Gemini is not configured', ...songQuizExtensionFinal }, { status: 503 });
+      }
       const banBlockStandard = `・禁止事項（断定・根拠薄い内容の回避）:
   - チャート順位/ビルボード等の順位・スコア、受賞/グラミー等は書かない（1本目の自由コメントで既に扱います。ここでは触れない）
   - 「インスピレーションを得て書かれたと言われています」など、裏付けのない私人話・伝聞調は禁止
@@ -1229,6 +1262,20 @@ ${isRemixFocusTopic ? banBlockRemixFocus : isCoverFocusTopic ? banBlockCoverFocu
 
     const filteredOut = applySlotsToPackBodies(baseText, freeBodiesTrimmedTriple, slots);
 
+    if (songIntroOnlyDiscography && packPhase !== 'frees') {
+      const logClient = createAdminClient();
+      if (logClient) {
+        void insertAiCommentaryUnavailableEntry(logClient, {
+          userId: selectorUserId,
+          roomId: roomId || null,
+          videoId,
+          artistLabel,
+          songLabel,
+          source: 'comment_pack',
+        });
+      }
+    }
+
     return NextResponse.json({
       songId,
       videoId,
@@ -1239,7 +1286,8 @@ ${isRemixFocusTopic ? banBlockRemixFocus : isCoverFocusTopic ? banBlockCoverFocu
       ...(tidbitIds.length > 0 ? { tidbitIds } : {}),
       ...(freeCommentTidbitIds.length > 0 ? { freeCommentTidbitIds } : {}),
       ...music8ModeratorHintsPayload,
-      ...songQuizExtension,
+      ...songQuizExtensionFinal,
+      ...(songIntroOnlyDiscography ? { songIntroOnlyDiscography: true } : {}),
     });
   } catch (e) {
     console.error('[api/ai/comment-pack]', e);

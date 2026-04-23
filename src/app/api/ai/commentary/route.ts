@@ -27,6 +27,8 @@ import {
   shouldRegenerateLibraryWhenMusicaichatSong,
   skipMusic8FactInjectEnv,
 } from '@/lib/music8-musicaichat';
+import { shouldUseSongIntroOnlyDiscographyMode } from '@/lib/commentary-song-intro-only-mode';
+import { insertAiCommentaryUnavailableEntry } from '@/lib/ai-commentary-unavailable-log';
 import { buildSongQuizApiExtension } from '@/lib/song-quiz-after-commentary';
 
 export const dynamic = 'force-dynamic';
@@ -41,6 +43,11 @@ export async function POST(request: Request) {
     }
 
     const supabase = await createClient();
+    let selectorUserId: string | null = null;
+    if (supabase) {
+      const { data: authData } = await supabase.auth.getUser();
+      selectorUserId = authData.user?.id ?? null;
+    }
     const reader = createAdminClient() ?? supabase;
     const [oembed, snippet] = await Promise.all([fetchOEmbed(videoId), getVideoSnippet(videoId)]);
     const rawYouTubeTitle = oembed?.title ?? snippet?.title ?? videoId;
@@ -135,6 +142,13 @@ export async function POST(request: Request) {
       !skipMusic8FactInject && musicaichatSong != null
         ? buildMusicaichatFactsForAiPromptBlock(musicaichatSong).trim()
         : '';
+    const songIntroOnlyDiscography = shouldUseSongIntroOnlyDiscographyMode({
+      musicaichatSong,
+      combinedFactsText: music8FactsBlock,
+    });
+    const songQuizExtensionFinal = songIntroOnlyDiscography
+      ? { songQuiz: { enabled: false as const } }
+      : songQuizExtension;
 
     let cachedCommentaryBody: string | null = null;
     if (reader) {
@@ -163,7 +177,8 @@ export async function POST(request: Request) {
               snippet?.description,
               snippet?.channelTitle ?? null,
             ),
-            ...songQuizExtension,
+            ...songQuizExtensionFinal,
+            ...(songIntroOnlyDiscography ? { songIntroOnlyDiscography: true } : {}),
           });
         }
         cachedCommentaryBody = bodyText;
@@ -205,10 +220,11 @@ export async function POST(request: Request) {
       rawYouTubeTitle,
       supergroupHintText: supergroupHint || null,
       music8FactsBlock: music8FactsBlock.length > 0 ? music8FactsBlock : null,
+      songIntroOnlyDiscography,
     });
     if (!text) {
       return NextResponse.json(
-        { error: 'AI is not configured or failed.', ...songQuizExtension },
+        { error: 'AI is not configured or failed.', ...songQuizExtensionFinal },
         { status: 503 },
       );
     }
@@ -239,6 +255,20 @@ export async function POST(request: Request) {
       }
     }
 
+    if (songIntroOnlyDiscography && text) {
+      const logClient = createAdminClient();
+      if (logClient) {
+        void insertAiCommentaryUnavailableEntry(logClient, {
+          userId: selectorUserId,
+          roomId: roomId || null,
+          videoId,
+          artistLabel: String(artistLabel ?? '').trim() || '（不明）',
+          songLabel: String(commentarySongLabel ?? '').trim() || '（不明）',
+          source: 'commentary',
+        });
+      }
+    }
+
     return NextResponse.json({
       text,
       source: 'new',
@@ -248,7 +278,8 @@ export async function POST(request: Request) {
         artistDisplay && song
           ? `${artistDisplay} - ${song}`
           : formatArtistTitle(title, authorName, snippet?.description, snippet?.channelTitle ?? null),
-      ...songQuizExtension,
+      ...songQuizExtensionFinal,
+      ...(songIntroOnlyDiscography ? { songIntroOnlyDiscography: true } : {}),
     });
   } catch (e) {
     console.error('[api/ai/commentary]', e);

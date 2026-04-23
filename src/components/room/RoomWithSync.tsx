@@ -3379,10 +3379,12 @@ export default function RoomWithSync({
               suppressTidbitRef.current = equivalentBaseOnlySlots(commentPackSlotsRef.current);
               const baseOnlyCtx = pack.baseComment.trim();
               const delayBaseOnly = 3500;
+              const skipQuizRecommendIntroOnly = Boolean(pack.songIntroOnlyDiscography);
               const shouldGateRecommendByQuiz =
                 ownerSongQuizEnabledRef.current &&
                 userRoomAiSongQuizEnabledRef.current &&
-                baseOnlyCtx.length >= 60;
+                baseOnlyCtx.length >= 60 &&
+                !skipQuizRecommendIntroOnly;
               // 曲解説・comment-pack は選曲したクライアントのみが fetch する。クイズも同じクライアントでスケジュールする
               //（「最古入室者のみ」にすると、選曲者が最古でないときクイズが永遠に出ない）。
               if (shouldGateRecommendByQuiz && !skipQuizRecommendForTheme) {
@@ -3428,7 +3430,8 @@ export default function RoomWithSync({
                 ownerNextSongRecommendEnabledRef.current &&
                 userRoomAiRecommendEnabledRef.current &&
                 !shouldGateRecommendByQuiz &&
-                !skipQuizRecommendForTheme
+                !skipQuizRecommendForTheme &&
+                !skipQuizRecommendIntroOnly
               ) {
                 scheduleNextSongRecommendAfterCommentary({
                   videoId: vid,
@@ -3595,10 +3598,12 @@ export default function RoomWithSync({
                       .join('\n\n---\n\n');
                     const delayMs =
                       freeIdxSorted.length * COMMENT_PACK_FREE_STAGGER_MS + 3500;
+                    const skipQuizRecommendIntroOnly = Boolean(pack.songIntroOnlyDiscography);
                     const shouldGateRecommendByQuiz =
                       ownerSongQuizEnabledRef.current &&
                       userRoomAiSongQuizEnabledRef.current &&
-                      commentaryContext.length >= 60;
+                      commentaryContext.length >= 60 &&
+                      !skipQuizRecommendIntroOnly;
                     if (shouldGateRecommendByQuiz && !skipQuizRecommendForTheme) {
                       const timer = setTimeout(() => {
                         if (videoIdRef.current !== vid) return;
@@ -3642,7 +3647,8 @@ export default function RoomWithSync({
                       ownerNextSongRecommendEnabledRef.current &&
                       userRoomAiRecommendEnabledRef.current &&
                       !shouldGateRecommendByQuiz &&
-                      !skipQuizRecommendForTheme
+                      !skipQuizRecommendForTheme &&
+                      !skipQuizRecommendIntroOnly
                     ) {
                       scheduleNextSongRecommendAfterCommentary({
                         videoId: vid,
@@ -3754,10 +3760,12 @@ export default function RoomWithSync({
               .filter(Boolean)
               .join('\n\n---\n\n');
             const delayMsSingle = shownIdx * COMMENT_PACK_FREE_STAGGER_MS + 3500;
+            const skipQuizRecommendIntroOnly = Boolean(pack.songIntroOnlyDiscography);
             const shouldGateRecommendByQuiz =
               ownerSongQuizEnabledRef.current &&
               userRoomAiSongQuizEnabledRef.current &&
-              commentaryContextSingle.length >= 60;
+              commentaryContextSingle.length >= 60 &&
+              !skipQuizRecommendIntroOnly;
             if (shouldGateRecommendByQuiz && !skipQuizRecommendForTheme) {
               const timer = setTimeout(() => {
                 if (videoIdRef.current !== vid) return;
@@ -3801,7 +3809,8 @@ export default function RoomWithSync({
               ownerNextSongRecommendEnabledRef.current &&
               userRoomAiRecommendEnabledRef.current &&
               !shouldGateRecommendByQuiz &&
-              !skipQuizRecommendForTheme
+              !skipQuizRecommendForTheme &&
+              !skipQuizRecommendIntroOnly
             ) {
               scheduleNextSongRecommendAfterCommentary({
                 videoId: vid,
@@ -3875,10 +3884,12 @@ export default function RoomWithSync({
                   touchActivity();
                   const commentarySingle = `${prefix}${data.text}`.trim();
                   const delayCommentary = 4000;
+                  const skipQuizRecommendIntroOnly = Boolean(data?.songIntroOnlyDiscography);
                   const shouldGateRecommendByQuiz =
                     ownerSongQuizEnabledRef.current &&
                     userRoomAiSongQuizEnabledRef.current &&
-                    commentarySingle.length >= 60;
+                    commentarySingle.length >= 60 &&
+                    !skipQuizRecommendIntroOnly;
                   if (shouldGateRecommendByQuiz && !skipQuizRecommendForTheme) {
                     const timer = setTimeout(() => {
                       if (videoIdRef.current !== vid) return;
@@ -3922,7 +3933,8 @@ export default function RoomWithSync({
                     ownerNextSongRecommendEnabledRef.current &&
                     userRoomAiRecommendEnabledRef.current &&
                     !shouldGateRecommendByQuiz &&
-                    !skipQuizRecommendForTheme
+                    !skipQuizRecommendForTheme &&
+                    !skipQuizRecommendIntroOnly
                   ) {
                     scheduleNextSongRecommendAfterCommentary({
                       videoId: vid,
@@ -5396,6 +5408,17 @@ export default function RoomWithSync({
             }
             onSongQuizPick={publishSongQuizAnswer}
             themePlaylistActiveMission={themePlaylistRoomSubmit}
+            themePlaylistMissionRoom={{
+              roomId: roomId?.trim() || undefined,
+              roomClientId: myClientId || undefined,
+              isGuest,
+              favoritedVideoIds,
+              onFavoriteClick: handleFavoriteClick,
+              participantsWithColor: participants
+                .filter((p) => p.textColor)
+                .map((p) => ({ displayName: p.displayName, textColor: p.textColor })),
+              currentVideoId: videoId,
+            }}
           />
         }
         rightTop={

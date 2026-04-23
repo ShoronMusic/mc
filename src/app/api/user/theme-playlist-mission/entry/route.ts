@@ -237,3 +237,119 @@ export async function POST(request: Request) {
     entries: entries ?? [],
   });
 }
+
+/**
+ * DELETE: 収録曲1件を削除（ミッション所有者のみ）。完了済みで曲数が減った場合はミッションを再び進行可能に戻す。
+ * Query: entryId=<uuid>
+ */
+export async function DELETE(request: Request) {
+  const supabase = await createClient();
+  if (!supabase) {
+    return NextResponse.json({ error: '認証が利用できません。' }, { status: 503 });
+  }
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user?.id) {
+    return NextResponse.json({ error: 'ログインしていません。' }, { status: 401 });
+  }
+
+  const entryId = new URL(request.url).searchParams.get('entryId')?.trim() ?? '';
+  if (!entryId) {
+    return NextResponse.json({ error: 'entryId が必要です。' }, { status: 400 });
+  }
+
+  const { data: entry, error: entErr } = await supabase
+    .from('user_theme_playlist_entries')
+    .select('id, mission_id')
+    .eq('id', entryId)
+    .maybeSingle();
+
+  if (entErr) {
+    if (entErr.code === '42P01') return tableMissingResponse();
+    console.error('[theme-playlist-entry DELETE] entry', entErr);
+    return NextResponse.json({ error: entErr.message }, { status: 500 });
+  }
+  if (!entry) {
+    return NextResponse.json({ error: 'エントリが見つかりません。' }, { status: 404 });
+  }
+
+  const missionId = typeof entry.mission_id === 'string' ? entry.mission_id.trim() : '';
+  if (!missionId) {
+    return NextResponse.json({ error: 'ミッションが不正です。' }, { status: 400 });
+  }
+
+  const { data: mission, error: mErr } = await supabase
+    .from('user_theme_playlist_missions')
+    .select('id, status, completed_at, user_id')
+    .eq('id', missionId)
+    .maybeSingle();
+
+  if (mErr) {
+    if (mErr.code === '42P01') return tableMissingResponse();
+    console.error('[theme-playlist-entry DELETE] mission', mErr);
+    return NextResponse.json({ error: mErr.message }, { status: 500 });
+  }
+  if (!mission || mission.user_id !== user.id) {
+    return NextResponse.json({ error: 'ミッションが見つかりません。' }, { status: 404 });
+  }
+
+  const { error: delErr } = await supabase.from('user_theme_playlist_entries').delete().eq('id', entryId);
+  if (delErr) {
+    if (delErr.code === '42P01') return tableMissingResponse();
+    console.error('[theme-playlist-entry DELETE]', delErr);
+    return NextResponse.json({ error: delErr.message }, { status: 500 });
+  }
+
+  const { count: remaining, error: cErr } = await supabase
+    .from('user_theme_playlist_entries')
+    .select('*', { count: 'exact', head: true })
+    .eq('mission_id', missionId);
+
+  if (cErr) {
+    if (cErr.code === '42P01') return tableMissingResponse();
+    console.error('[theme-playlist-entry DELETE] recount', cErr);
+    return NextResponse.json({ error: cErr.message }, { status: 500 });
+  }
+
+  const n = remaining ?? 0;
+  const nowIso = new Date().toISOString();
+  if (mission.status === 'completed' && n < THEME_PLAYLIST_SLOT_TARGET) {
+    const { error: upErr } = await supabase
+      .from('user_theme_playlist_missions')
+      .update({
+        status: 'active',
+        completed_at: null,
+        updated_at: nowIso,
+      })
+      .eq('id', missionId)
+      .eq('user_id', user.id);
+    if (upErr) {
+      console.error('[theme-playlist-entry DELETE] reopen mission', upErr);
+    }
+  } else {
+    const { error: upErr } = await supabase
+      .from('user_theme_playlist_missions')
+      .update({ updated_at: nowIso })
+      .eq('id', missionId)
+      .eq('user_id', user.id);
+    if (upErr) {
+      console.error('[theme-playlist-entry DELETE] touch mission', upErr);
+    }
+  }
+
+  const { data: entries } = await supabase
+    .from('user_theme_playlist_entries')
+    .select(
+      'id, mission_id, slot_index, video_id, url, title, artist, ai_comment, selector_display_name, created_at',
+    )
+    .eq('mission_id', missionId)
+    .order('slot_index', { ascending: true });
+
+  return NextResponse.json({
+    ok: true,
+    entries: entries ?? [],
+    remaining_count: n,
+  });
+}

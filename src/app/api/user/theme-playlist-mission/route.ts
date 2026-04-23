@@ -118,6 +118,7 @@ export async function GET() {
       description: r.description ?? '',
       is_custom: true,
       base_id: r.id,
+      created_at: r.created_at,
     };
   });
   const themes = [...presetThemes, ...customThemes];
@@ -198,6 +199,7 @@ export async function GET() {
  * - それ以外: お題でミッション開始/再開
  * Body:
  * - pause: { action: 'pause', missionId: string }
+ * - delete_custom_theme: { action: 'delete_custom_theme', themeId: 'custom:…' }（ミッション・曲は削除し、お題は非表示）
  * - start/resume: { themeId: string }
  */
 export async function POST(request: Request) {
@@ -311,6 +313,50 @@ export async function POST(request: Request) {
         description: ((inserted as { description?: string | null }).description ?? '').trim(),
       },
     });
+  }
+
+  if (body?.action === 'delete_custom_theme') {
+    const themeId = typeof body?.themeId === 'string' ? body.themeId.trim() : '';
+    const baseId = fromCustomThemeId(themeId);
+    if (!themeId || !baseId) {
+      return NextResponse.json({ error: 'オリジナルお題（custom:…）のみ削除できます。' }, { status: 400 });
+    }
+    const { data: owned, error: ownErr } = await supabase
+      .from('user_theme_playlist_custom_themes')
+      .select('id')
+      .eq('id', baseId)
+      .eq('user_id', user.id)
+      .eq('is_active', true)
+      .maybeSingle();
+    if (ownErr && ownErr.code !== '42P01') {
+      console.error('[theme-playlist-mission POST delete_custom verify]', ownErr);
+      return NextResponse.json({ error: ownErr.message }, { status: 500 });
+    }
+    if (!owned) {
+      return NextResponse.json({ error: 'お題が見つからないか、すでに削除されています。' }, { status: 404 });
+    }
+    const { error: missDelErr } = await supabase
+      .from('user_theme_playlist_missions')
+      .delete()
+      .eq('user_id', user.id)
+      .eq('theme_id', themeId);
+    if (missDelErr) {
+      if (missDelErr.code === '42P01') return tableMissingResponse();
+      console.error('[theme-playlist-mission POST delete_custom missions]', missDelErr);
+      return NextResponse.json({ error: missDelErr.message }, { status: 500 });
+    }
+    const nowIso = new Date().toISOString();
+    const { error: softErr } = await supabase
+      .from('user_theme_playlist_custom_themes')
+      .update({ is_active: false, updated_at: nowIso })
+      .eq('id', baseId)
+      .eq('user_id', user.id);
+    if (softErr) {
+      if (softErr.code === '42P01') return tableMissingResponse();
+      console.error('[theme-playlist-mission POST delete_custom theme]', softErr);
+      return NextResponse.json({ error: softErr.message }, { status: 500 });
+    }
+    return NextResponse.json({ ok: true, deletedThemeId: themeId });
   }
 
   const themeId = typeof body?.themeId === 'string' ? body.themeId.trim() : '';

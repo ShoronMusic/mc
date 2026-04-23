@@ -6,11 +6,11 @@
 
 import {
   forwardRef,
+  useCallback,
   useEffect,
   useImperativeHandle,
   useRef,
   useState,
-  useCallback,
   type ReactNode,
 } from 'react';
 import { MAX_MESSAGE_LENGTH } from '@/lib/chat-limits';
@@ -97,6 +97,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
   const [usageGuideOpen, setUsageGuideOpen] = useState(false);
   const [aiQuestionExamplesOpen, setAiQuestionExamplesOpen] = useState(false);
   const [songHowtoOpen, setSongHowtoOpen] = useState(false);
+  const [themePlaylistConfirmOpen, setThemePlaylistConfirmOpen] = useState(false);
   const [searchResults, setSearchResults] = useState<SearchResultRow[]>([]);
   const [previewVideoId, setPreviewVideoId] = useState<string | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -284,13 +285,27 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
     setValue('');
   };
 
-  const handleThemePlaylistVideoSubmit = () => {
+  const openThemePlaylistConfirm = () => {
     const trimmed = value.trim();
     if (!trimmed || !onVideoUrl || !themePlaylistRoomSubmit) return;
+    if (!extractVideoId(trimmed)) return;
+    setThemePlaylistConfirmOpen(true);
+  };
+
+  const confirmThemePlaylistVideoSubmit = () => {
+    const trimmed = value.trim();
+    if (!trimmed || !onVideoUrl || !themePlaylistRoomSubmit) {
+      setThemePlaylistConfirmOpen(false);
+      return;
+    }
     const vid = extractVideoId(trimmed);
-    if (!vid) return;
+    if (!vid) {
+      setThemePlaylistConfirmOpen(false);
+      return;
+    }
     onVideoUrl(trimmed, { themePlaylistThemeId: themePlaylistRoomSubmit.themeId });
     setValue('');
+    setThemePlaylistConfirmOpen(false);
   };
 
   const handleSearchAndPlay = () => {
@@ -331,6 +346,22 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
     searchResultsOpen && previewOpen && previewVideoId
       ? searchResults.find((r) => r.videoId === previewVideoId) ?? null
       : null;
+
+  useEffect(() => {
+    if (!themePlaylistConfirmOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setThemePlaylistConfirmOpen(false);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [themePlaylistConfirmOpen]);
+
+  useEffect(() => {
+    if (!themePlaylistRoomSubmit) setThemePlaylistConfirmOpen(false);
+  }, [themePlaylistRoomSubmit]);
 
   return (
     <>
@@ -627,8 +658,8 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
               {themePlaylistRoomSubmit ? (
                 <li>
                   <span className="font-medium text-gray-200">お題曲送信（β）</span>
-                  ：マイページでお題ミッションを進行中のとき、URL を入れたうえでこちらを押すと、通常の AI
-                  曲解説のあとにお題に沿った講評が続きます（通常の「送信」ではお題には紐づきません）。
+                  ：マイページでお題ミッションを進行中のとき、URL を入れたうえでこちらを押すと確認モーダルが開き、確定後に送信されます。通常の
+                  AI 曲解説のあとにお題に沿った講評が続きます（通常の「送信」ではお題には紐づきません）。
                 </li>
               ) : null}
               <li>
@@ -754,6 +785,49 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
         </div>
       )}
 
+      {themePlaylistConfirmOpen && themePlaylistRoomSubmit && onVideoUrl ? (
+        <div
+          className="fixed inset-0 z-[88] flex items-center justify-center bg-black/65 p-4"
+          role="presentation"
+          onClick={() => setThemePlaylistConfirmOpen(false)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="theme-playlist-send-confirm-title"
+            className="w-full max-w-md rounded-lg border border-amber-800/50 bg-gray-900 p-4 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="theme-playlist-send-confirm-title" className="text-sm font-semibold text-amber-100">
+              お題曲の送信
+            </h2>
+            <p className="mt-2 text-xs leading-relaxed text-gray-300">
+              お題「<span className="font-medium text-gray-100">{themePlaylistRoomSubmit.themeLabel}</span>
+              」として、次の URL を<strong className="text-gray-200">お題曲送信</strong>します。通常の「送信」とは別扱いで、曲解説のあとにお題講評が付きます。
+            </p>
+            <p className="mt-2 break-all rounded border border-gray-700 bg-gray-950/80 px-2 py-1.5 font-mono text-[11px] text-gray-400">
+              {value.trim() || '（URL なし）'}
+            </p>
+            <div className="mt-4 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                className="rounded border border-gray-600 bg-gray-800 px-4 py-2 text-sm text-gray-200 hover:bg-gray-700"
+                onClick={() => setThemePlaylistConfirmOpen(false)}
+              >
+                キャンセル
+              </button>
+              <button
+                type="button"
+                onClick={() => confirmThemePlaylistVideoSubmit()}
+                className="rounded border border-amber-600/80 bg-amber-800/80 px-4 py-2 text-sm font-semibold text-amber-50 hover:bg-amber-700/90"
+              >
+                送信する
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <div className="rounded-lg border border-gray-700 bg-gray-900/50 p-2">
         <div className="flex w-full flex-row flex-wrap items-stretch gap-2">
           <div className="min-w-0 flex-1 basis-[min(100%,12rem)]">
@@ -782,10 +856,12 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
             <div className="flex h-[3.75rem] shrink-0 flex-col justify-center gap-1">
               <button
                 type="button"
-                onClick={handleThemePlaylistVideoSubmit}
-                title={`お題「${themePlaylistRoomSubmit.themeLabel}」として記録し、曲解説のあとにお題講評が付きます`}
+                onClick={openThemePlaylistConfirm}
+                title={`お題「${themePlaylistRoomSubmit.themeLabel}」として記録し、曲解説のあとにお題講評が付きます（確認のあと送信）`}
                 className="box-border flex min-h-0 flex-1 items-center justify-center rounded border border-amber-500/80 bg-amber-900/50 px-2 text-[11px] font-semibold leading-tight text-amber-50 hover:bg-amber-800/60 disabled:opacity-50"
                 disabled={!value.trim() || !extractVideoId(value.trim())}
+                aria-haspopup="dialog"
+                aria-expanded={themePlaylistConfirmOpen}
               >
                 お題曲送信（β）
               </button>

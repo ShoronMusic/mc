@@ -35,6 +35,9 @@ import {
 } from '@/lib/song-quiz-types';
 import { THEME_PLAYLIST_SLOT_TARGET } from '@/lib/theme-playlist-definitions';
 import type { ThemePlaylistRoomSubmitBanner } from '@/hooks/useThemePlaylistRoomSubmitMission';
+import ThemePlaylistMissionEntriesModal, {
+  type ThemePlaylistMissionEntriesModalRoomProps,
+} from '@/components/chat/ThemePlaylistMissionEntriesModal';
 
 /** 詳細フィードバック用モーダルの状態 */
 type FeedbackModalState =
@@ -102,6 +105,8 @@ interface ChatProps {
   onSongQuizPick?: (quizMessageId: string, videoId: string, pickedIndex: number) => void;
   /** マイページで進行中のお題ミッションがあるとき、ヘッダー2段目に進捗を表示 */
   themePlaylistActiveMission?: ThemePlaylistRoomSubmitBanner | null;
+  /** 「実施中」モーダル: 視聴履歴と同様の列・お気に入り・年代スタイル補完用 */
+  themePlaylistMissionRoom?: ThemePlaylistMissionEntriesModalRoomProps;
 }
 
 function formatTime(createdAt: string): string {
@@ -519,6 +524,7 @@ export default function Chat({
   onYoutubeSearchFromAi,
   onSongQuizPick,
   themePlaylistActiveMission = null,
+  themePlaylistMissionRoom,
 }: ChatProps) {
   const pathname = usePathname();
   const pathSegs = pathname?.split('/').filter(Boolean) ?? [];
@@ -546,12 +552,19 @@ export default function Chat({
   const [tidbitRejectingId, setTidbitRejectingId] = useState<string | null>(null);
   const [nextSongRecRejectingId, setNextSongRecRejectingId] = useState<string | null>(null);
   const [artistTitleReportingId, setArtistTitleReportingId] = useState<string | null>(null);
+  const [themeMissionModalOpen, setThemeMissionModalOpen] = useState(false);
   /** 三択クイズ: メッセージ id → 選んだ選択肢 index */
   const [songQuizPickedIndex, setSongQuizPickedIndex] = useState<Record<string, number>>({});
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages.length]);
+
+  useEffect(() => {
+    if (!themePlaylistActiveMission && themeMissionModalOpen) {
+      setThemeMissionModalOpen(false);
+    }
+  }, [themePlaylistActiveMission, themeMissionModalOpen]);
 
   const registerAiCommentaryNode = useCallback((id: string, node: HTMLLIElement | null) => {
     const map = aiCommentaryNodeRefs.current;
@@ -1026,9 +1039,16 @@ export default function Chat({
               {' '}
               （{themePlaylistActiveMission.entryCount}/{THEME_PLAYLIST_SLOT_TARGET}）
             </span>
-            <span className="ml-1.5 shrink-0 rounded border border-amber-700/50 bg-amber-900/30 px-1.5 py-0.5 text-[10px] font-semibold text-amber-100/95">
+            <button
+              type="button"
+              onClick={() => setThemeMissionModalOpen(true)}
+              className="ml-1.5 shrink-0 rounded border border-amber-700/50 bg-amber-900/30 px-1.5 py-0.5 text-[10px] font-semibold text-amber-100/95 hover:bg-amber-800/40 hover:text-amber-50"
+              aria-haspopup="dialog"
+              aria-expanded={themeMissionModalOpen}
+              title="これまでに登録した曲の一覧を表示"
+            >
               実施中
-            </span>
+            </button>
           </span>
         </div>
       ) : null}
@@ -1869,6 +1889,16 @@ export default function Chat({
           </div>
         </div>
       )}
+      {themePlaylistActiveMission && themeMissionModalOpen ? (
+        <ThemePlaylistMissionEntriesModal
+          open
+          onClose={() => setThemeMissionModalOpen(false)}
+          themeId={themePlaylistActiveMission.themeId}
+          themeLabel={themePlaylistActiveMission.themeLabel}
+          room={themePlaylistMissionRoom}
+        />
+      ) : null}
+
       {aiQuestionExamplesOpen && (
         <div
           className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4"

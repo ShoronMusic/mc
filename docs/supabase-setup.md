@@ -781,3 +781,40 @@ alter table public.user_theme_playlist_entries
 ```
 
 テーブルが無い状態では上記 API は **503** と案内文を返します。
+
+---
+
+## 19. AI 曲解説不可リスト（参照データ不足で曲紹介のみとなった選曲）
+
+Music8 等の参照にリリース年・収録出自が揃わず、曲解説が**曲紹介の定型文のみ**になった選曲を `ai_commentary_unavailable_entries` に記録します（`POST /api/ai/comment-pack`・`POST /api/ai/commentary` が **サービスロール**で挿入）。一覧・対応済みフラグは **STYLE_ADMIN** の管理 API・画面から操作します。
+
+**SQL（SQL Editor で実行）:**
+
+```sql
+create table if not exists public.ai_commentary_unavailable_entries (
+  id uuid primary key default gen_random_uuid(),
+  recorded_at timestamptz not null default now(),
+  user_id uuid references auth.users (id) on delete set null,
+  room_id text,
+  video_id text not null,
+  watch_url text not null,
+  artist_label text not null,
+  song_label text not null,
+  source text not null check (source in ('comment_pack', 'commentary')),
+  resolved boolean not null default false,
+  resolved_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists ai_commentary_unavailable_entries_recorded_idx
+  on public.ai_commentary_unavailable_entries (recorded_at desc);
+
+create index if not exists ai_commentary_unavailable_entries_resolved_idx
+  on public.ai_commentary_unavailable_entries (resolved, recorded_at desc);
+
+alter table public.ai_commentary_unavailable_entries enable row level security;
+```
+
+- **記録日時** `recorded_at`: サーバーが挿入した時刻（選曲フローで曲解説 API に到達した時刻に近い）。
+- **管理画面**: `/admin/ai-commentary-unavailable`（`GET` / `PATCH` は ` /api/admin/ai-commentary-unavailable`）。
+- 挿入に **`SUPABASE_SERVICE_ROLE_KEY`** が無い環境では記録はスキップされます（コンソール warn のみ）。

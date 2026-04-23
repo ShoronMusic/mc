@@ -7,6 +7,7 @@ import {
   containsUnreliableCommentaryDiscographyClaim,
   isRejectedChatOrTidbitOutput,
 } from '@/lib/ai-output-policy';
+import { buildSongIntroOnlyBaseComment } from '@/lib/commentary-song-intro-only-mode';
 import {
   buildGoogleGenerativeModelParams,
   extractTextFromGenerateContentResponse,
@@ -88,6 +89,8 @@ export type GeminiUsageLogMeta = {
   groundedFactsBlock?: string | null;
   /** musicaichat 曲 JSON の buildMusicaichatFactsForAiPromptBlock 出力 */
   music8FactsBlock?: string | null;
+  /** 参照データに年・出自が揃わないとき true。generateCommentary は定型の曲紹介のみ返す */
+  songIntroOnlyDiscography?: boolean;
   /** スーパーグループ文脈（手動マスタ + 外部データ補完） */
   supergroupHintText?: string | null;
 };
@@ -485,6 +488,12 @@ export async function generateCommentary(
   authorName?: string,
   usageMeta?: GeminiUsageLogMeta,
 ): Promise<string | null> {
+  if (usageMeta?.songIntroOnlyDiscography) {
+    const song = (title ?? '').trim() || 'この曲';
+    const artist = (authorName ?? '').trim() || 'このアーティスト';
+    return buildSongIntroOnlyBaseComment(artist, song);
+  }
+
   const model = getGeminiModel('commentary');
   if (!model) return null;
 

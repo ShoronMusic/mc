@@ -1,10 +1,18 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type MouseEvent } from 'react';
 import { THEME_PLAYLIST_SLOT_TARGET } from '@/lib/theme-playlist-definitions';
 import { THEME_PLAYLIST_MISSION_CLIENT_CHANGED_EVENT } from '@/lib/theme-playlist-mission-client-events';
 
-type ThemeRow = { id: string; label: string; description: string };
+type ThemeRow = {
+  id: string;
+  label: string;
+  description: string;
+  is_custom?: boolean;
+  base_id?: string;
+  /** ISO。オリジナルお題のみ API で返す */
+  created_at?: string;
+};
 
 type EntryApi = {
   id: string;
@@ -33,6 +41,11 @@ type MissionApi = {
 
 type Props = {
   isGuest: boolean;
+  /**
+   * 収録曲1件の削除。未指定なら `!isGuest`。
+   * 部屋内マイページでは `!isGuest && (!roomId || isChatOwner)` のように渡す想定（チャットオーナーのみ）。
+   */
+  canDeleteRecordedEntries?: boolean;
 };
 type ThemeListTab = 'preset' | 'create' | 'completed';
 
@@ -42,7 +55,32 @@ function notifyThemePlaylistMissionChanged() {
   }
 }
 
-export default function ThemePlaylistMissionPanel({ isGuest }: Props) {
+function formatThemeCreatedDate(iso: string | undefined): string {
+  if (!iso?.trim()) return '';
+  try {
+    return new Date(iso).toLocaleDateString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit' });
+  } catch {
+    return '';
+  }
+}
+
+function displayMissionForTheme(themeId: string, missions: MissionApi[]): MissionApi | null {
+  const list = missions.filter((m) => m.theme_id === themeId);
+  if (!list.length) return null;
+  const active = list.find((m) => m.status === 'active');
+  if (active) return active;
+  const paused = list
+    .filter((m) => m.status === 'paused')
+    .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
+  if (paused[0]) return paused[0];
+  const done = list
+    .filter((m) => m.status === 'completed')
+    .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
+  return done[0] ?? null;
+}
+
+export default function ThemePlaylistMissionPanel({ isGuest, canDeleteRecordedEntries }: Props) {
+  const allowRecordedDelete = canDeleteRecordedEntries ?? !isGuest;
   const [presetThemes, setPresetThemes] = useState<ThemeRow[]>([]);
   const [customThemes, setCustomThemes] = useState<ThemeRow[]>([]);
   const [missions, setMissions] = useState<MissionApi[]>([]);
@@ -53,9 +91,15 @@ export default function ThemePlaylistMissionPanel({ isGuest }: Props) {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [deleteModal, setDeleteModal] = useState<{
+    open: boolean;
+    theme: ThemeRow | null;
+    entryCount: number;
+  }>({ open: false, theme: null, entryCount: 0 });
+  const [deletingEntryId, setDeletingEntryId] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    if (isGuest) return;
+  const load = useCallback(async (): Promise<MissionApi[] | null> => {
+    if (isGuest) return null;
     setLoadError(null);
     setBusy(true);
     try {
@@ -72,7 +116,7 @@ export default function ThemePlaylistMissionPanel({ isGuest }: Props) {
         setPresetThemes([]);
         setCustomThemes([]);
         setMissions([]);
-        return;
+        return null;
       }
       const presets = Array.isArray(data?.presetThemes)
         ? data.presetThemes
@@ -90,11 +134,17 @@ export default function ThemePlaylistMissionPanel({ isGuest }: Props) {
       setMissions(ms);
       const firstActive = ms.find((m) => m.status === 'active');
       setSelectedMissionId((prev) => {
+        if (firstActive) return firstActive.id;
         if (prev && ms.some((m) => m.id === prev)) return prev;
-        return firstActive?.id ?? null;
+        const paused = [...ms]
+          .filter((m) => m.status === 'paused')
+          .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
+        return paused[0]?.id ?? null;
       });
+      return ms;
     } catch {
       setLoadError('読み込みに失敗しました。');
+      return null;
     } finally {
       setBusy(false);
     }
@@ -109,8 +159,67 @@ export default function ThemePlaylistMissionPanel({ isGuest }: Props) {
     [missions, selectedMissionId],
   );
 
-  const startMission = async (themeId: string) => {
+  /** 一覧の定義から、選択中ミッションのお題行（カスタムなら作成日・オリジナル表示用） */
+  const selectedThemeMetaForDetail = useMemo(() => {
+    if (!selectedMission) return { row: null as ThemeRow | null, descriptionFull: '' };
+    const row = [...customThemes, ...presetThemes].find((t) => t.id === selectedMission.theme_id) ?? null;
+    return { row, descriptionFull: (row?.description ?? '').trim() };
+  }, [selectedMission, customThemes, presetThemes]);
+
+  /** 未完了（進行中・一時解除）で曲が入っているほど上に。完了のみ／未開始は後方 */
+  const themeListRowsSorted = useMemo(() => {
+    const list = [...customThemes, ...presetThemes];
+    const progressSortKey = (themeId: string): number => {
+      const dm = displayMissionForTheme(themeId, missions);
+      if (!dm || dm.status === 'completed') return -1;
+      return dm.entry_count;
+    };
+    list.sort((a, b) => {
+      const ka = progressSortKey(a.id);
+      const kb = progressSortKey(b.id);
+      if (kb !== ka) return kb - ka;
+      const aCustom = customThemes.some((t) => t.id === a.id);
+      const bCustom = customThemes.some((t) => t.id === b.id);
+      if (aCustom !== bCustom) return aCustom ? -1 : 1;
+      return a.label.localeCompare(b.label, 'ja');
+    });
+    return list;
+  }, [customThemes, presetThemes, missions]);
+
+  const pauseMissionById = async (missionId: string) => {
     setActionMessage(null);
+    setBusy(true);
+    try {
+      const res = await fetch('/api/user/theme-playlist-mission', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'pause', missionId }),
+      });
+      const data = (await res.json().catch(() => null)) as { error?: string } | null;
+      if (!res.ok) {
+        setActionMessage(typeof data?.error === 'string' ? data.error : '一旦解除に失敗しました。');
+        return false;
+      }
+      await load();
+      notifyThemePlaylistMissionChanged();
+      return true;
+    } catch {
+      setActionMessage('一旦解除に失敗しました。');
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const startMission = async (themeId: string, missionsSnapshot?: MissionApi[]) => {
+    setActionMessage(null);
+    const ms = missionsSnapshot ?? missions;
+    const otherActive = ms.find((m) => m.status === 'active' && m.theme_id !== themeId);
+    if (otherActive) {
+      const okPause = await pauseMissionById(otherActive.id);
+      if (!okPause) return;
+    }
     setBusy(true);
     try {
       const res = await fetch('/api/user/theme-playlist-mission', {
@@ -175,9 +284,9 @@ export default function ThemePlaylistMissionPanel({ isGuest }: Props) {
       setNewThemeDescription('');
       setThemeTab('preset');
       setActionMessage('オリジナルお題を登録しました。');
-      await load();
+      const msAfter = await load();
       if (data?.customTheme?.id) {
-        await startMission(data.customTheme.id);
+        await startMission(data.customTheme.id, msAfter ?? undefined);
       }
       notifyThemePlaylistMissionChanged();
     } catch {
@@ -187,8 +296,23 @@ export default function ThemePlaylistMissionPanel({ isGuest }: Props) {
     }
   };
 
-  const pauseMission = async () => {
-    if (!selectedMissionId) return;
+  /** お題行クリック: 進行中なら一旦解除（OFF）、それ以外は開始/再開（ON）。他テーマの進行は startMission 側で解除 */
+  const toggleThemeRow = async (themeId: string) => {
+    if (busy) return;
+    const dm = displayMissionForTheme(themeId, missions);
+    if (dm?.status === 'active') {
+      setActionMessage(null);
+      const ok = await pauseMissionById(dm.id);
+      if (ok) {
+        setSelectedMissionId(dm.id);
+        setActionMessage('ミッションを一旦解除しました。同じお題の行をもう一度クリックすると再開できます。');
+      }
+      return;
+    }
+    await startMission(themeId);
+  };
+
+  const executeDeleteCustomTheme = async (themeId: string) => {
     setActionMessage(null);
     setBusy(true);
     try {
@@ -196,20 +320,60 @@ export default function ThemePlaylistMissionPanel({ isGuest }: Props) {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'pause', missionId: selectedMissionId }),
+        body: JSON.stringify({ action: 'delete_custom_theme', themeId }),
       });
       const data = (await res.json().catch(() => null)) as { error?: string } | null;
       if (!res.ok) {
-        setActionMessage(typeof data?.error === 'string' ? data.error : '一旦解除に失敗しました。');
+        setActionMessage(typeof data?.error === 'string' ? data.error : '削除に失敗しました。');
         return;
       }
-      setActionMessage('ミッションを一旦解除しました。後で開始/再開で続きを再開できます。');
+      setDeleteModal({ open: false, theme: null, entryCount: 0 });
+      setActionMessage('オリジナルお題を削除しました。');
       await load();
       notifyThemePlaylistMissionChanged();
     } catch {
-      setActionMessage('一旦解除に失敗しました。');
+      setActionMessage('削除に失敗しました。');
     } finally {
       setBusy(false);
+    }
+  };
+
+  const requestDeleteCustomTheme = (t: ThemeRow, e?: MouseEvent<HTMLButtonElement>) => {
+    e?.stopPropagation();
+    e?.preventDefault();
+    if (busy || !t.is_custom) return;
+    const dm = displayMissionForTheme(t.id, missions);
+    const n = dm?.entry_count ?? 0;
+    if (n >= 1) {
+      setDeleteModal({ open: true, theme: t, entryCount: n });
+      return;
+    }
+    if (typeof window !== 'undefined' && window.confirm(`「${t.label}」\nこのオリジナルお題を削除しますか？`)) {
+      void executeDeleteCustomTheme(t.id);
+    }
+  };
+
+  const deleteRecordedEntry = async (entryId: string) => {
+    if (!allowRecordedDelete || busy || !entryId.trim()) return;
+    if (typeof window !== 'undefined' && !window.confirm('この曲を収録から外しますか？')) return;
+    setActionMessage(null);
+    setDeletingEntryId(entryId);
+    try {
+      const res = await fetch(
+        `/api/user/theme-playlist-mission/entry?entryId=${encodeURIComponent(entryId)}`,
+        { method: 'DELETE', credentials: 'include' },
+      );
+      const data = (await res.json().catch(() => null)) as { error?: string } | null;
+      if (!res.ok) {
+        setActionMessage(typeof data?.error === 'string' ? data.error : '曲の削除に失敗しました。');
+        return;
+      }
+      await load();
+      notifyThemePlaylistMissionChanged();
+    } catch {
+      setActionMessage('曲の削除に失敗しました。');
+    } finally {
+      setDeletingEntryId(null);
     }
   };
 
@@ -249,7 +413,10 @@ export default function ThemePlaylistMissionPanel({ isGuest }: Props) {
       ) : null}
 
       <div>
-        <h3 className="mb-2 text-sm font-medium text-gray-200">お題一覧（開始）</h3>
+        <h3 className="mb-2 text-sm font-medium text-gray-200">お題一覧</h3>
+        <p className="mb-2 text-[11px] text-gray-500">
+          行をクリックして進行の ON/OFF を切り替えます（進行中の行だけがハイライト）。別のお題を ON にすると、進行中だったお題は自動で一旦解除されます。
+        </p>
         <div className="mb-2 flex flex-wrap gap-1 text-xs">
           {([
             ['preset', 'お題例'],
@@ -328,79 +495,104 @@ export default function ThemePlaylistMissionPanel({ isGuest }: Props) {
           </div>
         ) : (
           <div className="max-h-[50vh] overflow-auto rounded border border-gray-700">
-            <table className="w-full border-collapse text-left text-xs sm:text-sm">
+            <table className="w-full table-fixed border-collapse text-left text-xs sm:text-sm">
               <thead>
                 <tr className="border-b border-gray-700 bg-gray-950/90 text-[11px] text-gray-400">
-                  <th className="px-2 py-1.5 font-medium">お題</th>
-                  <th className="hidden px-2 py-1.5 font-medium sm:table-cell">説明</th>
-                  <th className="w-28 px-2 py-1.5 font-medium">操作</th>
+                  <th className="w-[5.25rem] px-2 py-1.5 font-medium">進捗</th>
+                  <th className="min-w-0 px-2 py-1.5 font-medium">お題・説明</th>
                 </tr>
               </thead>
               <tbody>
-                {[...customThemes, ...presetThemes].map((t) => (
-                  <tr key={t.id} className="border-b border-gray-800/90">
-                    <td className="px-2 py-1.5 font-medium text-white">{t.label}</td>
-                    <td className="hidden px-2 py-1.5 text-gray-500 sm:table-cell">{t.description}</td>
-                    <td className="px-2 py-1.5">
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => void startMission(t.id)}
-                        className="rounded bg-violet-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-violet-700 disabled:opacity-40"
-                      >
-                        開始/再開
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      <div>
-        <h3 className="mb-2 text-sm font-medium text-gray-200">ミッション選択</h3>
-        {missions.length === 0 ? (
-          <p className="text-xs text-gray-500">まだミッションがありません。上の表からお題を開始してください。</p>
-        ) : (
-          <div className="max-h-[40vh] overflow-auto rounded border border-gray-700">
-            <table className="w-full border-collapse text-left text-xs sm:text-sm">
-              <thead>
-                <tr className="border-b border-gray-700 bg-gray-950/90 text-[11px] text-gray-400">
-                  <th className="w-10 px-2 py-1.5 font-medium">選</th>
-                  <th className="px-2 py-1.5 font-medium">お題</th>
-                  <th className="w-24 px-2 py-1.5 font-medium">状態</th>
-                  <th className="w-16 px-2 py-1.5 font-medium">進捗</th>
-                </tr>
-              </thead>
-              <tbody>
-                {missions.map((m) => (
-                  <tr
-                    key={m.id}
-                    className={`border-b border-gray-800/90 ${
-                      selectedMissionId === m.id ? 'bg-violet-950/30' : ''
-                    }`}
-                  >
-                    <td className="px-2 py-1.5 text-center">
-                      <input
-                        type="radio"
-                        name="theme-mission-my"
-                        checked={selectedMissionId === m.id}
-                        onChange={() => setSelectedMissionId(m.id)}
-                        className="accent-violet-500"
-                        aria-label={`ミッション ${m.theme_label}`}
-                      />
-                    </td>
-                    <td className="px-2 py-1.5 text-gray-100">{m.theme_label}</td>
-                    <td className="px-2 py-1.5 text-gray-400">
-                      {m.status === 'completed' ? '完了' : m.status === 'paused' ? '一時解除' : '進行中'}
-                    </td>
-                    <td className="px-2 py-1.5 text-gray-300">
-                      {m.entry_count}/{THEME_PLAYLIST_SLOT_TARGET}
-                    </td>
-                  </tr>
-                ))}
+                {themeListRowsSorted.map((t) => {
+                  const dm = displayMissionForTheme(t.id, missions);
+                  const isRowActive = dm?.status === 'active';
+                  const count = dm?.entry_count ?? 0;
+                  const statusLabel =
+                    dm?.status === 'completed'
+                      ? '完了'
+                      : dm?.status === 'paused'
+                        ? '一時解除'
+                        : dm
+                          ? '進行中'
+                          : '—';
+                  return (
+                    <tr
+                      key={t.id}
+                      tabIndex={0}
+                      role="button"
+                      aria-pressed={isRowActive}
+                      aria-label={`お題 ${t.label}。${isRowActive ? '進行中。クリックで一旦解除' : 'クリックで開始または再開'}`}
+                      onClick={() => void toggleThemeRow(t.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          void toggleThemeRow(t.id);
+                        }
+                      }}
+                      className={`cursor-pointer border-b border-gray-800/90 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-violet-400/80 ${
+                        isRowActive
+                          ? 'bg-violet-950/45 ring-1 ring-inset ring-violet-500/40'
+                          : 'hover:bg-gray-800/55'
+                      } ${busy ? 'pointer-events-none opacity-50' : ''}`}
+                    >
+                      <td className="px-2 py-1.5 align-middle text-gray-200">
+                        <div className="flex flex-col items-center gap-1">
+                          <span
+                            className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                              isRowActive
+                                ? 'bg-violet-600 text-white'
+                                : dm?.status === 'paused'
+                                  ? 'bg-gray-800 text-gray-300'
+                                  : dm?.status === 'completed'
+                                    ? 'bg-gray-800 text-lime-200/90'
+                                    : 'bg-gray-800 text-gray-500'
+                            }`}
+                          >
+                            {statusLabel}
+                          </span>
+                          <span className="font-mono tabular-nums text-[11px] text-gray-100 sm:text-xs">
+                            {count}/{THEME_PLAYLIST_SLOT_TARGET}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="min-w-0 px-2 py-1.5">
+                        <div className="min-w-0">
+                          {t.is_custom ? (
+                            <div className="mb-1 flex w-full min-w-0 flex-wrap items-center gap-1.5">
+                              <span className="shrink-0 rounded border border-amber-700/50 bg-amber-950/40 px-1.5 py-0.5 text-[10px] font-semibold text-amber-100">
+                                オリジナル
+                              </span>
+                              {formatThemeCreatedDate(t.created_at) ? (
+                                <span className="text-[10px] text-gray-500 tabular-nums">
+                                  作成 {formatThemeCreatedDate(t.created_at)}
+                                </span>
+                              ) : null}
+                              <button
+                                type="button"
+                                disabled={busy}
+                                onClick={(e) => requestDeleteCustomTheme(t, e)}
+                                className="ml-auto shrink-0 rounded border border-red-900/60 bg-red-950/35 px-1.5 py-0.5 text-[10px] font-medium text-red-200 hover:bg-red-900/50 disabled:opacity-40"
+                              >
+                                削除
+                              </button>
+                            </div>
+                          ) : null}
+                          <div className="truncate font-medium text-white" title={t.label}>
+                            {t.label}
+                          </div>
+                          {t.description?.trim() ? (
+                            <div
+                              className="mt-0.5 truncate text-[11px] leading-snug text-gray-500"
+                              title={t.description}
+                            >
+                              {t.description}
+                            </div>
+                          ) : null}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -409,91 +601,190 @@ export default function ThemePlaylistMissionPanel({ isGuest }: Props) {
 
       {selectedMission && (
         <div className="rounded border border-gray-700 bg-gray-900/30 p-3">
-          <div className="mb-2 flex flex-wrap items-center gap-2">
-            <span className="text-sm font-semibold text-white">{selectedMission.theme_label}</span>
-            {isComplete ? (
-              <span className="rounded bg-lime-600/90 px-2 py-0.5 text-[11px] font-bold text-white">
-                コンプリート
-              </span>
-            ) : isPaused ? (
-              <span className="rounded bg-gray-600/90 px-2 py-0.5 text-[11px] font-bold text-white">
-                一時解除中
-              </span>
-            ) : (
-              <span className="text-xs text-gray-400">
-                {progress}/{THEME_PLAYLIST_SLOT_TARGET} 曲
-              </span>
-            )}
-            {!isComplete && isActive ? (
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => void pauseMission()}
-                className="rounded border border-gray-600 bg-gray-800 px-2 py-1 text-[11px] font-medium text-gray-200 hover:bg-gray-700 disabled:opacity-40"
-              >
-                一旦解除
-              </button>
-            ) : null}
+          <div className="mb-2 flex flex-wrap items-start gap-2">
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                {selectedThemeMetaForDetail.row?.is_custom ? (
+                  <>
+                    <span className="shrink-0 rounded border border-amber-700/50 bg-amber-950/40 px-1.5 py-0.5 text-[10px] font-semibold text-amber-100">
+                      オリジナル
+                    </span>
+                    {formatThemeCreatedDate(selectedThemeMetaForDetail.row.created_at) ? (
+                      <span className="text-[10px] text-gray-500 tabular-nums">
+                        作成 {formatThemeCreatedDate(selectedThemeMetaForDetail.row.created_at)}
+                      </span>
+                    ) : null}
+                  </>
+                ) : null}
+                <span className="text-sm font-semibold text-white">{selectedMission.theme_label}</span>
+                {isComplete ? (
+                  <span className="rounded bg-lime-600/90 px-2 py-0.5 text-[11px] font-bold text-white">
+                    コンプリート
+                  </span>
+                ) : isPaused ? (
+                  <span className="rounded bg-gray-600/90 px-2 py-0.5 text-[11px] font-bold text-white">
+                    一時解除中
+                  </span>
+                ) : (
+                  <span className="text-xs text-gray-400">
+                    {progress}/{THEME_PLAYLIST_SLOT_TARGET} 曲
+                  </span>
+                )}
+              </div>
+            </div>
           </div>
 
-          {!isComplete && isActive ? (
-            <p className="mb-2 text-xs text-gray-300/90">
-              URL入力欄は廃止しました。部屋の発言欄で URL を貼り、<strong className="text-gray-200">お題曲送信（β）</strong> を押して追加してください。
+          {selectedThemeMetaForDetail.descriptionFull ? (
+            <p className="mb-2 whitespace-pre-wrap text-sm leading-relaxed text-gray-400">
+              {selectedThemeMetaForDetail.descriptionFull}
             </p>
-          ) : isPaused ? (
-            <p className="mb-2 text-xs text-gray-300/90">
-              このミッションは一旦解除中です。上のお題一覧で同じお題の「開始/再開」を押すと途中から再開できます。
-            </p>
-          ) : (
-            <p className="mb-2 text-xs text-lime-100/90">
-              このミッションは完了済みです。同じお題で再度「開始/再開」すると、新しい10曲用のセッションが始まります。
-            </p>
-          )}
+          ) : null}
 
-          <h4 className="mb-1 text-[11px] font-medium text-gray-400">収録曲</h4>
-          <div className="max-h-[50vh] overflow-auto rounded border border-gray-800">
-            <table className="w-full border-collapse text-left text-[11px] sm:text-xs">
-              <thead>
-                <tr className="border-b border-gray-700 bg-gray-950/90 text-gray-500">
-                  <th className="w-8 px-1 py-1 font-medium">#</th>
-                  <th className="px-1 py-1 font-medium">曲</th>
-                  <th className="w-28 px-1 py-1 font-medium">選曲者</th>
-                  <th className="w-32 px-1 py-1 font-medium">日時</th>
-                  <th className="px-1 py-1 font-medium">AI総評</th>
-                </tr>
-              </thead>
-              <tbody>
-                {selectedMission.entries.map((e) => (
-                  <tr key={e.id} className="border-b border-gray-800/80 align-top">
-                    <td className="px-1 py-1 text-gray-500">{e.slot_index}</td>
-                    <td className="px-1 py-1 text-gray-100">
-                      <div>{e.artist || '—'} — {e.title || e.video_id}</div>
-                      <a
-                        href={e.url || `https://www.youtube.com/watch?v=${encodeURIComponent(e.video_id)}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-sky-300 hover:underline"
-                      >
-                        YouTube
-                      </a>
-                    </td>
-                    <td className="px-1 py-1 text-gray-300">{e.selector_display_name?.trim() || '—'}</td>
-                    <td className="px-1 py-1 text-gray-400">
-                      {new Date(e.created_at).toLocaleString('ja-JP', {
+          {isPaused ? (
+            <div className="rounded border border-gray-700/80 bg-gray-950/40 px-3 py-4 text-center">
+              <p className="text-sm font-medium text-gray-200">現在、進行中のミッションはありません。</p>
+              <p className="mt-2 text-xs leading-relaxed text-gray-400">
+                上のお題一覧で同じお題の行をクリックすると、途中から再開できます。
+              </p>
+            </div>
+          ) : (
+            <>
+              {isComplete ? (
+                <p className="mb-2 text-xs text-lime-100/90">
+                  このミッションは完了済みです。同じお題の行をクリックすると、新しい10曲用のセッションが始まります。
+                </p>
+              ) : null}
+              <h4 className="sr-only">収録曲</h4>
+              {!allowRecordedDelete && !isGuest ? (
+                <p className="mb-2 text-[10px] text-amber-200/85">
+                  収録曲の削除は<strong className="text-amber-100">チャットオーナー</strong>のみ利用できます。
+                </p>
+              ) : null}
+              <div className="max-h-[50vh] overflow-auto rounded-lg border border-gray-700/90 bg-gray-950/50 p-2 text-[11px] sm:text-xs">
+                {selectedMission.entries.length === 0 ? (
+                  <p className="px-2 py-4 text-center text-sm text-gray-500">まだ収録がありません。</p>
+                ) : (
+                  <ul className="space-y-2" aria-label="収録曲一覧">
+                    {selectedMission.entries.map((e) => {
+                      const dt = new Date(e.created_at).toLocaleString('ja-JP', {
                         month: '2-digit',
                         day: '2-digit',
                         hour: '2-digit',
                         minute: '2-digit',
-                      })}
-                    </td>
-                    <td className="px-1 py-1 leading-snug text-gray-400">{e.ai_comment}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                      });
+                      const yt = e.url || `https://www.youtube.com/watch?v=${encodeURIComponent(e.video_id)}`;
+                      return (
+                        <li
+                          key={e.id}
+                          className="overflow-hidden rounded-lg border border-gray-800 bg-gray-900/55 shadow-sm"
+                          aria-label={`${e.slot_index}番目の収録`}
+                        >
+                          <div className="relative px-3 pt-2.5 pb-2">
+                            <span
+                              className="pointer-events-none absolute left-2 top-1/2 z-0 -translate-y-1/2 select-none font-black tabular-nums leading-none text-gray-500/[0.2] sm:text-gray-500/[0.24]"
+                              style={{ fontSize: 'clamp(3rem, 14vw, 4.25rem)' }}
+                              aria-hidden
+                            >
+                              {e.slot_index}
+                            </span>
+                            <div className="relative z-10 min-w-0 pl-10 sm:pl-11">
+                              <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                                <span className="min-w-0 break-words font-medium leading-snug text-gray-50">
+                                  {e.artist || '—'} — {e.title || e.video_id}
+                                </span>
+                                <a
+                                  href={yt}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="shrink-0 text-xs font-medium text-sky-400 hover:text-sky-300 hover:underline"
+                                >
+                                  YouTube
+                                </a>
+                              </div>
+                              <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-gray-800/90 pt-2 text-[11px]">
+                                <time
+                                  className="tabular-nums text-gray-500"
+                                  dateTime={e.created_at}
+                                  title={e.created_at}
+                                >
+                                  {dt}
+                                </time>
+                                <span className="font-medium text-gray-200">
+                                  {e.selector_display_name?.trim() || '—'}
+                                </span>
+                                {allowRecordedDelete ? (
+                                  <button
+                                    type="button"
+                                    disabled={busy || deletingEntryId === e.id}
+                                    onClick={() => void deleteRecordedEntry(e.id)}
+                                    className="ml-auto shrink-0 rounded-md border border-red-500/50 bg-red-950/50 px-2 py-1 text-[10px] font-semibold text-red-100 hover:border-red-400/70 hover:bg-red-900/60 disabled:opacity-40"
+                                    title="収録からこの曲を削除"
+                                  >
+                                    {deletingEntryId === e.id ? '…' : '削除'}
+                                  </button>
+                                ) : null}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="w-full border-t border-gray-800/90 bg-black/30 px-3 py-2.5">
+                            <p className="whitespace-pre-wrap text-[11px] leading-relaxed text-gray-400">
+                              {e.ai_comment}
+                            </p>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+            </>
+          )}
         </div>
       )}
+
+      {deleteModal.open && deleteModal.theme ? (
+        <div
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-black/65 p-4"
+          role="presentation"
+          onClick={() => {
+            if (!busy) setDeleteModal({ open: false, theme: null, entryCount: 0 });
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-custom-theme-title"
+            className="w-full max-w-md rounded-lg border border-gray-600 bg-gray-900 p-4 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 id="delete-custom-theme-title" className="text-sm font-semibold text-white">
+              オリジナルお題を削除
+            </h3>
+            <p className="mt-3 text-xs leading-relaxed text-gray-300">
+              「<span className="font-medium text-gray-100">{deleteModal.theme.label}</span>
+              」には登録済みの曲が <strong className="text-amber-100">{deleteModal.entryCount}</strong> 件あります。削除するとミッションと収録データはすべて消え、一覧からも消えます。この操作は取り消せません。
+            </p>
+            <div className="mt-4 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => setDeleteModal({ open: false, theme: null, entryCount: 0 })}
+                className="rounded border border-gray-600 bg-gray-800 px-3 py-1.5 text-xs text-gray-200 hover:bg-gray-700 disabled:opacity-40"
+              >
+                キャンセル
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void executeDeleteCustomTheme(deleteModal.theme!.id)}
+                className="rounded bg-red-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-600 disabled:opacity-40"
+              >
+                削除する
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
