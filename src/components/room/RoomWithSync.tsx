@@ -2436,6 +2436,8 @@ export default function RoomWithSync({
         playLeaveChime?: boolean;
         /** AI 本文の強調（入室直後の選曲案内など） */
         aiBodyEmphasis?: ChatMessage['aiBodyEmphasis'];
+        /** おすすめ生成中カード */
+        nextSongRecommendPending?: boolean;
       }
     ) => {
       if (aiFreeSpeechStopped && !options?.allowWhenAiStopped) return;
@@ -2468,6 +2470,7 @@ export default function RoomWithSync({
         ...(options?.playJoinChime ? { playJoinChime: true as const } : {}),
         ...(options?.playLeaveChime ? { playLeaveChime: true as const } : {}),
         ...(options?.aiBodyEmphasis ? { aiBodyEmphasis: options.aiBodyEmphasis } : {}),
+        ...(options?.nextSongRecommendPending ? { nextSongRecommendPending: true as const } : {}),
       };
       if (!options?.localOnly) {
         safePublish(CHAT_MESSAGE_EVENT, payload);
@@ -2492,6 +2495,7 @@ export default function RoomWithSync({
           ...(payload.playJoinChime ? { playJoinChime: true as const } : {}),
           ...(payload.playLeaveChime ? { playLeaveChime: true as const } : {}),
           ...(payload.aiBodyEmphasis ? { aiBodyEmphasis: payload.aiBodyEmphasis } : {}),
+          ...(payload.nextSongRecommendPending ? { nextSongRecommendPending: true as const } : {}),
         },
       ]);
     },
@@ -2507,6 +2511,42 @@ export default function RoomWithSync({
     },
     [],
   );
+
+  const createPendingNextSongRecommendCard = useCallback((targetVideoId: string): string => {
+    const deferToPanel = nextPromptShownForVideoIdRef.current === targetVideoId;
+    const id = createMessageId();
+    const payload: ChatMessagePayload = {
+      id,
+      body: '【AIオススメ準備中】次に聴くなら候補を生成中です…',
+      displayName: AI_DISPLAY_NAME,
+      messageType: 'ai',
+      createdAt: new Date().toISOString(),
+      videoId: targetVideoId,
+      aiSource: 'next_song_recommend',
+      nextSongRecommendPending: true,
+      ...(deferToPanel ? { deferToPanel: true } : {}),
+    };
+    safePublish(CHAT_MESSAGE_EVENT, payload);
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: payload.id,
+        body: payload.body,
+        displayName: payload.displayName,
+        messageType: payload.messageType,
+        createdAt: payload.createdAt,
+        videoId: payload.videoId,
+        aiSource: payload.aiSource,
+        nextSongRecommendPending: true,
+        ...(deferToPanel ? { deferToPanel: true } : {}),
+      },
+    ]);
+    return id;
+  }, [safePublish]);
+
+  const clearPendingNextSongRecommendCard = useCallback((messageId: string): void => {
+    setMessages((prev) => prev.filter((m) => m.id !== messageId));
+  }, []);
 
   const runSongQuizResultAnnounce = useCallback(
     (quizMsgId: string, videoIdForQuiz: string) => {
@@ -3414,6 +3454,8 @@ export default function RoomWithSync({
                       addAiMessage,
                       buildAddAiMessageExtras: () => buildNextSongRecommendExtras(vid),
                       allowAfterVideoChange: true,
+                      createPendingCard: () => createPendingNextSongRecommendCard(vid),
+                      clearPendingCard: clearPendingNextSongRecommendCard,
                     });
                   }
                   void fetch('/api/ai/song-quiz', {
@@ -3452,6 +3494,8 @@ export default function RoomWithSync({
                   addAiMessage,
                   buildAddAiMessageExtras: () => buildNextSongRecommendExtras(vid),
                   allowAfterVideoChange: true,
+                  createPendingCard: () => createPendingNextSongRecommendCard(vid),
+                  clearPendingCard: clearPendingNextSongRecommendCard,
                 });
               }
               scheduleThemePlaylistRoomBlurbAfterPack({
@@ -3632,6 +3676,8 @@ export default function RoomWithSync({
                             addAiMessage,
                             buildAddAiMessageExtras: () => buildNextSongRecommendExtras(vid),
                             allowAfterVideoChange: true,
+                            createPendingCard: () => createPendingNextSongRecommendCard(vid),
+                            clearPendingCard: clearPendingNextSongRecommendCard,
                           });
                         }
                         void fetch('/api/ai/song-quiz', {
@@ -3670,6 +3716,8 @@ export default function RoomWithSync({
                         addAiMessage,
                         buildAddAiMessageExtras: () => buildNextSongRecommendExtras(vid),
                         allowAfterVideoChange: true,
+                        createPendingCard: () => createPendingNextSongRecommendCard(vid),
+                        clearPendingCard: clearPendingNextSongRecommendCard,
                       });
                     }
                     scheduleThemePlaylistRoomBlurbAfterPack({
@@ -3795,6 +3843,8 @@ export default function RoomWithSync({
                     addAiMessage,
                     buildAddAiMessageExtras: () => buildNextSongRecommendExtras(vid),
                     allowAfterVideoChange: true,
+                    createPendingCard: () => createPendingNextSongRecommendCard(vid),
+                    clearPendingCard: clearPendingNextSongRecommendCard,
                   });
                 }
                 void fetch('/api/ai/song-quiz', {
@@ -3833,6 +3883,8 @@ export default function RoomWithSync({
                 addAiMessage,
                 buildAddAiMessageExtras: () => buildNextSongRecommendExtras(vid),
                 allowAfterVideoChange: true,
+                createPendingCard: () => createPendingNextSongRecommendCard(vid),
+                clearPendingCard: clearPendingNextSongRecommendCard,
               });
             }
             scheduleThemePlaylistRoomBlurbAfterPack({
@@ -3920,6 +3972,8 @@ export default function RoomWithSync({
                           addAiMessage,
                           buildAddAiMessageExtras: () => buildNextSongRecommendExtras(vid),
                           allowAfterVideoChange: true,
+                          createPendingCard: () => createPendingNextSongRecommendCard(vid),
+                          clearPendingCard: clearPendingNextSongRecommendCard,
                         });
                       }
                       void fetch('/api/ai/song-quiz', {
@@ -3958,6 +4012,8 @@ export default function RoomWithSync({
                       addAiMessage,
                       buildAddAiMessageExtras: () => buildNextSongRecommendExtras(vid),
                       allowAfterVideoChange: true,
+                      createPendingCard: () => createPendingNextSongRecommendCard(vid),
+                      clearPendingCard: clearPendingNextSongRecommendCard,
                     });
                   }
                   scheduleThemePlaylistRoomBlurbAfterPack({
@@ -3998,6 +4054,8 @@ export default function RoomWithSync({
       isGuest,
       effectiveDisplayName,
       buildNextSongRecommendExtras,
+      createPendingNextSongRecommendCard,
+      clearPendingNextSongRecommendCard,
     ]
   );
 

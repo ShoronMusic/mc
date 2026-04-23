@@ -56,8 +56,16 @@ export function scheduleNextSongRecommendAfterCommentary(options: {
   preferFastAfterQuiz?: boolean;
   /** 曲が切り替わっても前曲のおすすめを遅延表示へ回して出す */
   allowAfterVideoChange?: boolean;
+  /** 生成中カードを表示して messageId を返す */
+  createPendingCard?: () => string | null;
+  /** 生成中カードを消す */
+  clearPendingCard?: (messageId: string) => void;
 }): void {
   if (options.isGuest) return;
+  const pendingMessageId = options.createPendingCard?.() ?? null;
+  const clearPending = () => {
+    if (pendingMessageId) options.clearPendingCard?.(pendingMessageId);
+  };
 
   const delayMs = getNextSongRecommendScheduleDelayMs(
     options.songQuizDelayMs,
@@ -76,8 +84,14 @@ export function scheduleNextSongRecommendAfterCommentary(options: {
     })
       .then((r) => (r.ok ? r.json() : null))
       .then((data: { enabled?: unknown; picks?: unknown } | null) => {
-        if (!options.allowAfterVideoChange && options.videoIdRef.current !== options.videoId) return;
-        if (!data || data.enabled !== true || !Array.isArray(data.picks) || data.picks.length === 0) return;
+        if (!options.allowAfterVideoChange && options.videoIdRef.current !== options.videoId) {
+          clearPending();
+          return;
+        }
+        if (!data || data.enabled !== true || !Array.isArray(data.picks) || data.picks.length === 0) {
+          clearPending();
+          return;
+        }
         const picks = data.picks as NextSongPick[];
         const ok = picks.every(
           (p) =>
@@ -87,7 +101,11 @@ export function scheduleNextSongRecommendAfterCommentary(options: {
             typeof p.reason === 'string' &&
             typeof p.youtubeSearchQuery === 'string',
         );
-        if (!ok) return;
+        if (!ok) {
+          clearPending();
+          return;
+        }
+        clearPending();
         picks.forEach((pick, idx) => {
           const emit = () => {
             if (!options.allowAfterVideoChange && options.videoIdRef.current !== options.videoId) return;
@@ -110,6 +128,9 @@ export function scheduleNextSongRecommendAfterCommentary(options: {
           const staggerTimer = setTimeout(emit, idx * NEXT_SONG_RECOMMEND_STAGGER_MS);
           options.registerTimer(staggerTimer);
         });
+      })
+      .catch(() => {
+        clearPending();
       });
   }, delayMs);
   options.registerTimer(timer);

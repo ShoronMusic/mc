@@ -201,7 +201,12 @@ function isNextSongRecommendFeedbackTarget(m: ChatMessageType): boolean {
 }
 
 function isDeferredNextSongRecommendMessage(m: ChatMessageType): boolean {
-  return m.messageType === 'ai' && m.aiSource === 'next_song_recommend' && m.deferToPanel === true;
+  return (
+    m.messageType === 'ai' &&
+    m.aiSource === 'next_song_recommend' &&
+    m.deferToPanel === true &&
+    m.nextSongRecommendPending !== true
+  );
 }
 
 function tuningReportAnchorPreviewBody(m: ChatMessageType): string {
@@ -1076,7 +1081,9 @@ export default function Chat({
               const isNextPromptMessage =
                 m.messageType === 'ai' && renderedBodyText.includes('再生が終了したら次の選曲をどうぞ');
               const isNextSongRecommendMessage =
-                m.messageType === 'ai' && m.aiSource === 'next_song_recommend';
+                m.messageType === 'ai' &&
+                m.aiSource === 'next_song_recommend' &&
+                m.nextSongRecommendPending !== true;
               const isThemePlaylistRoomReview =
                 m.messageType === 'ai' &&
                 (parsedUiLabel.label === 'お題講評' || m.aiSource === 'theme_playlist_room');
@@ -1365,7 +1372,7 @@ export default function Chat({
                 )}
                 {m.messageType === 'ai' &&
                   ((renderedBodyText.startsWith('[NEW]') || renderedBodyText.startsWith('[DB]')) ||
-                    m.aiSource === 'next_song_recommend') && (
+                    (m.aiSource === 'next_song_recommend' && m.nextSongRecommendPending !== true)) && (
                   <div className="mt-1 flex flex-wrap items-center gap-1 text-xs">
                     <button
                       type="button"
