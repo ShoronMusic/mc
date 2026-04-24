@@ -2,33 +2,32 @@ import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { requireStyleAdminApi } from '@/lib/admin-access';
 import {
-  buildSongLookupExportText,
-  extractLiveCommentariesFromLog,
-  extractQuizMarkersFromLog,
+  buildSongReportExportText,
   extractYoutubeVideoIdFromQuery,
   filterAtPairsByPlayWindows,
+  groupNextSongRecommendationsIntoRounds,
   jstDayRangeUtc,
   jstYmdFromIso,
-  mergeLibraryComments,
-  SONG_LOOKUP_COMMENT_SOURCES,
+  splitDisplayTitle,
   type AtQaPairWithRoom,
-  type SongLookupDateBlock,
-  type SongLookupLibraryComment,
-  type SongLookupRecommendRow,
+  type RoomChatLogRow,
+  type SongAdminReport,
+  type SongReportAtRow,
+  type SongReportCommentaryDb,
+  type SongReportQuizDb,
+  type SongReportSelectionRow,
 } from '@/lib/admin-song-lookup';
-import { buildAtChatPairsFromLogRows, type RoomChatLogRow } from '@/lib/room-chat-at-qa-from-log';
+import { buildAtChatPairsFromLogRows } from '@/lib/room-chat-at-qa-from-log';
+import { coerceSongQuizCorrectIndex, isValidSongQuizPayload } from '@/lib/song-quiz-types';
 
 export const dynamic = 'force-dynamic';
 
-const MAX_PLAYBACK_ROWS = 200;
-const MAX_ROOM_DAY_KEYS = 28;
+const MAX_PLAYBACK_ROWS = 400;
+const MAX_ROOM_DAY_KEYS = 40;
 const MAX_CHAT_ROWS_PER_DAY = 8000;
-const LIVE_COMMENTARY_PER_ROOM_DAY = 8;
-const QUIZ_MARKERS_PER_ROOM_DAY = 12;
-const LIVE_COMMENTARY_PER_DATE_CAP = 5;
-const AT_QA_PER_DATE_CAP = 40;
-const QUIZ_MARKERS_PER_DATE_CAP = 15;
-const MAX_RECOMMEND_ROWS = 80;
+const AT_QA_FLAT_CAP = 120;
+const MAX_QUIZ_LOG_ROWS = 200;
+const MAX_RECOMMEND_ROWS = 200;
 
 async function resolveVideoIdAndLabel(
   admin: NonNullable<ReturnType<typeof createAdminClient>>,
@@ -71,6 +70,18 @@ async function resolveVideoIdAndLabel(
   return { videoId: first.video_id.trim(), displayLabel: label };
 }
 
+function parseQuizFromRow(raw: unknown): SongReportQuizDb['quiz'] | null {
+  if (!isValidSongQuizPayload(raw)) return null;
+  const q = raw;
+  return {
+    question: q.question.trim(),
+    choices: q.choices as [string, string, string],
+    correctIndex: coerceSongQuizCorrectIndex(q.correctIndex),
+    explanation: String(q.explanation).trim(),
+    ...(q.theme ? { theme: q.theme } : {}),
+  };
+}
+
 export async function GET(request: Request) {
   const gate = await requireStyleAdminApi();
   if (!gate.ok) return gate.response;
@@ -90,75 +101,74 @@ export async function GET(request: Request) {
   }
   const { videoId, displayLabel: labelFromResolve } = resolved;
   const watchUrl = `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}`;
-
-  const warnings: string[] = [
-    '曲クイズの設問・選択肢・正解は room_chat_log に保存されていないため、出題システム行の時刻のみ取得します。',
-    '曲解説のチャット抽出は「当該 video を含むユーザー投稿の直後付近の [NEW]/[DB] AI 行」＋視聴履歴の時刻窓に基づく推定です。',
-  ];
-
-  let displayLabel = labelFromResolve;
-
   const sinceIso = new Date(Date.now() - days * 86400000).toISOString();
 
-  let libraryComments: SongLookupLibraryComment[] = [];
+  const warnings: string[] = [];
+
+  let artist = '';
+  let songTitle = '';
+  let displayTitle = labelFromResolve;
+
+  const { data: svOne } = await admin.from('song_videos').select('song_id').eq('video_id', videoId).maybeSingle();
+  const songId = (svOne as { song_id?: string } | null)?.song_id?.trim();
+  if (songId) {
+    const { data: songRow } = await admin
+      .from('songs')
+      .select('main_artist, song_title, display_title')
+      .eq('id', songId)
+      .maybeSingle();
+    if (songRow) {
+      const sr = songRow as { main_artist: string | null; song_title: string | null; display_title: string | null };
+      artist = (sr.main_artist ?? '').trim();
+      songTitle = (sr.song_title ?? '').trim();
+      const dt = (sr.display_title ?? '').trim();
+      if (dt) displayTitle = dt;
+      if (!artist || !songTitle) {
+        const sp = splitDisplayTitle(dt || displayTitle);
+        if (!artist) artist = sp.artist;
+        if (!songTitle) songTitle = sp.songTitle;
+      }
+    }
+  }
+
+  let commentaryDb: SongReportCommentaryDb | null = null;
   try {
     const { data: sc } = await admin
       .from('song_commentary')
       .select('body, created_at')
       .eq('video_id', videoId)
       .maybeSingle();
-    const songCommentary =
-      sc && typeof (sc as { body?: string }).body === 'string'
-        ? { body: (sc as { body: string }).body, created_at: String((sc as { created_at: string }).created_at ?? '') }
-        : null;
-
-    const { data: tidRows, error: tidErr } = await admin
-      .from('song_tidbits')
-      .select('source, body, created_at')
-      .eq('video_id', videoId)
-      .in('source', [...SONG_LOOKUP_COMMENT_SOURCES])
-      .order('created_at', { ascending: false })
-      .limit(40);
-
-    if (tidErr && tidErr.code !== '42P01') {
-      console.warn('[admin/song-lookup] song_tidbits', tidErr.message);
+    if (sc && typeof (sc as { body?: string }).body === 'string' && (sc as { body: string }).body.trim()) {
+      commentaryDb = {
+        body: (sc as { body: string }).body.trim(),
+        source: 'song_commentary',
+        updated_at: String((sc as { created_at: string }).created_at ?? ''),
+      };
+    } else {
+      const { data: tidOne } = await admin
+        .from('song_tidbits')
+        .select('body, created_at')
+        .eq('video_id', videoId)
+        .eq('source', 'ai_commentary')
+        .eq('is_active', true)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (tidOne && typeof (tidOne as { body?: string }).body === 'string' && (tidOne as { body: string }).body.trim()) {
+        commentaryDb = {
+          body: (tidOne as { body: string }).body.trim(),
+          source: 'song_tidbits:ai_commentary',
+          updated_at: String((tidOne as { created_at: string }).created_at ?? ''),
+        };
+      }
     }
-    const tidbits = (Array.isArray(tidRows) ? tidRows : []) as { source: string; body: string; created_at: string }[];
-    libraryComments = mergeLibraryComments({ songCommentary, tidbits, max: 5 });
-  } catch (e) {
-    console.warn('[admin/song-lookup] library block', e);
-  }
-
-  let recommendations: SongLookupRecommendRow[] = [];
-  try {
-    const { data: recData, error: recErr } = await admin
-      .from('next_song_recommendations')
-      .select(
-        'id, seed_label, recommended_artist, recommended_title, reason, order_index, created_at, is_active',
-      )
-      .eq('seed_video_id', videoId)
-      .order('created_at', { ascending: false })
-      .limit(MAX_RECOMMEND_ROWS);
-    if (recErr && recErr.code !== '42P01') {
-      console.warn('[admin/song-lookup] next_song_recommendations', recErr.message);
-    }
-    recommendations = (Array.isArray(recData) ? recData : []).map((r: Record<string, unknown>) => ({
-      id: String(r.id ?? ''),
-      seed_label: (r.seed_label as string) ?? null,
-      recommended_artist: (r.recommended_artist as string) ?? null,
-      recommended_title: (r.recommended_title as string) ?? null,
-      reason: (r.reason as string) ?? null,
-      order_index: typeof r.order_index === 'number' ? r.order_index : null,
-      created_at: String(r.created_at ?? ''),
-      is_active: r.is_active === true,
-    }));
-  } catch (e) {
-    console.warn('[admin/song-lookup] recommendations', e);
+  } catch {
+    /* noop */
   }
 
   const { data: playData, error: playErr } = await admin
     .from('room_playback_history')
-    .select('room_id, played_at, title, artist_name')
+    .select('room_id, played_at, title, artist_name, display_name')
     .eq('video_id', videoId)
     .gte('played_at', sinceIso)
     .order('played_at', { ascending: false })
@@ -180,13 +190,97 @@ export async function GET(request: Request) {
     played_at: string;
     title: string | null;
     artist_name: string | null;
+    display_name: string | null;
   }[];
 
-  if (plays.length > 0) {
-    const latest = plays[0]!;
-    const t = (latest.title ?? '').trim();
-    const a = (latest.artist_name ?? '').trim();
-    if (t || a) displayLabel = a && t ? `${a} - ${t}` : t || a || displayLabel;
+  if (!artist && !songTitle && plays[0]) {
+    const sp = splitDisplayTitle((plays[0].title ?? '').trim());
+    artist = sp.artist;
+    songTitle = sp.songTitle;
+    if (!displayTitle || displayTitle === videoId) {
+      displayTitle = [plays[0].artist_name, plays[0].title].filter(Boolean).join(' - ').trim() || displayTitle;
+    }
+  }
+
+  const roomIds = [...new Set(plays.map((p) => p.room_id).filter(Boolean))];
+  const roomTitleMap = new Map<string, string>();
+  if (roomIds.length > 0) {
+    const { data: lobbyRows, error: lobbyErr } = await admin
+      .from('room_lobby_message')
+      .select('room_id, display_title')
+      .in('room_id', roomIds);
+    if (!lobbyErr && Array.isArray(lobbyRows)) {
+      for (const row of lobbyRows as { room_id: string; display_title: string | null }[]) {
+        const rid = (row.room_id ?? '').trim();
+        if (!rid) continue;
+        const t = (row.display_title ?? '').trim();
+        roomTitleMap.set(rid, t || rid);
+      }
+    }
+  }
+
+  const selectionHistory: SongReportSelectionRow[] = plays.map((p) => ({
+    played_at: p.played_at,
+    date_jst: jstYmdFromIso(p.played_at),
+    room_id: p.room_id,
+    room_display_title: roomTitleMap.get(p.room_id) ?? p.room_id,
+    selector_display_name: (p.display_name ?? '').trim() || '—',
+    snapshot_title: p.title,
+    snapshot_artist: p.artist_name,
+  }));
+
+  let quizzesDb: SongReportQuizDb[] = [];
+  const { data: qzRows, error: qzErr } = await admin
+    .from('song_quiz_logs')
+    .select('id, created_at, room_id, commentary_context_sha256, commentary_context_preview, quiz')
+    .eq('video_id', videoId)
+    .gte('created_at', sinceIso)
+    .order('created_at', { ascending: false })
+    .limit(MAX_QUIZ_LOG_ROWS);
+
+  if (qzErr) {
+    if (qzErr.code === '42P01') {
+      warnings.push('song_quiz_logs テーブルがありません。docs/supabase-setup.md 第20章の SQL を実行すると、以降のクイズが保存・表示されます。');
+    } else {
+      console.warn('[admin/song-lookup] song_quiz_logs', qzErr.message);
+    }
+  } else {
+    for (const raw of Array.isArray(qzRows) ? qzRows : []) {
+      const o = raw as Record<string, unknown>;
+      const id = String(o.id ?? '');
+      const created_at = String(o.created_at ?? '');
+      const quizParsed = parseQuizFromRow(o.quiz);
+      if (!id || !created_at || !quizParsed) continue;
+      quizzesDb.push({
+        id,
+        created_at,
+        date_jst: jstYmdFromIso(created_at),
+        room_id: typeof o.room_id === 'string' ? o.room_id.trim() || null : null,
+        commentary_sha: typeof o.commentary_context_sha256 === 'string' ? o.commentary_context_sha256 : null,
+        commentary_preview: typeof o.commentary_context_preview === 'string' ? o.commentary_context_preview : null,
+        quiz: quizParsed,
+      });
+    }
+  }
+
+  let recommendationRounds: ReturnType<typeof groupNextSongRecommendationsIntoRounds> = [];
+  try {
+    const { data: recData, error: recErr } = await admin
+      .from('next_song_recommendations')
+      .select(
+        'created_at, recommended_artist, recommended_title, reason, order_index, is_active',
+      )
+      .eq('seed_video_id', videoId)
+      .gte('created_at', sinceIso)
+      .order('created_at', { ascending: false })
+      .limit(MAX_RECOMMEND_ROWS);
+    if (recErr && recErr.code !== '42P01') {
+      console.warn('[admin/song-lookup] next_song_recommendations', recErr.message);
+    } else {
+      recommendationRounds = groupNextSongRecommendationsIntoRounds(Array.isArray(recData) ? recData : [], 3);
+    }
+  } catch {
+    /* noop */
   }
 
   const playsByDate = new Map<string, typeof plays>();
@@ -196,7 +290,6 @@ export async function GET(request: Request) {
     arr.push(p);
     playsByDate.set(d, arr);
   }
-
   const sortedDates = [...playsByDate.keys()].sort((a, b) => (a < b ? 1 : a > b ? -1 : 0));
 
   type RoomDayKey = `${string}\t${string}`;
@@ -212,10 +305,9 @@ export async function GET(request: Request) {
       roomDayKeys.push(k);
     }
   }
-
   const keysLimited = roomDayKeys.slice(0, MAX_ROOM_DAY_KEYS);
   if (roomDayKeys.length > MAX_ROOM_DAY_KEYS) {
-    warnings.push(`部屋×日の会話取得は最大 ${MAX_ROOM_DAY_KEYS} 件に制限しました（古い組み合わせは省略）。`);
+    warnings.push(`@ 質問用の会話取得は部屋×日で最大 ${MAX_ROOM_DAY_KEYS} 件に制限しました。`);
   }
 
   const chatCache = new Map<string, RoomChatLogRow[]>();
@@ -239,104 +331,61 @@ export async function GET(request: Request) {
     }
     const raw = (logData ?? []) as RoomChatLogRow[];
     chatCache.set(key, raw.length > MAX_CHAT_ROWS_PER_DAY ? raw.slice(0, MAX_CHAT_ROWS_PER_DAY) : raw);
-    if (raw.length > MAX_CHAT_ROWS_PER_DAY) {
-      warnings.push(`room_chat_log が1日あたり ${MAX_CHAT_ROWS_PER_DAY} 件を超えたため打ち切りました（${roomId} / ${dateJst}）。`);
-    }
   }
 
-  const dateBlocks: SongLookupDateBlock[] = [];
-
+  const atFlat: AtQaPairWithRoom[] = [];
   for (const dateJst of sortedDates) {
-    const dayPlays = [...(playsByDate.get(dateJst) ?? [])].sort(
-      (a, b) => new Date(b.played_at).getTime() - new Date(a.played_at).getTime(),
-    );
-
-    const liveCommentaries: SongLookupDateBlock['liveCommentaries'] = [];
-    const atQaPairs: AtQaPairWithRoom[] = [];
-    const quizMarkers: SongLookupDateBlock['quizMarkers'] = [];
-
+    const dayPlays = playsByDate.get(dateJst) ?? [];
     const rooms = [...new Set(dayPlays.map((p) => p.room_id).filter(Boolean))];
     for (const roomId of rooms) {
       const cacheKey = `${roomId}\t${dateJst}` as const;
       const rows = chatCache.get(cacheKey) ?? [];
       const playsThisRoom = dayPlays.filter((p) => p.room_id === roomId);
-
       const pairs = buildAtChatPairsFromLogRows(rows);
-      const filteredPairs = filterAtPairsByPlayWindows(pairs, playsThisRoom);
-      for (const pr of filteredPairs) {
-        atQaPairs.push({ ...pr, room_id: roomId });
+      const filtered = filterAtPairsByPlayWindows(pairs, playsThisRoom);
+      for (const pr of filtered) {
+        atFlat.push({ ...pr, room_id: roomId });
       }
-
-      const lc = extractLiveCommentariesFromLog(
-        rows,
-        videoId,
-        playsThisRoom,
-        roomId,
-        LIVE_COMMENTARY_PER_ROOM_DAY,
-      );
-      liveCommentaries.push(...lc);
-
-      const qm = extractQuizMarkersFromLog(rows, playsThisRoom, roomId, QUIZ_MARKERS_PER_ROOM_DAY);
-      quizMarkers.push(...qm);
     }
-
-    liveCommentaries.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-    const liveDedup: typeof liveCommentaries = [];
-    const seenL = new Set<string>();
-    for (const x of liveCommentaries) {
-      const k = `${x.room_id}\t${x.created_at}\t${x.body.slice(0, 100)}`;
-      if (seenL.has(k)) continue;
-      seenL.add(k);
-      liveDedup.push(x);
-      if (liveDedup.length >= LIVE_COMMENTARY_PER_DATE_CAP) break;
-    }
-
-    atQaPairs.sort((a, b) => new Date(b.userCreatedAt).getTime() - new Date(a.userCreatedAt).getTime());
-    const atDedup = atQaPairs.slice(0, AT_QA_PER_DATE_CAP);
-
-    quizMarkers.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-    const quizDedup: typeof quizMarkers = [];
-    const seenQ = new Set<string>();
-    for (const x of quizMarkers) {
-      const k = `${x.room_id}\t${x.created_at}`;
-      if (seenQ.has(k)) continue;
-      seenQ.add(k);
-      quizDedup.push(x);
-      if (quizDedup.length >= QUIZ_MARKERS_PER_DATE_CAP) break;
-    }
-
-    dateBlocks.push({
-      dateJst,
-      plays: dayPlays.map((p) => ({
-        room_id: p.room_id,
-        played_at: p.played_at,
-        title: p.title,
-        artist_name: p.artist_name,
-      })),
-      liveCommentaries: liveDedup,
-      atQaPairs: atDedup,
-      quizMarkers: quizDedup,
+  }
+  atFlat.sort((a, b) => new Date(b.userCreatedAt).getTime() - new Date(a.userCreatedAt).getTime());
+  const atDedup: SongReportAtRow[] = [];
+  const seenAt = new Set<string>();
+  for (const p of atFlat) {
+    const k = `${p.room_id}\t${p.userCreatedAt}\t${p.userBody.slice(0, 80)}`;
+    if (seenAt.has(k)) continue;
+    seenAt.add(k);
+    atDedup.push({
+      date_jst: jstYmdFromIso(p.userCreatedAt),
+      user_created_at: p.userCreatedAt,
+      ai_created_at: p.aiCreatedAt,
+      room_id: p.room_id,
+      room_display_title: roomTitleMap.get(p.room_id) ?? p.room_id,
+      questioner: p.userDisplayName,
+      question: p.userBody,
+      answer: p.aiBody,
     });
+    if (atDedup.length >= AT_QA_FLAT_CAP) break;
   }
 
-  const exportText = buildSongLookupExportText({
+  const report: SongAdminReport = {
     videoId,
-    displayLabel,
+    artist,
+    songTitle,
+    displayTitle,
     watchUrl,
+    commentaryDb,
+    selectionHistory,
+    quizzesDb,
+    recommendationRounds,
+    atQuestions: atDedup,
     warnings,
-    libraryComments,
-    recommendations,
-    dateBlocks,
-  });
+  };
+
+  const exportText = buildSongReportExportText(report);
 
   return NextResponse.json({
-    videoId,
-    displayLabel,
-    watchUrl,
-    warnings,
-    libraryComments,
-    recommendations,
-    dateBlocks,
+    ...report,
     exportText,
     playbackRowCount: plays.length,
     days,

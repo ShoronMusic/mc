@@ -7,6 +7,7 @@ import {
 } from '@/lib/song-quiz-after-commentary';
 import { getVideoSnippet } from '@/lib/youtube-search';
 import type { SongQuizPayload } from '@/lib/song-quiz-types';
+import { insertSongQuizLog } from '@/lib/song-quiz-log';
 
 export const dynamic = 'force-dynamic';
 
@@ -65,6 +66,14 @@ export async function POST(request: Request) {
       roomId: roomId || null,
       videoId,
     });
+    if (quiz) {
+      void insertSongQuizLog({
+        videoId,
+        roomId: roomId || null,
+        commentaryContext,
+        quiz,
+      });
+    }
     return NextResponse.json({
       ...songQuizExtension,
       quiz,

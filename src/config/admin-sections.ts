@@ -110,7 +110,7 @@ export const ADMIN_SECTIONS: AdminSection[] = [
     href: '/admin/song-lookup',
     title: '曲引き',
     description:
-      'YouTube ID またはアーティスト-タイトルで集約。曲解説（最大5）・おすすめ曲・日別のクイズ出題時刻・@Q&A を表示し TEXT で DL',
+      'アーティスト・タイトル・URL・DB解説・選曲履歴（部屋名・選曲者）・song_quiz_logs のクイズ一式・おすすめ（バッチ最大3）・@Q&A を日付順で TEXT 可',
   },
 ];
 

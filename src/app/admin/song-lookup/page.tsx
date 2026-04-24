@@ -3,16 +3,16 @@
 import { useCallback, useState } from 'react';
 import Link from 'next/link';
 import { AdminMenuBar } from '@/components/admin/AdminMenuBar';
-import type { SongLookupDateBlock, SongLookupLibraryComment, SongLookupRecommendRow } from '@/lib/admin-song-lookup';
+import { isValidSongQuizTheme, SONG_QUIZ_THEME_UI_LABEL } from '@/lib/song-quiz-types';
+import type {
+  SongAdminReport,
+  SongReportAtRow,
+  SongReportQuizDb,
+  SongReportRecommendRound,
+  SongReportSelectionRow,
+} from '@/lib/admin-song-lookup';
 
-type ApiOk = {
-  videoId: string;
-  displayLabel: string;
-  watchUrl: string;
-  warnings: string[];
-  libraryComments: SongLookupLibraryComment[];
-  recommendations: SongLookupRecommendRow[];
-  dateBlocks: SongLookupDateBlock[];
+type ApiOk = SongAdminReport & {
   exportText: string;
   playbackRowCount: number;
   days: number;
@@ -56,7 +56,7 @@ export default function AdminSongLookupPage() {
     const blob = new Blob([data.exportText], { type: 'text/plain;charset=utf-8' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `song-lookup-${slug}.txt`;
+    a.download = `song-report-${slug}.txt`;
     a.click();
     URL.revokeObjectURL(a.href);
   }, [data]);
@@ -66,7 +66,7 @@ export default function AdminSongLookupPage() {
       <div className="mx-auto max-w-5xl">
         <AdminMenuBar />
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-          <h1 className="text-xl font-semibold">曲引き</h1>
+          <h1 className="text-xl font-semibold">曲引き（曲レポート）</h1>
           <Link href="/admin" className="text-sm text-sky-400 hover:underline">
             ← ダッシュボード
           </Link>
@@ -74,13 +74,9 @@ export default function AdminSongLookupPage() {
 
         <section className="mb-6 rounded-lg border border-gray-700 bg-gray-900/50 p-4 text-sm text-gray-400">
           <p className="leading-relaxed">
-            <strong className="text-gray-300">STYLE_ADMIN</strong> かつログイン済みで利用します。キーは{' '}
-            <strong className="text-gray-300">YouTube の video ID</strong>（11 文字）または{' '}
-            <strong className="text-gray-300">URL</strong>、または <strong className="text-gray-300">曲ダッシュボード検索に近い表記</strong>
-            （例: Bruce Springsteen - Born in the U.S.A.）です。
-          </p>
-          <p className="mt-2 leading-relaxed">
-            同一曲の複数回再生は <strong className="text-gray-300">日付（JST）</strong>で区切り、新しい日付から表示します。テキストは画面下部のボタンで保存（DL）できます。
+            キーは <strong className="text-gray-300">YouTube ID / URL</strong> または{' '}
+            <strong className="text-gray-300">曲名検索</strong>。アーティスト・タイトル・URL・DB 解説・選曲履歴・
+            <strong className="text-gray-300"> song_quiz_logs のクイズ</strong>（新規）・おすすめ曲バッチ（各最大3）・@ 質問をまとめます。
           </p>
         </section>
 
@@ -90,12 +86,12 @@ export default function AdminSongLookupPage() {
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="例: dQw4w9WgXcQ または アーティスト - タイトル"
+              placeholder="例: video ID または アーティスト - タイトル"
               className="mt-1 w-full rounded border border-gray-600 bg-gray-800 px-2 py-2 text-sm text-white"
             />
           </label>
           <label className="text-xs text-gray-400">
-            視聴履歴の参照日数
+            参照日数
             <select
               value={days}
               onChange={(e) => setDays(Number(e.target.value) || 120)}
@@ -122,17 +118,20 @@ export default function AdminSongLookupPage() {
 
         {data ? (
           <>
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <p className="text-lg font-semibold text-white">{data.displayLabel}</p>
+            <div className="mb-4 flex flex-wrap items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-lg font-semibold text-white">
+                  {data.artist || '—'} — {data.songTitle || '—'}
+                </p>
+                <p className="mt-1 text-sm text-gray-400">表示名: {data.displayTitle}</p>
                 <p className="mt-1 font-mono text-xs text-gray-500">
-                  video_id: {data.videoId} / 視聴行: {data.playbackRowCount}
+                  video_id: {data.videoId} / 選曲行: {data.playbackRowCount}
                 </p>
                 <a
                   href={data.watchUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="mt-1 inline-block text-sm text-sky-400 hover:underline"
+                  className="mt-2 inline-block text-sm text-sky-400 hover:underline"
                 >
                   {data.watchUrl}
                 </a>
@@ -140,7 +139,7 @@ export default function AdminSongLookupPage() {
               <button
                 type="button"
                 onClick={downloadText}
-                className="rounded border border-gray-600 bg-gray-800 px-3 py-2 text-sm text-gray-200 hover:bg-gray-700"
+                className="shrink-0 rounded border border-gray-600 bg-gray-800 px-3 py-2 text-sm text-gray-200 hover:bg-gray-700"
               >
                 TEXT 保存（DL）
               </button>
@@ -154,91 +153,7 @@ export default function AdminSongLookupPage() {
               </ul>
             ) : null}
 
-            <section className="mb-6">
-              <h2 className="mb-2 text-sm font-medium text-gray-300">1. 曲解説（ライブラリ・最大5件）</h2>
-              <div className="space-y-3 rounded-lg border border-gray-700 bg-gray-900/40 p-3">
-                {data.libraryComments.length === 0 ? (
-                  <p className="text-sm text-gray-500">該当なし</p>
-                ) : (
-                  data.libraryComments.map((c) => (
-                    <div key={`${c.source}-${c.created_at}`} className="border-b border-gray-800 pb-3 last:border-0">
-                      <p className="text-xs text-gray-500">
-                        {c.source} · {c.created_at}
-                      </p>
-                      <pre className="mt-1 whitespace-pre-wrap text-sm text-gray-200">{c.body}</pre>
-                    </div>
-                  ))
-                )}
-              </div>
-            </section>
-
-            <section className="mb-6">
-              <h2 className="mb-2 text-sm font-medium text-gray-300">2. 曲クイズと正解</h2>
-              <p className="mb-2 text-xs text-gray-500">
-                DB に設問・選択肢・正解インデックスはありません。日別ブロックに「出題システム行」の時刻のみ出します。
-              </p>
-            </section>
-
-            <section className="mb-6">
-              <h2 className="mb-2 text-sm font-medium text-gray-300">3. おすすめ曲（next_song_recommendations）</h2>
-              <div className="overflow-x-auto rounded-lg border border-gray-700">
-                <table className="w-full min-w-[480px] text-left text-sm">
-                  <thead className="border-b border-gray-700 bg-gray-800/80 text-xs text-gray-400">
-                    <tr>
-                      <th className="px-2 py-2">推薦曲</th>
-                      <th className="px-2 py-2">理由</th>
-                      <th className="px-2 py-2">順</th>
-                      <th className="px-2 py-2">active</th>
-                      <th className="px-2 py-2">登録日時</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.recommendations.length === 0 ? (
-                      <tr>
-                        <td colSpan={5} className="px-2 py-4 text-center text-gray-500">
-                          該当なし
-                        </td>
-                      </tr>
-                    ) : (
-                      data.recommendations.map((r) => (
-                        <tr key={r.id} className="border-b border-gray-800">
-                          <td className="px-2 py-2 text-gray-200">
-                            {[r.recommended_artist, r.recommended_title].filter(Boolean).join(' - ') || '—'}
-                          </td>
-                          <td className="max-w-[280px] truncate px-2 py-2 text-gray-400" title={r.reason ?? ''}>
-                            {r.reason ?? '—'}
-                          </td>
-                          <td className="px-2 py-2 text-gray-400">{r.order_index ?? '—'}</td>
-                          <td className="px-2 py-2 text-gray-400">{r.is_active === false ? '×' : '○'}</td>
-                          <td className="whitespace-nowrap px-2 py-2 font-mono text-xs text-gray-500">{r.created_at}</td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-
-            <section className="mb-8">
-              <h2 className="mb-2 text-sm font-medium text-gray-300">4. 日別（JST・新しい順）— 再生・曲解説（チャット推定）・クイズ時刻・@Q&amp;A</h2>
-              {data.dateBlocks.length === 0 ? (
-                <p className="text-sm text-gray-500">指定期間に room_playback_history の再生がありません。</p>
-              ) : (
-                <div className="space-y-6">
-                  {data.dateBlocks.map((block) => (
-                    <DateBlockView key={block.dateJst} block={block} />
-                  ))}
-                </div>
-              )}
-            </section>
-
-            <section className="rounded-lg border border-gray-800 bg-black/30 p-3">
-              <h2 className="mb-2 text-sm font-medium text-gray-400">プレビュー（TEXT 先頭 2,000 文字）</h2>
-              <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-all text-xs text-gray-500">
-                {data.exportText.slice(0, 2000)}
-                {data.exportText.length > 2000 ? '\n…' : ''}
-              </pre>
-            </section>
+            <ReportBody data={data} />
           </>
         ) : null}
       </div>
@@ -246,68 +161,177 @@ export default function AdminSongLookupPage() {
   );
 }
 
-function DateBlockView({ block }: { block: SongLookupDateBlock }) {
+function ReportBody({ data }: { data: ApiOk }) {
   return (
-    <div className="rounded-lg border border-gray-700 bg-gray-900/35 p-4">
-      <h3 className="border-b border-gray-700 pb-2 font-mono text-base text-amber-200/95">{block.dateJst}</h3>
+    <div className="space-y-8">
+      <section>
+        <h2 className="mb-2 border-b border-gray-700 pb-1 text-sm font-medium text-gray-300">解説（DB）</h2>
+        {!data.commentaryDb ? (
+          <p className="text-sm text-gray-500">該当なし</p>
+        ) : (
+          <div className="rounded-lg border border-gray-700 bg-gray-900/40 p-3">
+            <p className="text-xs text-gray-500">
+              {data.commentaryDb.source} · {data.commentaryDb.updated_at}
+            </p>
+            <pre className="mt-2 max-h-96 overflow-auto whitespace-pre-wrap text-sm text-gray-200">{data.commentaryDb.body}</pre>
+          </div>
+        )}
+      </section>
 
-      <h4 className="mt-3 text-xs font-medium uppercase tracking-wide text-gray-500">再生</h4>
-      <ul className="mt-1 space-y-1 text-sm text-gray-300">
-        {block.plays.map((p) => (
-          <li key={`${p.room_id}-${p.played_at}`}>
-            <span className="font-mono text-xs text-gray-500">{p.played_at}</span> · room{' '}
-            <code className="text-sky-300/90">{p.room_id}</code> ·{' '}
-            {[p.artist_name, p.title].filter(Boolean).join(' — ') || '—'}
+      <section>
+        <h2 className="mb-2 border-b border-gray-700 pb-1 text-sm font-medium text-gray-300">
+          選曲履歴（日付・部屋名・選曲者）
+        </h2>
+        {data.selectionHistory.length === 0 ? (
+          <p className="text-sm text-gray-500">該当なし</p>
+        ) : (
+          <ul className="space-y-2 text-sm text-gray-200">
+            {data.selectionHistory.map((s) => (
+              <SelectionRow key={`${s.room_id}-${s.played_at}-${s.selector_display_name}`} s={s} />
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section>
+        <h2 className="mb-2 border-b border-gray-700 pb-1 text-sm font-medium text-gray-300">
+          クイズ（質問・三択・正解・解説）日付順
+        </h2>
+        {data.quizzesDb.length === 0 ? (
+          <p className="text-sm text-gray-500">該当なし（未生成、または song_quiz_logs 未作成）</p>
+        ) : (
+          <ul className="space-y-4">
+            {data.quizzesDb.map((q) => (
+              <QuizCard key={q.id} q={q} />
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section>
+        <h2 className="mb-2 border-b border-gray-700 pb-1 text-sm font-medium text-gray-300">
+          おすすめ曲（各バッチ最大3・日付順）
+        </h2>
+        {data.recommendationRounds.length === 0 ? (
+          <p className="text-sm text-gray-500">該当なし</p>
+        ) : (
+          <ul className="space-y-4">
+            {data.recommendationRounds.map((round) => (
+              <RecommendRound key={round.created_at} round={round} />
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section>
+        <h2 className="mb-2 border-b border-gray-700 pb-1 text-sm font-medium text-gray-300">
+          @ 質問と回答
+        </h2>
+        {data.atQuestions.length === 0 ? (
+          <p className="text-sm text-gray-500">該当なし</p>
+        ) : (
+          <ul className="space-y-4">
+            {data.atQuestions.map((a, i) => (
+              <AtCard key={`${a.room_id}-${a.user_created_at}-${i}`} a={a} />
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section className="rounded-lg border border-gray-800 bg-black/30 p-3">
+        <h2 className="mb-2 text-sm font-medium text-gray-400">TEXT 先頭 2,000 文字</h2>
+        <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-all text-xs text-gray-500">
+          {data.exportText.slice(0, 2000)}
+          {data.exportText.length > 2000 ? '\n…' : ''}
+        </pre>
+      </section>
+    </div>
+  );
+}
+
+function SelectionRow({ s }: { s: SongReportSelectionRow }) {
+  return (
+    <li className="rounded border border-gray-800 bg-gray-900/35 px-3 py-2">
+      <span className="font-mono text-xs text-amber-200/90">{s.date_jst}</span>{' '}
+      <span className="font-mono text-xs text-gray-400">{s.played_at}</span>
+      <div className="mt-1">
+        部屋: <span className="text-sky-200/90">「{s.room_display_title}」</span>
+        <code className="ml-1 text-xs text-gray-500">({s.room_id})</code>
+      </div>
+      <div className="mt-0.5">
+        選曲者: <strong className="text-gray-100">{s.selector_display_name}</strong>
+      </div>
+      {(s.snapshot_artist || s.snapshot_title) && (
+        <div className="mt-1 text-xs text-gray-500">
+          履歴表記: {[s.snapshot_artist, s.snapshot_title].filter(Boolean).join(' - ') || '—'}
+        </div>
+      )}
+    </li>
+  );
+}
+
+function QuizCard({ q }: { q: SongReportQuizDb }) {
+  const sq = q.quiz;
+  const themeLabel = sq.theme && isValidSongQuizTheme(sq.theme) ? SONG_QUIZ_THEME_UI_LABEL[sq.theme] : null;
+  return (
+    <li className="rounded-lg border border-emerald-900/40 bg-emerald-950/15 p-3">
+      <p className="text-xs text-gray-500">
+        {q.date_jst} · {q.created_at} · room {q.room_id ?? '—'}
+      </p>
+      {q.commentary_preview ? (
+        <p className="mt-1 line-clamp-2 text-xs text-gray-500" title={q.commentary_preview}>
+          曲解説コンテキスト先頭: {q.commentary_preview}
+        </p>
+      ) : null}
+      <p className="mt-2 text-sm font-medium text-white">{sq.question}</p>
+      <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm text-gray-200">
+        {sq.choices.map((c, i) => (
+          <li key={i} className={i === sq.correctIndex ? 'font-semibold text-emerald-200' : ''}>
+            {c}
+            {i === sq.correctIndex ? '（正解）' : ''}
+          </li>
+        ))}
+      </ol>
+      {themeLabel ? <p className="mt-2 text-xs text-gray-400">観点: {themeLabel}</p> : null}
+      <p className="mt-2 text-sm text-gray-300">解説: {sq.explanation}</p>
+    </li>
+  );
+}
+
+function RecommendRound({ round }: { round: SongReportRecommendRound }) {
+  return (
+    <li className="rounded-lg border border-gray-700 bg-gray-900/35 p-3">
+      <p className="text-xs text-gray-500">
+        {round.date_jst} · {round.created_at}
+      </p>
+      <ul className="mt-2 space-y-2">
+        {round.picks.map((p) => (
+          <li key={p.order_index} className="text-sm text-gray-200">
+            <strong>
+              {p.artist} — {p.title}
+            </strong>
+            <p className="mt-0.5 text-xs text-gray-400">解説: {p.reason}</p>
           </li>
         ))}
       </ul>
+    </li>
+  );
+}
 
-      <h4 className="mt-4 text-xs font-medium uppercase tracking-wide text-gray-500">曲解説（チャット [NEW]/[DB]・最大5/日）</h4>
-      {block.liveCommentaries.length === 0 ? (
-        <p className="mt-1 text-sm text-gray-500">該当なし</p>
-      ) : (
-        <ul className="mt-2 space-y-2">
-          {block.liveCommentaries.map((c) => (
-            <li key={`${c.room_id}-${c.created_at}`} className="rounded border border-gray-800 bg-gray-950/50 p-2">
-              <p className="text-xs text-gray-500">
-                {c.created_at} · room <code className="text-sky-300/90">{c.room_id}</code>
-              </p>
-              <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap text-sm text-gray-200">{c.body}</pre>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      <h4 className="mt-4 text-xs font-medium uppercase tracking-wide text-gray-500">曲クイズ（システム行のみ）</h4>
-      {block.quizMarkers.length === 0 ? (
-        <p className="mt-1 text-sm text-gray-500">該当なし</p>
-      ) : (
-        <ul className="mt-1 space-y-1 text-sm text-gray-400">
-          {block.quizMarkers.map((m) => (
-            <li key={`${m.room_id}-${m.created_at}`}>
-              <span className="font-mono text-xs">{m.created_at}</span> · {m.room_id}: {m.body}
-            </li>
-          ))}
-        </ul>
-      )}
-
-      <h4 className="mt-4 text-xs font-medium uppercase tracking-wide text-gray-500">@ 質問と AI 回答</h4>
-      {block.atQaPairs.length === 0 ? (
-        <p className="mt-1 text-sm text-gray-500">該当なし</p>
-      ) : (
-        <ul className="mt-2 space-y-3">
-          {block.atQaPairs.map((p, i) => (
-            <li key={`${p.room_id}-${p.userCreatedAt}-${i}`} className="rounded border border-gray-800 bg-gray-950/40 p-2">
-              <p className="text-xs text-gray-500">
-                {p.userCreatedAt} · {p.userDisplayName} · room <code className="text-sky-300/90">{p.room_id}</code>
-              </p>
-              <p className="mt-1 text-sm text-gray-200">Q: {p.userBody}</p>
-              <p className="mt-1 text-xs text-gray-500">{p.aiCreatedAt}</p>
-              <p className="text-sm text-gray-300">A: {p.aiBody}</p>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
+function AtCard({ a }: { a: SongReportAtRow }) {
+  return (
+    <li className="rounded-lg border border-gray-700 bg-gray-900/35 p-3">
+      <p className="text-xs text-gray-500">
+        {a.date_jst} · {a.user_created_at}
+      </p>
+      <p className="mt-1 text-sm">
+        部屋: <span className="text-sky-200/90">「{a.room_display_title}」</span>
+        <code className="ml-1 text-xs text-gray-500">({a.room_id})</code>
+      </p>
+      <p className="mt-1 text-sm text-gray-300">質問者: {a.questioner}</p>
+      <p className="mt-2 text-sm text-gray-100">Q: {a.question}</p>
+      <p className="mt-2 text-sm text-gray-300">A: {a.answer}</p>
+      <p className="mt-1 text-xs text-gray-600">{a.ai_created_at}</p>
+    </li>
   );
 }

@@ -818,3 +818,31 @@ alter table public.ai_commentary_unavailable_entries enable row level security;
 - **記録日時** `recorded_at`: サーバーが挿入した時刻（選曲フローで曲解説 API に到達した時刻に近い）。
 - **管理画面**: `/admin/ai-commentary-unavailable`（`GET` / `PATCH` は ` /api/admin/ai-commentary-unavailable`）。
 - 挿入に **`SUPABASE_SERVICE_ROLE_KEY`** が無い環境では記録はスキップされます（コンソール warn のみ）。
+
+---
+
+## 20. 曲解説に紐づく三択クイズログ（`song_quiz_logs`）
+
+`POST /api/ai/song-quiz` でクイズ生成に成功したとき、**サービスロール**で 1 行 INSERT します。管理画面の曲引きで **質問・三択・正解インデックス・解説**を日付順に参照できます。曲解説テキストは DB 重複でも、**`commentary_context_sha256` + `created_at`** で「その回の出題」として区別します。
+
+**SQL（SQL Editor で実行）:**
+
+```sql
+create table if not exists public.song_quiz_logs (
+  id uuid primary key default gen_random_uuid(),
+  created_at timestamptz not null default now(),
+  video_id text not null,
+  room_id text,
+  commentary_context_sha256 text not null,
+  commentary_context_preview text,
+  quiz jsonb not null
+);
+
+create index if not exists song_quiz_logs_video_created_idx
+  on public.song_quiz_logs (video_id, created_at desc);
+
+alter table public.song_quiz_logs enable row level security;
+```
+
+- **RLS**: ポリシーなし（`anon` からは読めない）。アプリは **`SUPABASE_SERVICE_ROLE_KEY`** のみ INSERT/SELECT。
+- **オフ**: サーバー環境変数 `SONG_QUIZ_LOG_PERSIST=0` で INSERT を止められます。

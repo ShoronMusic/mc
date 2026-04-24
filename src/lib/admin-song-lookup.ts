@@ -1,13 +1,14 @@
 /**
- * 管理画面「曲引き」: キー解決・room_chat_log からの関連抽出・テキストエクスポート
+ * 管理画面「曲引き」: 日時ユーティリティ・会話ログからの @ ペア用・レポート TEXT 組み立て
  */
 
-import type { AtChatPairFromLog, RoomChatLogRow } from '@/lib/room-chat-at-qa-from-log';
-import { buildAtChatPairsFromLogRows } from '@/lib/room-chat-at-qa-from-log';
+import type { AtChatPairFromLog } from '@/lib/room-chat-at-qa-from-log';
+
+export type { RoomChatLogRow } from '@/lib/room-chat-at-qa-from-log';
 
 export const JST = 'Asia/Tokyo';
 
-/** comment-pack 保存ソース（曲解説＋自由4本） */
+/** comment-pack 保存ソース（曲解説＋自由4本）— DB 解説の補助取得用 */
 export const SONG_LOOKUP_COMMENT_SOURCES = [
   'ai_commentary',
   'ai_chat_1',
@@ -65,11 +66,6 @@ export function textContainsVideoId(body: string, videoId: string): boolean {
   return b.includes(v);
 }
 
-export function isLikelySongCommentaryAiBody(body: string): boolean {
-  const s = body.trim();
-  return /^\[NEW\]/u.test(s) || /^\[DB\]/u.test(s);
-}
-
 export function playWindowsFromPlays(
   plays: { played_at: string }[],
   marginBeforeMs: number,
@@ -90,7 +86,7 @@ export function isoInAnyWindow(iso: string, windows: { start: number; end: numbe
   return windows.some((w) => t >= w.start && t <= w.end);
 }
 
-/** 再生ウィンドウ内の @→AI ペア（同一部屋・同一日の plays はその日の該当曲再生のみ） */
+/** 再生ウィンドウ内の @→AI ペア */
 export function filterAtPairsByPlayWindows(
   pairs: AtChatPairFromLog[],
   plays: { played_at: string }[],
@@ -99,257 +95,224 @@ export function filterAtPairsByPlayWindows(
   return pairs.filter((p) => isoInAnyWindow(p.userCreatedAt, wins));
 }
 
-export type LiveCommentaryHit = {
-  created_at: string;
-  room_id: string;
+export type AtQaPairWithRoom = AtChatPairFromLog & { room_id: string };
+
+export function splitDisplayTitle(raw: string): { artist: string; songTitle: string } {
+  const t = raw.trim();
+  if (!t) return { artist: '', songTitle: '' };
+  const m = /\s+-\s+/.exec(t);
+  if (!m || m.index <= 0) return { artist: '', songTitle: t };
+  return {
+    artist: t.slice(0, m.index).trim(),
+    songTitle: t.slice(m.index + m[0].length).trim(),
+  };
+}
+
+export type SongReportCommentaryDb = {
   body: string;
+  source: string;
+  updated_at: string;
+};
+
+export type SongReportSelectionRow = {
+  played_at: string;
+  date_jst: string;
+  room_id: string;
+  room_display_title: string;
+  selector_display_name: string;
+  snapshot_title: string | null;
+  snapshot_artist: string | null;
+};
+
+export type SongReportQuizDb = {
+  id: string;
+  created_at: string;
+  date_jst: string;
+  room_id: string | null;
+  commentary_sha: string | null;
+  commentary_preview: string | null;
+  quiz: {
+    question: string;
+    choices: [string, string, string];
+    correctIndex: 0 | 1 | 2;
+    explanation: string;
+    theme?: string;
+  };
+};
+
+export type SongReportRecommendPick = {
+  artist: string;
+  title: string;
+  reason: string;
+  order_index: number;
+};
+
+export type SongReportRecommendRound = {
+  created_at: string;
+  date_jst: string;
+  picks: SongReportRecommendPick[];
+};
+
+export type SongReportAtRow = {
+  date_jst: string;
+  user_created_at: string;
+  ai_created_at: string;
+  room_id: string;
+  room_display_title: string;
+  questioner: string;
+  question: string;
+  answer: string;
+};
+
+export type SongAdminReport = {
+  videoId: string;
+  artist: string;
+  songTitle: string;
+  displayTitle: string;
+  watchUrl: string;
+  commentaryDb: SongReportCommentaryDb | null;
+  selectionHistory: SongReportSelectionRow[];
+  quizzesDb: SongReportQuizDb[];
+  recommendationRounds: SongReportRecommendRound[];
+  atQuestions: SongReportAtRow[];
+  warnings: string[];
 };
 
 /**
- * 同一日・同一部屋ログから、[NEW]/[DB] の AI 行で、
- * 直前（最大 40 行）に当該 video を含むユーザー行があり、かつ再生ウィンドウに入るものを最大 max 件。
+ * `next_song_recommendations` の複数行を、同一 `created_at`（秒まで）のバッチ＝1 回のおすすめ生成とみなしてまとめる。
+ * 各バッチは order_index 昇順で最大 `maxPicksPerRound` 件（既定 3）。
  */
-export function extractLiveCommentariesFromLog(
-  rows: readonly RoomChatLogRow[],
-  videoId: string,
-  plays: { played_at: string }[],
-  roomId: string,
-  max: number,
-): LiveCommentaryHit[] {
-  const wins = playWindowsFromPlays(plays, 45_000, 50 * 60_000);
-  const list = [...rows].sort((a, b) => a.created_at.localeCompare(b.created_at));
-  const hits: LiveCommentaryHit[] = [];
-  const seen = new Set<string>();
-
-  for (let i = 0; i < list.length; i += 1) {
-    const row = list[i]!;
-    if ((row.message_type ?? '') !== 'ai') continue;
-    if (!isLikelySongCommentaryAiBody(row.body ?? '')) continue;
-    if (!isoInAnyWindow(row.created_at, wins)) continue;
-
-    let foundUserWithVideo = false;
-    for (let j = i - 1; j >= 0 && j >= i - 40; j -= 1) {
-      const u = list[j]!;
-      if ((u.message_type ?? '') !== 'user') continue;
-      if (textContainsVideoId(u.body ?? '', videoId)) {
-        const ut = new Date(u.created_at).getTime();
-        const rt = new Date(row.created_at).getTime();
-        if (!Number.isNaN(ut) && !Number.isNaN(rt) && rt - ut <= 20 * 60_000) {
-          foundUserWithVideo = true;
-        }
-        break;
-      }
-    }
-    if (!foundUserWithVideo) continue;
-
-    const key = `${roomId}\t${row.created_at}\t${(row.body ?? '').slice(0, 120)}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    hits.push({
-      created_at: row.created_at,
-      room_id: roomId,
-      body: (row.body ?? '').trim(),
-    });
-    if (hits.length >= max) break;
+export function groupNextSongRecommendationsIntoRounds(
+  rows: ReadonlyArray<{
+    created_at: string;
+    recommended_artist: string | null;
+    recommended_title: string | null;
+    reason: string | null;
+    order_index: number | null;
+    is_active?: boolean | null;
+  }>,
+  maxPicksPerRound = 3,
+): SongReportRecommendRound[] {
+  const active = rows.filter((r) => r.is_active !== false);
+  const sorted = [...active].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  const batches: (typeof active)[] = [];
+  for (const r of sorted) {
+    const sub = (r.created_at || '').slice(0, 19);
+    const prev = batches[batches.length - 1];
+    if (prev?.[0] && (prev[0].created_at || '').slice(0, 19) === sub) prev.push(r);
+    else batches.push([r]);
   }
-
-  return hits;
+  return batches.map((g) => {
+    const inner = [...g].sort((a, b) => (a.order_index ?? 0) - (b.order_index ?? 0));
+    const picks: SongReportRecommendPick[] = inner.slice(0, maxPicksPerRound).map((x) => ({
+      artist: (x.recommended_artist ?? '').trim() || '—',
+      title: (x.recommended_title ?? '').trim() || '—',
+      reason: (x.reason ?? '').trim() || '—',
+      order_index: x.order_index ?? 0,
+    }));
+    const created = g[0]!.created_at;
+    return { created_at: created, date_jst: jstYmdFromIso(created), picks };
+  });
 }
 
-export type QuizMarkerHit = {
-  created_at: string;
-  room_id: string;
-  body: string;
-};
-
-/** 【曲クイズ】のシステム行（本文に設問は含まれない想定）を時刻のみ記録 */
-export function extractQuizMarkersFromLog(
-  rows: readonly RoomChatLogRow[],
-  plays: { played_at: string }[],
-  roomId: string,
-  max: number,
-): QuizMarkerHit[] {
-  const wins = playWindowsFromPlays(plays, 60_000, 55 * 60_000);
-  const hits: QuizMarkerHit[] = [];
-  const seen = new Set<string>();
-  for (const row of rows) {
-    if ((row.message_type ?? '') !== 'system') continue;
-    const body = row.body ?? '';
-    if (!body.includes('【曲クイズ】') && !body.includes('曲クイズ')) continue;
-    if (!isoInAnyWindow(row.created_at, wins)) continue;
-    const key = `${roomId}\t${row.created_at}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    hits.push({ created_at: row.created_at, room_id: roomId, body: body.trim() });
-    if (hits.length >= max) break;
-  }
-  return hits;
-}
-
-export type AtQaPairWithRoom = AtChatPairFromLog & { room_id: string };
-
-export type SongLookupDateBlock = {
-  dateJst: string;
-  plays: { room_id: string; played_at: string; title: string | null; artist_name: string | null }[];
-  liveCommentaries: LiveCommentaryHit[];
-  atQaPairs: AtQaPairWithRoom[];
-  quizMarkers: QuizMarkerHit[];
-};
-
-export type SongLookupLibraryComment = {
-  source: string;
-  body: string;
-  created_at: string;
-};
-
-export type SongLookupRecommendRow = {
-  id: string;
-  seed_label: string | null;
-  recommended_artist: string | null;
-  recommended_title: string | null;
-  reason: string | null;
-  order_index: number | null;
-  created_at: string;
-  is_active?: boolean;
-};
-
-export function buildSongLookupExportText(params: {
-  videoId: string;
-  displayLabel: string;
-  watchUrl: string;
-  warnings: string[];
-  libraryComments: SongLookupLibraryComment[];
-  recommendations: SongLookupRecommendRow[];
-  dateBlocks: SongLookupDateBlock[];
-}): string {
+export function buildSongReportExportText(r: SongAdminReport): string {
   const lines: string[] = [];
   const br = () => lines.push('');
   lines.push('='.repeat(78));
-  lines.push('曲引き（管理用エクスポート）');
+  lines.push('曲レポート（管理・曲引き）');
   lines.push('='.repeat(78));
   br();
-  lines.push(`YouTube ID: ${params.videoId}`);
-  lines.push(`表示: ${params.displayLabel}`);
-  lines.push(`URL: ${params.watchUrl}`);
+  lines.push(`動画ID: ${r.videoId}`);
+  lines.push(`アーティスト: ${r.artist || '—'}`);
+  lines.push(`タイトル: ${r.songTitle || '—'}`);
+  lines.push(`表示名: ${r.displayTitle || '—'}`);
+  lines.push(`URL: ${r.watchUrl}`);
   br();
-  if (params.warnings.length) {
+  if (r.warnings.length) {
     lines.push('【注意】');
-    for (const w of params.warnings) lines.push(`- ${w}`);
+    for (const w of r.warnings) lines.push(`- ${w}`);
     br();
   }
 
   lines.push('-'.repeat(78));
-  lines.push('■ ライブラリ（曲解説・comment-pack 系・最大5件）');
+  lines.push('■ 解説（DB）');
   lines.push('-'.repeat(78));
-  if (params.libraryComments.length === 0) {
+  if (!r.commentaryDb) {
     lines.push('（該当なし）');
   } else {
-    for (const c of params.libraryComments) {
-      lines.push(`[${c.source}] ${c.created_at}`);
-      lines.push(c.body);
+    lines.push(`source: ${r.commentaryDb.source}`);
+    lines.push(`updated: ${r.commentaryDb.updated_at}`);
+    lines.push(r.commentaryDb.body);
+  }
+  br();
+
+  lines.push('-'.repeat(78));
+  lines.push('■ 選曲履歴（日付・部屋名・選曲者）');
+  lines.push('-'.repeat(78));
+  if (r.selectionHistory.length === 0) {
+    lines.push('（該当なし）');
+  } else {
+    for (const s of r.selectionHistory) {
+      lines.push(
+        `- ${s.date_jst} ${s.played_at}  部屋:「${s.room_display_title}」(${s.room_id})  選曲者:${s.selector_display_name}`,
+      );
+      if (s.snapshot_artist || s.snapshot_title) {
+        lines.push(`  履歴表記: ${[s.snapshot_artist, s.snapshot_title].filter(Boolean).join(' - ') || '—'}`);
+      }
+    }
+  }
+  br();
+
+  lines.push('-'.repeat(78));
+  lines.push('■ クイズ（質問・三択・正解・解説）日付順（新しい順）');
+  lines.push('-'.repeat(78));
+  if (r.quizzesDb.length === 0) {
+    lines.push('（該当なし。song_quiz_logs 未作成時や未生成の場合）');
+  } else {
+    for (const q of r.quizzesDb) {
+      lines.push(`--- ${q.date_jst} ${q.created_at} id=${q.id} room=${q.room_id ?? '—'}`);
+      if (q.commentary_preview) lines.push(`曲解説コンテキスト先頭: ${q.commentary_preview.replace(/\s+/g, ' ').slice(0, 200)}…`);
+      lines.push(`SHA256(曲解説コンテキスト): ${q.commentary_sha ?? '—'}`);
+      const sq = q.quiz;
+      lines.push(`問題: ${sq.question}`);
+      sq.choices.forEach((c, i) => lines.push(`  選択肢${i + 1}: ${c}`));
+      lines.push(`正解: 選択肢${sq.correctIndex + 1}（index=${sq.correctIndex}）`);
+      if (sq.theme) lines.push(`観点: ${sq.theme}`);
+      lines.push(`解説: ${sq.explanation}`);
       br();
     }
   }
-  br();
 
   lines.push('-'.repeat(78));
-  lines.push('■ おすすめ曲（next_song_recommendations）');
+  lines.push('■ おすすめ曲（最大3件／バッチ。日付順・新しいバッチから）');
   lines.push('-'.repeat(78));
-  if (params.recommendations.length === 0) {
+  if (r.recommendationRounds.length === 0) {
     lines.push('（該当なし）');
   } else {
-    for (const r of params.recommendations) {
-      const pick = [r.recommended_artist, r.recommended_title].filter(Boolean).join(' - ') || '—';
-      const act = r.is_active === false ? 'inactive' : 'active';
-      lines.push(`- ${pick} (order ${r.order_index ?? '—'}, ${act})`);
-      if (r.reason) lines.push(`  理由: ${r.reason}`);
-      lines.push(`  登録: ${r.created_at}  id=${r.id}`);
+    for (const round of r.recommendationRounds) {
+      lines.push(`--- ${round.date_jst} ${round.created_at}`);
+      for (const p of round.picks) {
+        lines.push(`  - ${p.artist} - ${p.title}`);
+        lines.push(`    解説: ${p.reason}`);
+      }
     }
   }
   br();
 
   lines.push('-'.repeat(78));
-  lines.push('■ 曲クイズ');
+  lines.push('■ @ 質問と回答（再生付近・日付順）');
   lines.push('-'.repeat(78));
-  lines.push(
-    'room_chat_log には三択の設問・選択肢・正解インデックスが本文で保存されていないため、出題システム行の時刻のみ列挙します。',
-  );
-  br();
-
-  for (const block of params.dateBlocks) {
-    lines.push('='.repeat(78));
-    lines.push(`日付（JST）: ${block.dateJst}（新しい日付から順に出力）`);
-    lines.push('='.repeat(78));
-
-    lines.push('-- 再生（room_playback_history）');
-    if (block.plays.length === 0) lines.push('（なし）');
-    else {
-      for (const p of block.plays) {
-        const label = [p.artist_name, p.title].filter(Boolean).join(' / ') || '—';
-        lines.push(`- ${p.played_at}  room=${p.room_id}  ${label}`);
-      }
+  if (r.atQuestions.length === 0) {
+    lines.push('（該当なし）');
+  } else {
+    for (const a of r.atQuestions) {
+      lines.push(`--- ${a.date_jst} ${a.user_created_at}  部屋:「${a.room_display_title}」(${a.room_id})`);
+      lines.push(`質問者: ${a.questioner}`);
+      lines.push(`Q: ${a.question}`);
+      lines.push(`(${a.ai_created_at}) A: ${a.answer}`);
+      br();
     }
-    br();
-
-    lines.push('-- 曲解説（チャット上の [NEW]/[DB]・再生付近・最大5件/日）');
-    if (block.liveCommentaries.length === 0) {
-      lines.push('（該当なし）');
-    } else {
-      for (const c of block.liveCommentaries) {
-        lines.push(`[${c.created_at}] room=${c.room_id}`);
-        lines.push(c.body);
-        br();
-      }
-    }
-
-    lines.push('-- 曲クイズ（システム行の記録のみ）');
-    if (block.quizMarkers.length === 0) {
-      lines.push('（該当なし）');
-    } else {
-      for (const q of block.quizMarkers) {
-        lines.push(`[${q.created_at}] room=${q.room_id}`);
-        lines.push(q.body);
-      }
-    }
-    br();
-
-    lines.push('-- @ 質問と AI 回答（再生付近のペア）');
-    if (block.atQaPairs.length === 0) {
-      lines.push('（該当なし）');
-    } else {
-      for (const p of block.atQaPairs) {
-        lines.push(`[${p.userCreatedAt}] ${p.userDisplayName} (room=${p.room_id})`);
-        lines.push(`Q: ${p.userBody}`);
-        lines.push(`[${p.aiCreatedAt}] AI`);
-        lines.push(`A: ${p.aiBody}`);
-        br();
-      }
-    }
-    br();
   }
 
   return lines.join('\n').trimEnd() + '\n';
-}
-
-export function mergeLibraryComments(params: {
-  songCommentary: { body: string; created_at: string } | null;
-  tidbits: { source: string; body: string; created_at: string }[];
-  max: number;
-}): SongLookupLibraryComment[] {
-  const out: SongLookupLibraryComment[] = [];
-  if (params.songCommentary?.body?.trim()) {
-    out.push({
-      source: 'song_commentary',
-      body: params.songCommentary.body.trim(),
-      created_at: params.songCommentary.created_at,
-    });
-  }
-  for (const t of params.tidbits) {
-    if (out.length >= params.max) break;
-    const body = (t.body ?? '').trim();
-    if (!body) continue;
-    if (out.some((o) => o.body === body)) continue;
-    out.push({ source: t.source, body, created_at: t.created_at });
-  }
-  return out.slice(0, params.max);
 }
