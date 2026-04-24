@@ -327,6 +327,33 @@ export function isShortMusicBiographyFollowupQuestion(
   return SHORT_BIO_FOLLOWUP_RE.test(q);
 }
 
+const FANBASE_FOLLOWUP_RE = new RegExp(
+  String.raw`(?:ファン(?:層|層?が)?|ファンダム|支持層|コア層|リスナー層|信者|人気(?:層|の層)?|(?:swifties|army|blinks|little monsters|beyhive|directioners))`,
+  'iu'
+);
+
+const FANBASE_COMPARE_RE = new RegExp(
+  String.raw`(?:それぞれ|互い|両者|二組|2組|比較|違(?:い|う|って)|異な(?:る|り)|住み分け|棲み分け|棲み分(?:け|けて))`,
+  'iu'
+);
+
+/**
+ * 直前が音楽文脈のとき、「ファン層は違う？」のような短い比較フォローを許可する。
+ * 単独では一般トピックにも使えるため、recent context を必須にする。
+ */
+export function isMusicFanbaseFollowupQuestion(
+  question: string,
+  recent: readonly AboutDetailRecentMessage[]
+): boolean {
+  if (!recentMessagesSuggestMusicRoomContext(recent)) return false;
+  const q = question.trim().normalize('NFKC');
+  if (!q || q.includes('\n')) return false;
+  if (q.length > 180) return false;
+  if (!FANBASE_FOLLOWUP_RE.test(q)) return false;
+  if (FANBASE_COMPARE_RE.test(q)) return true;
+  return /[?？]$/.test(q) || q.length <= 40;
+}
+
 /** 「について教えて」単体は通さない（経済記事等の誤爆防止） */
 const FREE_STRONG_MUSIC_ANCHOR_RE = new RegExp(
   [
@@ -349,6 +376,10 @@ const FREE_STRONG_MUSIC_ANCHOR_RE = new RegExp(
     '近況',
     '代表曲',
     'ヒット',
+    '人気',
+    '人気が高',
+    '人気高',
+    '人気も',
     'チャート',
     '概要',
     '詳細',

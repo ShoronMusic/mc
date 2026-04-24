@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {
   isAboutDetailMusicFollowupQuestion,
+  isMusicFanbaseFollowupQuestion,
   isOutlineTeachMusicFollowupQuestion,
   isOffTopicAboutSubject,
   isMusicLikelyKatakanaOrLatinWithStrongAnchors,
@@ -115,6 +116,15 @@ assert.equal(isShortMusicBiographyFollowupQuestion('生まれは？', musicCtxRe
 assert.equal(isShortMusicBiographyFollowupQuestion('出身地です', [{ messageType: 'user', body: 'hi' }]), false);
 assert.equal(shouldShortCircuitSongRequestForAtPrompt('出身地です', musicCtxRecent), true);
 assert.equal(shouldShortCircuitSongRequestForAtPrompt('出身地です'), false);
+assert.equal(
+  isMusicFanbaseFollowupQuestion('たしかそれぞれのファン層が異なるのですよね？', musicCtxRecent),
+  true
+);
+assert.equal(isMusicFanbaseFollowupQuestion('ファン層って違う？', musicCtxRecent), true);
+assert.equal(
+  isMusicFanbaseFollowupQuestion('ファン層って違う？', [{ messageType: 'user', body: 'こんにちは' }]),
+  false
+);
 
 assert.equal(
   isMusicLikelyKatakanaOrLatinWithStrongAnchors('メタリカの活動教えて', musicCtxRecent),
@@ -126,6 +136,20 @@ assert.equal(
 );
 assert.equal(
   isMusicLikelyKatakanaOrLatinWithStrongAnchors('Whitesnakeの活動は？', musicCtxRecent),
+  true
+);
+assert.equal(
+  isMusicLikelyKatakanaOrLatinWithStrongAnchors(
+    '日本ではオアシスの人気が高いように思う',
+    musicCtxRecent
+  ),
+  true
+);
+assert.equal(
+  isMusicLikelyKatakanaOrLatinWithStrongAnchors(
+    '日本ではオアシスの人気も異常でしたね',
+    musicCtxRecent
+  ),
   true
 );
 

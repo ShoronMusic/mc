@@ -4,6 +4,7 @@
 
 import {
   isAboutDetailMusicFollowupQuestion,
+  isMusicFanbaseFollowupQuestion,
   isMusicLikelyKatakanaOrLatinWithStrongAnchors,
   isOutlineTeachMusicFollowupQuestion,
   isShortMusicBiographyFollowupQuestion,
@@ -46,6 +47,7 @@ export async function resolveAiQuestionMusicRelated(
   if (isAboutDetailMusicFollowupQuestion(q, recentMessages)) return { outcome: 'allow' };
   if (isOutlineTeachMusicFollowupQuestion(q, recentMessages)) return { outcome: 'allow' };
   if (isShortMusicBiographyFollowupQuestion(q, recentMessages)) return { outcome: 'allow' };
+  if (isMusicFanbaseFollowupQuestion(q, recentMessages)) return { outcome: 'allow' };
   if (isMusicLikelyKatakanaOrLatinWithStrongAnchors(q, recentMessages)) return { outcome: 'allow' };
   if (isMusicRelatedAiQuestion(q)) return { outcome: 'allow' };
 

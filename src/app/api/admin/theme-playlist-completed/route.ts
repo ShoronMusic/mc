@@ -22,6 +22,8 @@ type EntryRow = {
   artist: string | null;
   video_id: string;
   selector_display_name: string | null;
+  ai_comment: string | null;
+  ai_overall_comment: string | null;
 };
 
 function toSafeName(raw: unknown): string | null {
@@ -89,7 +91,7 @@ export async function GET(request: Request) {
 
   const { data: entriesRaw, error: eErr } = await admin
     .from('user_theme_playlist_entries')
-    .select('mission_id, slot_index, title, artist, video_id, selector_display_name')
+    .select('mission_id, slot_index, title, artist, video_id, selector_display_name, ai_comment, ai_overall_comment')
     .in('mission_id', missionIds)
     .order('slot_index', { ascending: true });
   if (eErr) return NextResponse.json({ error: eErr.message }, { status: 500 });
@@ -125,7 +127,7 @@ export async function GET(request: Request) {
     room_title: string | null;
     owner: string | null;
     participants: string[];
-    songs: Array<{ slot_index: number; label: string; selector: string | null }>;
+    songs: Array<{ slot_index: number; label: string; selector: string | null; ai_comment: string | null }>;
   }>;
 
   for (const m of missions) {
@@ -134,6 +136,7 @@ export async function GET(request: Request) {
       slot_index: e.slot_index,
       label: `${(e.artist || '').trim() || '—'} - ${(e.title || '').trim() || e.video_id}`,
       selector: toSafeName(e.selector_display_name),
+      ai_comment: toSafeName(e.ai_overall_comment) ?? toSafeName(e.ai_comment),
     }));
 
     const participantsSet = new Set<string>();

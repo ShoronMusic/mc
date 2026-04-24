@@ -11,7 +11,7 @@ type Row = {
   room_title: string | null;
   owner: string | null;
   participants: string[];
-  songs: Array<{ slot_index: number; label: string; selector: string | null }>;
+  songs: Array<{ slot_index: number; label: string; selector: string | null; ai_comment: string | null }>;
 };
 
 type ApiResponse = { error?: string; days?: number; rows?: Row[] };
@@ -108,12 +108,13 @@ export default function AdminThemePlaylistCompletedPage() {
                   {r.participants.length ? r.participants.join(' / ') : '—'}
                 </p>
                 <div className="overflow-x-auto rounded border border-gray-800">
-                  <table className="w-full min-w-[560px] text-left text-sm">
+                  <table className="w-full min-w-[860px] text-left text-sm">
                     <thead className="border-b border-gray-700 bg-gray-800/70">
                       <tr>
                         <th className="px-2 py-1.5">#</th>
                         <th className="px-2 py-1.5">曲</th>
                         <th className="px-2 py-1.5">選曲者</th>
+                        <th className="px-2 py-1.5">AI講評</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -122,6 +123,9 @@ export default function AdminThemePlaylistCompletedPage() {
                           <td className="px-2 py-1.5">{s.slot_index}</td>
                           <td className="px-2 py-1.5">{s.label}</td>
                           <td className="px-2 py-1.5">{s.selector || '—'}</td>
+                          <td className="px-2 py-1.5 whitespace-pre-wrap text-gray-200">
+                            {s.ai_comment || '—'}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
