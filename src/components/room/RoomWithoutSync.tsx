@@ -14,6 +14,10 @@ import MyPage from '@/components/mypage/MyPage';
 import NowPlaying from '@/components/room/NowPlaying';
 import RoomMainLayout from '@/components/room/RoomMainLayout';
 import RoomPlaybackHistory from '@/components/room/RoomPlaybackHistory';
+import ChatSummaryModalBody, {
+  buildActiveUsageTimeLabelFromFetch,
+  type RoomSessionChatSummaryDisplay,
+} from '@/components/room/ChatSummaryModalBody';
 import { useThemePlaylistRoomSubmitMission } from '@/hooks/useThemePlaylistRoomSubmitMission';
 import { SiteFeedbackModal } from '@/components/room/SiteFeedbackModal';
 import UserBar from '@/components/room/UserBar';
@@ -249,16 +253,7 @@ export default function RoomWithoutSync({
     };
   }, [isGuest]);
 
-  const [chatSummary, setChatSummary] = useState<{
-    summaryText: string;
-    sessionWindowLabel: string;
-    participants?: string[];
-    participantSongCounts?: { displayName: string; count: number }[];
-    eraDistribution?: { era: string; count: number }[];
-    styleDistribution?: { style: string; count: number }[];
-    popularArtists?: { artist: string; count: number }[];
-    popularTracks?: { artist: string; title: string; count: number }[];
-  } | null>(null);
+  const [chatSummary, setChatSummary] = useState<RoomSessionChatSummaryDisplay | null>(null);
   const isLg = useIsLgViewport();
   const [userTextColor, setUserTextColor] = useState(DEFAULT_CHAT_TEXT_COLOR);
   const lastActivityAtRef = useRef(Date.now());
@@ -464,14 +459,12 @@ export default function RoomWithoutSync({
           return;
         }
         setChatSummary({
-          summaryText: data.summaryText ?? '',
           sessionWindowLabel: data.sessionWindowLabel ?? '',
-          participants: Array.isArray(data.participants) ? data.participants : [],
+          activeUsageTimeLabel: buildActiveUsageTimeLabelFromFetch(data as Record<string, unknown>),
           participantSongCounts: Array.isArray(data.participantSongCounts) ? data.participantSongCounts : [],
           eraDistribution: Array.isArray(data.eraDistribution) ? data.eraDistribution : [],
           styleDistribution: Array.isArray(data.styleDistribution) ? data.styleDistribution : [],
           popularArtists: Array.isArray(data.popularArtists) ? data.popularArtists : [],
-          popularTracks: Array.isArray(data.popularTracks) ? data.popularTracks : [],
         });
       })
       .catch(() => {
@@ -1837,26 +1830,7 @@ export default function RoomWithoutSync({
             ) : chatSummaryError ? (
               <p className="text-sm text-amber-300">{chatSummaryError}</p>
             ) : chatSummary ? (
-              <div className="space-y-2 text-sm">
-                <p className="text-gray-300">対象枠: {chatSummary.sessionWindowLabel || '—'}</p>
-                <p className="text-gray-100">{chatSummary.summaryText}</p>
-                <p className="text-gray-300">参加者: {(chatSummary.participants ?? []).join('、') || '—'}</p>
-                <p className="text-gray-300">
-                  選曲数: {(chatSummary.participantSongCounts ?? []).map((v) => `${v.displayName}(${v.count})`).join(' / ') || '—'}
-                </p>
-                <p className="text-gray-300">
-                  時代分布: {(chatSummary.eraDistribution ?? []).map((v) => `${v.era}(${v.count})`).join(' / ') || '—'}
-                </p>
-                <p className="text-gray-300">
-                  スタイル分布: {(chatSummary.styleDistribution ?? []).map((v) => `${v.style}(${v.count})`).join(' / ') || '—'}
-                </p>
-                <p className="text-gray-300">
-                  人気アーティスト: {(chatSummary.popularArtists ?? []).map((v) => `${v.artist}(${v.count})`).join(' / ') || '—'}
-                </p>
-                <p className="text-gray-300">
-                  人気曲: {(chatSummary.popularTracks ?? []).map((v) => `${v.artist} - ${v.title} (${v.count})`).join(' / ') || '—'}
-                </p>
-              </div>
+              <ChatSummaryModalBody summary={chatSummary} />
             ) : (
               <p className="text-sm text-gray-500">データがありません。</p>
             )}

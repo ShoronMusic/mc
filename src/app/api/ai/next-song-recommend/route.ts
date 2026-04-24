@@ -194,8 +194,10 @@ export async function POST(request: Request): Promise<NextResponse<OkDisabled | 
     if (generatedDeduped.length === 0) {
       return NextResponse.json({ enabled: false, reason: 'all_filtered_as_duplicate' }, { status: 200 });
     }
-    const seedLikelyMinorByModel = generatedDeduped.some((p) => p.popularityFit === 'niche_match');
-    const maxPicksByRule = recentWithinOneYear || seedLikelyMinorByModel ? 1 : 3;
+    // popularityFit は「各おすすめ候補」に対するモデル自己申告であり、種曲がメジャーかどうかの代理にはならない
+    // （例: Springsteen の次に Mellencamp 等を出すとき、候補の1件だけ niche_match でも種曲はメジャーのまま）。
+    // 件数のハード上限はプロンプトの「1年以内の新曲」に合わせ、種曲の公開日のみで 1 vs 3 を切る。
+    const maxPicksByRule = recentWithinOneYear ? 1 : 3;
     const generatedCapped = generatedDeduped.slice(0, maxPicksByRule);
     if (generatedCapped.length === 0) {
       return NextResponse.json({ enabled: false, reason: 'generate_failed' }, { status: 200 });
@@ -240,7 +242,7 @@ export async function POST(request: Request): Promise<NextResponse<OkDisabled | 
           existingCount,
           insertedCount: insertedRows.length,
           recentWithinOneYear,
-          seedLikelyMinorByModel,
+          anyPickNicheMatch: generatedDeduped.some((p) => p.popularityFit === 'niche_match'),
           maxPicksByRule,
           picks: picks.map((p) => ({
             recommendationId: p.recommendationId ?? null,

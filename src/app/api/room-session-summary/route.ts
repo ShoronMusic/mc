@@ -189,11 +189,14 @@ export async function GET(request: Request) {
     `選曲は ${participantSongCounts.map((v) => `${v.displayName}(${v.count})`).join(' / ') || 'まだなし'}。` +
     `人気アーティストは ${popularArtists.map((v) => v.artist).join('、') || 'まだなし'} です。`;
 
+  const activeUsageTimeLabel = `${fmtJstHm(activeFromAt)}〜${fmtJstHm(activeToAt)}`;
+
   return NextResponse.json({
     roomId,
     dateJst: session.dateJst,
     sessionPart: session.sessionPart,
     sessionWindowLabel: session.sessionPart === 'part1' ? '第1部 06:00-18:00' : '第2部 18:00-翌06:00',
+    activeUsageTimeLabel,
     activeFromAt,
     activeToAt,
     participants,

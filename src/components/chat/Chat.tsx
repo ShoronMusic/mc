@@ -17,8 +17,8 @@ import {
 } from '@heroicons/react/24/outline';
 import type { ChatMessage as ChatMessageType } from '@/types/chat';
 import {
-  getAiChatDisclaimerForDisplay,
-  getAiConversationGuideForDisplay,
+  getAiChatDisclaimerCommentsTabForDisplay,
+  getAiConversationGuideQuestionTabForModal,
 } from '@/lib/chat-system-copy';
 import { AI_GUARD_OBJECTION_REASON_OPTIONS } from '@/lib/ai-guard-objection';
 import {
@@ -91,8 +91,14 @@ interface ChatProps {
   onNextSongRecommendReject?: (messageId: string, recommendationId: string) => void | Promise<void>;
   /** 途中参加向けチャットサマリーを開く */
   onChatSummaryClick?: () => void;
-  /** オーナー設定: 邦楽AI解説を解禁中ならヘッダーに表示 */
+  /** オーナー設定: 邦楽AI解説を解禁中ならヘッダー左に表示 */
   jpAiUnlockEnabled?: boolean;
+  /** オーナー設定: ヘッダー「AI曲解説」ピル（曲紹介スロットが全非オフでない） */
+  ownerAiCommentaryEnabled?: boolean;
+  /** オーナー設定: ヘッダー「曲クイズ」ピル */
+  ownerSongQuizEnabled?: boolean;
+  /** オーナー設定: ヘッダー「おすすめ曲」ピル */
+  ownerNextSongRecommendEnabled?: boolean;
   /** 部屋ID（異議申立てAPI用） */
   roomId?: string;
   /** 自分の Ably clientId（ガード警告の対象者のみ異議ボタンを出す） */
@@ -141,6 +147,25 @@ function uiLabelClassName(label: string | null): string {
 
 function stripUiLabelPrefix(body: string): string {
   return extractUiLabelFromBody(body).text;
+}
+
+/** チャットヘッダー：オーナーON/OFFの状態表示（クリック不可） */
+function ownerRoomFeatureHeaderPillClass(
+  active: boolean,
+  variant: 'commentary' | 'quiz' | 'recommend',
+): string {
+  const base =
+    'shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-semibold leading-none tracking-tight';
+  if (!active) {
+    return `${base} border-gray-600/55 bg-gray-800/45 text-gray-500`;
+  }
+  if (variant === 'commentary') {
+    return `${base} border-sky-500/70 bg-sky-900/35 text-sky-200`;
+  }
+  if (variant === 'quiz') {
+    return `${base} border-emerald-500/70 bg-emerald-900/35 text-emerald-200`;
+  }
+  return `${base} border-violet-500/70 bg-violet-900/35 text-violet-200`;
 }
 
 function renderSelectionAnnounceBodyWithMusicNote(body: string): ReactNode {
@@ -436,7 +461,9 @@ function renderAiBodyWithArtistSongHighlight(
 
   if (!hasSearchTailRows) {
     if (!prefix && !music8Line && out.length === 0) return body;
-    if (!prefix && !music8Line && out.length === 1 && typeof out[0] === 'string') return out[0] as string;
+    // keywordQuery があるときは下のフラグメントでキーワード行を付ける必要がある（単一文字列の早期 return では落ちる）
+    if (!prefix && !music8Line && out.length === 1 && typeof out[0] === 'string' && !keywordQuery)
+      return out[0] as string;
 
     return (
       <>
@@ -527,6 +554,9 @@ export default function Chat({
   onNextSongRecommendReject,
   onChatSummaryClick,
   jpAiUnlockEnabled = false,
+  ownerAiCommentaryEnabled = true,
+  ownerSongQuizEnabled = true,
+  ownerNextSongRecommendEnabled = true,
   roomId,
   myClientId,
   styleAdminChatTools = false,
@@ -965,8 +995,8 @@ export default function Chat({
     }
   }
 
-  const [disclaimerOpen, setDisclaimerOpen] = useState(false);
-  const [conversationGuideOpen, setConversationGuideOpen] = useState(false);
+  const [aiHelpModalOpen, setAiHelpModalOpen] = useState(false);
+  const [aiHelpModalTab, setAiHelpModalTab] = useState<'question' | 'comments'>('question');
   const [aiQuestionExamplesOpen, setAiQuestionExamplesOpen] = useState(false);
   const aiQuestionExamples = [
     {
@@ -988,16 +1018,29 @@ export default function Chat({
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden rounded-lg border border-gray-700 bg-gray-900/50">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-700 px-3 py-2">
-        <span className="inline-flex items-center gap-2 text-sm font-medium text-gray-300">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-gray-700 px-3 py-2">
+        <span
+          className="shrink-0 text-sm font-medium text-gray-300"
+          title="参加者同士のチャット欄です。"
+        >
           チャット
-          {jpAiUnlockEnabled ? (
-            <span className="rounded border border-emerald-600/70 bg-emerald-900/40 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-200">
-              邦楽解禁
-            </span>
-          ) : null}
         </span>
-        <div className="inline-flex items-center gap-2">
+        <div
+          className="inline-flex flex-wrap items-center gap-x-2 gap-y-1"
+          role="status"
+          aria-label={`部屋のAI機能: 曲解説${ownerAiCommentaryEnabled ? 'オン' : 'オフ'}、曲クイズ${
+            ownerSongQuizEnabled ? 'オン' : 'オフ'
+          }、おすすめ曲${ownerNextSongRecommendEnabled ? 'オン' : 'オフ'}`}
+        >
+          <span className={ownerRoomFeatureHeaderPillClass(ownerAiCommentaryEnabled, 'commentary')}>
+            AI曲解説
+          </span>
+          <span className={ownerRoomFeatureHeaderPillClass(ownerSongQuizEnabled, 'quiz')}>曲クイズ</span>
+          <span className={ownerRoomFeatureHeaderPillClass(ownerNextSongRecommendEnabled, 'recommend')}>
+            おすすめ曲
+          </span>
+        </div>
+        <div className="ml-auto inline-flex min-w-0 flex-wrap items-center justify-end gap-x-3 gap-y-1">
           {onChatSummaryClick ? (
             <button
               type="button"
@@ -1011,28 +1054,24 @@ export default function Chat({
           ) : null}
           <button
             type="button"
-            onClick={() => setConversationGuideOpen(true)}
+            onClick={() => {
+              setAiHelpModalTab('question');
+              setAiHelpModalOpen(true);
+            }}
             className="inline-flex items-center gap-1 text-xs text-amber-200/90 hover:text-amber-100"
             aria-haspopup="dialog"
-            aria-expanded={conversationGuideOpen}
-            aria-label="AIとの会話のしかた（説明を表示）"
-            title="AIとの会話"
+            aria-expanded={aiHelpModalOpen}
+            aria-label="AIに質問する方法とAIのコメントについて（案内を表示）"
+            title="AIに質問・AIのコメントについて"
           >
             <AtSymbolIcon className="h-3.5 w-3.5 shrink-0" aria-hidden />
-            <span className="underline decoration-dotted underline-offset-2">AIとの会話…</span>
+            <span className="underline decoration-dotted underline-offset-2">AIに質問…</span>
           </button>
-          <button
-            type="button"
-            onClick={() => setDisclaimerOpen(true)}
-            className="inline-flex items-center gap-1 text-xs text-amber-200/90 hover:text-amber-100"
-            aria-haspopup="dialog"
-            aria-expanded={disclaimerOpen}
-            aria-label="AIのコメントについて（注意事項を表示）"
-            title="AIのコメントについて"
-          >
-            <ChatBubbleLeftRightIcon className="h-3.5 w-3.5 shrink-0" aria-hidden />
-            <span className="underline decoration-dotted underline-offset-2">AIのコメント…</span>
-          </button>
+          {jpAiUnlockEnabled ? (
+            <span className="shrink-0 rounded border border-emerald-600/70 bg-emerald-900/40 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-200">
+              邦楽解禁
+            </span>
+          ) : null}
         </div>
       </div>
       {themePlaylistActiveMission ? (
@@ -1835,95 +1874,107 @@ export default function Chat({
         </div>
       )}
 
-      {disclaimerOpen && (
+      {aiHelpModalOpen && (
         <div
           className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4"
           role="dialog"
           aria-modal="true"
-          aria-labelledby="ai-disclaimer-title"
-          onClick={() => setDisclaimerOpen(false)}
+          aria-label="AIに関する案内"
+          onClick={() => setAiHelpModalOpen(false)}
         >
           <div
-            className="max-h-[min(80vh,28rem)] w-full max-w-md overflow-y-auto rounded-lg border border-gray-600 bg-gray-900 p-4 shadow-xl"
+            className="flex max-h-[min(80vh,28rem)] w-full max-w-md flex-col overflow-hidden rounded-lg border border-gray-600 bg-gray-900 shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 id="ai-disclaimer-title" className="mb-3 text-sm font-semibold text-white">
-              AIコメントについて
-            </h2>
-            <p className="whitespace-pre-line text-sm leading-relaxed text-gray-300">
-              {getAiChatDisclaimerForDisplay()}
-            </p>
-            <p className="mt-3 text-sm">
-              <button
-                type="button"
-                className="text-amber-200/90 underline decoration-dotted underline-offset-2 hover:text-amber-100"
-                onClick={() => {
-                  setDisclaimerOpen(false);
-                  setAiQuestionExamplesOpen(true);
-                }}
+            <div className="shrink-0 border-b border-gray-700 px-4 pb-0 pt-4">
+              <div
+                className="flex gap-1 border-b border-gray-700/80"
+                role="tablist"
+                aria-label="案内の切替"
               >
-                AI質問例を見る
-              </button>
-            </p>
-            <div className="mt-4 flex justify-end">
-              <button
-                type="button"
-                className="rounded border border-gray-600 bg-gray-800 px-4 py-2 text-sm text-gray-200 hover:bg-gray-700"
-                onClick={() => setDisclaimerOpen(false)}
-              >
-                閉じる
-              </button>
+                <button
+                  type="button"
+                  role="tab"
+                  id="ai-help-tab-question"
+                  aria-selected={aiHelpModalTab === 'question'}
+                  aria-controls="ai-help-panel-question"
+                  className={`relative -mb-px shrink-0 rounded-t px-3 py-2 text-xs font-medium transition-colors ${
+                    aiHelpModalTab === 'question'
+                      ? 'border-b-2 border-amber-400 text-amber-100'
+                      : 'border-b-2 border-transparent text-gray-400 hover:text-gray-200'
+                  }`}
+                  onClick={() => setAiHelpModalTab('question')}
+                >
+                  AIに質問
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  id="ai-help-tab-comments"
+                  aria-selected={aiHelpModalTab === 'comments'}
+                  aria-controls="ai-help-panel-comments"
+                  className={`relative -mb-px shrink-0 rounded-t px-3 py-2 text-xs font-medium transition-colors ${
+                    aiHelpModalTab === 'comments'
+                      ? 'border-b-2 border-amber-400 text-amber-100'
+                      : 'border-b-2 border-transparent text-gray-400 hover:text-gray-200'
+                  }`}
+                  onClick={() => setAiHelpModalTab('comments')}
+                >
+                  AIのコメント
+                </button>
+              </div>
             </div>
-          </div>
-        </div>
-      )}
-
-      {conversationGuideOpen && (
-        <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="ai-conversation-guide-title"
-          onClick={() => setConversationGuideOpen(false)}
-        >
-          <div
-            className="max-h-[min(80vh,28rem)] w-full max-w-md overflow-y-auto rounded-lg border border-gray-600 bg-gray-900 p-4 shadow-xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 id="ai-conversation-guide-title" className="mb-3 text-sm font-semibold text-white">
-              AIとの会話
-            </h2>
-            <p className="whitespace-pre-line text-sm leading-relaxed text-gray-300">
-              {getAiConversationGuideForDisplay()}
-            </p>
-            <p className="mt-3 text-sm">
+            <div className="min-h-0 flex-1 overflow-y-auto p-4 pt-3">
+              {aiHelpModalTab === 'question' ? (
+                <div
+                  id="ai-help-panel-question"
+                  role="tabpanel"
+                  aria-labelledby="ai-help-tab-question"
+                >
+                  <p className="whitespace-pre-line text-sm leading-relaxed text-gray-300">
+                    {getAiConversationGuideQuestionTabForModal()}
+                  </p>
+                  <p className="mt-3 text-sm">
+                    <Link
+                      href={guideAiHref}
+                      className="text-amber-200/90 underline underline-offset-2 hover:text-amber-100"
+                    >
+                      ご利用上の注意（AIについて）を開く
+                    </Link>
+                  </p>
+                </div>
+              ) : (
+                <div
+                  id="ai-help-panel-comments"
+                  role="tabpanel"
+                  aria-labelledby="ai-help-tab-comments"
+                >
+                  <p className="whitespace-pre-line text-sm leading-relaxed text-gray-300">
+                    {getAiChatDisclaimerCommentsTabForDisplay()}
+                  </p>
+                </div>
+              )}
+            </div>
+            <div className="shrink-0 space-y-3 border-t border-gray-700 p-4 pt-3">
               <button
                 type="button"
-                className="text-amber-200/90 underline decoration-dotted underline-offset-2 hover:text-amber-100"
+                className="text-left text-sm text-amber-200/90 underline decoration-dotted underline-offset-2 hover:text-amber-100"
                 onClick={() => {
-                  setConversationGuideOpen(false);
+                  setAiHelpModalOpen(false);
                   setAiQuestionExamplesOpen(true);
                 }}
               >
                 AI質問例を見る
               </button>
-            </p>
-            <p className="mt-3 text-sm">
-              <Link
-                href={guideAiHref}
-                className="text-amber-200/90 underline underline-offset-2 hover:text-amber-100"
-              >
-                ご利用上の注意（AIについて）を開く
-              </Link>
-            </p>
-            <div className="mt-4 flex justify-end">
-              <button
-                type="button"
-                className="rounded border border-gray-600 bg-gray-800 px-4 py-2 text-sm text-gray-200 hover:bg-gray-700"
-                onClick={() => setConversationGuideOpen(false)}
-              >
-                閉じる
-              </button>
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  className="rounded border border-gray-600 bg-gray-800 px-4 py-2 text-sm text-gray-200 hover:bg-gray-700"
+                  onClick={() => setAiHelpModalOpen(false)}
+                >
+                  閉じる
+                </button>
+              </div>
             </div>
           </div>
         </div>
