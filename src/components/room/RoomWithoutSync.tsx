@@ -44,6 +44,11 @@ import { shouldShortCircuitSongRequestForAtPrompt } from '@/lib/ai-question-abou
 import { resolveAiQuestionMusicRelated } from '@/lib/client-ai-question-guard-resolve';
 import { isDevMinimalSongAi } from '@/lib/dev-minimal-song-ai';
 import { formatMusic8ModeratorIntroPrefix } from '@/lib/music8-moderator-chat-prefix';
+import {
+  buildCommentaryUiLabel,
+  NEXT_RECOMMEND_PENDING_UI_LABEL,
+  SONG_QUIZ_UI_LABEL,
+} from '@/lib/chat-message-ui-labels';
 import { USER_SONG_HISTORY_UPDATED_EVENT } from '@/lib/user-song-history-events';
 import { playbackLog } from '@/lib/playback-debug';
 import { rememberRoomForGuideReturn } from '@/lib/safe-return-path';
@@ -538,7 +543,7 @@ export default function RoomWithoutSync({
       ...prev,
       {
         id,
-        body: '【AIオススメ準備中】次に聴くなら候補を生成中です…',
+        body: `${NEXT_RECOMMEND_PENDING_UI_LABEL}次に聴くなら候補を生成中です…`,
         displayName: AI_DISPLAY_NAME,
         messageType: 'ai',
         createdAt: new Date().toISOString(),
@@ -905,7 +910,7 @@ export default function RoomWithoutSync({
                 canRejectTidbit,
                 pack.music8ModeratorHints,
               );
-              addAiMessage(`【AI解説01】 ${packPrefix + modIntro + pack.baseComment}`, { videoId: vid });
+              addAiMessage(`${buildCommentaryUiLabel('01')} ${packPrefix + modIntro + pack.baseComment}`, { videoId: vid });
               touchActivity();
               const commentaryCtx =
                 typeof pack.baseComment === 'string' ? pack.baseComment.trim() : '';
@@ -958,8 +963,8 @@ export default function RoomWithoutSync({
                         ...prev,
                         {
                           id,
-                          body: '【AIクイズ】 三択クイズ（曲解説の内容のみを根拠に自動生成）',
-                          displayName: 'クイズ',
+                          body: `${SONG_QUIZ_UI_LABEL} 三択クイズ（曲解説の内容のみを根拠に自動生成）`,
+                          displayName: '曲クイズ',
                           messageType: 'system',
                           createdAt: new Date().toISOString(),
                           videoId: vid,
@@ -1051,7 +1056,7 @@ export default function RoomWithoutSync({
           }
           if (data?.text) {
             const prefix = data.source === 'library' ? '[DB] ' : '[NEW] ';
-            addAiMessage(`【AI解説01】 ${prefix + data.text}`, { videoId: vid });
+            addAiMessage(`${buildCommentaryUiLabel('01')} ${prefix + data.text}`, { videoId: vid });
             touchActivity();
             const commentarySingle = `${prefix}${data.text}`.trim();
             const skipQuizRecommendIntroOnly = Boolean(data?.songIntroOnlyDiscography);
@@ -1103,8 +1108,8 @@ export default function RoomWithoutSync({
                       ...prev,
                       {
                         id,
-                        body: '【AIクイズ】 三択クイズ（曲解説の内容のみを根拠に自動生成）',
-                        displayName: 'クイズ',
+                        body: `${SONG_QUIZ_UI_LABEL} 三択クイズ（曲解説の内容のみを根拠に自動生成）`,
+                        displayName: '曲クイズ',
                         messageType: 'system',
                         createdAt: new Date().toISOString(),
                         videoId: vid,

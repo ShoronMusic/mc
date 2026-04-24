@@ -34,6 +34,10 @@ import {
   SONG_QUIZ_THEME_UI_LABEL,
 } from '@/lib/song-quiz-types';
 import { THEME_PLAYLIST_SLOT_TARGET } from '@/lib/theme-playlist-definitions';
+import {
+  extractUiLabelFromBody,
+  stripUiLabelPrefixFromBody,
+} from '@/lib/chat-message-ui-labels';
 import type { ThemePlaylistRoomSubmitBanner } from '@/hooks/useThemePlaylistRoomSubmitMission';
 import ThemePlaylistMissionEntriesModal, {
   type ThemePlaylistMissionEntriesModalRoomProps,
@@ -130,24 +134,16 @@ function getSelectorNameFromBody(body: string): string | null {
   return match ? match[1].trim() : null;
 }
 
-function extractUiLabelFromBody(body: string): { label: string | null; text: string } {
-  const m = body.match(/^【(AI解説\d{2}|AIクイズ|AIオススメ\d{2}|お題講評)】\s*/);
-  if (!m) return { label: null, text: body };
-  return { label: m[1] ?? null, text: body.slice(m[0].length) };
-}
-
 function uiLabelClassName(label: string | null): string {
   if (!label) return 'border-gray-500/70 bg-gray-800/65 text-gray-200';
-  if (label.startsWith('AI解説')) return 'border-sky-500/70 bg-sky-900/35 text-sky-200';
-  if (label.startsWith('AIクイズ')) return 'border-emerald-500/70 bg-emerald-900/35 text-emerald-200';
-  if (label.startsWith('AIオススメ')) return 'border-violet-500/70 bg-violet-900/35 text-violet-200';
+  if (label.startsWith('AI曲解説')) return 'border-sky-500/70 bg-sky-900/35 text-sky-200';
+  if (label === '曲クイズ') return 'border-emerald-500/70 bg-emerald-900/35 text-emerald-200';
+  if (label.startsWith('おすすめ曲')) return 'border-violet-500/70 bg-violet-900/35 text-violet-200';
   if (label === 'お題講評') return 'border-amber-500/70 bg-amber-900/40 text-amber-100';
   return 'border-gray-500/70 bg-gray-800/65 text-gray-200';
 }
 
-function stripUiLabelPrefix(body: string): string {
-  return extractUiLabelFromBody(body).text;
-}
+const stripUiLabelPrefix = stripUiLabelPrefixFromBody;
 
 /** チャットヘッダー：オーナーON/OFFの状態表示（クリック不可） */
 function ownerRoomFeatureHeaderPillClass(
@@ -1129,7 +1125,7 @@ export default function Chat({
               const isAiCommentaryLabeled =
                 m.messageType === 'ai' &&
                 typeof parsedUiLabel.label === 'string' &&
-                parsedUiLabel.label.startsWith('AI解説');
+                parsedUiLabel.label.startsWith('AI曲解説');
               const shouldAnimateAiCommentary =
                 isAiCommentaryLabeled && !visibleAiCommentaryIds[m.id];
               const isYellowEmphasisAi = m.messageType === 'ai' && m.aiBodyEmphasis === 'yellow';
@@ -1541,7 +1537,7 @@ export default function Chat({
         {deferredNextSongRecommendMessages.length > 0 ? (
           <details className="mt-3 rounded-md border border-violet-700/55 bg-violet-950/15 p-2">
             <summary className="cursor-pointer list-none text-xs font-semibold text-violet-200">
-              あとで見るAIおすすめ ({deferredNextSongRecommendMessages.length})
+              あとで見るおすすめ曲 ({deferredNextSongRecommendMessages.length})
             </summary>
             <ul className="mt-2 flex flex-col gap-2">
               {deferredNextSongRecommendMessages.map((m) => (

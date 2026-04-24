@@ -143,6 +143,11 @@ import { useRoomAccessLogReport } from '@/hooks/useRoomAccessLogReport';
 import { useSupabaseAuthUserId } from '@/hooks/useSupabaseAuthUserId';
 import { isAiQuestionGuardKickExemptUserId } from '@/lib/ai-question-guard-exempt-user-ids';
 import { lineFromJoinGreetingApi } from '@/lib/join-greeting-logic';
+import {
+  buildCommentaryUiLabel,
+  NEXT_RECOMMEND_PENDING_UI_LABEL,
+  SONG_QUIZ_UI_LABEL,
+} from '@/lib/chat-message-ui-labels';
 
 const AI_DISPLAY_NAME = 'AI';
 const SILENCE_TIDBIT_SEC = 30;
@@ -2510,7 +2515,7 @@ export default function RoomWithSync({
     const id = createMessageId();
     const payload: ChatMessagePayload = {
       id,
-      body: '【AIオススメ準備中】次に聴くなら候補を生成中です…',
+      body: `${NEXT_RECOMMEND_PENDING_UI_LABEL}次に聴くなら候補を生成中です…`,
       displayName: AI_DISPLAY_NAME,
       messageType: 'ai',
       createdAt: new Date().toISOString(),
@@ -2719,11 +2724,11 @@ export default function RoomWithSync({
   const addSongQuizMessage = useCallback(
     (quiz: SongQuizPayload, videoIdForQuiz: string) => {
       const id = createMessageId();
-      const body = '【AIクイズ】 三択クイズ（曲解説の内容のみを根拠に自動生成）';
+      const body = `${SONG_QUIZ_UI_LABEL} 三択クイズ（曲解説の内容のみを根拠に自動生成）`;
       const payload: ChatMessagePayload = {
         id,
         body,
-        displayName: 'クイズ',
+        displayName: '曲クイズ',
         messageType: 'system',
         createdAt: new Date().toISOString(),
         videoId: videoIdForQuiz,
@@ -3395,7 +3400,7 @@ export default function RoomWithSync({
               canRejectTidbit,
               pack.music8ModeratorHints,
             );
-            addAiMessage(`【AI解説01】 ${packPrefixPhase + modIntroPhase + pack.baseComment.trim()}`, {
+            addAiMessage(`${buildCommentaryUiLabel('01')} ${packPrefixPhase + modIntroPhase + pack.baseComment.trim()}`, {
               allowWhenAiStopped: true,
               tidbitId: tid0Phase,
               songId: pack.songId ?? null,
@@ -3561,7 +3566,7 @@ export default function RoomWithSync({
                 const timer = setTimeout(() => {
                   if (videoIdRef.current !== vid) return;
                   const freeLabelNo = String(labelNoForThisMessage).padStart(2, '0');
-                  addAiMessage(`【AI解説${freeLabelNo}】 ${prefixI + c}`, {
+                  addAiMessage(`${buildCommentaryUiLabel(freeLabelNo)} ${prefixI + c}`, {
                     allowWhenAiStopped: true,
                     tidbitId: tidN,
                     songId: baseSongId,
@@ -3754,7 +3759,7 @@ export default function RoomWithSync({
                 canRejectTidbit,
                 pack.music8ModeratorHints,
               );
-              addAiMessage(`【AI解説01】 ${packPrefix + modIntro + baseStr}`, {
+              addAiMessage(`${buildCommentaryUiLabel('01')} ${packPrefix + modIntro + baseStr}`, {
                 allowWhenAiStopped: true,
                 tidbitId: tid0,
                 songId: pack.songId ?? null,
@@ -3794,7 +3799,7 @@ export default function RoomWithSync({
                 /* 次曲案内後も同一 videoId なら出す。ここで nextPromptShown を見ると、
                    comment-pack が遅いとき曲終了→「次の曲」で自由4本が全スキップされる */
                 const freeLabelNo = String(labelNoForThisMessage).padStart(2, '0');
-                addAiMessage(`【AI解説${freeLabelNo}】 ${packPrefix + c}`, {
+                addAiMessage(`${buildCommentaryUiLabel(freeLabelNo)} ${packPrefix + c}`, {
                   allowWhenAiStopped: true,
                   tidbitId: tidN,
                   songId: pack.songId ?? null,
@@ -3929,7 +3934,7 @@ export default function RoomWithSync({
                   const prefix = data.source === 'library' ? '[DB] ' : '[NEW] ';
                   const songRowId =
                     typeof data.songTidbitId === 'string' ? data.songTidbitId : undefined;
-                  addAiMessage(`【AI解説01】 ${prefix + data.text}`, {
+                  addAiMessage(`${buildCommentaryUiLabel('01')} ${prefix + data.text}`, {
                     allowWhenAiStopped: true,
                     ...(songRowId ? { tidbitId: songRowId } : {}),
                     songId: typeof data.songId === 'string' ? data.songId : null,

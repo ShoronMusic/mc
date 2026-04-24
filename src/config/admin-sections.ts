@@ -106,6 +106,12 @@ export const ADMIN_SECTIONS: AdminSection[] = [
     description: '曲の検索、詳細ページ（動画・コメント・豆知識・フィードバック）',
     activePathPrefix: '/admin/songs',
   },
+  {
+    href: '/admin/song-lookup',
+    title: '曲引き',
+    description:
+      'YouTube ID またはアーティスト-タイトルで集約。曲解説（最大5）・おすすめ曲・日別のクイズ出題時刻・@Q&A を表示し TEXT で DL',
+  },
 ];
 
 export function isAdminSectionActive(pathname: string, section: AdminSection): boolean {

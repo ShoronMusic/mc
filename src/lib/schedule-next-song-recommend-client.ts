@@ -5,6 +5,7 @@
  */
 
 import type { NextSongPick } from '@/lib/next-song-recommend-generate';
+import { buildNextRecommendUiLabel } from '@/lib/chat-message-ui-labels';
 
 /** クイズ fetch 遅延より後ろにずらすオフセット（ミリ秒） */
 const AFTER_COMMENTARY_EXTRA_MS = 4500;
@@ -22,7 +23,7 @@ export function getNextSongRecommendScheduleDelayMs(
 
 function formatPickMessage(pick: NextSongPick, index: number, total: number): string {
   const sourceLabel = pick.source === 'db' ? '[DB] ' : '[NEW] ';
-  const aiLabel = `【AIオススメ${String(index + 1).padStart(2, '0')}】`;
+  const aiLabel = buildNextRecommendUiLabel(index + 1);
   const numberedHead = `${sourceLabel}${index + 1}/${total} ♪ ${pick.artist}「${pick.title}」`;
   const head =
     index === 0
