@@ -2957,11 +2957,14 @@ export default function RoomWithSync({
           playJoinChime: true,
         });
         if (ownerAiCharacterJoinEnabledRef.current) {
-          addAiMessage(`【AIキャラ】${displayName}さん、今日もよろしくお願いします。`, {
+          addAiMessage(
+            `【AIキャラ】${displayName}さん、${getTimeBasedGreeting()}！よろしくお願いします。`,
+            {
             allowWhenAiStopped: true,
             aiSource: 'character_chat',
             displayName: ownerAiCharacterNameRef.current,
-          });
+            }
+          );
         }
       }
       return;
@@ -2993,11 +2996,14 @@ export default function RoomWithSync({
             ownerAiCharacterJoinEnabledRef.current &&
             clientId !== AI_CHARACTER_CLIENT_ID
           ) {
-            addAiMessage(`【AIキャラ】${displayName}さん、今日もよろしくお願いします。`, {
-              allowWhenAiStopped: true,
-              aiSource: 'character_chat',
-              displayName: ownerAiCharacterNameRef.current,
-            });
+            addAiMessage(
+              `【AIキャラ】${displayName}さん、${getTimeBasedGreeting()}！よろしくお願いします。`,
+              {
+                allowWhenAiStopped: true,
+                aiSource: 'character_chat',
+                displayName: ownerAiCharacterNameRef.current,
+              }
+            );
           }
         }
       });
