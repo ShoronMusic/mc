@@ -103,6 +103,8 @@ interface ChatProps {
   ownerSongQuizEnabled?: boolean;
   /** オーナー設定: ヘッダー「おすすめ曲」ピル */
   ownerNextSongRecommendEnabled?: boolean;
+  /** オーナー設定: ヘッダー「AIキャラクター参加」ピル */
+  ownerAiCharacterJoinEnabled?: boolean;
   /** 部屋ID（異議申立てAPI用） */
   roomId?: string;
   /** 自分の Ably clientId（ガード警告の対象者のみ異議ボタンを出す） */
@@ -139,6 +141,7 @@ function uiLabelClassName(label: string | null): string {
   if (label.startsWith('AI曲解説')) return 'border-sky-500/70 bg-sky-900/35 text-sky-200';
   if (label === '曲クイズ') return 'border-emerald-500/70 bg-emerald-900/35 text-emerald-200';
   if (label.startsWith('おすすめ曲')) return 'border-violet-500/70 bg-violet-900/35 text-violet-200';
+  if (label === 'AIキャラ') return 'border-amber-500/70 bg-amber-900/35 text-amber-200';
   if (label === 'お題講評') return 'border-amber-500/70 bg-amber-900/40 text-amber-100';
   return 'border-gray-500/70 bg-gray-800/65 text-gray-200';
 }
@@ -148,7 +151,7 @@ const stripUiLabelPrefix = stripUiLabelPrefixFromBody;
 /** チャットヘッダー：オーナーON/OFFの状態表示（クリック不可） */
 function ownerRoomFeatureHeaderPillClass(
   active: boolean,
-  variant: 'commentary' | 'quiz' | 'recommend',
+  variant: 'commentary' | 'quiz' | 'recommend' | 'character',
 ): string {
   const base =
     'shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-semibold leading-none tracking-tight';
@@ -160,6 +163,9 @@ function ownerRoomFeatureHeaderPillClass(
   }
   if (variant === 'quiz') {
     return `${base} border-emerald-500/70 bg-emerald-900/35 text-emerald-200`;
+  }
+  if (variant === 'character') {
+    return `${base} border-amber-500/70 bg-amber-900/35 text-amber-200`;
   }
   return `${base} border-violet-500/70 bg-violet-900/35 text-violet-200`;
 }
@@ -553,6 +559,7 @@ export default function Chat({
   ownerAiCommentaryEnabled = true,
   ownerSongQuizEnabled = true,
   ownerNextSongRecommendEnabled = true,
+  ownerAiCharacterJoinEnabled = true,
   roomId,
   myClientId,
   styleAdminChatTools = false,
@@ -1026,7 +1033,9 @@ export default function Chat({
           role="status"
           aria-label={`部屋のAI機能: 曲解説${ownerAiCommentaryEnabled ? 'オン' : 'オフ'}、曲クイズ${
             ownerSongQuizEnabled ? 'オン' : 'オフ'
-          }、おすすめ曲${ownerNextSongRecommendEnabled ? 'オン' : 'オフ'}`}
+          }、おすすめ曲${ownerNextSongRecommendEnabled ? 'オン' : 'オフ'}、AIキャラクター参加${
+            ownerAiCharacterJoinEnabled ? 'オン' : 'オフ'
+          }`}
         >
           <span className={ownerRoomFeatureHeaderPillClass(ownerAiCommentaryEnabled, 'commentary')}>
             AI曲解説
@@ -1034,6 +1043,9 @@ export default function Chat({
           <span className={ownerRoomFeatureHeaderPillClass(ownerSongQuizEnabled, 'quiz')}>曲クイズ</span>
           <span className={ownerRoomFeatureHeaderPillClass(ownerNextSongRecommendEnabled, 'recommend')}>
             おすすめ曲
+          </span>
+          <span className={ownerRoomFeatureHeaderPillClass(ownerAiCharacterJoinEnabled, 'character')}>
+            AI参加
           </span>
         </div>
         <div className="ml-auto inline-flex min-w-0 flex-wrap items-center justify-end gap-x-3 gap-y-1">
@@ -1122,6 +1134,8 @@ export default function Chat({
               const isThemePlaylistRoomReview =
                 m.messageType === 'ai' &&
                 (parsedUiLabel.label === 'お題講評' || m.aiSource === 'theme_playlist_room');
+              const isCharacterChatMessage =
+                m.messageType === 'ai' && m.aiSource === 'character_chat';
               const isAiCommentaryLabeled =
                 m.messageType === 'ai' &&
                 typeof parsedUiLabel.label === 'string' &&
@@ -1142,6 +1156,8 @@ export default function Chat({
                 m.messageType === 'ai'
                   ? isSelectionAnnounce
                     ? renderSelectionAnnounceBodyWithMusicNote(bodyTextForDisplay)
+                    : isCharacterChatMessage
+                      ? <span className="whitespace-pre-wrap break-words">{bodyTextForDisplay}</span>
                     : isThemePlaylistRoomReview
                       ? (
                           <span className="whitespace-pre-wrap break-words">{bodyTextForDisplay}</span>
@@ -1181,7 +1197,7 @@ export default function Chat({
                       className={`min-w-0 flex-1 break-words whitespace-pre-wrap ${
                         isYellowEmphasisAi
                           ? 'font-semibold text-yellow-300'
-                          : `${isSelectionAnnounce ? 'text-gray-300' : 'text-gray-200'} ${isSelectionAnnounce || isNextPromptMessage ? 'font-bold' : ''}`
+                          : `${isCharacterChatMessage ? 'text-amber-100/85' : isSelectionAnnounce ? 'text-gray-300' : 'text-gray-200'} ${isSelectionAnnounce || isNextPromptMessage ? 'font-bold' : ''}`
                       }`}
                       style={
                         !isYellowEmphasisAi && isSelectionAnnounce && selectionAnnounceColor

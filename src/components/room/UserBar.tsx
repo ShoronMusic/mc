@@ -21,6 +21,8 @@ import {
 import { useIsLgViewport } from '@/hooks/useLgViewport';
 import { SELECTION_ROUND_SESSION_MAX_GAP_MS } from '@/lib/room-selection-round';
 
+const AI_PARTICIPANT_CLIENT_ID = '__ai_character__';
+
 export interface ParticipantItem {
   clientId: string;
   displayName: string;
@@ -320,6 +322,7 @@ export default function UserBar({
           const name = participantDisplayName(p, myClientId, isGuest);
           const away = p.isAway === true;
           const color = away ? '#9ca3af' : p.textColor ?? '#e5e7eb';
+          const isAiParticipant = p.clientId === AI_PARTICIPANT_CLIENT_ID;
           const isCurrentSongPoster = p.clientId === currentSongPosterClientId;
           const isQueuedSongPoster =
             queuedSongPublisherClientIds.length > 0 &&
@@ -379,6 +382,15 @@ export default function UserBar({
                     aria-label="チャットオーナー"
                   >
                     👑
+                  </span>
+                )}
+                {isAiParticipant && (
+                  <span
+                    className="inline-flex shrink-0 items-center rounded border border-violet-500/70 bg-violet-900/35 px-1 py-0 text-[9px] font-semibold leading-tight text-violet-200"
+                    title="AI参加者"
+                    aria-label="AI参加者"
+                  >
+                    AI
                   </span>
                 )}
                 {(p.yellowCards ?? 0) > 0 && (
@@ -723,6 +735,7 @@ export default function UserBar({
                 const name = participantDisplayName(p, myClientId, isGuest);
                 const away = p.isAway === true;
                 const color = away ? '#9ca3af' : p.textColor ?? '#e5e7eb';
+                const isAiParticipant = p.clientId === AI_PARTICIPANT_CLIENT_ID;
                 const isCurrentSongPoster = p.clientId === currentSongPosterClientId;
                 const isQueuedSongPoster =
                   queuedSongPublisherClientIds.length > 0 &&
@@ -764,6 +777,15 @@ export default function UserBar({
                           aria-label="チャットオーナー"
                         >
                           👑
+                        </span>
+                      )}
+                      {isAiParticipant && (
+                        <span
+                          className="inline-flex items-center rounded border border-violet-500/70 bg-violet-900/35 px-1 py-0 text-[9px] font-semibold leading-tight text-violet-200"
+                          title="AI参加者"
+                          aria-label="AI参加者"
+                        >
+                          AI
                         </span>
                       )}
                       {(p.yellowCards ?? 0) > 0 && (

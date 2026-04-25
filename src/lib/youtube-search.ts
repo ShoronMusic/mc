@@ -29,10 +29,16 @@ export function isYouTubeConfigured(): boolean {
   return getApiKey() != null;
 }
 
+export type SearchYouTubeOptions = {
+  /** 検索ヒットから除外する videoId（再生中の曲の再ヒット防止など） */
+  excludeVideoIds?: readonly string[];
+};
+
 export async function searchYouTube(
   query: string,
   maxResults = 5,
-  meta?: YouTubeApiLogMeta
+  meta?: YouTubeApiLogMeta,
+  options?: SearchYouTubeOptions
 ): Promise<YouTubeSearchResult | null> {
   const key = getApiKey();
   if (!key) {
@@ -102,9 +108,32 @@ export async function searchYouTube(
       });
       return null;
     }
-    const item = data.items?.[0];
-    if (!item?.id?.videoId || !item.snippet) {
-      console.log('[youtube-search] no items for q=', q.slice(0, 40));
+    const exclude = new Set(
+      (options?.excludeVideoIds ?? [])
+        .map((x) => (typeof x === 'string' ? x.trim() : ''))
+        .filter(Boolean),
+    );
+    const rawItems = Array.isArray(data.items) ? data.items : [];
+    let result: YouTubeSearchResult | null = null;
+    for (const item of rawItems) {
+      const vid = item?.id?.videoId;
+      const sn = item?.snippet;
+      if (!vid || !sn) continue;
+      if (exclude.has(vid)) continue;
+      const thumbs = sn.thumbnails;
+      const thumbUrl =
+        thumbs?.medium?.url || thumbs?.high?.url || thumbs?.default?.url || undefined;
+      result = {
+        videoId: vid,
+        title: sn.title ?? '',
+        channelTitle: sn.channelTitle ?? '',
+        publishedAt: sn.publishedAt,
+        thumbnailUrl: thumbUrl,
+      };
+      break;
+    }
+    if (!result) {
+      console.log('[youtube-search] no eligible items for q=', q.slice(0, 40));
       await persistYouTubeApiUsageLog({
         endpoint: 'search.list',
         queryText: q,
@@ -117,23 +146,13 @@ export async function searchYouTube(
       });
       return null;
     }
-    const thumbs = item.snippet.thumbnails;
-    const thumbUrl =
-      thumbs?.medium?.url || thumbs?.high?.url || thumbs?.default?.url || undefined;
-    const result = {
-      videoId: item.id.videoId,
-      title: item.snippet.title ?? '',
-      channelTitle: item.snippet.channelTitle ?? '',
-      publishedAt: item.snippet.publishedAt,
-      thumbnailUrl: thumbUrl,
-    };
     await persistYouTubeApiUsageLog({
       endpoint: 'search.list',
       queryText: q,
       maxResults: cappedMaxResults,
       responseStatus: res.status,
       ok: true,
-      resultCount: Array.isArray(data.items) ? data.items.length : 1,
+      resultCount: rawItems.length,
       roomId: meta?.roomId,
       source: meta?.source ?? 'searchYouTube',
     });
@@ -276,11 +295,12 @@ export async function searchYouTubeMany(
 /** 複数のクエリで試行し、最初にヒットした結果を返す */
 export async function searchYouTubeWithFallback(
   queries: string[],
-  meta?: YouTubeApiLogMeta
+  meta?: YouTubeApiLogMeta,
+  options?: SearchYouTubeOptions
 ): Promise<YouTubeSearchResult | null> {
   for (const q of queries) {
     if (!q.trim()) continue;
-    const hit = await searchYouTube(q.trim(), 5, { ...meta, source: meta?.source ?? 'searchYouTubeWithFallback' });
+    const hit = await searchYouTube(q.trim(), 5, { ...meta, source: meta?.source ?? 'searchYouTubeWithFallback' }, options);
     if (hit) return hit;
   }
   return null;

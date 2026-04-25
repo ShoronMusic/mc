@@ -83,6 +83,11 @@ export default function AdminYouTubeApiUsagePage() {
     () => Object.entries(byRoom).sort((a, b) => b[1].calls - a[1].calls),
     [byRoom]
   );
+  const characterPickUsage = bySource['api/ai/character-song-pick'] ?? {
+    calls: 0,
+    okCalls: 0,
+    ngCalls: 0,
+  };
 
   return (
     <main className="min-h-screen bg-gray-950 p-4 text-gray-100">
@@ -130,7 +135,7 @@ export default function AdminYouTubeApiUsagePage() {
           <p className="text-gray-400">読み込み中…</p>
         ) : (
           <>
-            <section className="mb-6 grid gap-4 sm:grid-cols-3">
+            <section className="mb-6 grid gap-4 sm:grid-cols-4">
               <div className="rounded-lg border border-gray-700 bg-gray-900/50 p-4">
                 <div className="text-xs text-gray-500">呼び出し回数（期間内）</div>
                 <div className="text-2xl font-semibold">{totals.calls.toLocaleString()}</div>
@@ -145,6 +150,16 @@ export default function AdminYouTubeApiUsagePage() {
                 <div className="text-xs text-gray-500">失敗</div>
                 <div className="text-2xl font-semibold text-rose-300">
                   {totals.ngCalls.toLocaleString()}
+                </div>
+              </div>
+              <div className="rounded-lg border border-cyan-700/70 bg-cyan-950/20 p-4">
+                <div className="text-xs text-cyan-200/80">AIキャラ選曲での使用量</div>
+                <div className="text-lg font-semibold text-cyan-200">
+                  {characterPickUsage.calls.toLocaleString()} 回
+                </div>
+                <div className="text-xs text-cyan-200/80">
+                  成功 {characterPickUsage.okCalls.toLocaleString()} / 失敗{' '}
+                  {characterPickUsage.ngCalls.toLocaleString()}
                 </div>
               </div>
             </section>

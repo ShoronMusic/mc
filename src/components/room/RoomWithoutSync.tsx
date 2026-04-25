@@ -54,6 +54,7 @@ import { playbackLog } from '@/lib/playback-debug';
 import { rememberRoomForGuideReturn } from '@/lib/safe-return-path';
 import { extractVideoId, isStandaloneNonYouTubeUrl } from '@/lib/youtube';
 import { isYoutubeKeywordSearchEnabled } from '@/lib/youtube-keyword-search-ui';
+import { extractCharacterSongPickResolvedYoutube } from '@/lib/character-song-pick-youtube';
 import { scheduleNextSongRecommendAfterCommentary } from '@/lib/schedule-next-song-recommend-client';
 import { scheduleThemePlaylistRoomBlurbAfterPack } from '@/lib/schedule-theme-playlist-room-blurb';
 import type { ChatMessage, SystemMessageOptions } from '@/types/chat';
@@ -74,6 +75,7 @@ import {
 } from '@/lib/site-feedback-prompt';
 
 const AI_DISPLAY_NAME = 'AI';
+const AI_CHARACTER_DEFAULT_NAME = 'エージェント1号';
 const SILENCE_TIDBIT_SEC = 30;
 
 /** 時間帯に応じた挨拶（参加者入室時） */
@@ -288,6 +290,10 @@ export default function RoomWithoutSync({
   const songQuizFetchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const nextSongRecommendTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const themePlaylistBlurbTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const aiCharacterPickReasonByVideoIdRef = useRef<
+    Map<string, { reason: string; artistTitle?: string }>
+  >(new Map());
+  const aiCharacterPickReasonPostedVideoIdsRef = useRef<Set<string>>(new Set());
   const pendingThemePlaylistBlurbRef = useRef<{
     videoId: string;
     themeId: string;
@@ -500,6 +506,7 @@ export default function RoomWithoutSync({
         aiSource?: ChatMessage['aiSource'];
         recommendationId?: string | null;
         deferToPanel?: boolean;
+        displayName?: string;
       }
     ) => {
       const jpS = jpDomesticSilenceVideoIdRef.current;
@@ -515,7 +522,7 @@ export default function RoomWithoutSync({
       const msg: ChatMessage = {
         id: createMessageId(),
         body,
-        displayName: AI_DISPLAY_NAME,
+        displayName: options?.displayName ?? AI_DISPLAY_NAME,
         messageType: 'ai',
         createdAt: new Date().toISOString(),
         ...(options?.videoId != null ? { videoId: options.videoId } : {}),
@@ -630,6 +637,62 @@ export default function RoomWithoutSync({
       return [...prev, msg];
     });
   }, []);
+
+  const rememberAiCharacterPickReason = useCallback(
+    (pickedVideoId: string, artistTitleText: unknown, reasonText: unknown) => {
+      const v = pickedVideoId.trim();
+      if (!v) return;
+      const reason = typeof reasonText === 'string' ? reasonText.trim() : '';
+      if (!reason) return;
+      const artistTitle =
+        typeof artistTitleText === 'string' && artistTitleText.trim()
+          ? artistTitleText.trim().slice(0, 120)
+          : undefined;
+      aiCharacterPickReasonByVideoIdRef.current.set(v, {
+        reason: reason.slice(0, 120),
+        artistTitle,
+      });
+      aiCharacterPickReasonPostedVideoIdsRef.current.delete(v);
+    },
+    [],
+  );
+
+  const emitAiCharacterPickReasonAfterCommentary = useCallback(
+    (pickedVideoId: string) => {
+      const v = pickedVideoId.trim();
+      if (!v) return;
+      if (videoIdRef.current !== v) return;
+      if (aiCharacterPickReasonPostedVideoIdsRef.current.has(v)) return;
+      const picked = aiCharacterPickReasonByVideoIdRef.current.get(v);
+      if (!picked) return;
+      aiCharacterPickReasonPostedVideoIdsRef.current.add(v);
+      const reasonBody = picked.reason.endsWith('。') ? picked.reason : `${picked.reason}。`;
+      const lead = picked.artistTitle
+        ? `${picked.artistTitle}をどうぞ！`
+        : 'この曲をどうぞ！';
+      addAiMessage(`${lead}${reasonBody}`, {
+        videoId: v,
+        aiSource: 'character_chat',
+        displayName: AI_CHARACTER_DEFAULT_NAME,
+      });
+      const label = picked.artistTitle ?? '';
+      if (/feat\.|ft\./i.test(label)) {
+        addAiMessage('メインとフィーチャリングの掛け合いが気持ちよく、聴きどころがはっきりした一曲ですね。', {
+          videoId: v,
+          aiSource: 'character_chat',
+          displayName: AI_CHARACTER_DEFAULT_NAME,
+        });
+      } else if (/soundtrack|ost|original motion picture|映画/i.test(label)) {
+        addAiMessage('映画のシーンを思い出せるタイプのサウンドで、映像と一緒に楽しめるのが魅力ですね。', {
+          videoId: v,
+          aiSource: 'character_chat',
+          displayName: AI_CHARACTER_DEFAULT_NAME,
+        });
+      }
+      touchActivity();
+    },
+    [addAiMessage, touchActivity],
+  );
 
   const clearLocalAiQuestionGuardState = useCallback(() => {
     const rid = roomId || 'local';
@@ -912,6 +975,9 @@ export default function RoomWithoutSync({
               );
               addAiMessage(`${buildCommentaryUiLabel('01')} ${packPrefix + modIntro + pack.baseComment}`, { videoId: vid });
               touchActivity();
+              setTimeout(() => {
+                emitAiCharacterPickReasonAfterCommentary(vid);
+              }, 900);
               const commentaryCtx =
                 typeof pack.baseComment === 'string' ? pack.baseComment.trim() : '';
               const skipQuizRecommendIntroOnly = Boolean(pack.songIntroOnlyDiscography);
@@ -1058,6 +1124,9 @@ export default function RoomWithoutSync({
             const prefix = data.source === 'library' ? '[DB] ' : '[NEW] ';
             addAiMessage(`${buildCommentaryUiLabel('01')} ${prefix + data.text}`, { videoId: vid });
             touchActivity();
+            setTimeout(() => {
+              emitAiCharacterPickReasonAfterCommentary(vid);
+            }, 900);
             const commentarySingle = `${prefix}${data.text}`.trim();
             const skipQuizRecommendIntroOnly = Boolean(data?.songIntroOnlyDiscography);
             const shouldGateRecommendByQuiz =
@@ -1417,7 +1486,16 @@ export default function RoomWithoutSync({
       const trimmed = text.trim();
       const aiMentioned = /^[@\uFF20]/.test(trimmed);
       const aiPromptText = aiMentioned ? trimmed.replace(/^[@\uFF20]\s*/, '').trim() : '';
-      if (aiMentioned && aiPromptText) {
+      const characterDirectMatch = trimmed.match(/^(?:キャラ|キャラクター|character)\s+(.+)$/i);
+      const characterPromptText = characterDirectMatch?.[1]?.trim() ?? '';
+      const isCharacterDirectMention = characterPromptText.length > 0;
+      const isCharacterSongPickRequest =
+        isCharacterDirectMention &&
+        /(選曲|曲.*(選ん|えらん|かけ|流し)|おすすめ|オススメ|まかせ|任せ|空気|雰囲気|一曲|1曲)/i.test(
+          characterPromptText,
+        );
+      if ((aiMentioned && aiPromptText) || isCharacterDirectMention) {
+        const promptForGuard = isCharacterDirectMention ? characterPromptText : aiPromptText;
         const recentForGuard = [
           ...messages.map((m) => ({
             displayName: m.displayName,
@@ -1430,7 +1508,7 @@ export default function RoomWithoutSync({
             messageType: 'user',
           },
         ].slice(-12);
-        const guardRes = await resolveAiQuestionMusicRelated(aiPromptText, recentForGuard, {
+        const guardRes = await resolveAiQuestionMusicRelated(promptForGuard, recentForGuard, {
           isGuest,
           roomId: roomId ?? undefined,
         });
@@ -1455,6 +1533,160 @@ export default function RoomWithoutSync({
           return;
         }
       }
+
+      const doCharacterChatReply = () => {
+        const jpS = jpDomesticSilenceVideoIdRef.current;
+        const vCur = videoIdRef.current;
+        if (jpS != null && vCur != null && jpS === vCur) {
+          return;
+        }
+        const listForCharacterAi = [...messages, { ...userMsg, body: characterPromptText || userMsg.body }].map((m) => ({
+          displayName: m.displayName,
+          body: m.body,
+          messageType: m.messageType,
+        }));
+        const aiErrorMessage =
+          'AI が応答できませんでした。.env.local に GEMINI_API_KEY を設定し、開発サーバーを再起動してください。';
+        fetch('/api/ai/character-chat', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            messages: listForCharacterAi,
+            videoId: videoId ?? undefined,
+            roomId: roomId ?? undefined,
+            roomTitle: roomDisplayTitleCurrent || roomTitle || undefined,
+            isGuest,
+          }),
+        })
+          .then(async (r) => {
+            const data = (await r.json().catch(() => null)) as {
+              text?: string;
+              skipped?: boolean;
+              error?: string;
+              message?: string;
+            } | null;
+            if (r.status === 429 && data?.error === 'rate_limit') {
+              addSystemMessage(
+                typeof data.message === 'string' && data.message.trim()
+                  ? data.message
+                  : 'AI への質問が短時間に集中しています。しばらく待ってから再度お試しください。',
+              );
+              return;
+            }
+            if (!r.ok) {
+              addSystemMessage(aiErrorMessage);
+              return;
+            }
+            if (data?.text) {
+              const body = data.text.startsWith('【AIキャラ】') ? data.text : `【AIキャラ】 ${data.text}`;
+              addAiMessage(body, { aiSource: 'character_chat', displayName: AI_CHARACTER_DEFAULT_NAME });
+              touchActivity();
+              return;
+            }
+            if (data?.skipped === true) {
+              return;
+            }
+            addSystemMessage(aiErrorMessage);
+          })
+          .catch(() => addSystemMessage(aiErrorMessage));
+      };
+
+      const doCharacterSongPick = () => {
+        const listForCharacterAi = [...messages, { ...userMsg, body: characterPromptText || userMsg.body }].map((m) => ({
+          displayName: m.displayName,
+          body: m.body,
+          messageType: m.messageType,
+        }));
+        fetch('/api/ai/character-song-pick', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            messages: listForCharacterAi,
+            videoId: videoId ?? undefined,
+            roomId: roomId ?? undefined,
+            isGuest,
+          }),
+        })
+          .then(async (r0) => (r0.ok ? r0.json() : null))
+          .then((pick) => {
+            if (!pick?.ok || !pick?.query) {
+              doCharacterChatReply();
+              return;
+            }
+
+            const applyCharacterPickResolved = (data2: {
+              ok?: boolean;
+              videoId?: string;
+              artistTitle?: string;
+              watchUrl?: string;
+            } | null) => {
+              if (data2?.ok && data2?.videoId && data2?.artistTitle) {
+                const vid = data2.videoId;
+                const watchUrl =
+                  typeof data2.watchUrl === 'string' && data2.watchUrl.trim()
+                    ? data2.watchUrl.trim()
+                    : `https://www.youtube.com/watch?v=${encodeURIComponent(vid)}`;
+                rememberAiCharacterPickReason(vid, data2.artistTitle, pick.reason);
+                const prevId = videoIdRef.current;
+                const sameReplay = Boolean(prevId && prevId === vid);
+                jpDomesticSilenceVideoIdRef.current = null;
+                setVideoId(vid);
+                playerRef.current?.loadVideoById(vid);
+                scheduleLocalAutoPlayAfterLoad();
+                addAiMessage(`【AIキャラ】${data2.artistTitle} を選びました。\n${watchUrl}`, {
+                  aiSource: 'character_chat',
+                  displayName: AI_CHARACTER_DEFAULT_NAME,
+                });
+                saveSongHistory(vid);
+                touchActivity();
+                fetchAnnounceAndPublish(vid, (sameReplay || isDevMinimalSongAi()) ? { silent: true } : undefined);
+                if (!sameReplay) fetchCommentaryAndPublish(vid);
+                schedulePlaybackHistory(roomId ?? '', vid);
+                return;
+              }
+              doCharacterChatReply();
+            };
+
+            const resolvedFromPick = extractCharacterSongPickResolvedYoutube(pick);
+            if (resolvedFromPick) {
+              applyCharacterPickResolved({
+                ok: true,
+                videoId: resolvedFromPick.videoId,
+                artistTitle: resolvedFromPick.artistTitle,
+                watchUrl: resolvedFromPick.watchUrl,
+              });
+              return;
+            }
+
+            return fetch('/api/ai/paste-by-query', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                query: String(pick.query),
+                isGuest,
+                roomId: roomId ?? undefined,
+                pasteIntent: 'ai_character_manual_song_pick',
+                pickConfirmationText:
+                  typeof pick.confirmationText === 'string' ? pick.confirmationText : undefined,
+                excludeVideoIds: (() => {
+                  const v = (videoIdRef.current ?? '').trim();
+                  return v ? [v] : [];
+                })(),
+              }),
+            }).then(async (r2) => {
+              const data2 = (await r2.json().catch(() => null)) as {
+                ok?: boolean;
+                videoId?: string;
+                artistTitle?: string;
+                watchUrl?: string;
+              } | null;
+              applyCharacterPickResolved(data2);
+            });
+          })
+          .catch(() => doCharacterChatReply());
+      };
 
       const doChatReply = () => {
         const jpS = jpDomesticSilenceVideoIdRef.current;
@@ -1580,6 +1812,13 @@ export default function RoomWithoutSync({
       }
 
       if (!aiMentioned) {
+        if (isCharacterDirectMention) {
+          if (isCharacterSongPickRequest) {
+            doCharacterSongPick();
+          } else {
+            doCharacterChatReply();
+          }
+        }
         touchActivity();
         return;
       }

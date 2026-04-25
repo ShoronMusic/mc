@@ -62,6 +62,7 @@ const CONTEXT_HELP: Record<string, string> = {
   next_song_recommend: '「次に聴くなら（試験）」のおすすめ曲生成',
   next_song_recomend: '「次に聴くなら（試験）」のおすすめ曲生成（旧キー）',
   question_guard_classify: '「@」音楽関連の二次判定（質問ガード分類）',
+  character_song_pick: 'AIキャラの選曲クエリ生成（/api/ai/character-song-pick）',
   user_taste_auto_profile: 'マイページ・履歴からの自動趣向プロフィール生成',
 };
 
@@ -129,6 +130,11 @@ export default function AdminGeminiUsagePage() {
   const plannedMonthlyUsd = planMonthlySongs * perSongUsd * planSafetyMultiplier;
   const plannedMonthlyJpy = plannedMonthlyUsd * usdToJpy;
   const plannedPerUserMonthlyJpy = planMonthlyUsers > 0 ? plannedMonthlyJpy / planMonthlyUsers : 0;
+  const characterSongPickSummary = byContext.character_song_pick ?? {
+    calls: 0,
+    promptTokens: 0,
+    outputTokens: 0,
+  };
 
   const blendedInputUsdPerM =
     totals.promptTokens > 0
@@ -262,7 +268,7 @@ export default function AdminGeminiUsagePage() {
           <p className="text-gray-400">読み込み中…</p>
         ) : (
           <>
-            <section className="mb-6 grid gap-4 sm:grid-cols-3">
+            <section className="mb-6 grid gap-4 sm:grid-cols-4">
               <div className="rounded-lg border border-gray-700 bg-gray-900/50 p-4">
                 <div className="text-xs text-gray-500">呼び出し回数（期間内）</div>
                 <div className="text-2xl font-semibold">{totals.calls.toLocaleString()}</div>
@@ -274,6 +280,16 @@ export default function AdminGeminiUsagePage() {
               <div className="rounded-lg border border-gray-700 bg-gray-900/50 p-4">
                 <div className="text-xs text-gray-500">出力トークン合計</div>
                 <div className="text-2xl font-semibold text-emerald-300">{totals.outputTokens.toLocaleString()}</div>
+              </div>
+              <div className="rounded-lg border border-violet-700/70 bg-violet-950/20 p-4">
+                <div className="text-xs text-violet-200/80">AIキャラ選曲（character_song_pick）</div>
+                <div className="text-lg font-semibold text-violet-200">
+                  {characterSongPickSummary.calls.toLocaleString()} 回
+                </div>
+                <div className="text-xs text-violet-200/80">
+                  入力 {characterSongPickSummary.promptTokens.toLocaleString()} / 出力{' '}
+                  {characterSongPickSummary.outputTokens.toLocaleString()}
+                </div>
               </div>
             </section>
 

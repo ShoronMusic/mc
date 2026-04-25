@@ -114,12 +114,18 @@ export async function generateChatReply(
   currentSong?: string | null,
   currentSongStyle?: string | null,
   usageMeta?: GeminiUsageLogMeta,
-  options?: { forceReply?: boolean; userTasteSummary?: string | null }
+  options?: { forceReply?: boolean; userTasteSummary?: string | null; personaInstruction?: string | null }
 ): Promise<string | null> {
   const model = getGeminiModel('chat_reply');
   if (!model) return null;
 
   const forceReply = options?.forceReply === true;
+  const personaInstructionRaw =
+    typeof options?.personaInstruction === 'string' ? options.personaInstruction.trim() : '';
+  const personaInstructionBlock =
+    personaInstructionRaw.length > 0
+      ? `【キャラクター設定（最優先）】\n${personaInstructionRaw}\n\n`
+      : '';
   const userTasteRaw = typeof options?.userTasteSummary === 'string' ? options.userTasteSummary.trim() : '';
   const userTasteBlock =
     forceReply && userTasteRaw.length > 0
@@ -223,7 +229,7 @@ export async function generateChatReply(
     : '・**どのアルバムに収録か・デビュー作か・各国チャートの順位**などディスコグラフィーの細部を聞かれたとき、またはユーザーがその種の事実を述べて確認してきたときは、**検証できないまま「はい、そのとおりです」と肯定しない**こと。確認できない場合は「すみません、手元では照合できません。公式ディスコグラフィーや信頼できる音楽データベースでのご確認をおすすめします」のように案内する。\n';
 
   const prompt = `あなたは洋楽を聴きながら参加者とチャットしている「音楽仲間」のAIです。自分は「私」と呼んでください。性別を聞かれたら「性別はありません」と答えてください。
-以下の直近の会話に対して返してください。${songContext}${userTasteBlock}
+以下の直近の会話に対して返してください。${songContext}${personaInstructionBlock}${userTasteBlock}
 ${atMentionBlock}${defaultLengthRule}
 ・同意するときは「はい、そうですね」ではなく「そう思います」を使うこと。
 ・PV・MV（ミュージックビデオ）・プロモーション映像の話題は**拒否や話題転換だけで済ませない**こと。**大物監督が手がけた演出、大物俳優や著名人の出演、映画・ドラマ・CM・ゲームなどとのタイアップで話題になった例**も含め、**監督・出演者・作品連携・撮影地や制作エピソード・当時の反響・よく語られるコンセプト**など、テキストとしても答えられる範囲では普通に答えてください。**日本の漫画家・アニメ作家がキャラクターや映像で関与した例**（例：Daft Punk『Discovery』期の映像とアニメ映画『インターステラ5555』で松本零士氏のキャラクター・美術面の関与が語られるケース）も同様に、知っている範囲で答える。
@@ -301,6 +307,12 @@ export interface SongSearchIntent {
   confirmationText: string;
 }
 
+export interface CharacterSongPick {
+  query: string;
+  confirmationText: string;
+  reason: string;
+}
+
 /**
  * 1行だけの「左 - 右」を曲指定とみなして検索クエリにする（例: Blur - The Universal）。
  * 送信だけでは再生しない運用のため、Gemini なしでも判定できるようにする。
@@ -375,6 +387,59 @@ export async function extractSongSearchQuery(
     return { query, confirmationText };
   } catch (e) {
     console.error('[gemini] extractSongSearchQuery:', e);
+    return null;
+  }
+}
+
+/** キャラクターAI向け: 直近の会話の空気に合う1曲を提案（検索クエリ + 表示名 + 短い理由） */
+export async function generateCharacterSongPick(
+  recentMessages: { displayName?: string; body: string; messageType?: string }[],
+  currentSong?: string | null,
+  currentSongStyle?: string | null,
+  usageMeta?: GeminiUsageLogMeta,
+): Promise<CharacterSongPick | null> {
+  const model = getGeminiModel('character_song_pick');
+  if (!model) return null;
+
+  const lines = recentMessages
+    .slice(-12)
+    .map((m) => {
+      const who = m.messageType === 'ai' ? 'AI' : (m.displayName ?? 'ユーザー');
+      return `${who}: ${truncateChatContextBody(typeof m.body === 'string' ? m.body : '', 220)}`;
+    })
+    .join('\n');
+  const songHint = currentSong?.trim() ? `【現在の曲】${currentSong.trim()}\n` : '';
+  const styleHint = currentSongStyle?.trim() ? `【現在の曲のジャンル】${currentSongStyle.trim()}\n` : '';
+
+  const prompt = `あなたは洋楽に詳しいDJアシスタントです。この選曲ターンでは会話の空気に合う曲を1首だけ選びます。
+・第2候補・別曲の列挙・「ほかにも」「次に○○も」など複数曲に触れる表現は禁止（1曲のみ）。
+・選んだ1曲の検索用クエリと表示名と理由以外は書かない。
+${songHint}${styleHint}【直近の会話】
+${lines || '(会話なし)'}
+
+【出力ルール】
+・候補がある場合は必ず3行だけで出力（行を増やさない）:
+1行目: YouTube検索用クエリ（Artist Song）
+2行目: 表示名（Artist - Song）
+3行目: 選曲理由（日本語で1文、20〜55文字、やさしい言葉。他曲名や別候補には触れない）
+・会話から雰囲気が読めない場合のみ null とだけ出力。
+・70年代〜現在の洋楽から選ぶ。
+・難しい専門用語は使わない。`;
+
+  try {
+    const result = await model.generateContent(prompt);
+    logGeminiUsage('character_song_pick', result.response);
+    await persistGeminiUsageLog('character_song_pick', result.response.usageMetadata, usageMeta);
+    const out = readGeneratedText(result.response, 'character_song_pick');
+    if (!out || out.toLowerCase() === 'null') return null;
+    const outLines = out.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+    const query = outLines[0] ?? '';
+    if (!query) return null;
+    const confirmationText = outLines[1] ?? query.replace(/^(\S+)\s+(.+)$/, '$1 - $2');
+    const reason = (outLines[2] ?? 'この流れに合う一曲だと思います。').slice(0, 80);
+    return { query, confirmationText, reason };
+  } catch (e) {
+    console.error('[gemini] generateCharacterSongPick:', e);
     return null;
   }
 }

@@ -45,6 +45,7 @@ export interface ChatMessage {
     | 'commentary'
     | 'tidbit'
     | 'chat_reply'
+    | 'character_chat'
     | 'next_song_recommend'
     | 'theme_playlist_room'
     | 'other';
@@ -105,6 +106,7 @@ export interface ChatMessagePayload {
     | 'commentary'
     | 'tidbit'
     | 'chat_reply'
+    | 'character_chat'
     | 'next_song_recommend'
     | 'theme_playlist_room'
     | 'other';

@@ -20,7 +20,7 @@ export const NEXT_RECOMMEND_PENDING_UI_LABEL = '【おすすめ曲準備中】';
 
 /** メッセージ本文先頭の UI ラベル（新形式＋旧形式）。キャプチャ1＝【】内の文字列 */
 const CHAT_MESSAGE_UI_LABEL_CAPTURE_RE =
-  /^【(AI曲解説\d{2}|AI解説\d{2}|曲クイズ|AIクイズ|おすすめ曲\d{2}|AIオススメ\d{2}|おすすめ曲準備中|AIオススメ準備中|お題講評)】\s*/;
+  /^【(AI曲解説\d{2}|AI解説\d{2}|曲クイズ|AIクイズ|おすすめ曲\d{2}|AIオススメ\d{2}|おすすめ曲準備中|AIオススメ準備中|お題講評|AIキャラ|AIキャラクター)】\s*/;
 
 /** 【】内のトークンを常に新名称へ（バッジ表示用。旧ログも新表記に揃える） */
 export function normalizeChatUiLabelInner(raw: string): string {
@@ -28,6 +28,7 @@ export function normalizeChatUiLabelInner(raw: string): string {
   if (raw === 'AIクイズ') return '曲クイズ';
   if (raw === 'AIオススメ準備中') return 'おすすめ曲準備中';
   if (raw.startsWith('AIオススメ')) return `おすすめ曲${raw.slice('AIオススメ'.length)}`;
+  if (raw === 'AIキャラクター') return 'AIキャラ';
   return raw;
 }
 

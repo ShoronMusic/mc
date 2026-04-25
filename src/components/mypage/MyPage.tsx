@@ -531,6 +531,12 @@ interface MyPageProps {
   /** オーナー時のみ。おすすめ曲の全体ON/OFF */
   ownerNextSongRecommendEnabled?: boolean;
   onOwnerNextSongRecommendToggle?: () => void;
+  /** オーナー時のみ。AIキャラクターのチャット参加ON/OFF */
+  ownerAiCharacterJoinEnabled?: boolean;
+  onOwnerAiCharacterJoinToggle?: () => void;
+  /** オーナー時のみ。AIキャラクター表示名（デフォルト: エージェント1号） */
+  ownerAiCharacterName?: string;
+  onOwnerAiCharacterNameChange?: (name: string) => void;
   /** オーナー時のみ。[基本, ヒット/受賞, 歌詞, サウンド, アーティスト情報] */
   commentPackSlots?: CommentPackSlotSelection;
   onCommentPackSlotsChange?: (slots: CommentPackSlotSelection) => void;
@@ -624,6 +630,10 @@ export default function MyPage({
   onOwnerSongQuizToggle,
   ownerNextSongRecommendEnabled = true,
   onOwnerNextSongRecommendToggle,
+  ownerAiCharacterJoinEnabled = true,
+  onOwnerAiCharacterJoinToggle,
+  ownerAiCharacterName = 'エージェント1号',
+  onOwnerAiCharacterNameChange,
   commentPackSlots = DEFAULT_COMMENT_PACK_SLOTS,
   onCommentPackSlotsChange,
   jpAiUnlockEnabled = false,
@@ -648,6 +658,11 @@ export default function MyPage({
     (effectiveRoomId ? getOrCreateRoomClientId(effectiveRoomId) : '');
 
   const [isLiveOrganizer, setIsLiveOrganizer] = useState(false);
+  const [ownerAiCharacterNameInput, setOwnerAiCharacterNameInput] = useState(ownerAiCharacterName);
+
+  useEffect(() => {
+    setOwnerAiCharacterNameInput(ownerAiCharacterName);
+  }, [ownerAiCharacterName]);
 
   const isJoinChimeControlled =
     typeof onJoinEntryChimeEnabledChange === 'function' &&
@@ -698,6 +713,8 @@ export default function MyPage({
     Boolean(
       onTransferOwner ||
         onAiFreeSpeechStopToggle ||
+        onOwnerAiCharacterJoinToggle ||
+        onOwnerAiCharacterNameChange ||
         onOwnerSongQuizToggle ||
         onOwnerNextSongRecommendToggle ||
         onCommentPackSlotsChange ||
@@ -2173,6 +2190,56 @@ export default function MyPage({
                   OFF
                 </button>
               </div>
+            </div>
+          )}
+
+          {onOwnerAiCharacterJoinToggle && (
+            <div className="rounded border border-amber-700/50 bg-amber-900/20 p-3">
+              <h4 className="mb-2 text-xs font-medium text-gray-300">AIキャラクター参加（オーナー設定）</h4>
+              <p className="mb-2 text-xs text-gray-400">
+                部屋全体の AI キャラクター参加 ON/OFF の準備設定です。既存の進行・解説AI（@応答/曲解説/曲クイズ/おすすめ曲）には影響しません。
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={ownerAiCharacterJoinEnabled ? undefined : onOwnerAiCharacterJoinToggle}
+                  className={`rounded px-3 py-1.5 text-sm ${ownerAiCharacterJoinEnabled ? 'bg-amber-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                >
+                  ON
+                </button>
+                <button
+                  type="button"
+                  onClick={!ownerAiCharacterJoinEnabled ? undefined : onOwnerAiCharacterJoinToggle}
+                  className={`rounded px-3 py-1.5 text-sm ${!ownerAiCharacterJoinEnabled ? 'bg-gray-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                >
+                  OFF
+                </button>
+              </div>
+              {onOwnerAiCharacterNameChange && (
+                <div className="mt-3 space-y-2">
+                  <label className="block text-xs text-gray-300">AIキャラクター名</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={ownerAiCharacterNameInput}
+                      onChange={(e) => setOwnerAiCharacterNameInput(e.target.value)}
+                      maxLength={24}
+                      placeholder="エージェント1号"
+                      className="min-w-0 flex-1 rounded border border-gray-600 bg-gray-800 px-2.5 py-1.5 text-sm text-gray-100 placeholder:text-gray-500 focus:border-amber-500 focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => onOwnerAiCharacterNameChange(ownerAiCharacterNameInput)}
+                      className="rounded bg-amber-700 px-3 py-1.5 text-sm text-white hover:bg-amber-600"
+                    >
+                      反映
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-gray-500">
+                    空欄で反映するとデフォルト名「エージェント1号」に戻ります。
+                  </p>
+                </div>
+              )}
             </div>
           )}
 

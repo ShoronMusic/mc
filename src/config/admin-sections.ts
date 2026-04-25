@@ -16,9 +16,21 @@ export const ADMIN_SECTIONS: AdminSection[] = [
     description: 'API 呼び出し回数・トークン消費の集計と、直近の呼び出し明細',
   },
   {
+    href: '/admin/ai-engine-phase-readiness',
+    title: 'AIエンジン段階判定',
+    description:
+      'フェーズ1のKPI観測値・Go/No-Go判定と、フェーズ3（独自LLM）開始判定をまとめて確認',
+  },
+  {
     href: '/admin/youtube-api-usage',
     title: 'YouTube API 利用ログ',
     description: 'search.list / videos.list の呼び出し回数・成功失敗・source別集計',
+  },
+  {
+    href: '/admin/ai-character-song-picks',
+    title: 'AIキャラ選曲ログ',
+    description:
+      'AIキャラの参加日時・部屋名・選曲（アーティスト/タイトル）・投入コメントの保存と集計',
   },
   {
     href: '/admin/ai-comment-origin',

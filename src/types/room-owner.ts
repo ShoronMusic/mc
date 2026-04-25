@@ -11,6 +11,8 @@ export const OWNER_AI_FREE_SPEECH_STOP_EVENT = 'owner:aiFreeSpeechStop';
 export const OWNER_STATE_EVENT = 'owner:state';
 export const OWNER_SONG_QUIZ_EVENT = 'owner:songQuiz';
 export const OWNER_NEXT_SONG_RECOMMEND_EVENT = 'owner:nextSongRecommend';
+export const OWNER_AI_CHARACTER_JOIN_EVENT = 'owner:aiCharacterJoin';
+export const OWNER_AI_CHARACTER_NAME_EVENT = 'owner:aiCharacterName';
 
 export interface OwnerForceExitPayload {
   targetClientId: string;
@@ -34,6 +36,14 @@ export interface OwnerSongQuizPayload {
 
 export interface OwnerNextSongRecommendPayload {
   enabled: boolean;
+}
+
+export interface OwnerAiCharacterJoinPayload {
+  enabled: boolean;
+}
+
+export interface OwnerAiCharacterNamePayload {
+  name: string;
 }
 
 /** オーナー状態の同期（誰がオーナーか・退出時刻） */
