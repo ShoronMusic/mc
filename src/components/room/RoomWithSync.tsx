@@ -5993,6 +5993,14 @@ export default function RoomWithSync({
           }
         } else if (
           ownerAiCharacterJoinEnabledRef.current &&
+          currentSongPosterClientId === AI_CHARACTER_CLIENT_ID &&
+          trimmed.length >= 5 &&
+          trimmed.length <= 90 &&
+          /(カバー|cover|原曲|オリジナル|セルフカバー)/i.test(trimmed)
+        ) {
+          doCharacterQuickReaction(trimmed);
+        } else if (
+          ownerAiCharacterJoinEnabledRef.current &&
           currentSongPosterClientId !== '' &&
           currentSongPosterClientId !== AI_CHARACTER_CLIENT_ID &&
           trimmed.length >= 6 &&
