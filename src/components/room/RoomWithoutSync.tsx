@@ -55,6 +55,10 @@ import { rememberRoomForGuideReturn } from '@/lib/safe-return-path';
 import { extractVideoId, isStandaloneNonYouTubeUrl } from '@/lib/youtube';
 import { isYoutubeKeywordSearchEnabled } from '@/lib/youtube-keyword-search-ui';
 import { extractCharacterSongPickResolvedYoutube } from '@/lib/character-song-pick-youtube';
+import {
+  postAiCharacterPickUtteranceToLog,
+  pushAiCharacterPickUtteranceLine,
+} from '@/lib/ai-character-song-pick-client';
 import { scheduleNextSongRecommendAfterCommentary } from '@/lib/schedule-next-song-recommend-client';
 import { scheduleThemePlaylistRoomBlurbAfterPack } from '@/lib/schedule-theme-playlist-room-blurb';
 import type { ChatMessage, SystemMessageOptions } from '@/types/chat';
@@ -294,6 +298,8 @@ export default function RoomWithoutSync({
     Map<string, { reason: string; artistTitle?: string }>
   >(new Map());
   const aiCharacterPickReasonPostedVideoIdsRef = useRef<Set<string>>(new Set());
+  const characterPickLogIdByVideoIdRef = useRef<Map<string, string>>(new Map());
+  const characterPickUtteranceLinesByLogIdRef = useRef<Map<string, string[]>>(new Map());
   const pendingThemePlaylistBlurbRef = useRef<{
     videoId: string;
     themeId: string;
@@ -689,9 +695,36 @@ export default function RoomWithoutSync({
           displayName: AI_CHARACTER_DEFAULT_NAME,
         });
       }
+      const logId = characterPickLogIdByVideoIdRef.current.get(v);
+      if (logId) {
+        let merged = pushAiCharacterPickUtteranceLine(
+          characterPickUtteranceLinesByLogIdRef,
+          logId,
+          `${lead}${reasonBody}`,
+        );
+        if (/feat\.|ft\./i.test(label)) {
+          merged = pushAiCharacterPickUtteranceLine(
+            characterPickUtteranceLinesByLogIdRef,
+            logId,
+            'メインとフィーチャリングの掛け合いが気持ちよく、聴きどころがはっきりした一曲ですね。',
+          );
+        } else if (/soundtrack|ost|original motion picture|映画/i.test(label)) {
+          merged = pushAiCharacterPickUtteranceLine(
+            characterPickUtteranceLinesByLogIdRef,
+            logId,
+            '映画のシーンを思い出せるタイプのサウンドで、映像と一緒に楽しめるのが魅力ですね。',
+          );
+        }
+        postAiCharacterPickUtteranceToLog({
+          pickLogId: logId,
+          utterance: merged,
+          pickedVideoId: v,
+          isGuest: isGuest === true,
+        });
+      }
       touchActivity();
     },
-    [addAiMessage, touchActivity],
+    [addAiMessage, touchActivity, isGuest],
   );
 
   const clearLocalAiQuestionGuardState = useCallback(() => {
@@ -1557,6 +1590,7 @@ export default function RoomWithoutSync({
             roomId: roomId ?? undefined,
             roomTitle: roomDisplayTitleCurrent || roomTitle || undefined,
             isGuest,
+            aiCharacterDisplayName: AI_CHARACTER_DEFAULT_NAME,
           }),
         })
           .then(async (r) => {
@@ -1606,6 +1640,7 @@ export default function RoomWithoutSync({
             messages: listForCharacterAi,
             videoId: videoId ?? undefined,
             roomId: roomId ?? undefined,
+            roomTitle: roomDisplayTitleCurrent || roomTitle || undefined,
             isGuest,
           }),
         })
@@ -1629,16 +1664,37 @@ export default function RoomWithoutSync({
                     ? data2.watchUrl.trim()
                     : `https://www.youtube.com/watch?v=${encodeURIComponent(vid)}`;
                 rememberAiCharacterPickReason(vid, data2.artistTitle, pick.reason);
+                const rawPlid = (pick as { pickLogId?: unknown }).pickLogId;
+                const pickLogIdRow = typeof rawPlid === 'string' ? rawPlid.trim() : '';
+                if (pickLogIdRow) {
+                  characterPickLogIdByVideoIdRef.current.set(vid, pickLogIdRow);
+                  characterPickUtteranceLinesByLogIdRef.current.delete(pickLogIdRow);
+                }
                 const prevId = videoIdRef.current;
                 const sameReplay = Boolean(prevId && prevId === vid);
                 jpDomesticSilenceVideoIdRef.current = null;
                 setVideoId(vid);
                 playerRef.current?.loadVideoById(vid);
                 scheduleLocalAutoPlayAfterLoad();
-                addAiMessage(`【AIキャラ】${data2.artistTitle} を選びました。\n${watchUrl}`, {
+                const pickAnnounceBody = `【AIキャラ】${data2.artistTitle} を選びました。\n${watchUrl}`;
+                addAiMessage(pickAnnounceBody, {
                   aiSource: 'character_chat',
                   displayName: AI_CHARACTER_DEFAULT_NAME,
                 });
+                const logIdAnn = characterPickLogIdByVideoIdRef.current.get(vid);
+                if (logIdAnn) {
+                  const mergedAnn = pushAiCharacterPickUtteranceLine(
+                    characterPickUtteranceLinesByLogIdRef,
+                    logIdAnn,
+                    pickAnnounceBody,
+                  );
+                  postAiCharacterPickUtteranceToLog({
+                    pickLogId: logIdAnn,
+                    utterance: mergedAnn,
+                    pickedVideoId: vid,
+                    isGuest: isGuest === true,
+                  });
+                }
                 saveSongHistory(vid);
                 touchActivity();
                 fetchAnnounceAndPublish(vid, (sameReplay || isDevMinimalSongAi()) ? { silent: true } : undefined);

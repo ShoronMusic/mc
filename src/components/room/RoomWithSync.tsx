@@ -72,6 +72,11 @@ import {
 import { extractVideoId, isStandaloneNonYouTubeUrl } from '@/lib/youtube';
 import { isYoutubeKeywordSearchEnabled } from '@/lib/youtube-keyword-search-ui';
 import { extractCharacterSongPickResolvedYoutube } from '@/lib/character-song-pick-youtube';
+import { CHARACTER_SONG_PICK_AUTO_USER_PROMPT } from '@/lib/ai-character-song-pick-cues';
+import {
+  postAiCharacterPickUtteranceToLog,
+  pushAiCharacterPickUtteranceLine,
+} from '@/lib/ai-character-song-pick-client';
 import {
   type PlaybackMessage,
   type PlaybackHistoryUpdatedPayload,
@@ -3272,6 +3277,9 @@ export default function RoomWithSync({
     [buildAiCharacterYoutubeWatchUrl],
   );
 
+  const characterPickLogIdByVideoIdRef = useRef<Map<string, string>>(new Map());
+  const characterPickUtteranceLinesByLogIdRef = useRef<Map<string, string[]>>(new Map());
+
   const rememberAiCharacterPickReason = useCallback(
     (pickedVideoId: string, artistTitleText: unknown, reasonText: unknown) => {
       const v = pickedVideoId.trim();
@@ -3327,11 +3335,38 @@ export default function RoomWithSync({
             videoId: v,
           });
         }
+        const logId = characterPickLogIdByVideoIdRef.current.get(v);
+        if (logId) {
+          let merged = pushAiCharacterPickUtteranceLine(
+            characterPickUtteranceLinesByLogIdRef,
+            logId,
+            `${lead}${reasonBody}`,
+          );
+          if (/feat\.|ft\./i.test(label)) {
+            merged = pushAiCharacterPickUtteranceLine(
+              characterPickUtteranceLinesByLogIdRef,
+              logId,
+              'メインとフィーチャリングの掛け合いが気持ちよく、聴きどころがはっきりした一曲ですね。',
+            );
+          } else if (/soundtrack|ost|original motion picture|映画/i.test(label)) {
+            merged = pushAiCharacterPickUtteranceLine(
+              characterPickUtteranceLinesByLogIdRef,
+              logId,
+              '映画のシーンを思い出せるタイプのサウンドで、映像と一緒に楽しめるのが魅力ですね。',
+            );
+          }
+          postAiCharacterPickUtteranceToLog({
+            pickLogId: logId,
+            utterance: merged,
+            pickedVideoId: v,
+            isGuest: isGuest === true,
+          });
+        }
         touchActivity();
       }, Math.max(300, Math.min(delayMs, 900)));
       freeCommentTimeoutsRef.current.push(timer);
     },
-    [addAiMessage, touchActivity],
+    [addAiMessage, touchActivity, isGuest],
   );
 
   const clearPendingFreeCommentTimers = useCallback(() => {
@@ -4698,11 +4733,10 @@ export default function RoomWithSync({
     if (aiCharacterLastAutoPickTurnKeyRef.current === turnKey) return;
     aiCharacterAutoPickInFlightRef.current = true;
 
-    const pickPrompt = 'この部屋の流れに合う洋楽を1曲だけ選曲してください。';
+    const pickPrompt = CHARACTER_SONG_PICK_AUTO_USER_PROMPT;
     const listForCharacterAi = [...messagesForAiCharacterPickRef.current, {
       id: createMessageId(),
       body: pickPrompt,
-      displayName: ownerAiCharacterNameRef.current,
       messageType: 'user' as const,
       createdAt: new Date().toISOString(),
     }].map((m) => ({
@@ -4785,6 +4819,12 @@ export default function RoomWithSync({
               data2.artistTitle,
               (pick as { reason?: unknown }).reason,
             );
+            const rawPickLogId = (pick as { pickLogId?: unknown }).pickLogId;
+            const pickLogIdRow = typeof rawPickLogId === 'string' ? rawPickLogId.trim() : '';
+            if (pickLogIdRow) {
+              characterPickLogIdByVideoIdRef.current.set(pickedVid, pickLogIdRow);
+              characterPickUtteranceLinesByLogIdRef.current.delete(pickLogIdRow);
+            }
             const useReservationQueue = shouldAiCharacterUseReservationQueue();
             if (useReservationQueue) {
               if (
@@ -4827,6 +4867,20 @@ export default function RoomWithSync({
                 aiSource: 'character_chat',
                 displayName: ownerAiCharacterNameRef.current,
               });
+              const logId = characterPickLogIdByVideoIdRef.current.get(pickedVid);
+              if (logId) {
+                const merged = pushAiCharacterPickUtteranceLine(
+                  characterPickUtteranceLinesByLogIdRef,
+                  logId,
+                  pickedBody,
+                );
+                postAiCharacterPickUtteranceToLog({
+                  pickLogId: logId,
+                  utterance: merged,
+                  pickedVideoId: pickedVid,
+                  isGuest: ctx.isGuest === true,
+                });
+              }
             }
             return;
           }
@@ -4918,7 +4972,6 @@ export default function RoomWithSync({
     const listForCharacterAi = [...messages, {
       id: createMessageId(),
       body: 'いま流れ始めた曲について、選曲した人をさりげなく褒める短い一言をください。',
-      displayName: ownerAiCharacterNameRef.current,
       messageType: 'user' as const,
       createdAt: new Date().toISOString(),
     }].map((m) => ({
@@ -4936,6 +4989,7 @@ export default function RoomWithSync({
         videoId: vid,
         roomId: roomId ?? undefined,
         isGuest,
+        aiCharacterDisplayName: ownerAiCharacterNameRef.current || AI_CHARACTER_DEFAULT_NAME,
       }),
     })
       .then(async (r) => {
@@ -5330,6 +5384,7 @@ export default function RoomWithSync({
             roomId: roomId ?? undefined,
             roomTitle: roomDisplayTitleCurrent || roomTitle || undefined,
             isGuest,
+            aiCharacterDisplayName: ownerAiCharacterNameRef.current || AI_CHARACTER_DEFAULT_NAME,
           }),
         })
           .then(async (r) => {
@@ -5391,6 +5446,7 @@ export default function RoomWithSync({
             videoId: videoId ?? undefined,
             roomId: roomId ?? undefined,
             isGuest,
+            aiCharacterDisplayName: ownerAiCharacterNameRef.current || AI_CHARACTER_DEFAULT_NAME,
           }),
         })
           .then(async (r) => {
@@ -5576,6 +5632,7 @@ export default function RoomWithSync({
             messages: listForCharacterAi,
             videoId: videoId ?? undefined,
             roomId: roomId ?? undefined,
+            roomTitle: roomDisplayTitleCurrent || roomTitle || undefined,
             isGuest,
           }),
         })
@@ -5629,6 +5686,13 @@ export default function RoomWithSync({
                   data2.artistTitle,
                   (pick as { reason?: unknown }).reason,
                 );
+                const rawPickLogIdManual = (pick as { pickLogId?: unknown }).pickLogId;
+                const pickLogIdRowManual =
+                  typeof rawPickLogIdManual === 'string' ? rawPickLogIdManual.trim() : '';
+                if (pickLogIdRowManual) {
+                  characterPickLogIdByVideoIdRef.current.set(pickedVid, pickLogIdRowManual);
+                  characterPickUtteranceLinesByLogIdRef.current.delete(pickLogIdRowManual);
+                }
                 if (useReservationQueue) {
                   if (
                     songReservationQueueRef.current.some(
@@ -5671,6 +5735,20 @@ export default function RoomWithSync({
                     aiSource: 'character_chat',
                     displayName: ownerAiCharacterNameRef.current,
                   });
+                  const logIdM = characterPickLogIdByVideoIdRef.current.get(pickedVid);
+                  if (logIdM) {
+                    const mergedM = pushAiCharacterPickUtteranceLine(
+                      characterPickUtteranceLinesByLogIdRef,
+                      logIdM,
+                      pickedBody,
+                    );
+                    postAiCharacterPickUtteranceToLog({
+                      pickLogId: logIdM,
+                      utterance: mergedM,
+                      pickedVideoId: pickedVid,
+                      isGuest: isGuest === true,
+                    });
+                  }
                 }
                 touchActivity();
                 return;

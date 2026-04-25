@@ -28,10 +28,6 @@ export async function POST(request: Request) {
     const roomId = typeof body?.roomId === 'string' ? body.roomId.trim() : '';
     const roomTitle = typeof body?.roomTitle === 'string' ? body.roomTitle.trim() : '';
     const isGuest = body?.isGuest === true;
-    const inputComment =
-      [...messages]
-        .reverse()
-        .find((m) => m.messageType !== 'ai' && typeof m.body === 'string' && m.body.trim())?.body ?? '';
 
     const rl = checkCharacterSongPickRateLimit(roomId);
     if (!rl.ok) {
@@ -159,7 +155,7 @@ export async function POST(request: Request) {
       youtube,
     };
     if (youtube.ok === true) {
-      await persistAiCharacterSongPickLog({
+      const pickLogId = await persistAiCharacterSongPickLog({
         roomId: roomId || null,
         roomTitle: roomTitle || null,
         pickedVideoId: youtube.videoId,
@@ -168,8 +164,8 @@ export async function POST(request: Request) {
         pickQuery: pick.query,
         pickReason: pick.reason,
         confirmationText: pick.confirmationText,
-        inputComment: inputComment || null,
       });
+      if (pickLogId) bodyOut.pickLogId = pickLogId;
       bodyOut.resolvedVideoId = youtube.videoId;
       bodyOut.resolvedWatchUrl = youtube.watchUrl;
       bodyOut.resolvedArtistTitle = youtube.artistTitle;

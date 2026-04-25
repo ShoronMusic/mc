@@ -49,9 +49,13 @@ alter table public.ai_character_song_pick_logs enable row level security;
 | `pick_query` | AI が出した検索クエリ |
 | `pick_reason` | AI が出した選曲理由（短文） |
 | `confirmation_text` | 確認表示用の「Artist - Title」 |
-| `input_comment` | 選曲 API に渡した直近のユーザー側発言（投入コメント） |
+| `input_comment` | **AIキャラが当該選曲についてチャットに出した本文**（「この1曲です」＋URL、および曲解説後の短い紹介などを結合。INSERT 直後は空で、クライアントが `POST /api/ai/character-song-pick-utterance` で追記） |
 
 ## 管理画面
 
 - **一覧**: `/admin/ai-character-song-picks`
 - **API**: `GET /api/admin/ai-character-song-picks`（`STYLE_ADMIN_USER_IDS` + ログイン + service role）
+
+## 選曲コメントの追記
+
+ルームクライアントが選曲確定後にチャットへ出した AI キャラ文を、`POST /api/ai/character-song-pick-utterance`（認証不要・IP レート制限）で `input_comment` に UPDATE します。`pickLogId` は `/api/ai/character-song-pick` の JSON に含まれます。

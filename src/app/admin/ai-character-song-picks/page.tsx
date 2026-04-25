@@ -151,7 +151,7 @@ export default function AdminAiCharacterSongPicksPage() {
                       <th className="px-2 py-1.5">選曲（Artist - Title）</th>
                       <th className="px-2 py-1.5">YouTube題名</th>
                       <th className="px-2 py-1.5">選曲日時</th>
-                      <th className="px-2 py-1.5">投入コメント</th>
+                      <th className="px-2 py-1.5">選曲コメント（チャット）</th>
                     </tr>
                   </thead>
                   <tbody>

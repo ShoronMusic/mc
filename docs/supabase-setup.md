@@ -851,7 +851,7 @@ alter table public.song_quiz_logs enable row level security;
 
 ## 21. AIキャラ選曲ログ（`ai_character_song_pick_logs`）
 
-AIキャラの選曲が YouTube まで解決したとき、**サービスロール**で 1 行 INSERT します。管理画面 **`/admin/ai-character-song-picks`** で、参加日時・部屋名・選曲（アーティスト／タイトル）・投入コメントを確認できます。
+AIキャラの選曲が YouTube まで解決したとき、**サービスロール**で 1 行 INSERT します。管理画面 **`/admin/ai-character-song-picks`** で、参加日時・部屋名・選曲（アーティスト／タイトル）・**選曲に対するチャットコメント**（`input_comment`）を確認できます。
 
 **SQL・列の説明・保存条件**は **docs/supabase-ai-character-song-pick-logs-table.md** を開き、**Supabase SQL Editor** で同ファイルの `create table` ブロックを実行してください。
 

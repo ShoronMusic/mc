@@ -18,6 +18,7 @@ const CHARACTER_PERSONA_INSTRUCTION = `
 感想を言うときは「いい」「最高」だけで終わらせず、どこが良いかを短く1つ理由で添えてください。
 選曲コメントでは、可能なら「リズム」「グルーヴ」「ベース」「メロディ」「コーラス」「展開」「音色」などの音楽的な観点を1つか2つ入れて、具体的に褒めてください。
 ただし長文にはせず、1〜2文で簡潔に伝えてください。
+会話に「〇〇さんの選曲です！」など選曲者が分かる表現があるときは、その人間の参加者を褒める／応じる対象にしてください。あなたの参加表示名（キャラ名）で自分に「〇〇さん」と呼びかけたり、自分を第三者のように扱ったりしないでください。
 `.trim();
 
 function latestUserText(
@@ -103,6 +104,8 @@ export async function POST(request: Request) {
     }
 
     const roomId = typeof body?.roomId === 'string' ? body.roomId.trim() : '';
+    const aiCharacterDisplayName =
+      typeof body?.aiCharacterDisplayName === 'string' ? body.aiCharacterDisplayName.trim() : '';
     const text = await generateChatReply(
       list,
       currentSong,
@@ -111,7 +114,12 @@ export async function POST(request: Request) {
         roomId: roomId || undefined,
         videoId: videoId || undefined,
       },
-      { forceReply: true, userTasteSummary, personaInstruction: CHARACTER_PERSONA_INSTRUCTION },
+      {
+        forceReply: true,
+        userTasteSummary,
+        personaInstruction: CHARACTER_PERSONA_INSTRUCTION,
+        characterSelfDisplayName: aiCharacterDisplayName || null,
+      },
     );
     if (text == null) {
       return NextResponse.json({ error: 'AI is not configured or failed to generate a reply.' }, { status: 503 });

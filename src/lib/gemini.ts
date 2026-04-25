@@ -114,7 +114,13 @@ export async function generateChatReply(
   currentSong?: string | null,
   currentSongStyle?: string | null,
   usageMeta?: GeminiUsageLogMeta,
-  options?: { forceReply?: boolean; userTasteSummary?: string | null; personaInstruction?: string | null }
+  options?: {
+    forceReply?: boolean;
+    userTasteSummary?: string | null;
+    personaInstruction?: string | null;
+    /** AIキャラの参加表示名。会話ログに出るため、本文で自分を「〇〇さん」と呼ばないよう注入する */
+    characterSelfDisplayName?: string | null;
+  }
 ): Promise<string | null> {
   const model = getGeminiModel('chat_reply');
   if (!model) return null;
@@ -125,6 +131,12 @@ export async function generateChatReply(
   const personaInstructionBlock =
     personaInstructionRaw.length > 0
       ? `【キャラクター設定（最優先）】\n${personaInstructionRaw}\n\n`
+      : '';
+  const characterSelfNameRaw =
+    typeof options?.characterSelfDisplayName === 'string' ? options.characterSelfDisplayName.trim() : '';
+  const characterSelfGuardBlock =
+    characterSelfNameRaw.length > 0
+      ? `【キャラ会話・自己指称の禁止】\nあなたの参加表示名は「${characterSelfNameRaw}」です。これは**あなた自身**です。返答で「${characterSelfNameRaw}さん」などと**自分を第三者のように呼びかけない**でください（一人称は「私」）。会話に「〇〇さんの選曲です！」とあるときは、その〇〇さん（人間の選曲者）を褒める／応じる対象です。選曲者の名前がはっきり分からないときは「ナイス選曲ですね」「いいセンスですね」など、**自分の表示名を使わず**に述べてください。\n\n`
       : '';
   const userTasteRaw = typeof options?.userTasteSummary === 'string' ? options.userTasteSummary.trim() : '';
   const userTasteBlock =
@@ -229,7 +241,7 @@ export async function generateChatReply(
     : '・**どのアルバムに収録か・デビュー作か・各国チャートの順位**などディスコグラフィーの細部を聞かれたとき、またはユーザーがその種の事実を述べて確認してきたときは、**検証できないまま「はい、そのとおりです」と肯定しない**こと。確認できない場合は「すみません、手元では照合できません。公式ディスコグラフィーや信頼できる音楽データベースでのご確認をおすすめします」のように案内する。\n';
 
   const prompt = `あなたは洋楽を聴きながら参加者とチャットしている「音楽仲間」のAIです。自分は「私」と呼んでください。性別を聞かれたら「性別はありません」と答えてください。
-以下の直近の会話に対して返してください。${songContext}${personaInstructionBlock}${userTasteBlock}
+以下の直近の会話に対して返してください。${songContext}${personaInstructionBlock}${characterSelfGuardBlock}${userTasteBlock}
 ${atMentionBlock}${defaultLengthRule}
 ・同意するときは「はい、そうですね」ではなく「そう思います」を使うこと。
 ・PV・MV（ミュージックビデオ）・プロモーション映像の話題は**拒否や話題転換だけで済ませない**こと。**大物監督が手がけた演出、大物俳優や著名人の出演、映画・ドラマ・CM・ゲームなどとのタイアップで話題になった例**も含め、**監督・出演者・作品連携・撮影地や制作エピソード・当時の反響・よく語られるコンセプト**など、テキストとしても答えられる範囲では普通に答えてください。**日本の漫画家・アニメ作家がキャラクターや映像で関与した例**（例：Daft Punk『Discovery』期の映像とアニメ映画『インターステラ5555』で松本零士氏のキャラクター・美術面の関与が語られるケース）も同様に、知っている範囲で答える。
@@ -416,6 +428,12 @@ export async function generateCharacterSongPick(
 ・選んだ1曲の検索用クエリと表示名と理由以外は書かない。
 ${songHint}${styleHint}【直近の会話】
 ${lines || '(会話なし)'}
+
+【選曲の優先順位（重要）】
+・**最優先は参加者（ユーザー側）の流れ**です。「〇〇さんの選曲です！」や参加者の発言・貼った曲から読み取れる**ジャンル・時代・ムード**に寄せてください。
+・**AIキャラ自身が直前にかけた曲**や、**AI曲解説の話題だけ**に引きずって、参加者がかけている路線（例: US オルタナティブロック、90年代ロックなど）から大きく外れたジャンル（例: 盛り上がり目的だけのファンク／ディスコ連打）に飛ばさないでください。同じムードの中で次の一曲、または自然な横展開（同系統のアーティスト・同年代の近いサウンド）にしてください。
+・上に【現在の曲】【現在の曲のジャンル】があるときは、**それに沿うか、会話で参加者が触れている系統に合わせる**ことを強く推奨します。ジャンルがロック／オルタナ系なのに、理由なくパーティー・ファンク中心だけを続けないでください。
+・会話ログの「AI:」行は参考程度とし、**誰が選曲したか・何が流れているかは参加者の行と【現在の曲】を主**に判断してください。
 
 【出力ルール】
 ・候補がある場合は必ず3行だけで出力（行を増やさない）:

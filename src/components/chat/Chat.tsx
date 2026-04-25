@@ -136,7 +136,18 @@ function getSelectorNameFromBody(body: string): string | null {
   return match ? match[1].trim() : null;
 }
 
-function uiLabelClassName(label: string | null): string {
+/** UserBar の「AI」ラベル＋表示名と同じ読み（例: AI エージェント1号）でチャットバッジを揃える */
+function aiCharacterParticipantBadgeLabel(displayName: string | undefined | null): string {
+  const raw = (displayName ?? '').trim();
+  const base = raw || 'エージェント1号';
+  if (/^AI\s+/i.test(base)) return base;
+  return `AI ${base}`;
+}
+
+function uiLabelClassName(label: string | null, opts?: { isCharacterChat?: boolean }): string {
+  if (opts?.isCharacterChat) {
+    return 'border-amber-500/70 bg-amber-900/35 text-amber-200';
+  }
   if (!label) return 'border-gray-500/70 bg-gray-800/65 text-gray-200';
   if (label.startsWith('AI曲解説')) return 'border-sky-500/70 bg-sky-900/35 text-sky-200';
   if (label === '曲クイズ') return 'border-emerald-500/70 bg-emerald-900/35 text-emerald-200';
@@ -1136,6 +1147,14 @@ export default function Chat({
                 (parsedUiLabel.label === 'お題講評' || m.aiSource === 'theme_playlist_room');
               const isCharacterChatMessage =
                 m.messageType === 'ai' && m.aiSource === 'character_chat';
+              /** 本文は【AIキャラ】のまま保存しつつ、バッジは参加者一覧と同じ「AI ＋表示名」表記 */
+              const characterParticipantBadgeText = isCharacterChatMessage
+                ? aiCharacterParticipantBadgeLabel(m.displayName)
+                : null;
+              const showAiCharacterBadge = characterParticipantBadgeText !== null;
+              const showAiMessageBadge = Boolean(parsedUiLabel.label) || showAiCharacterBadge;
+              const aiMessageBadgeLabelText =
+                characterParticipantBadgeText ?? parsedUiLabel.label;
               const isAiCommentaryLabeled =
                 m.messageType === 'ai' &&
                 typeof parsedUiLabel.label === 'string' &&
@@ -1205,14 +1224,19 @@ export default function Chat({
                           : undefined
                       }
                     >
-                      {parsedUiLabel.label == null && !isSelectionAnnounce ? (
+                      {parsedUiLabel.label == null &&
+                      !isSelectionAnnounce &&
+                      !isCharacterChatMessage ? (
                         <span className="mr-2 font-medium text-gray-300">{m.displayName ?? 'ユーザー'}</span>
                       ) : null}
-                      {parsedUiLabel.label ? (
+                      {showAiMessageBadge && aiMessageBadgeLabelText ? (
                         <span
-                          className={`mr-2 inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-semibold ${uiLabelClassName(parsedUiLabel.label)}`}
+                          className={`mr-2 inline-flex max-w-[min(16rem,52vw)] shrink-0 items-center truncate rounded border px-1.5 py-0.5 text-[10px] font-semibold ${uiLabelClassName(parsedUiLabel.label, {
+                            isCharacterChat: isCharacterChatMessage,
+                          })}`}
+                          title={aiMessageBadgeLabelText}
                         >
-                          {parsedUiLabel.label}
+                          {aiMessageBadgeLabelText}
                         </span>
                       ) : null}
                       {bodyContent}
