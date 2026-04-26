@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { displayNameFromAuthUserMetadata } from '@/lib/auth-user-public-display-name';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,6 +13,8 @@ type LiveRoom = {
   displayTitle: string;
   joinLocked: boolean;
   canEnter: boolean;
+  /** 会を開始したユーザーの表示名（auth メタデータ由来。未取得時は null） */
+  hostDisplayName: string | null;
 };
 
 type RoomGatheringRow = {
@@ -20,7 +23,32 @@ type RoomGatheringRow = {
   title: string | null;
   started_at: string | null;
   join_locked?: boolean | null;
+  created_by?: string | null;
 };
+
+async function hostDisplayNameByUserId(
+  admin: NonNullable<ReturnType<typeof createAdminClient>>,
+  userIds: string[],
+): Promise<Map<string, string | null>> {
+  const map = new Map<string, string | null>();
+  const unique = [...new Set(userIds.map((id) => id.trim()).filter(Boolean))];
+  if (unique.length === 0) return map;
+  await Promise.all(
+    unique.map(async (uid) => {
+      try {
+        const { data, error } = await admin.auth.admin.getUserById(uid);
+        if (error || !data?.user) {
+          map.set(uid, null);
+          return;
+        }
+        map.set(uid, displayNameFromAuthUserMetadata(data.user));
+      } catch {
+        map.set(uid, null);
+      }
+    }),
+  );
+  return map;
+}
 
 function safeRoomId(raw: string): string | null {
   const t = raw.trim();
@@ -76,8 +104,8 @@ export async function GET(request: Request) {
 
   const buildBaseQuery = (withJoinLocked: boolean) => {
     const selectCols = withJoinLocked
-      ? 'id, room_id, title, started_at, join_locked'
-      : 'id, room_id, title, started_at';
+      ? 'id, room_id, title, started_at, join_locked, created_by'
+      : 'id, room_id, title, started_at, created_by';
     return supabase
       .from('room_gatherings')
       .select(selectCols)
@@ -148,15 +176,29 @@ export async function GET(request: Request) {
     );
   }
 
-  const baseRooms: LiveRoom[] = (data ?? []).map((r) => ({
-    gatheringId: typeof r.id === 'string' ? r.id : '',
-    roomId: String(r.room_id ?? ''),
-    title: typeof r.title === 'string' && r.title.trim() ? r.title.trim() : 'タイトル未設定の会',
-    startedAt: typeof r.started_at === 'string' ? r.started_at : null,
-    displayTitle: '',
-    joinLocked: r.join_locked === true,
-    canEnter: true,
-  }));
+  const createdByIds = (data ?? [])
+    .map((r) => (typeof (r as RoomGatheringRow).created_by === 'string' ? (r as RoomGatheringRow).created_by!.trim() : ''))
+    .filter(Boolean);
+  const admin = createAdminClient();
+  const hostByUserId =
+    admin && createdByIds.length > 0 ? await hostDisplayNameByUserId(admin, createdByIds) : new Map<string, string | null>();
+
+  const baseRooms: LiveRoom[] = (data ?? []).map((r) => {
+    const row = r as RoomGatheringRow;
+    const roomId = String(row.room_id ?? '');
+    const createdBy = typeof row.created_by === 'string' && row.created_by.trim() ? row.created_by.trim() : '';
+    const hostDisplayName = createdBy ? (hostByUserId.get(createdBy) ?? null) : null;
+    return {
+      gatheringId: typeof row.id === 'string' ? row.id : '',
+      roomId,
+      title: typeof row.title === 'string' && row.title.trim() ? row.title.trim() : 'タイトル未設定の会',
+      startedAt: typeof row.started_at === 'string' ? row.started_at : null,
+      displayTitle: '',
+      joinLocked: row.join_locked === true,
+      canEnter: true,
+      hostDisplayName,
+    };
+  });
 
   const lobbyMap = await lobbyDisplayTitleByRoomIds(
     supabase,
@@ -170,7 +212,6 @@ export async function GET(request: Request) {
 
   let organizerRoomIdSet = new Set<string>();
   if (sessionUserId && roomIdsLive.length > 0) {
-    const admin = createAdminClient();
     if (admin) {
       const { data: myLiveRows, error: myLiveErr } = await admin
         .from('room_gatherings')
@@ -190,7 +231,6 @@ export async function GET(request: Request) {
 
   let enteredGatheringSet = new Set<string>();
   if (sessionUserId && gatheringIdsLive.length > 0) {
-    const admin = createAdminClient();
     if (admin) {
       const { data: joinedRows, error: joinedErr } = await admin
         .from('user_room_participation_history')
@@ -238,6 +278,7 @@ export async function GET(request: Request) {
               joinLocked: first.joinLocked,
               canEnter: first.canEnter,
               isOrganizer,
+              hostDisplayName: first.hostDisplayName,
             }
           : {
               roomId,

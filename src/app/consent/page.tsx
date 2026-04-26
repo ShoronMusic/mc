@@ -25,7 +25,7 @@ export default function ConsentPage({
         </header>
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
           <div className="mb-6 border-b border-gray-800 pb-6">
-            <StartPageSiteIntro forceShow />
+            <StartPageSiteIntro forceShow liveChatsAfterHero />
           </div>
           <GuideFullNotice />
         </div>

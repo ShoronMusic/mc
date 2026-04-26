@@ -3,6 +3,7 @@
 import Image from 'next/image';
 import { useEffect, useState } from 'react';
 import { GUEST_STORAGE_KEY } from '@/components/auth/JoinChoice';
+import { ConsentPageLiveChats } from '@/components/home/ConsentPageLiveChats';
 import { createClient, isSupabaseConfigured } from '@/lib/supabase/client';
 
 /** サイト紹介動画（トップ・ご利用にあたっての説明内） */
@@ -15,9 +16,11 @@ const SITE_INTRO_YOUTUBE_VIDEO_ID = 'gtwgUAcV3rE';
 interface StartPageSiteIntroProps {
   /** 同意画面などで未ログイン判定をスキップして常時表示する */
   forceShow?: boolean;
+  /** 同意ページなど: 先頭カバー画像の直後に開催中一覧を差し込む */
+  liveChatsAfterHero?: boolean;
 }
 
-export function StartPageSiteIntro({ forceShow = false }: StartPageSiteIntroProps) {
+export function StartPageSiteIntro({ forceShow = false, liveChatsAfterHero = false }: StartPageSiteIntroProps) {
   const [show, setShow] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -56,6 +59,7 @@ export function StartPageSiteIntro({ forceShow = false }: StartPageSiteIntroProp
           priority
         />
       </figure>
+      {liveChatsAfterHero ? <ConsentPageLiveChats /> : null}
       <div className="mb-4 rounded-lg border border-gray-700 bg-gray-900/40 p-3 text-sm text-gray-300">
         <p className="mb-2 leading-relaxed">
           YouTubeの曲を参加者みんなで同じタイミングで聴きながら、チャットで交流できる洋楽サロンです。
