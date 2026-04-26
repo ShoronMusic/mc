@@ -138,26 +138,38 @@ export function ConsentPageLiveChats() {
         </p>
       )}
       {!loading && activeRows.length > 0 && (
-        <ul className="flex flex-col gap-2">
-          {activeRows.map((row) => (
-            <li
-              key={row.roomId}
-              className="rounded-md border border-gray-700/90 bg-gray-950/50 px-2.5 py-2 text-xs leading-snug text-gray-300"
-            >
-              <div className="font-medium text-gray-100">{row.roomName}</div>
-              <div className="mt-1 grid grid-cols-1 gap-0.5 sm:grid-cols-2 sm:gap-x-2">
-                <div>
-                  <span className="text-gray-500">チャットオーナー</span>
-                  <span className="block text-gray-200">{row.owner}</span>
-                </div>
-                <div>
-                  <span className="text-gray-500">参加人数</span>
-                  <span className="block text-gray-200">{row.count} 人</span>
-                </div>
-              </div>
-            </li>
-          ))}
-        </ul>
+        <div className="overflow-x-auto rounded-md border border-gray-700">
+          <table className="w-full min-w-[280px] border-collapse text-left text-xs text-gray-200">
+            <thead>
+              <tr className="border-b border-gray-700 bg-gray-800/90">
+                <th scope="col" className="whitespace-nowrap px-2 py-2 text-center font-semibold text-gray-300">
+                  No
+                </th>
+                <th scope="col" className="px-2 py-2 font-semibold text-gray-300">
+                  チャットルーム
+                </th>
+                <th scope="col" className="px-2 py-2 font-semibold text-gray-300">
+                  オーナー
+                </th>
+                <th scope="col" className="whitespace-nowrap px-2 py-2 text-center font-semibold text-gray-300">
+                  人数
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {activeRows.map((row, i) => (
+                <tr key={row.roomId} className="border-b border-gray-800/90 bg-gray-950/40 last:border-b-0">
+                  <td className="align-middle whitespace-nowrap px-2 py-2 text-center tabular-nums text-gray-400">
+                    {i + 1}
+                  </td>
+                  <td className="align-middle break-words px-2 py-2 font-medium text-gray-100">{row.roomName}</td>
+                  <td className="align-middle break-words px-2 py-2 text-gray-300">{row.owner}</td>
+                  <td className="align-middle whitespace-nowrap px-2 py-2 text-center tabular-nums">{row.count} 人</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
       {!loading && activeRows.length > 0 && (
         <p className="mt-2 text-center text-[10px] text-gray-600">約{POLL_MS / 1000}秒ごとに更新</p>
