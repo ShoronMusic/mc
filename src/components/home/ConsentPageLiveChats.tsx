@@ -158,7 +158,10 @@ export function ConsentPageLiveChats() {
             </thead>
             <tbody>
               {activeRows.map((row, i) => (
-                <tr key={row.roomId} className="border-b border-gray-800/90 bg-gray-950/40 last:border-b-0">
+                <tr
+                  key={row.roomId}
+                  className="border-b border-gray-800/90 last:border-b-0 odd:bg-gray-950/50 even:bg-gray-800/40"
+                >
                   <td className="align-middle whitespace-nowrap px-2 py-2 text-center tabular-nums text-gray-400">
                     {i + 1}
                   </td>
