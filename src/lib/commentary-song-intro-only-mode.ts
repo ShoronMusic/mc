@@ -1,5 +1,6 @@
 /**
- * 曲解説: Music8 / 事実ブロックに「確証あるリリース年」と「収録・シングル等の出自」が揃わないときは、
+ * 曲解説: Music8 / 事実ブロックに「確証あるリリース年」または
+ * 「収録・シングル等の出自」のどちらも見当たらないときだけ、
  * AI による憶測コメントを避け、曲紹介のみにする。
  */
 
@@ -44,7 +45,7 @@ function hasTrustedReleaseProvenance(
 }
 
 /**
- * 確証あるリリース年と、収録／シングル等の出自の両方が参照データで示せない場合に true（曲紹介のみへ）。
+ * 確証あるリリース年と、収録／シングル等の出自の両方が欠ける場合に true（曲紹介のみへ）。
  */
 export function shouldUseSongIntroOnlyDiscographyMode(params: {
   music8Song: MusicaichatSongJson | unknown | null;
@@ -60,7 +61,8 @@ export function shouldUseSongIntroOnlyDiscographyMode(params: {
   const hasYear =
     musicaichatSongHasStructuredReleaseYear(params.music8Song) || factsTextHasConcreteYear(combined);
   const hasProvenance = hasTrustedReleaseProvenance(params.music8Song, combined);
-  return !(hasYear && hasProvenance);
+  // 緩和: 年か出自のどちらか一方でも取れるなら通常解説に戻す。
+  return !(hasYear || hasProvenance);
 }
 
 /** 曲解説・comment-pack 基本枠用の定型文（憶測なし・80字以上を目安） */

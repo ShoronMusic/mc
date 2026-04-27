@@ -13,7 +13,7 @@ test('intro-only: no Music8 song and empty facts → false (fallback to normal c
   );
 });
 
-test('intro-only: Music8 releases year but facts lack album/single wording → true', () => {
+test('intro-only: Music8 releases year but facts lack album/single wording → false', () => {
   const song = {
     stable_key: { artist_slug: 'a', song_slug: 'b' },
     releases: { original_release_date: '1979-01-01' },
@@ -23,17 +23,17 @@ test('intro-only: Music8 releases year but facts lack album/single wording → t
     '【Music8 参照事実（外部マスタ。本文はこれと矛盾させない。推測で補わない）】\n・ジャンル： New wave\n・stable_key: a_b';
   assert.equal(
     shouldUseSongIntroOnlyDiscographyMode({ music8Song: song, combinedFactsText: block }),
-    true,
+    false,
   );
 });
 
-test('intro-only: facts with year in text but no provenance → true', () => {
+test('intro-only: facts with year in text but no provenance → false', () => {
   assert.equal(
     shouldUseSongIntroOnlyDiscographyMode({
       music8Song: null,
       combinedFactsText: '・1979年頃に話題となった',
     }),
-    true,
+    false,
   );
 });
 
@@ -44,6 +44,26 @@ test('intro-only: facts with year + シングル → false', () => {
       combinedFactsText: '・1979年のシングルとしてリリース',
     }),
     false,
+  );
+});
+
+test('intro-only: facts with provenance only (no concrete year) → false', () => {
+  assert.equal(
+    shouldUseSongIntroOnlyDiscographyMode({
+      music8Song: null,
+      combinedFactsText: '・デビュー作のアルバム『X』に収録された楽曲です',
+    }),
+    false,
+  );
+});
+
+test('intro-only: references exist but neither year nor provenance → true', () => {
+  assert.equal(
+    shouldUseSongIntroOnlyDiscographyMode({
+      music8Song: null,
+      combinedFactsText: '・ジャンル: soul',
+    }),
+    true,
   );
 });
 
