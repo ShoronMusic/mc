@@ -52,6 +52,7 @@ import {
   parseOptionalFreeSlotIndex,
 } from '@/lib/comment-pack-slots';
 import { buildSupergroupPromptBlock } from '@/lib/supergroup-artist';
+import { fetchMusicBrainzCommentaryFactsBlock } from '@/lib/musicbrainz-commentary-facts';
 import {
   buildCommentPackSessionContextBlock,
   generateCommentPackSessionBridge,
@@ -65,7 +66,7 @@ import {
   skipMusic8FactInjectEnv,
 } from '@/lib/music8-musicaichat';
 import {
-  buildSongIntroOnlyBaseComment,
+  buildSongIntroOnlyArtistFocusComment,
   shouldUseSongIntroOnlyDiscographyMode,
 } from '@/lib/commentary-song-intro-only-mode';
 import { insertAiCommentaryUnavailableEntry } from '@/lib/ai-commentary-unavailable-log';
@@ -474,10 +475,18 @@ export async function POST(request: Request) {
       !skipMusic8FactInject && musicaichatSong != null
         ? buildMusicaichatFactsForAiPromptBlock(musicaichatSong).trim()
         : '';
+    const mbFactsBlockTrimmed =
+      (await fetchMusicBrainzCommentaryFactsBlock(
+        (artistDisplay ?? artist ?? authorName ?? '').trim(),
+        (song || title).trim(),
+      )) ?? '';
     const songIntroOnlyDiscography = shouldUseSongIntroOnlyDiscographyMode({
       music8Song: musicaichatSong ?? fallbackMusic8Song,
-      combinedFactsText: music8FactsBlockTrimmed,
+      combinedFactsText: [music8FactsBlockTrimmed, mbFactsBlockTrimmed].filter(Boolean).join('\n'),
     });
+    const responseSlots: CommentPackSlotSelection = songIntroOnlyDiscography
+      ? [true, false, false, false, false]
+      : slots;
     const baseOnlyPack = baseOnlyPackCore || songIntroOnlyDiscography;
     const songQuizExtensionFinal = songIntroOnlyDiscography
       ? { songQuiz: { enabled: false as const } }
@@ -547,7 +556,11 @@ export async function POST(request: Request) {
           if (isSupergroupArtist && !hasSupergroupContext(cached.baseComment)) {
             // 旧キャッシュでスーパーグループ背景が欠ける場合は再生成を優先
           } else {
-            const filtered = applySlotsToPackBodies(cached.baseComment, [...cached.freeComments], slots);
+            const filtered = applySlotsToPackBodies(
+              cached.baseComment,
+              [...cached.freeComments],
+              responseSlots,
+            );
             let baseOutLib = filtered.baseComment;
             const freePolished = polishCachedBodiesForGemma
               ? filtered.freeComments.map((c) =>
@@ -625,10 +638,16 @@ export async function POST(request: Request) {
     }
     const music8FactsSection =
       music8FactsBlockTrimmed.length > 0 ? `\n${music8FactsBlockTrimmed}\n` : '';
+    const musicBrainzFactsSection =
+      mbFactsBlockTrimmed.length > 0
+        ? `\n【MusicBrainz 参照事実（外部DB。本文はこれと矛盾させない）】\n${mbFactsBlockTrimmed}\n`
+        : '';
     const music8SourcePolicyLine =
       music8FactsSection.length > 0
         ? `・下記【Music8 参照事実】はマスター由来の要約です。**記載のリリース時期・ジャンル分類・アルバム名などと本文を矛盾させないこと。**参照に無い受賞・チャート順位・固有名は捏造しないこと。参照と YouTube メタが明確に食い違うときは断定を避け、メタデータ優先でよい。`
-        : `・本APIは Music8 等の外部楽曲DBを参照していません。根拠のない固有名・年号を作らないこと。`;
+        : musicBrainzFactsSection.length > 0
+          ? `・下記【MusicBrainz 参照事実】は照合済みの事実です。盤名・年号・シングル/アルバム区分はこの範囲のみで述べ、補完・推測しないこと。`
+          : `・本APIは Music8 等の外部楽曲DBを参照していません。根拠のない固有名・年号を作らないこと。`;
 
     const metaLockBlock = `【メタデータの前提（厳守）】
 ${adminTitleHint}・YouTube 動画タイトル（原文）: ${rawYouTubeTitle}
@@ -644,7 +663,7 @@ ${supergroupBlock}
 ・アーティスト名と曲名を入れ替えたり、別の架空の曲として語らないこと。
 ・タイトル・チャンネル名と矛盾するリリース年・アルバム名・編成・未来の年号は書かない。不明・不確実ならその一句を省くか「〜として知られる」など弱い表現にとどめる。
 ${music8SourcePolicyLine}
-・【曲名】は既に (Official Video)・(Lyric Video) など**公式動画・配信向けの副題を除いた**表記です。本文では【曲名】の表記どおり使うこと。**Remix・Remaster が【曲名】に含まれるときは省略せず**そのまま書く（勝手に短くしない）。${music8FactsSection}`;
+・【曲名】は既に (Official Video)・(Lyric Video) など**公式動画・配信向けの副題を除いた**表記です。本文では【曲名】の表記どおり使うこと。**Remix・Remaster が【曲名】に含まれるときは省略せず**そのまま書く（勝手に短くしない）。${music8FactsSection}${musicBrainzFactsSection}`;
 
     // 1. 基本コメント（/commentary と似た役割だが、このAPI専用に少し短めに生成）
     const basePromptTail = isNewRelease
@@ -725,7 +744,11 @@ ${basePromptTail}`;
       }
       baseText = fromClient;
     } else if (songIntroOnlyDiscography) {
-      baseText = buildSongIntroOnlyBaseComment(artistLabel, songLabel);
+      baseText = buildSongIntroOnlyArtistFocusComment({
+        artistLabel,
+        songLabel,
+        music8Song: musicaichatSong ?? fallbackMusic8Song,
+      });
     } else {
       if (!model) {
         return NextResponse.json({ error: 'Gemini is not configured', ...songQuizExtensionFinal }, { status: 503 });
@@ -738,7 +761,11 @@ ${basePromptTail}`;
         baseText = (baseText + COMMENT_PACK_NEW_RELEASE_DISCLAIMER).trim();
       }
 
-      const filteredEarlyBaseOnly = applySlotsToPackBodies(baseText.trim(), ['', '', ''], slots);
+      const filteredEarlyBaseOnly = applySlotsToPackBodies(
+        baseText.trim(),
+        ['', '', '', ''],
+        responseSlots,
+      );
       if (
         packPhase === 'base' &&
         !baseOnlyPack &&
@@ -1264,7 +1291,7 @@ ${isRemixFocusTopic ? banBlockRemixFocus : isCoverFocusTopic ? banBlockCoverFocu
     const freeCommentTidbitIds =
       !baseOnlyPack && tidbitIds.length > 1 ? tidbitIds.slice(1) : [];
 
-    const filteredOut = applySlotsToPackBodies(baseText, freeBodiesTrimmedTriple, slots);
+    const filteredOut = applySlotsToPackBodies(baseText, freeBodiesTrimmedTriple, responseSlots);
 
     if (songIntroOnlyDiscography && packPhase !== 'frees') {
       const logClient = createAdminClient();

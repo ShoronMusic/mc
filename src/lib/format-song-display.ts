@@ -1482,6 +1482,17 @@ export function buildArtistSongFromTitleSegments(
   };
 }
 
+function decodeCommonHtmlEntities(input: string): string {
+  const t = (input ?? '').trim();
+  if (!t || t.indexOf('&') < 0) return t;
+  return t
+    .replace(/&amp;/gi, '&')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>');
+}
+
 /**
  * @param videoDescription YouTube Data API の snippet.description（取れるとき）。
  *   「Music video by … performing …」を最優先し、oEmbed だけの逆転表示を防ぐ。
@@ -1492,7 +1503,7 @@ export function formatArtistTitle(
   videoDescription?: string | null,
   youtubeChannelTitle?: string | null,
 ): string {
-  const cleaned = cleanTitle(title);
+  const cleaned = cleanTitle(decodeCommonHtmlEntities(title));
   const optsBase = {
     ...(videoDescription?.trim() ? { videoDescription } : {}),
     ...(youtubeChannelTitle != null && String(youtubeChannelTitle).trim()
@@ -1509,7 +1520,7 @@ export function formatArtistTitle(
     return cleaned;
   }
 
-  const author = cleanAuthor(authorName);
+  const author = cleanAuthor(decodeCommonHtmlEntities(authorName));
   if (!author || isLikelyPersonalChannelName(author)) {
     if (opts) {
       const { artistDisplay, song } = getArtistAndSong(cleaned, null, opts);

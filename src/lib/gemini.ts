@@ -440,25 +440,72 @@ ${lines || '(会話なし)'}
 1行目: YouTube検索用クエリ（Artist Song）
 2行目: 表示名（Artist - Song）
 3行目: 選曲理由（日本語で1文、20〜55文字、やさしい言葉。他曲名や別候補には触れない）
-・会話から雰囲気が読めない場合のみ null とだけ出力。
+・会話から雰囲気が読みにくい場合でも、**必ず1曲を選んで3行で出力**する（nullは禁止）。
+・迷ったら【現在の曲】やその周辺ジャンルに近い、定番の洋楽1曲を選ぶ。
 ・70年代〜現在の洋楽から選ぶ。
 ・難しい専門用語は使わない。`;
 
   try {
+    const buildFallbackPick = (): CharacterSongPick => {
+      const cur = (currentSong ?? '').trim();
+      const m = /^(.+?)\s*-\s*(.+)$/.exec(cur);
+      if (m) {
+        const artist = m[1].trim();
+        const song = m[2].trim();
+        if (artist && song) {
+          return {
+            query: `${artist} ${song}`,
+            confirmationText: `${artist} - ${song}`,
+            reason: '流れを切らさないよう、この路線でつなげます。',
+          };
+        }
+      }
+      return {
+        query: 'Earth Wind & Fire September',
+        confirmationText: 'Earth, Wind & Fire - September',
+        reason: '会話の流れに合わせて、定番の一曲でつなげます。',
+      };
+    };
+
     const result = await model.generateContent(prompt);
     logGeminiUsage('character_song_pick', result.response);
     await persistGeminiUsageLog('character_song_pick', result.response.usageMetadata, usageMeta);
-    const out = readGeneratedText(result.response, 'character_song_pick');
-    if (!out || out.toLowerCase() === 'null') return null;
-    const outLines = out.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
-    const query = outLines[0] ?? '';
-    if (!query) return null;
+    let out = readGeneratedText(result.response, 'character_song_pick');
+    let outLines = out.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+    let query = outLines[0] ?? '';
+    if (!out || out.toLowerCase() === 'null' || !query) {
+      const retryPrompt = `${prompt}\n\n（最終指示）nullは禁止。必ず3行で1曲だけ出力してください。`;
+      const retry = await model.generateContent(retryPrompt);
+      logGeminiUsage('character_song_pick', retry.response);
+      await persistGeminiUsageLog('character_song_pick', retry.response.usageMetadata, usageMeta);
+      out = readGeneratedText(retry.response, 'character_song_pick');
+      outLines = out.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+      query = outLines[0] ?? '';
+    }
+    if (!out || out.toLowerCase() === 'null' || !query) return buildFallbackPick();
     const confirmationText = outLines[1] ?? query.replace(/^(\S+)\s+(.+)$/, '$1 - $2');
     const reason = (outLines[2] ?? 'この流れに合う一曲だと思います。').slice(0, 80);
     return { query, confirmationText, reason };
   } catch (e) {
     console.error('[gemini] generateCharacterSongPick:', e);
-    return null;
+    const cur = (currentSong ?? '').trim();
+    const m = /^(.+?)\s*-\s*(.+)$/.exec(cur);
+    if (m) {
+      const artist = m[1].trim();
+      const song = m[2].trim();
+      if (artist && song) {
+        return {
+          query: `${artist} ${song}`,
+          confirmationText: `${artist} - ${song}`,
+          reason: '流れを切らさないよう、この路線でつなげます。',
+        };
+      }
+    }
+    return {
+      query: 'Earth Wind & Fire September',
+      confirmationText: 'Earth, Wind & Fire - September',
+      reason: '会話の流れに合わせて、定番の一曲でつなげます。',
+    };
   }
 }
 

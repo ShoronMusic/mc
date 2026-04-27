@@ -218,4 +218,9 @@ const p18 = resolveOEmbedToMyListStylePack('Passenger | Let Her Go (Official Vid
 assert(p18.artistDisplay === 'Passenger', `p18 artistDisplay: ${p18.artistDisplay}`);
 assert(p18.song === 'Let Her Go', `p18 song: ${p18.song}`);
 
+// 区切り無し "Artist Song"（個人アップローダー）を救済
+const p19 = resolveOEmbedToMyListStylePack('Stevie Wonder Superstition', 'lozzagermain');
+assert(p19.artistDisplay === 'Stevie Wonder', `p19 artistDisplay: ${p19.artistDisplay}`);
+assert(p19.song === 'Superstition', `p19 song: ${p19.song}`);
+
 console.log('my-list-youtube-title-suggest unit tests: OK');

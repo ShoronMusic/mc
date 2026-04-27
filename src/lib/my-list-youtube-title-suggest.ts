@@ -85,6 +85,33 @@ function normalizeSpaces(s: string): string {
   return s.replace(/\s+/g, ' ').trim();
 }
 
+function looksLikeAsciiTitleWord(token: string): boolean {
+  if (!/^[A-Za-z][A-Za-z0-9'&.+-]*$/.test(token)) return false;
+  return /^[A-Z]/.test(token);
+}
+
+/**
+ * 区切り記号なしの "Stevie Wonder Superstition" のような並びを、
+ * 先頭2語=アーティスト、残り=曲名として控えめに推定する。
+ */
+function splitPlainArtistSongWithoutDash(title: string): { artist: string; song: string } | null {
+  const t = normalizeSpaces(title);
+  if (!t) return null;
+  if (/[|]/.test(t)) return null;
+  if (/\s[-\u2013\u2014\u2015\u2011]\s|[-\u2013\u2014\u2015\u2011]/.test(t)) return null;
+  if (/'[^']{2,240}'/.test(t)) return null;
+  if (/\([^)]{2,120}\)/.test(t)) return null;
+  const words = t.split(/\s+/).filter(Boolean);
+  if (words.length < 3 || words.length > 6) return null;
+  if (!words.every(looksLikeAsciiTitleWord)) return null;
+  const artist = words.slice(0, 2).join(' ').trim();
+  const song = words.slice(2).join(' ').trim();
+  if (!artist || !song) return null;
+  const firstTwo = words.slice(0, 2);
+  if (!firstTwo.some((w) => w.length >= 5)) return null;
+  return { artist, song };
+}
+
 function looksLikeArtistNameInParen(s: string): boolean {
   const t = s.trim();
   if (t.length < 2 || t.length > 80) return false;
@@ -259,6 +286,18 @@ export function suggestMyListArtistTitleFromYoutubeStyle(
   const splitRaw =
     splitTitleAtFirstSpacedDash(t) ?? splitTitleAtFirstDashLoose(t) ?? splitTitleAtFirstPipe(t);
   if (!splitRaw) {
+    const plainNoDash = splitPlainArtistSongWithoutDash(t);
+    if (
+      plainNoDash &&
+      a &&
+      !isLikelyYoutubeChannelUploader(a) &&
+      parseCommaSeparatedArtists(a).length <= 1
+    ) {
+      return {
+        artists: [plainNoDash.artist],
+        title: cleanMyListSongTitle(plainNoDash.song),
+      };
+    }
     const quotedPair = splitArtistQuotedSongFromYoutubeTitle(t);
     if (quotedPair) {
       const fromQuote = parseCommaSeparatedArtists(quotedPair.artist);

@@ -15,6 +15,16 @@ const DEFAULT_ROOM_IDS = Array.from({ length: DEFAULT_ROOM_COUNT }, (_, i) =>
   String(i + 1).padStart(2, '0'),
 );
 
+function readCsvEnvSet(key: string): Set<string> {
+  const raw = process.env[key] ?? '';
+  return new Set(
+    raw
+      .split(',')
+      .map((v) => v.trim())
+      .filter(Boolean),
+  );
+}
+
 function safeRoomId(raw: string): string | null {
   const t = raw.trim();
   if (!t || t.length > 48) return null;
@@ -394,6 +404,43 @@ export async function GET() {
       isLive: prev.isLive || isLive,
       lastStartedAt: prev.lastStartedAt ?? startedAt,
     });
+  }
+
+  const extraVisibleUserIds = readCsvEnvSet('DEV_ROOM_EXTRA_VISIBLE_USER_IDS');
+  if (extraVisibleUserIds.has(user.id)) {
+    const extraVisibleRoomIds = Array.from(readCsvEnvSet('DEV_ROOM_EXTRA_VISIBLE_ROOM_IDS'));
+    const safeExtraRoomIds = (extraVisibleRoomIds.length > 0 ? extraVisibleRoomIds : ['02'])
+      .map((id) => safeRoomId(id))
+      .filter((id): id is string => !!id);
+
+    if (safeExtraRoomIds.length > 0) {
+      const { data: extraRows, error: extraErr } = await supabase
+        .from('room_gatherings')
+        .select('room_id, title, status, started_at')
+        .in('room_id', safeExtraRoomIds)
+        .order('started_at', { ascending: false })
+        .limit(CREATED_ROOMS_LIMIT);
+      if (!extraErr) {
+        for (const row of extraRows ?? []) {
+          const roomId = safeRoomId(String(row.room_id ?? ''));
+          if (!roomId) continue;
+          const title = typeof row.title === 'string' && row.title.trim() ? row.title.trim() : '未設定の会';
+          const startedAt = typeof row.started_at === 'string' ? row.started_at : null;
+          const isLive = String(row.status ?? '') === 'live';
+          const prev = map.get(roomId);
+          if (!prev) {
+            map.set(roomId, { roomId, title, isLive, lastStartedAt: startedAt });
+            continue;
+          }
+          map.set(roomId, {
+            roomId,
+            title: prev.title || title,
+            isLive: prev.isLive || isLive,
+            lastStartedAt: prev.lastStartedAt ?? startedAt,
+          });
+        }
+      }
+    }
   }
 
   const lobbyMap = await lobbyDisplayTitleByRoomIds(supabase, Array.from(map.keys()));

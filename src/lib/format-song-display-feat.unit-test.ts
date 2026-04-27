@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import {
   buildAiCommentaryPromptLabels,
   cleanTitle,
+  formatArtistTitle,
   getAmbiguousTitleSegmentsForMusicBrainz,
   getArtistAndSong,
   getArtistDisplayString,
@@ -21,6 +22,12 @@ import { resolveArtistSongForPack } from './youtube-artist-song-for-pack';
 
 assert.equal(compoundArtistCanonicalIfKnown('Hall & Oates'), 'Daryl Hall & John Oates');
 assert.equal(compoundArtistCanonicalIfKnown('Hall and Oates'), 'Daryl Hall & John Oates');
+assert.equal(compoundArtistCanonicalIfKnown('Earth, Wind & Fire'), 'Earth, Wind & Fire');
+assert.equal(compoundArtistCanonicalIfKnown('Earth Wind and Fire'), 'Earth, Wind & Fire');
+assert.equal(compoundArtistCanonicalIfKnown('Kool & the Gang'), 'Kool & the Gang');
+assert.equal(compoundArtistCanonicalIfKnown('Kool and the Gang'), 'Kool & the Gang');
+assert.equal(compoundArtistCanonicalIfKnown('Katrina & The Waves'), 'Katrina & The Waves');
+assert.equal(compoundArtistCanonicalIfKnown('Katrina and The Waves'), 'Katrina & The Waves');
 
 assert.equal(getMainArtist('Die With A Smile'), 'Die With A Smile');
 assert.equal(getArtistDisplayString('Die With A Smile'), 'Die With A Smile');
@@ -135,6 +142,28 @@ assert.equal(cleanTitle('Foo © 1999 Some Label LLC'), 'Foo');
   const r = getArtistAndSong('Echo & The Bunnymen - The Killing Moon', null);
   assert.equal(r.artistDisplay, 'Echo & The Bunnymen');
   assert.equal(r.song, 'The Killing Moon');
+}
+{
+  const at = formatArtistTitle(
+    'Earth, Wind &amp; Fire - September (Official HD Video)',
+    'Earth, Wind &amp; Fire - Topic',
+  );
+  assert.equal(at, 'Earth, Wind & Fire - September');
+}
+{
+  const r = getArtistAndSong('Earth, Wind & Fire - September (Official HD Video)', null);
+  assert.equal(r.artistDisplay, 'Earth, Wind & Fire');
+  assert.equal(r.song, 'September');
+}
+{
+  const r = getArtistAndSong('Kool & the Gang - Celebration (Official Video)', null);
+  assert.equal(r.artistDisplay, 'Kool & the Gang');
+  assert.equal(r.song, 'Celebration');
+}
+{
+  const r = getArtistAndSong('Katrina & The Waves - Walking On Sunshine (Official Video)', null);
+  assert.equal(r.artistDisplay, 'Katrina & The Waves');
+  assert.equal(r.song, 'Walking On Sunshine');
 }
 {
   const url = getMusic8ArtistJsonUrl('Echo & The Bunnymen');

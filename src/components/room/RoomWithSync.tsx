@@ -269,13 +269,11 @@ const AI_FIRST_VOICE =
   '洋楽好きで一緒に楽しむチャットの部屋です。参加者が順番にYouTubeから曲を貼って一緒に鑑賞します。投稿する動画は洋楽の曲・MV・ライブ映像など音楽コンテンツに限ってください（洋楽以外の動画は控えてください）。洋楽ならジャンルや時代は自由です。よろしくお願いします！';
 /** 選曲順の説明 */
 const TURN_ORDER_VOICE =
-  '入室した順で、選曲に参加している方から曲を貼っていきます（視聴専用の方は順番に含めず案内も飛ばします）。退席から30分以内は枠と選曲順を維持し、ターン案内は在室の方へ進みます（予約曲は順番どおり再生されます）。';
+  '入室した順で、選曲に参加している方から曲を貼っていきます（視聴専用の方は順番に含めず案内も飛ばします）。退席した方は順番から外れ、再入室時はその時点の末尾に入ります。';
 /** ターン未取得時の選曲案内（黄色強調） */
 const JOIN_PASTE_YOUTUBE_URL_HINT =
   'YouTubeで選曲した洋楽のURLを発言欄に貼ってください';
 const TIDBIT_COOLDOWN_SEC = 60;
-/** presence から落ちた直後も、入室順の枠を残す時間（選曲順・表示順の土台を維持） */
-const VACANT_SLOT_RETENTION_MS = 30 * 60 * 1000;
 
 function createMessageId(): string {
   return `msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -311,22 +309,6 @@ interface PresenceMemberData {
    * updateStatus で名前・色が変わっても変えない（Ably の timestamp は更新のたびに進むため並びが崩れるのを防ぐ）。
    */
   joinedAtMs?: number;
-}
-
-/** presence 落ち直後の空席枠（クライアント間で共有せず、各クライアントが presence 差分から同じ結果を再構成） */
-interface VacantParticipantSlot {
-  departedAtMs: number;
-  sortKey: number;
-  displayName: string;
-  participatesInSelection: boolean;
-  textColor?: string;
-}
-
-interface LastKnownPresenceSnapshot {
-  displayName: string;
-  participatesInSelection: boolean;
-  textColor?: string;
-  sortKey: number;
 }
 
 interface CandidateSong {
@@ -634,9 +616,6 @@ export default function RoomWithSync({
   /** 入室順のフォールバック（古いクライアントが joinedAtMs を送らない場合）＋ ref 更新後に participants を再計算する */
   const joinOrderByClientIdRef = useRef<Map<string, number>>(new Map());
   const [joinOrderEpoch, setJoinOrderEpoch] = useState(0);
-  const lastKnownByClientIdRef = useRef<Map<string, LastKnownPresenceSnapshot>>(new Map());
-  const prevPresenceIdsRef = useRef<Set<string>>(new Set());
-  const [vacantByClientId, setVacantByClientId] = useState<Record<string, VacantParticipantSlot>>({});
   const presentClientIdsRef = useRef<Set<string>>(new Set());
   const lastPresenceRoomIdRef = useRef<string | null>(null);
   /** この部屋で presence を出し始めた時刻（並び用・部屋が変わったらリセット） */
@@ -645,8 +624,6 @@ export default function RoomWithSync({
     lastPresenceRoomIdRef.current = roomId ?? null;
     joinOrderByClientIdRef.current.clear();
     roomPresenceJoinedAtMsRef.current = null;
-    lastKnownByClientIdRef.current.clear();
-    prevPresenceIdsRef.current = new Set();
   }
   /** ゲスト用の表示名（マイページで変更可能）。非ゲストは displayNameProp をそのまま使う */
   const [guestDisplayName, setGuestDisplayName] = useState(displayNameProp);
@@ -911,10 +888,6 @@ export default function RoomWithSync({
   ]);
 
   useEffect(() => {
-    setVacantByClientId({});
-  }, [roomId]);
-
-  useEffect(() => {
     updateStatus(presencePayload);
   }, [updateStatus, presencePayload]);
 
@@ -940,124 +913,15 @@ export default function RoomWithSync({
   }, [presenceData]);
 
   useEffect(() => {
-    const now = Date.now();
-    const currentIds = new Set(presenceData.map((p) => p.clientId));
-    const prev = prevPresenceIdsRef.current;
-    let joinPruned = false;
-
-    setVacantByClientId((v0) => {
-      let next = v0;
-      let changed = false;
-      const ensureCopy = () => {
-        if (next === v0) next = { ...v0 };
-      };
-
-      for (const [id, slot] of Object.entries(next)) {
-        if (now - slot.departedAtMs > VACANT_SLOT_RETENTION_MS) {
-          ensureCopy();
-          delete next[id];
-          joinOrderByClientIdRef.current.delete(id);
-          joinPruned = true;
-          changed = true;
-        }
-      }
-
-      currentIds.forEach((id) => {
-        if (next[id]) {
-          ensureCopy();
-          delete next[id];
-          changed = true;
-        }
-      });
-
-      prev.forEach((id) => {
-        if (!currentIds.has(id)) {
-          const known = lastKnownByClientIdRef.current.get(id);
-          if (known && !(id in next)) {
-            ensureCopy();
-            next[id] = {
-              departedAtMs: now,
-              sortKey: known.sortKey,
-              displayName: known.displayName,
-              participatesInSelection: known.participatesInSelection,
-              ...(known.textColor ? { textColor: known.textColor } : {}),
-            };
-            changed = true;
-          }
-        }
-      });
-
-      return changed ? next : v0;
-    });
-
-    if (joinPruned) setJoinOrderEpoch((e) => e + 1);
-
-    presenceData.forEach((p) => {
-      const d = p.data as PresenceMemberData | undefined;
-      const j = d?.joinedAtMs;
-      const sortKey =
-        typeof j === 'number' && Number.isFinite(j)
-          ? j
-          : joinOrderByClientIdRef.current.get(p.clientId) ??
-            (typeof p.timestamp === 'number' ? p.timestamp : 0);
-      lastKnownByClientIdRef.current.set(p.clientId, {
-        displayName: (d?.displayName ?? 'ゲスト').trim() || 'ゲスト',
-        participatesInSelection: d?.participatesInSelection !== false,
-        textColor:
-          typeof d?.textColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(d.textColor)
-            ? d.textColor
-            : undefined,
-        sortKey,
-      });
-    });
-
-    prevPresenceIdsRef.current = new Set(currentIds);
-  }, [presenceData]);
-
-  useEffect(() => {
-    const tick = window.setInterval(() => {
-      const now = Date.now();
-      let joinPruned = false;
-      setVacantByClientId((v0) => {
-        let next = v0;
-        let changed = false;
-        const ensureCopy = () => {
-          if (next === v0) next = { ...v0 };
-        };
-        for (const [id, slot] of Object.entries(next)) {
-          if (now - slot.departedAtMs > VACANT_SLOT_RETENTION_MS) {
-            ensureCopy();
-            delete next[id];
-            joinOrderByClientIdRef.current.delete(id);
-            joinPruned = true;
-            changed = true;
-          }
-        }
-        return changed ? next : v0;
-      });
-      if (joinPruned) setJoinOrderEpoch((e) => e + 1);
-    }, 60_000);
-    return () => clearInterval(tick);
-  }, []);
-
-  useEffect(() => {
     const presenceIds = new Set(presenceData.map((p) => p.clientId));
-    const now = Date.now();
-    const allowed = new Set([
-      ...Array.from(presenceIds),
-      ...Object.entries(vacantByClientId)
-        .filter(([, s]) => now - s.departedAtMs <= VACANT_SLOT_RETENTION_MS)
-        .map(([id]) => id),
-    ]);
     setYellowCardByClientId((prev) => {
-      const next = Object.fromEntries(Object.entries(prev).filter(([id]) => allowed.has(id)));
+      const next = Object.fromEntries(Object.entries(prev).filter(([id]) => presenceIds.has(id)));
       return Object.keys(next).length === Object.keys(prev).length ? prev : next;
     });
-  }, [presenceData, vacantByClientId]);
+  }, [presenceData]);
 
   const participants = useMemo(() => {
     void joinOrderEpoch;
-    const now = Date.now();
     const sortKeyForPresence = (p: (typeof presenceData)[number]) => {
       const d = p.data as PresenceMemberData | undefined;
       const j = d?.joinedAtMs;
@@ -1096,24 +960,14 @@ export default function RoomWithSync({
           ...(aid ? { authUserId: aid, publicProfileVisible: visible } : {}),
         };
       });
-
-    const vacantRows = Object.entries(vacantByClientId)
-      .filter(([id]) => !presenceData.some((p) => p.clientId === id))
-      .filter(([, slot]) => now - slot.departedAtMs <= VACANT_SLOT_RETENTION_MS)
-      .map(([clientId, slot]) => ({
-        clientId,
-        displayName: slot.displayName,
-        participatesInSelection: slot.participatesInSelection,
-        timestamp: slot.sortKey,
-        textColor: slot.textColor,
-        status: '退席中',
-        yellowCards: yellowCardByClientId[clientId] ?? 0,
-        isAway: true as const,
-      }));
-
+    const latestHumanTimestamp = presentRows
+      .filter((row) => row.clientId !== AI_CHARACTER_CLIENT_ID)
+      .reduce((max, row) => (row.timestamp > max ? row.timestamp : max), 0);
     const aiJoinedAt =
-      ownerAiCharacterJoinedAtMsRef.current ??
-      (typeof roomPresenceJoinedAtMsRef.current === 'number' ? roomPresenceJoinedAtMsRef.current + 1 : Date.now());
+      latestHumanTimestamp > 0
+        ? latestHumanTimestamp + 1
+        : ownerAiCharacterJoinedAtMsRef.current ??
+          (typeof roomPresenceJoinedAtMsRef.current === 'number' ? roomPresenceJoinedAtMsRef.current + 1 : Date.now());
     const aiRow = ownerAiCharacterJoinEnabled
       ? [
           {
@@ -1129,11 +983,11 @@ export default function RoomWithSync({
         ]
       : [];
 
-    return [...presentRows, ...vacantRows, ...aiRow].sort((a, b) => {
+    return [...presentRows, ...aiRow].sort((a, b) => {
       if (a.timestamp !== b.timestamp) return a.timestamp - b.timestamp;
       return a.clientId.localeCompare(b.clientId);
     });
-  }, [presenceData, yellowCardByClientId, joinOrderEpoch, vacantByClientId, ownerAiCharacterJoinEnabled, ownerAiCharacterName]);
+  }, [presenceData, yellowCardByClientId, joinOrderEpoch, ownerAiCharacterJoinEnabled, ownerAiCharacterName]);
   const participantsRef = useRef(participants);
   participantsRef.current = participants;
   /** 選曲に参加する人のみ・入室順（左から1,2,3...の番号に対応。一時退席枠を含む） */
@@ -2009,8 +1863,13 @@ export default function RoomWithSync({
           qSkip.shift();
           syncSongReservationQueueHead();
         } else if (qSkip.length > 0) {
-          songReservationQueueRef.current = [];
-          syncSongReservationQueueHead();
+          const idx = qSkip.findIndex(
+            (e) => e.videoId === pv && e.publisherClientId === (pp || ''),
+          );
+          if (idx >= 0) {
+            qSkip.splice(idx, 1);
+            syncSongReservationQueueHead();
+          }
         }
         if (playbackQueueFallbackTimerRef.current) {
           clearTimeout(playbackQueueFallbackTimerRef.current);
@@ -2080,11 +1939,16 @@ export default function RoomWithSync({
         const qCv = songReservationQueueRef.current;
         const pubIdForQueue = data.publisherClientId ?? '';
         if (qCv.length > 0) {
-          const h = qCv[0];
-          if (h.videoId === data.videoId && h.publisherClientId === pubIdForQueue) {
+          const head = qCv[0];
+          if (head.videoId === data.videoId && head.publisherClientId === pubIdForQueue) {
             qCv.shift();
           } else {
-            qCv.length = 0;
+            const idx = qCv.findIndex(
+              (e) => e.videoId === data.videoId && e.publisherClientId === pubIdForQueue,
+            );
+            if (idx >= 0) {
+              qCv.splice(idx, 1);
+            }
           }
         }
         syncSongReservationQueueHead();
@@ -2930,10 +2794,8 @@ export default function RoomWithSync({
   useEffect(() => {
     /**
      * 入室・退出は Ably presence の在籍差分のみで見る。
-     * participants には「退席中」空席枠（vacant・isAway）がマージされるが、
-     * presence から落ちた直後は vacant 反映が次レンダーまで遅れ、
-     * participants 全体で比較すると一瞬 clientId が消えて「退出」→ 枠復帰で「入室」と誤爆する。
-     * presenceData だけ使えば vacant と無関係で安全。
+     * 参加者リストも presence と同じ在室者のみを扱うため、
+     * 差分判定も presenceData だけで揃える。
      */
     const presentMap = new Map(
       presenceData.map((p) => {
@@ -3466,7 +3328,7 @@ export default function RoomWithSync({
       setCurrentTurnClientId('');
       publishRef.current?.(TURN_STATE_EVENT, buildTurnStatePayload(''));
     }
-  }, [currentTurnClientId, participants, vacantByClientId, presenceData, buildTurnStatePayload]);
+  }, [currentTurnClientId, participants, presenceData, buildTurnStatePayload]);
 
   /**
    * changeVideo 直後のまれな競合で currentTurn が空/投稿者のままになることがある。

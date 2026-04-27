@@ -10,6 +10,10 @@
   "D'Angelo and The Vanguard",
   "Echo & The Bunnymen",
   {
+    "canonical": "Earth, Wind & Fire",
+    "aliases": ["Earth Wind & Fire", "Earth Wind and Fire"]
+  },
+  {
     "canonical": "Daryl Hall & John Oates",
     "aliases": ["Hall & Oates", "Hall and Oates"]
   },
@@ -19,6 +23,14 @@
   "Haute & Freddy",
   "Hit-Boy",
   "Kanye West & Jay-Z",
+  {
+    "canonical": "Kool & the Gang",
+    "aliases": ["Kool and the Gang"]
+  },
+  {
+    "canonical": "Katrina & The Waves",
+    "aliases": ["Katrina and The Waves"]
+  },
   "Leigh-Anne",
   "Mumford & Sons",
   "Ne-Yo",

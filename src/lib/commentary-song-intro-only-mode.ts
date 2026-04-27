@@ -33,16 +33,14 @@ function factsTextHasAlbumOrSingleReleaseContext(text: string): boolean {
 }
 
 /**
- * Music8 曲 JSON の releases に日付がある、または事実テキストに盤・シングル文脈がある＝出自が参照データで示せる。
+ * 事実テキストに盤・シングル文脈があるかを出自情報として扱う。
  */
 function hasTrustedReleaseProvenance(
-  song: MusicaichatSongJson | unknown | null,
+  _song: MusicaichatSongJson | unknown | null,
   combinedFactsText: string,
 ): boolean {
-  return (
-    musicaichatSongHasStructuredReleaseYear(song) ||
-    factsTextHasAlbumOrSingleReleaseContext(combinedFactsText)
-  );
+  // リリース年月が取れていても、収録作/シングルの文脈が不明なケースは「出自不明」とみなす。
+  return factsTextHasAlbumOrSingleReleaseContext(combinedFactsText);
 }
 
 /**
@@ -72,4 +70,28 @@ export function buildSongIntroOnlyBaseComment(artistLabel: string, songLabel: st
   const body = `${a}の『${s}』です。参照データに確証あるリリース年と収録作品（アルバム・シングル等）の両方が揃っていないため、曲解説は曲名のご紹介にとどめます。`;
   if (body.length >= 80) return body;
   return `${body} 音源をお楽しみください。`;
+}
+
+function normalizeReleaseYm(value: string): string {
+  const t = (value ?? '').trim();
+  if (!t) return '';
+  const y = /^(\d{4})/.exec(t)?.[1] ?? '';
+  if (y) return `${y}年頃`;
+  return '';
+}
+
+export function buildSongIntroOnlyArtistFocusComment(params: {
+  artistLabel: string;
+  songLabel: string;
+  music8Song: MusicaichatSongJson | unknown | null;
+}): string {
+  const a = (params.artistLabel ?? '').trim() || 'このアーティスト';
+  const s = (params.songLabel ?? '').trim() || 'この曲';
+  const fields = params.music8Song ? extractMusic8SongFields(params.music8Song) : null;
+  const releaseYm = normalizeReleaseYm(fields?.releaseDate ?? '');
+
+  if (releaseYm) {
+    return `${a}の『${s}』です。詳しいリリース時期や収録アルバムは不明です。この時期の${a}は${releaseYm}、代表作を重ねながら表現の幅を広げ、精力的に活動していた時期として語られます。`;
+  }
+  return `${a}の『${s}』です。詳しいリリース時期や収録アルバムは不明です。この時期の${a}は音楽性や活動の流れを中心に、アーティスト概要として楽しむのがおすすめです。`;
 }

@@ -21,13 +21,17 @@ import { resolveJapaneseEconomyWithMusicBrainz } from '@/lib/resolve-japanese-ec
 import { isJpDomesticOfficialChannelAiException } from '@/lib/jp-official-channel-exception';
 import { isRoomJpAiUnlockEnabled } from '@/lib/room-jp-ai-unlock-server';
 import { buildSupergroupPromptBlock } from '@/lib/supergroup-artist';
+import { fetchMusicBrainzCommentaryFactsBlock } from '@/lib/musicbrainz-commentary-facts';
 import {
   buildMusicaichatFactsForAiPromptBlock,
   resolveMusic8ContextForCommentPack,
   shouldRegenerateLibraryWhenMusicaichatSong,
   skipMusic8FactInjectEnv,
 } from '@/lib/music8-musicaichat';
-import { shouldUseSongIntroOnlyDiscographyMode } from '@/lib/commentary-song-intro-only-mode';
+import {
+  buildSongIntroOnlyArtistFocusComment,
+  shouldUseSongIntroOnlyDiscographyMode,
+} from '@/lib/commentary-song-intro-only-mode';
 import { insertAiCommentaryUnavailableEntry } from '@/lib/ai-commentary-unavailable-log';
 import { buildSongQuizApiExtension } from '@/lib/song-quiz-after-commentary';
 
@@ -146,13 +150,34 @@ export async function POST(request: Request) {
       !skipMusic8FactInject && musicaichatSong != null
         ? buildMusicaichatFactsForAiPromptBlock(musicaichatSong).trim()
         : '';
+    const mbFactsBlock =
+      (await fetchMusicBrainzCommentaryFactsBlock(
+        (artistDisplay ?? artist ?? authorName ?? '').trim(),
+        (song ?? title).trim(),
+      )) ?? '';
     const songIntroOnlyDiscography = shouldUseSongIntroOnlyDiscographyMode({
       music8Song: musicaichatSong ?? fallbackMusic8Song,
-      combinedFactsText: music8FactsBlock,
+      combinedFactsText: [music8FactsBlock, mbFactsBlock].filter(Boolean).join('\n'),
     });
     const songQuizExtensionFinal = songIntroOnlyDiscography
       ? { songQuiz: { enabled: false as const } }
       : songQuizExtension;
+    const aiPromptLabels = buildAiCommentaryPromptLabels({
+      artistDisplay,
+      artist,
+      authorName,
+      song,
+      titleFallback: title,
+    });
+    const artistLabel =
+      aiPromptLabels.artistLabel.trim() ||
+      (artistDisplay ?? artist ?? authorName ?? undefined);
+    const commentarySongLabel = aiPromptLabels.songLabel.trim() || song || title;
+    const introOnlyText = buildSongIntroOnlyArtistFocusComment({
+      artistLabel: String(artistLabel ?? '').trim() || 'このアーティスト',
+      songLabel: String(commentarySongLabel ?? '').trim() || 'この曲',
+      music8Song: musicaichatSong ?? fallbackMusic8Song,
+    });
 
     let cachedCommentaryBody: string | null = null;
     if (reader) {
@@ -167,11 +192,12 @@ export async function POST(request: Request) {
         .maybeSingle();
       const bodyText = typeof data?.body === 'string' ? data.body.trim() : '';
       if (bodyText) {
+        const bodyForReturn = songIntroOnlyDiscography ? introOnlyText : bodyText;
         if (
           !shouldRegenerateLibraryWhenMusicaichatSong(musicaichatSong, skipMusic8FactInject)
         ) {
           return NextResponse.json({
-            text: bodyText,
+            text: bodyForReturn,
             source: 'library',
             songId: typeof data?.song_id === 'string' ? data.song_id : null,
             songTidbitId: typeof data?.id === 'string' ? data.id : null,
@@ -185,7 +211,7 @@ export async function POST(request: Request) {
             ...(songIntroOnlyDiscography ? { songIntroOnlyDiscography: true } : {}),
           });
         }
-        cachedCommentaryBody = bodyText;
+        cachedCommentaryBody = bodyForReturn;
       }
     }
 
@@ -204,28 +230,20 @@ export async function POST(request: Request) {
       }
     }
 
-    const aiPromptLabels = buildAiCommentaryPromptLabels({
-      artistDisplay,
-      artist,
-      authorName,
-      song,
-      titleFallback: title,
-    });
-    const artistLabel =
-      aiPromptLabels.artistLabel.trim() ||
-      (artistDisplay ?? artist ?? authorName ?? undefined);
-    const commentarySongLabel = aiPromptLabels.songLabel.trim() || song || title;
     const supergroupHint =
       artistLabel && artistLabel.trim().length > 0
         ? await buildSupergroupPromptBlock(artistLabel)
         : '';
-    const text = await generateCommentary(commentarySongLabel, artistLabel, {
-      videoId,
-      rawYouTubeTitle,
-      supergroupHintText: supergroupHint || null,
-      music8FactsBlock: music8FactsBlock.length > 0 ? music8FactsBlock : null,
-      songIntroOnlyDiscography,
-    });
+    const text = songIntroOnlyDiscography
+      ? introOnlyText
+      : await generateCommentary(commentarySongLabel, artistLabel, {
+          videoId,
+          rawYouTubeTitle,
+          supergroupHintText: supergroupHint || null,
+          music8FactsBlock: music8FactsBlock.length > 0 ? music8FactsBlock : null,
+          groundedFactsBlock: mbFactsBlock.length > 0 ? mbFactsBlock : null,
+          songIntroOnlyDiscography,
+        });
     if (!text) {
       return NextResponse.json(
         { error: 'AI is not configured or failed.', ...songQuizExtensionFinal },
