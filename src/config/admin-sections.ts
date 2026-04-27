@@ -124,6 +124,11 @@ export const ADMIN_SECTIONS: AdminSection[] = [
     description:
       'アーティスト・タイトル・URL・DB解説・選曲履歴（部屋名・選曲者）・song_quiz_logs のクイズ一式・おすすめ（バッチ最大3）・@Q&A を日付順で TEXT 可',
   },
+  {
+    href: '/admin/song-quiz-logs',
+    title: 'クイズログ',
+    description: '曲解説に紐づく song_quiz_logs を確認（質問・三択・正解・解説）。曲引き画面へ遷移',
+  },
 ];
 
 export function isAdminSectionActive(pathname: string, section: AdminSection): boolean {
