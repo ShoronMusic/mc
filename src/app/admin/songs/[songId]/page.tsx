@@ -92,6 +92,20 @@ interface AggregatedFeedback {
   badCount: number;
 }
 
+function isSongRow(value: unknown): value is SongRow {
+  if (!value || typeof value !== 'object') return false;
+  const row = value as Record<string, unknown>;
+  return (
+    typeof row.id === 'string' &&
+    typeof row.created_at === 'string' &&
+    ('display_title' in row) &&
+    ('main_artist' in row) &&
+    ('song_title' in row) &&
+    ('style' in row) &&
+    ('play_count' in row)
+  );
+}
+
 /** ラベル＋値の1行表示（null のときは「—」、href があれば別ウインドリンク） */
 function MetaRow({
   label,
@@ -164,7 +178,15 @@ export default async function SongDetailPage({ params }: SongDetailPageProps) {
     );
   }
 
-  const song = data as SongRow;
+  if (!isSongRow(data)) {
+    return (
+      <main className="mx-auto max-w-3xl p-4 text-gray-100">
+        <p>曲データ形式が不正です。管理者に連絡してください。</p>
+      </main>
+    );
+  }
+
+  const song = data;
 
   // Spotify アーティスト ID を取得（優先順位: artists テーブル → music8_song_data スナップショット）
   let spotifyArtistId: string | null = null;
