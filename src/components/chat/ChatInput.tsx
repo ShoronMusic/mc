@@ -5,10 +5,12 @@
  */
 
 import {
+  Fragment,
   forwardRef,
   useCallback,
   useEffect,
   useImperativeHandle,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -22,6 +24,7 @@ import { isAiQuestionGuardDisabledClient } from '@/lib/chat-system-copy';
 import {
   DocumentTextIcon,
   EnvelopeIcon,
+  FolderIcon,
   MusicalNoteIcon,
   QuestionMarkCircleIcon,
 } from '@heroicons/react/24/outline';
@@ -36,6 +39,79 @@ type SearchResultRow = {
   publishedAt?: string;
   thumbnailUrl?: string;
 };
+
+type LibrarySongRow = {
+  id: string;
+  title: string;
+  song_title: string | null;
+  main_artist: string | null;
+  style: string | null;
+  genres: string | null;
+  vocal: string | null;
+  play_count: number | null;
+  my_play_count: number | null;
+  original_release_date: string | null;
+  video_id: string | null;
+};
+
+type LibrarySongVideoRow = {
+  video_id: string;
+  variant: string | null;
+};
+
+type LibraryArtistInfo = {
+  id: string;
+  name: string;
+  name_ja: string | null;
+  kind: string | null;
+  origin_country: string | null;
+  active_period: string | null;
+  members: string | null;
+  image_url: string | null;
+  image_credit: string | null;
+  profile_text: string | null;
+};
+
+/** マイページのマイライブラリ索引と同じ規則（The … を除く・先頭1文字で A–Z / # / その他） */
+const LIBRARY_MODAL_INDEX_HASH = '#';
+const LIBRARY_MODAL_INDEX_OTHER = 'その他';
+
+function libraryModalArtistNameForIndexing(name: string | null): string {
+  const t = (name ?? '').trim();
+  const m = /^the\s+/i.exec(t);
+  if (m) return t.slice(m[0].length).trimStart();
+  return t;
+}
+
+function libraryModalArtistIndexKey(name: string | null): string {
+  const t = libraryModalArtistNameForIndexing(name);
+  if (!t) return LIBRARY_MODAL_INDEX_OTHER;
+  const c0 = t[0];
+  if (c0 >= 'A' && c0 <= 'Z') return c0;
+  if (c0 >= 'a' && c0 <= 'z') return c0.toUpperCase();
+  if (c0 >= '0' && c0 <= '9') return LIBRARY_MODAL_INDEX_HASH;
+  return LIBRARY_MODAL_INDEX_OTHER;
+}
+
+function sortLibraryModalLetterKeys(keys: string[]): string[] {
+  const rank = (k: string): number => {
+    if (k === LIBRARY_MODAL_INDEX_OTHER) return 1002;
+    if (k === LIBRARY_MODAL_INDEX_HASH) return 1001;
+    if (/^[A-Z]$/.test(k)) return k.charCodeAt(0);
+    return 1000;
+  };
+  return [...keys].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b, 'en'));
+}
+
+function libraryVariantLabel(variant: string | null): string {
+  const v = (variant ?? '').trim().toLowerCase();
+  if (v === 'official') return '公式';
+  if (v === 'lyric') return 'リリック';
+  if (v === 'live') return 'ライブ';
+  if (v === 'topic') return 'Topic';
+  if (!v) return 'その他';
+  return v;
+}
 
 export interface ChatInputHandle {
   /** 入力欄の末尾に文字列を追加する（参加者名クリック用） */
@@ -101,6 +177,24 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
   const [aiQuestionExamplesOpen, setAiQuestionExamplesOpen] = useState(false);
   const [songHowtoOpen, setSongHowtoOpen] = useState(false);
   const [themePlaylistConfirmOpen, setThemePlaylistConfirmOpen] = useState(false);
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  const [libraryQuery, setLibraryQuery] = useState('');
+  const [libraryLoading, setLibraryLoading] = useState(false);
+  const [libraryError, setLibraryError] = useState<string | null>(null);
+  const [libraryRows, setLibraryRows] = useState<LibrarySongRow[]>([]);
+  /** null = 全件表示。A–Z / # / その他 で main_artist 先頭に応じて絞り込み */
+  const [libraryArtistLetter, setLibraryArtistLetter] = useState<string | null>(null);
+  /** null = アーティスト未選択（レター内の全曲）。指定時は当該アーティスト曲に絞る */
+  const [librarySelectedArtistName, setLibrarySelectedArtistName] = useState<string | null>(null);
+  const [librarySelectedSongId, setLibrarySelectedSongId] = useState<string | null>(null);
+  const [librarySongVideos, setLibrarySongVideos] = useState<LibrarySongVideoRow[]>([]);
+  const [librarySelectedVideoId, setLibrarySelectedVideoId] = useState<string | null>(null);
+  const [libraryVideoLoading, setLibraryVideoLoading] = useState(false);
+  const [libraryVideoError, setLibraryVideoError] = useState<string | null>(null);
+  const [libraryArtistInfo, setLibraryArtistInfo] = useState<LibraryArtistInfo | null>(null);
+  const [libraryArtistInfoLoading, setLibraryArtistInfoLoading] = useState(false);
+  const [libraryArtistInfoError, setLibraryArtistInfoError] = useState<string | null>(null);
+  const [libraryCopyState, setLibraryCopyState] = useState<'idle' | 'ok' | 'fail'>('idle');
   const [searchResults, setSearchResults] = useState<SearchResultRow[]>([]);
   const [previewVideoId, setPreviewVideoId] = useState<string | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -111,6 +205,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
   const previewWatchedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
+  const libraryPreviewActiveRef = useRef(false);
   const aiQuestionExamples = [
     {
       question: '@アヴリル・ラヴィーンのデビュー曲は？',
@@ -318,6 +413,251 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
     void runYoutubeKeywordSearch(value.trim());
   };
 
+  const loadLibraryRows = useCallback(
+    async (rawQuery: string) => {
+      setLibraryLoading(true);
+      setLibraryError(null);
+      try {
+        const q = rawQuery.trim();
+        const params = new URLSearchParams();
+        if (q) params.set('q', q);
+        params.set('limit', '80');
+        const res = await fetch(`/api/library/search?${params.toString()}`);
+        const data = await res.json().catch(() => null);
+        if (!res.ok) {
+          setLibraryError(
+            typeof data?.error === 'string' ? data.error : 'ライブラリの取得に失敗しました。',
+          );
+          setLibraryRows([]);
+          setLibrarySelectedSongId(null);
+          setLibrarySongVideos([]);
+          setLibrarySelectedVideoId(null);
+          return;
+        }
+        const rows: LibrarySongRow[] = Array.isArray(data?.items)
+          ? data.items
+              .filter((r: any) => r && typeof r.id === 'string')
+              .map((r: any) => ({
+                id: r.id,
+                title: typeof r.title === 'string' ? r.title : '（タイトル不明）',
+                song_title: typeof r.song_title === 'string' ? r.song_title : null,
+                main_artist: typeof r.main_artist === 'string' ? r.main_artist : null,
+                style: typeof r.style === 'string' ? r.style : null,
+                genres: typeof r.genres === 'string' ? r.genres : null,
+                vocal: typeof r.vocal === 'string' ? r.vocal : null,
+                play_count: typeof r.play_count === 'number' ? r.play_count : null,
+                my_play_count: typeof r.my_play_count === 'number' ? r.my_play_count : null,
+                original_release_date:
+                  typeof r.original_release_date === 'string' ? r.original_release_date : null,
+                video_id: typeof r.video_id === 'string' ? r.video_id : null,
+              }))
+          : [];
+        setLibraryRows(rows);
+        setLibrarySelectedSongId((prev) => (prev && rows.some((r) => r.id === prev) ? prev : null));
+      } catch {
+        setLibraryError('ライブラリの取得に失敗しました。');
+        setLibraryRows([]);
+        setLibrarySelectedSongId(null);
+        setLibrarySongVideos([]);
+        setLibrarySelectedVideoId(null);
+      } finally {
+        setLibraryLoading(false);
+      }
+    },
+    [],
+  );
+
+  const loadLibrarySongVideos = useCallback(async (songId: string) => {
+    setLibraryVideoLoading(true);
+    setLibraryVideoError(null);
+    try {
+      const params = new URLSearchParams({ songId });
+      const res = await fetch(`/api/library/song-videos?${params.toString()}`);
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setLibrarySongVideos([]);
+        setLibrarySelectedVideoId(null);
+        setLibraryVideoError(
+          typeof data?.error === 'string' ? data.error : '動画バージョンの取得に失敗しました。',
+        );
+        return;
+      }
+      const rows: LibrarySongVideoRow[] = Array.isArray(data?.items)
+        ? data.items
+            .filter((r: any) => r && typeof r.video_id === 'string')
+            .map((r: any) => ({
+              video_id: r.video_id,
+              variant: typeof r.variant === 'string' ? r.variant : null,
+            }))
+        : [];
+      setLibrarySongVideos(rows);
+      setLibrarySelectedVideoId(rows[0]?.video_id ?? null);
+    } catch {
+      setLibrarySongVideos([]);
+      setLibrarySelectedVideoId(null);
+      setLibraryVideoError('動画バージョンの取得に失敗しました。');
+    } finally {
+      setLibraryVideoLoading(false);
+    }
+  }, []);
+
+  const loadLibraryArtistInfo = useCallback(async (artistName: string | null) => {
+    const name = (artistName ?? '').trim();
+    if (!name) {
+      setLibraryArtistInfo(null);
+      setLibraryArtistInfoError(null);
+      setLibraryArtistInfoLoading(false);
+      return;
+    }
+    setLibraryArtistInfoLoading(true);
+    setLibraryArtistInfoError(null);
+    try {
+      const params = new URLSearchParams({ artist: name });
+      const res = await fetch(`/api/library/artist-info?${params.toString()}`);
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setLibraryArtistInfo(null);
+        setLibraryArtistInfoError(
+          typeof data?.error === 'string' ? data.error : 'アーティスト情報の取得に失敗しました。',
+        );
+        return;
+      }
+      const a = data?.artist;
+      if (!a || typeof a !== 'object') {
+        setLibraryArtistInfo(null);
+        return;
+      }
+      setLibraryArtistInfo({
+        id: typeof a.id === 'string' ? a.id : '',
+        name: typeof a.name === 'string' ? a.name : name,
+        name_ja: typeof a.name_ja === 'string' ? a.name_ja : null,
+        kind: typeof a.kind === 'string' ? a.kind : null,
+        origin_country: typeof a.origin_country === 'string' ? a.origin_country : null,
+        active_period: typeof a.active_period === 'string' ? a.active_period : null,
+        members: typeof a.members === 'string' ? a.members : null,
+        image_url: typeof a.image_url === 'string' ? a.image_url : null,
+        image_credit: typeof a.image_credit === 'string' ? a.image_credit : null,
+        profile_text: typeof a.profile_text === 'string' ? a.profile_text : null,
+      });
+    } catch {
+      setLibraryArtistInfo(null);
+      setLibraryArtistInfoError('アーティスト情報の取得に失敗しました。');
+    } finally {
+      setLibraryArtistInfoLoading(false);
+    }
+  }, []);
+
+  const libraryLetterKeys = useMemo(() => {
+    const set = new Set<string>();
+    for (const row of libraryRows) {
+      set.add(libraryModalArtistIndexKey(row.main_artist));
+    }
+    return sortLibraryModalLetterKeys(Array.from(set));
+  }, [libraryRows]);
+
+  const letterFilteredLibraryRows = useMemo(() => {
+    if (libraryArtistLetter === null) return libraryRows;
+    return libraryRows.filter((r) => libraryModalArtistIndexKey(r.main_artist) === libraryArtistLetter);
+  }, [libraryRows, libraryArtistLetter]);
+
+  const libraryArtistNameCandidates = useMemo(() => {
+    const uniq = new Set<string>();
+    for (const row of letterFilteredLibraryRows) {
+      const name = (row.main_artist ?? '').trim();
+      if (!name) continue;
+      uniq.add(name);
+    }
+    return [...uniq].sort((a, b) => a.localeCompare(b, 'en'));
+  }, [letterFilteredLibraryRows]);
+
+  const filteredLibraryRows = useMemo(() => {
+    if (!librarySelectedArtistName) return letterFilteredLibraryRows;
+    return letterFilteredLibraryRows.filter((r) => (r.main_artist ?? '').trim() === librarySelectedArtistName);
+  }, [letterFilteredLibraryRows, librarySelectedArtistName]);
+
+  const selectedLibraryRow =
+    libraryOpen && librarySelectedSongId
+      ? filteredLibraryRows.find((r) => r.id === librarySelectedSongId) ?? null
+      : null;
+
+  const selectedLibraryUrl = librarySelectedVideoId
+    ? `https://www.youtube.com/watch?v=${encodeURIComponent(librarySelectedVideoId)}`
+    : '';
+
+  useEffect(() => {
+    if (libraryArtistLetter !== null && !libraryLetterKeys.includes(libraryArtistLetter)) {
+      setLibraryArtistLetter(null);
+    }
+  }, [libraryArtistLetter, libraryLetterKeys]);
+
+  useEffect(() => {
+    if (
+      librarySelectedArtistName &&
+      !libraryArtistNameCandidates.some((a) => a === librarySelectedArtistName)
+    ) {
+      setLibrarySelectedArtistName(null);
+    }
+  }, [librarySelectedArtistName, libraryArtistNameCandidates]);
+
+  useEffect(() => {
+    if (!libraryOpen) return;
+    setLibrarySelectedSongId((prev) => (prev && filteredLibraryRows.some((r) => r.id === prev) ? prev : null));
+  }, [libraryOpen, filteredLibraryRows]);
+
+  const openLibraryModal = useCallback(() => {
+    setLibraryOpen(true);
+    setLibraryCopyState('idle');
+    setLibraryArtistLetter(null);
+    setLibrarySelectedArtistName(null);
+    setLibrarySelectedSongId(null);
+    setLibrarySongVideos([]);
+    setLibrarySelectedVideoId(null);
+    setLibraryVideoError(null);
+    void loadLibraryRows(libraryQuery);
+  }, [libraryQuery, loadLibraryRows]);
+
+  const handleLibrarySearch = useCallback(() => {
+    setLibraryArtistLetter(null);
+    setLibrarySelectedArtistName(null);
+    setLibrarySelectedSongId(null);
+    setLibrarySongVideos([]);
+    setLibrarySelectedVideoId(null);
+    setLibraryVideoError(null);
+    void loadLibraryRows(libraryQuery);
+  }, [libraryQuery, loadLibraryRows]);
+
+  const copyLibraryUrl = useCallback(async () => {
+    if (!selectedLibraryUrl) return;
+    try {
+      await navigator.clipboard.writeText(selectedLibraryUrl);
+      setLibraryCopyState('ok');
+    } catch {
+      setLibraryCopyState('fail');
+    }
+  }, [selectedLibraryUrl]);
+
+  useEffect(() => {
+    if (!libraryOpen || !librarySelectedSongId) {
+      setLibrarySongVideos([]);
+      setLibrarySelectedVideoId(null);
+      setLibraryVideoError(null);
+      return;
+    }
+    void loadLibrarySongVideos(librarySelectedSongId);
+  }, [libraryOpen, librarySelectedSongId, loadLibrarySongVideos]);
+
+  const selectedArtistForInfo = librarySelectedArtistName ?? selectedLibraryRow?.main_artist ?? null;
+
+  useEffect(() => {
+    if (!libraryOpen || !selectedArtistForInfo) {
+      setLibraryArtistInfo(null);
+      setLibraryArtistInfoError(null);
+      setLibraryArtistInfoLoading(false);
+      return;
+    }
+    void loadLibraryArtistInfo(selectedArtistForInfo);
+  }, [libraryOpen, selectedArtistForInfo, loadLibraryArtistInfo]);
+
   const stopPreview = () => {
     if (previewWatchedTimerRef.current) {
       clearTimeout(previewWatchedTimerRef.current);
@@ -368,6 +708,31 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
   useEffect(() => {
     if (!themePlaylistRoomSubmit) setThemePlaylistConfirmOpen(false);
   }, [themePlaylistRoomSubmit]);
+
+  useEffect(() => {
+    if (libraryCopyState === 'idle') return;
+    const t = setTimeout(() => setLibraryCopyState('idle'), 1800);
+    return () => clearTimeout(t);
+  }, [libraryCopyState]);
+
+  useEffect(() => {
+    if (libraryOpen && librarySelectedVideoId && !libraryPreviewActiveRef.current) {
+      libraryPreviewActiveRef.current = true;
+      onPreviewStart?.(librarySelectedVideoId);
+      return;
+    }
+    if ((!libraryOpen || !librarySelectedVideoId) && libraryPreviewActiveRef.current) {
+      libraryPreviewActiveRef.current = false;
+      onPreviewStop?.();
+    }
+  }, [libraryOpen, librarySelectedVideoId, onPreviewStart, onPreviewStop]);
+
+  useEffect(() => {
+    if (!libraryOpen && libraryPreviewActiveRef.current) {
+      libraryPreviewActiveRef.current = false;
+      onPreviewStop?.();
+    }
+  }, [libraryOpen, onPreviewStop]);
 
   return (
     <>
@@ -834,6 +1199,374 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
         </div>
       ) : null}
 
+      {libraryOpen && (
+        <div
+          className="fixed inset-0 z-[96] flex items-center justify-center bg-black/75 p-3"
+          role="dialog"
+          aria-modal="true"
+          aria-label="ライブラリ"
+        >
+          <div
+            className="flex h-[88vh] w-full max-w-6xl flex-col overflow-hidden rounded-lg border border-lime-600/60 bg-gray-950"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-lime-900/60 px-4 py-3">
+              <h2 className="text-sm font-semibold text-white">ライブラリから選曲</h2>
+              <button
+                type="button"
+                className="rounded border border-lime-700/60 bg-gray-800 px-3 py-1.5 text-xs text-lime-100 hover:bg-gray-700"
+                onClick={() => setLibraryOpen(false)}
+              >
+                閉じる
+              </button>
+            </div>
+            <div className="grid min-h-0 flex-1 grid-cols-1 gap-0 lg:grid-cols-12">
+              <aside
+                className="flex max-h-[40vh] flex-col border-b border-lime-900/60 lg:col-span-2 lg:max-h-none lg:border-b-0 lg:border-r lg:border-r-lime-900/60"
+                aria-label="アーティスト頭文字"
+              >
+                <p className="hidden border-b border-lime-900/50 px-2 py-1.5 text-[10px] font-medium uppercase tracking-wide text-gray-500 lg:block">
+                  Artist A–Z
+                </p>
+                <div className="mc-scrollbar-stable flex min-h-0 flex-1 flex-row flex-wrap gap-1 px-2 py-2 lg:flex-col lg:flex-nowrap lg:overflow-y-auto">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLibraryArtistLetter(null);
+                      setLibrarySelectedArtistName(null);
+                    }}
+                    aria-pressed={libraryArtistLetter === null}
+                    className={`shrink-0 rounded px-2 py-1 text-center text-xs font-semibold lg:w-full ${
+                      libraryArtistLetter === null
+                        ? 'bg-lime-700 text-white'
+                        : 'border border-gray-700 bg-gray-900 text-gray-300 hover:bg-gray-800'
+                    }`}
+                  >
+                    全
+                  </button>
+                  {libraryLetterKeys.map((L) => (
+                    <button
+                      key={L}
+                      type="button"
+                      onClick={() => {
+                        setLibraryArtistLetter(L);
+                        setLibrarySelectedArtistName(null);
+                      }}
+                      aria-pressed={libraryArtistLetter === L}
+                      className={`shrink-0 rounded px-2 py-1 text-center text-xs font-semibold tabular-nums lg:w-full ${
+                        libraryArtistLetter === L
+                          ? 'bg-lime-700 text-white'
+                          : 'border border-gray-700 bg-gray-900 text-gray-300 hover:bg-gray-800'
+                      }`}
+                    >
+                      {L}
+                    </button>
+                  ))}
+                </div>
+              </aside>
+              <section className="flex min-h-0 flex-col border-b border-lime-900/60 lg:col-span-4 lg:border-b-0 lg:border-r lg:border-r-lime-900/60">
+                <div className="flex items-center gap-2 border-b border-lime-900/60 px-3 py-2">
+                  <input
+                    type="search"
+                    value={libraryQuery}
+                    onChange={(e) => setLibraryQuery(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleLibrarySearch();
+                      }
+                    }}
+                    placeholder="アーティスト名・曲名で検索"
+                    className="h-9 w-full rounded border border-gray-700 bg-gray-900 px-3 text-sm text-gray-100 outline-none focus:border-lime-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleLibrarySearch}
+                    disabled={libraryLoading}
+                    className="h-9 shrink-0 rounded border border-lime-500/70 bg-lime-900/30 px-3 text-xs text-lime-100 hover:bg-lime-900/60 disabled:opacity-50"
+                  >
+                    検索
+                  </button>
+                </div>
+                {!libraryLoading && !libraryError && libraryRows.length > 0 && (
+                  <p className="border-b border-lime-900/50 px-3 py-1.5 text-[11px] tabular-nums text-gray-400">
+                    {libraryArtistLetter === null ? (
+                      <>
+                        表示中{' '}
+                        <span className="font-medium text-gray-200">{libraryRows.length}</span> 曲
+                        {libraryRows.length >= 80 && !libraryQuery.trim() ? (
+                          <span className="text-gray-600">（一覧は最大80件）</span>
+                        ) : null}
+                      </>
+                    ) : (
+                      <>
+                        表示中{' '}
+                        <span className="font-medium text-gray-200">{filteredLibraryRows.length}</span> 曲
+                        <span className="text-gray-600">
+                          {' '}
+                          ／ 全体 <span className="text-gray-400">{libraryRows.length}</span> 曲
+                        </span>
+                      </>
+                    )}
+                  </p>
+                )}
+                {!libraryLoading && !libraryError && libraryArtistNameCandidates.length > 0 && (
+                  <div className="border-b border-lime-900/50 px-3 py-2">
+                    <p className="mb-1 text-[11px] text-gray-500">
+                      アーティスト一覧
+                      {libraryArtistLetter ? `（${libraryArtistLetter}）` : ''}
+                    </p>
+                    <div className="mc-scrollbar-stable flex max-h-20 flex-wrap gap-1 overflow-y-auto">
+                      <button
+                        type="button"
+                        onClick={() => setLibrarySelectedArtistName(null)}
+                        className={`rounded px-2 py-1 text-[11px] ${
+                          librarySelectedArtistName === null
+                            ? 'bg-lime-700 text-white'
+                            : 'border border-gray-700 bg-gray-900 text-gray-300 hover:bg-gray-800'
+                        }`}
+                      >
+                        全アーティスト
+                      </button>
+                      {libraryArtistNameCandidates.map((name) => (
+                        <button
+                          key={name}
+                          type="button"
+                          onClick={() => setLibrarySelectedArtistName(name)}
+                          className={`rounded px-2 py-1 text-[11px] ${
+                            librarySelectedArtistName === name
+                              ? 'bg-lime-700 text-white'
+                              : 'border border-gray-700 bg-gray-900 text-gray-300 hover:bg-gray-800'
+                          }`}
+                        >
+                          {name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {!libraryLoading && !libraryError && selectedArtistForInfo && (
+                  <div className="border-b border-lime-900/50 px-3 py-2 text-xs">
+                    {libraryArtistInfoLoading ? (
+                      <p className="text-gray-500">読み込み中…</p>
+                    ) : libraryArtistInfoError ? (
+                      <p className="text-amber-300">{libraryArtistInfoError}</p>
+                    ) : libraryArtistInfo ? (
+                      <div className="flex flex-col gap-2">
+                        <div className="flex gap-3">
+                          {(libraryArtistInfo.image_url ?? '').trim() ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={libraryArtistInfo.image_url as string}
+                              alt={libraryArtistInfo.name}
+                              className="h-20 w-20 flex-shrink-0 rounded object-cover"
+                              loading="lazy"
+                            />
+                          ) : null}
+                          <div className="min-w-0 flex-1 space-y-1 text-gray-300">
+                            <p className="font-medium text-gray-100">
+                              {libraryArtistInfo.name_ja?.trim() || libraryArtistInfo.name}
+                              {(libraryArtistInfo.origin_country ?? '').trim()
+                                ? ` (${libraryArtistInfo.origin_country})`
+                                : ''}
+                            </p>
+                            {(libraryArtistInfo.kind ?? '').trim() ? (
+                              <p className="lowercase text-gray-400">{libraryArtistInfo.kind}</p>
+                            ) : null}
+                            {(libraryArtistInfo.active_period ?? '').trim() ? (
+                              <p className="text-gray-400">
+                                活動期間：{libraryArtistInfo.active_period}
+                              </p>
+                            ) : null}
+                            {(libraryArtistInfo.members ?? '').trim() ? (
+                              <p className="text-gray-400">
+                                メンバー：{libraryArtistInfo.members}
+                              </p>
+                            ) : null}
+                          </div>
+                        </div>
+                        {(libraryArtistInfo.profile_text ?? '').trim() ? (
+                          <p className="border-t border-gray-700/60 pt-2 leading-relaxed text-gray-400">
+                            {libraryArtistInfo.profile_text}
+                          </p>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
+                )}
+                <div className="mc-scrollbar-stable min-h-0 flex-1 overflow-y-auto p-2">
+                  {libraryLoading && <p className="px-2 py-2 text-xs text-gray-400">読み込み中…</p>}
+                  {libraryError && <p className="px-2 py-2 text-xs text-amber-300">{libraryError}</p>}
+                  {!libraryLoading && !libraryError && filteredLibraryRows.length === 0 && (
+                    <p className="px-2 py-2 text-xs text-gray-500">候補がありません。</p>
+                  )}
+                  <ul className="space-y-1.5">
+                    {filteredLibraryRows.map((row) => {
+                      const active = row.id === librarySelectedSongId;
+                      return (
+                        <li key={row.id}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setLibrarySelectedSongId(row.id);
+                              setLibraryCopyState('idle');
+                            }}
+                            className={`w-full rounded border px-3 py-2 text-left ${
+                              active
+                                ? 'border-lime-500/70 bg-lime-950/40'
+                                : 'border-gray-800 bg-gray-900/60 hover:bg-gray-900'
+                            }`}
+                          >
+                            <p className="line-clamp-2 text-sm text-gray-100">{row.title}</p>
+                            <p className="mt-0.5 text-xs text-gray-400">
+                              {row.main_artist ?? '—'} / {row.style ?? '—'}
+                            </p>
+                            <p className="mt-0.5 text-[11px] text-gray-500">
+                              全選曲 {row.play_count ?? 0}
+                              {row.my_play_count != null ? ` / 自分 ${row.my_play_count}` : ''}
+                            </p>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              </section>
+              <section className="flex min-h-0 flex-col lg:col-span-6">
+                <div className="border-b border-lime-900/60 px-3 py-2">
+                  <p className="text-xs text-gray-400">
+                    曲を選ぶと、動画バージョン（公式優先）を選択できます。
+                  </p>
+                </div>
+                <div className="mc-scrollbar-stable min-h-0 flex-1 overflow-y-auto p-3">
+                  {selectedLibraryRow ? (
+                    <>
+                      <div className="mb-2 rounded border border-gray-800 bg-gray-900/60 px-3 py-2">
+                        <p className="text-sm font-medium text-gray-100">{selectedLibraryRow.title}</p>
+                        <p className="mt-1 text-xs text-gray-400">
+                          {selectedLibraryRow.main_artist ?? '—'} / {selectedLibraryRow.style ?? '—'}
+                        </p>
+                      </div>
+                      <div className="mb-2">
+                        <p className="mb-1 text-[11px] text-gray-500">動画バージョン</p>
+                        {libraryVideoLoading ? (
+                          <p className="text-xs text-gray-500">読み込み中…</p>
+                        ) : libraryVideoError ? (
+                          <p className="text-xs text-amber-300">{libraryVideoError}</p>
+                        ) : librarySongVideos.length === 0 ? (
+                          <p className="text-xs text-gray-500">候補動画がありません。</p>
+                        ) : (
+                          <div className="flex flex-wrap gap-1.5">
+                            {librarySongVideos.map((v) => {
+                              const active = v.video_id === librarySelectedVideoId;
+                              return (
+                                <button
+                                  key={v.video_id}
+                                  type="button"
+                                  onClick={() => {
+                                    setLibrarySelectedVideoId(v.video_id);
+                                    setLibraryCopyState('idle');
+                                  }}
+                                  className={`rounded px-2 py-1 text-xs ${
+                                    active
+                                      ? 'bg-lime-700 text-white'
+                                      : 'border border-gray-700 bg-gray-900 text-gray-300 hover:bg-gray-800'
+                                  }`}
+                                >
+                                  {libraryVariantLabel(v.variant)}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                      {librarySelectedVideoId ? (
+                        <div className="aspect-video overflow-hidden rounded border border-gray-800 bg-black">
+                          <iframe
+                            title="Library preview"
+                            src={`https://www.youtube.com/embed/${encodeURIComponent(
+                              librarySelectedVideoId,
+                            )}?autoplay=1&controls=1&modestbranding=1`}
+                            className="h-full w-full"
+                            allow="autoplay; encrypted-media"
+                            allowFullScreen
+                          />
+                        </div>
+                      ) : (
+                        <div className="flex aspect-video items-center justify-center rounded border border-gray-800 bg-black/50 text-xs text-gray-500">
+                          動画候補を選んでください
+                        </div>
+                      )}
+                      <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        <button
+                          type="button"
+                          disabled={!onVideoUrl || !selectedLibraryUrl}
+                          className="h-11 rounded border border-lime-500/70 bg-lime-900/40 px-3 text-sm font-semibold text-lime-100 hover:bg-lime-900/70 disabled:opacity-50"
+                          onClick={() => {
+                            if (!onVideoUrl) return;
+                            onVideoUrl(selectedLibraryUrl);
+                            setValue('');
+                            setLibraryOpen(false);
+                          }}
+                        >
+                          この曲を選曲
+                        </button>
+                        <button
+                          type="button"
+                          disabled={!selectedLibraryUrl}
+                          className="h-11 rounded border border-gray-600 bg-gray-800 px-3 text-sm text-gray-100 hover:bg-gray-700"
+                          onClick={() => {
+                            void copyLibraryUrl();
+                          }}
+                        >
+                          URLをコピー
+                        </button>
+                      </div>
+                      {libraryCopyState !== 'idle' && (
+                        <p className="mt-2 text-xs text-gray-300">
+                          {libraryCopyState === 'ok'
+                            ? 'URLをコピーしました。'
+                            : 'URLコピーに失敗しました。'}
+                        </p>
+                      )}
+                      {selectedLibraryRow && (
+                        <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-2 gap-y-1 text-xs text-gray-300">
+                          {[
+                            ['メインアーティスト', selectedLibraryRow.main_artist],
+                            ['曲タイトル', selectedLibraryRow.song_title],
+                            ['スタイル', selectedLibraryRow.style],
+                            ['ジャンル', selectedLibraryRow.genres],
+                            [
+                              '公開日',
+                              selectedLibraryRow.original_release_date
+                                ? selectedLibraryRow.original_release_date.slice(0, 7)
+                                : null,
+                            ],
+                            ['ボーカル', selectedLibraryRow.vocal],
+                            ['選曲回数', selectedLibraryRow.play_count != null ? String(selectedLibraryRow.play_count) : null],
+                          ]
+                            .filter(([, v]) => v != null && v !== '')
+                            .map(([label, value]) => (
+                              <Fragment key={label}>
+                                <dt className="whitespace-nowrap text-gray-500">{label}：</dt>
+                                <dd className="min-w-0 break-words">{value}</dd>
+                              </Fragment>
+                            ))}
+                        </dl>
+                      )}
+                    </>
+                  ) : (
+                    <p className="text-sm text-gray-500">
+                      一覧から曲を選んでください（左はアーティスト頭文字で絞り込み）。
+                    </p>
+                  )}
+                </div>
+              </section>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="rounded-lg border border-gray-700 bg-gray-900/50 p-2">
         <div className="flex w-full flex-row flex-wrap items-stretch gap-2">
           <div className="min-w-0 flex-1 basis-[min(100%,12rem)]">
@@ -1006,6 +1739,18 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
               aria-label="曲名・キーワードで検索"
             >
               {searching ? '…' : '検索'}
+            </button>
+          ) : null}
+          {onVideoUrl ? (
+            <button
+              type="button"
+              onClick={openLibraryModal}
+              title="ライブラリから曲を選んで再生・URLコピー"
+              className="box-border flex h-[3.75rem] shrink-0 items-center justify-center gap-1 rounded border border-lime-500/60 bg-lime-900/20 px-4 text-sm font-medium text-lime-100 hover:bg-lime-900/35"
+              aria-label="ライブラリを開く"
+            >
+              <FolderIcon className="h-4 w-4" aria-hidden />
+              <span>ライブラリ</span>
             </button>
           ) : null}
           {trailingSlot != null && trailingSlot !== false ? (

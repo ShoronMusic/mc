@@ -1,5 +1,9 @@
 import { createClient } from '@/lib/supabase/server';
 import { AdminMenuBar } from '@/components/admin/AdminMenuBar';
+import { AdminSongMasterDeletePanel } from '@/components/admin/AdminSongMasterDeletePanel';
+import { AdminSongMusic8RefreshPanel } from '@/components/admin/AdminSongMusic8RefreshPanel';
+import { AdminSongMusic8JsonImportPanel } from '@/components/admin/AdminSongMusic8JsonImportPanel';
+import { AdminSongBasicInfoEditPanel } from '@/components/admin/AdminSongBasicInfoEditPanel';
 
 interface SongDetailPageProps {
   params: { songId: string };
@@ -12,13 +16,34 @@ interface SongRow {
   song_title: string | null;
   style: string | null;
   play_count: number | null;
+  original_release_date?: string | null;
+  music8_song_data?: Record<string, unknown> | null;
   created_at: string;
+  // Music8 詳細メタ
+  genres?: string[] | null;
+  vocal?: string | null;
+  primary_artist_name_ja?: string | null;
+  structured_style?: string | null;
+  music8_song_id?: number | null;
+  music8_artist_slug?: string | null;
+  music8_song_slug?: string | null;
+  music8_video_id?: string | null;
+  // Spotify
+  spotify_track_id?: string | null;
+  spotify_release_date?: string | null;
+  spotify_name?: string | null;
+  spotify_artists?: string | null;
+  spotify_images?: string | null;
+  spotify_popularity?: number | null;
+  // artists FK
+  artist_id?: string | null;
 }
 
 interface SongVideoRow {
   video_id: string;
   variant: string | null;
   performance_id: string | null;
+  youtube_published_at?: string | null;
   created_at: string;
 }
 
@@ -36,6 +61,11 @@ interface SongTidbitRow {
   created_at: string;
   source: string;
   is_active: boolean;
+}
+
+interface UserSongPickCountRow {
+  userId: string;
+  count: number;
 }
 
 interface CommentFeedbackRow {
@@ -62,6 +92,33 @@ interface AggregatedFeedback {
   badCount: number;
 }
 
+/** ラベル＋値の1行表示（null のときは「—」、href があれば別ウインドリンク） */
+function MetaRow({
+  label,
+  value,
+  mono,
+  href,
+}: {
+  label: string;
+  value: string | null;
+  mono?: boolean;
+  href?: string | null;
+}) {
+  const textClass = `break-all ${mono ? 'font-mono text-blue-300' : 'text-gray-200'} ${!value ? 'text-gray-600' : ''}`;
+  return (
+    <div className="flex gap-1.5">
+      <span className="shrink-0 text-gray-500">{label}：</span>
+      {value && href ? (
+        <a href={href} target="_blank" rel="noopener noreferrer" className={`${textClass} hover:underline`}>
+          {value}
+        </a>
+      ) : (
+        <span className={textClass}>{value ?? '—'}</span>
+      )}
+    </div>
+  );
+}
+
 /** モーダルからの詳細フィードバック（チェックまたは自由コメントあり） */
 function isDetailFeedbackRow(row: CommentFeedbackRow): boolean {
   if (row.is_duplicate === true || row.is_dubious === true || row.is_ambiguous === true) return true;
@@ -81,7 +138,13 @@ export default async function SongDetailPage({ params }: SongDetailPageProps) {
 
   const { data, error } = await supabase
     .from('songs')
-    .select('id, display_title, main_artist, song_title, style, play_count, created_at')
+    .select(
+      'id, display_title, main_artist, song_title, style, play_count, original_release_date, music8_song_data, created_at,' +
+      'genres, vocal, primary_artist_name_ja, structured_style,' +
+      'music8_song_id, music8_artist_slug, music8_song_slug, music8_video_id,' +
+      'spotify_track_id, spotify_release_date, spotify_name, spotify_artists, spotify_images, spotify_popularity,' +
+      'artist_id',
+    )
     .eq('id', params.songId)
     .maybeSingle();
 
@@ -103,12 +166,34 @@ export default async function SongDetailPage({ params }: SongDetailPageProps) {
 
   const song = data as SongRow;
 
+  // Spotify アーティスト ID を取得（優先順位: artists テーブル → music8_song_data スナップショット）
+  let spotifyArtistId: string | null = null;
+  if (song.artist_id) {
+    try {
+      const { data: artistData } = await supabase
+        .from('artists')
+        .select('spotify_artist_id')
+        .eq('id', song.artist_id)
+        .maybeSingle();
+      const raw = (artistData as { spotify_artist_id?: string | null } | null)?.spotify_artist_id;
+      if (typeof raw === 'string' && raw.trim()) spotifyArtistId = raw.trim();
+    } catch {
+      // artists テーブルがなくても続行
+    }
+  }
+  // フォールバック: music8_song_data スナップショットの artist_spotify_id
+  if (!spotifyArtistId && song.music8_song_data && typeof song.music8_song_data === 'object') {
+    const snap = song.music8_song_data as Record<string, unknown>;
+    const fromSnap = snap.artist_spotify_id;
+    if (typeof fromSnap === 'string' && fromSnap.trim()) spotifyArtistId = fromSnap.trim();
+  }
+
   // song_videos の取得
   let videos: SongVideoRow[] = [];
   try {
     const { data: videoData, error: videoError } = await supabase
       .from('song_videos')
-      .select('video_id, variant, performance_id, created_at')
+      .select('video_id, variant, performance_id, youtube_published_at, created_at')
       .eq('song_id', song.id)
       .order('created_at', { ascending: true });
     if (videoError && videoError.code !== '42P01') {
@@ -158,6 +243,48 @@ export default async function SongDetailPage({ params }: SongDetailPageProps) {
     tidbits = (tidbitData as SongTidbitRow[]) ?? [];
   } catch (e) {
     console.error('[admin/song-detail] song_tidbits exception', e);
+  }
+
+  // 当該曲（song_videos.video_id 群）に対するログインユーザー別選曲回数
+  let userPickCounts: UserSongPickCountRow[] = [];
+  let userPickCountTruncated = false;
+  if (videos.length > 0) {
+    const videoIds = Array.from(new Set(videos.map((v) => v.video_id).filter(Boolean)));
+    if (videoIds.length > 0) {
+      const PAGE = 1000;
+      const MAX_SCAN = 12000;
+      const byUser = new Map<string, number>();
+      let scanned = 0;
+      for (let offset = 0; ; offset += PAGE) {
+        const { data: playRows, error: playErr } = await supabase
+          .from('room_playback_history')
+          .select('user_id')
+          .in('video_id', videoIds)
+          .not('user_id', 'is', null)
+          .range(offset, offset + PAGE - 1);
+        if (playErr) {
+          if (playErr.code !== '42P01') {
+            console.error('[admin/song-detail] room_playback_history user-count', playErr.code, playErr.message);
+          }
+          break;
+        }
+        const rows = (playRows ?? []) as { user_id?: string | null }[];
+        for (const r of rows) {
+          const uid = typeof r.user_id === 'string' ? r.user_id.trim() : '';
+          if (!uid) continue;
+          byUser.set(uid, (byUser.get(uid) ?? 0) + 1);
+        }
+        scanned += rows.length;
+        if (rows.length < PAGE) break;
+        if (scanned >= MAX_SCAN) {
+          userPickCountTruncated = true;
+          break;
+        }
+      }
+      userPickCounts = [...byUser.entries()]
+        .map(([userId, count]) => ({ userId, count }))
+        .sort((a, b) => b.count - a.count || a.userId.localeCompare(b.userId));
+    }
   }
 
   // comment_feedback（AIコメント評価）: song_id 単位で取得して集約
@@ -239,9 +366,101 @@ export default async function SongDetailPage({ params }: SongDetailPageProps) {
           {song.play_count ?? 0}
         </p>
         <p>
+          <span className="text-gray-500">original_release_date（原盤）：</span>
+          {song.original_release_date ?? '—'}
+        </p>
+        {song.music8_song_data && typeof song.music8_song_data === 'object' ? (
+          <details className="rounded border border-gray-800 bg-gray-950/80 p-2">
+            <summary className="cursor-pointer text-gray-400">music8_song_data（Music8 スナップショット）</summary>
+            <pre className="mt-2 max-h-96 overflow-auto whitespace-pre-wrap break-all text-[11px] text-gray-300">
+              {JSON.stringify(song.music8_song_data, null, 2)}
+            </pre>
+          </details>
+        ) : (
+          <p>
+            <span className="text-gray-500">music8_song_data：</span>
+            <span className="text-gray-400">—</span>
+          </p>
+        )}
+
+        {/* Music8 詳細メタ */}
+        <div className="rounded border border-gray-800 bg-gray-950/40 p-3">
+          <p className="mb-2 text-xs font-semibold text-gray-400">Music8 詳細メタ</p>
+          <div className="grid grid-cols-1 gap-x-6 gap-y-1.5 sm:grid-cols-2 text-xs">
+            <MetaRow label="music8_song_id" value={song.music8_song_id != null ? String(song.music8_song_id) : null} />
+            <MetaRow label="music8_artist_slug" value={song.music8_artist_slug ?? null} mono />
+            <MetaRow label="music8_song_slug" value={song.music8_song_slug ?? null} mono />
+            <MetaRow label="music8_video_id (canonical)" value={song.music8_video_id ?? null} mono />
+            <MetaRow label="genres" value={Array.isArray(song.genres) && song.genres.length > 0 ? song.genres.join(', ') : null} />
+            <MetaRow label="vocal" value={song.vocal ?? null} />
+            <MetaRow label="primary_artist_name_ja" value={song.primary_artist_name_ja ?? null} />
+            <MetaRow label="structured_style" value={song.structured_style ?? null} />
+            <MetaRow
+              label="spotify_track_id"
+              value={song.spotify_track_id ?? null}
+              mono
+              href={song.spotify_track_id ? `https://open.spotify.com/track/${song.spotify_track_id}` : null}
+            />
+            <MetaRow
+              label="spotify_artists01_id"
+              value={spotifyArtistId}
+              mono
+              href={spotifyArtistId ? `https://open.spotify.com/artist/${spotifyArtistId}` : null}
+            />
+            <MetaRow label="spotify_release_date" value={song.spotify_release_date ?? null} />
+            <MetaRow label="spotify_name" value={song.spotify_name ?? null} />
+            <MetaRow label="spotify_artists" value={song.spotify_artists ?? null} />
+            <MetaRow label="spotify_popularity" value={song.spotify_popularity != null ? String(song.spotify_popularity) : null} />
+          </div>
+          {(song.spotify_images ?? '').trim() ? (
+            <div className="mt-2 flex items-start gap-3">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={song.spotify_images as string}
+                alt="Spotify album art"
+                className="h-14 w-14 rounded object-cover"
+                loading="lazy"
+              />
+              <p className="break-all text-[11px] text-gray-500">{song.spotify_images}</p>
+            </div>
+          ) : null}
+          {song.music8_artist_slug && song.music8_song_slug ? (
+            <p className="mt-2 text-[11px] text-gray-500">
+              Music8 JSON URL:{' '}
+              <a
+                href={`https://xs867261.xsrv.jp/data/data/songs/${song.music8_artist_slug}_${song.music8_song_slug}.json`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sky-400 hover:underline"
+              >
+                {`/data/songs/${song.music8_artist_slug}_${song.music8_song_slug}.json`}
+              </a>
+            </p>
+          ) : null}
+        </div>
+
+        <AdminSongMusic8RefreshPanel songId={song.id} />
+        <AdminSongMusic8JsonImportPanel
+          songId={song.id}
+          music8ArtistSlug={song.music8_artist_slug ?? null}
+          music8SongSlug={song.music8_song_slug ?? null}
+        />
+        <AdminSongBasicInfoEditPanel
+          songId={song.id}
+          initialDisplayTitle={song.display_title ?? null}
+          initialMainArtist={song.main_artist ?? null}
+          initialSongTitle={song.song_title ?? null}
+          initialStyle={song.style ?? null}
+          initialOriginalReleaseDate={song.original_release_date ?? null}
+        />
+        <p>
           <span className="text-gray-500">作成日時：</span>
           {new Date(song.created_at).toLocaleString('ja-JP')}
         </p>
+        <AdminSongMasterDeletePanel
+          songId={song.id}
+          confirmLabel={(song.display_title ?? '').trim() || song.id}
+        />
       </section>
 
       {/* song_videos 一覧 */}
@@ -257,6 +476,7 @@ export default async function SongDetailPage({ params }: SongDetailPageProps) {
                   <th className="px-2 py-1 text-left">video_id</th>
                   <th className="px-2 py-1 text-left">variant</th>
                   <th className="px-2 py-1 text-left">performance_id</th>
+                  <th className="px-2 py-1 text-left">YouTube公開</th>
                   <th className="px-2 py-1 text-left">登録日時</th>
                   <th className="px-2 py-1 text-left">基本コメント</th>
                 </tr>
@@ -272,6 +492,11 @@ export default async function SongDetailPage({ params }: SongDetailPageProps) {
                       <td className="px-2 py-1">{v.variant ?? ''}</td>
                       <td className="px-2 py-1 text-[11px] font-mono text-gray-400">
                         {v.performance_id ?? ''}
+                      </td>
+                      <td className="px-2 py-1 text-[11px] text-gray-300">
+                        {v.youtube_published_at
+                          ? new Date(v.youtube_published_at).toLocaleString('ja-JP')
+                          : '—'}
                       </td>
                       <td className="px-2 py-1">
                         {new Date(v.created_at).toLocaleString('ja-JP')}
@@ -460,6 +685,41 @@ export default async function SongDetailPage({ params }: SongDetailPageProps) {
             </table>
           </div>
         )}
+      </section>
+
+      <section className="mb-4 rounded border border-gray-700 bg-gray-900 p-4 text-sm">
+        <h2 className="mb-2 text-sm font-semibold text-gray-200">
+          当該曲の選曲回数（ログインユーザー別）
+        </h2>
+        {userPickCounts.length === 0 ? (
+          <p className="text-gray-400 text-sm">
+            ログインユーザーの選曲履歴はまだありません（または取得対象外）。
+          </p>
+        ) : (
+          <div className="overflow-auto">
+            <table className="min-w-full border-collapse text-xs">
+              <thead className="bg-gray-800 text-gray-300">
+                <tr>
+                  <th className="px-2 py-1 text-left">user_id</th>
+                  <th className="px-2 py-1 text-right">回数</th>
+                </tr>
+              </thead>
+              <tbody>
+                {userPickCounts.map((r) => (
+                  <tr key={r.userId} className="border-t border-gray-800">
+                    <td className="px-2 py-1 font-mono text-[11px] text-gray-300">{r.userId}</td>
+                    <td className="px-2 py-1 text-right text-[11px] text-emerald-300">{r.count}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {userPickCountTruncated ? (
+          <p className="mt-2 text-[11px] text-amber-300">
+            件数が多いため上限までで集計しています（最大 12,000 履歴行）。
+          </p>
+        ) : null}
       </section>
     </main>
   );

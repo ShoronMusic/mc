@@ -189,8 +189,8 @@ SQL: `docs/supabase-setup.md` 第 9 章
 
 視聴履歴 POST で `upsertSongAndVideo` 等が動く環境では、概ね次が記録・更新されます。
 
-- **songs**: `main_artist`, `song_title`, `display_title`, `style`, `play_count`, `created_at` など
-- **song_videos**: `song_id`, `video_id`, `variant`, …
+- **songs**: `main_artist`, `song_title`, `display_title`, `style`, `play_count`, `original_release_date`（原盤・任意）, `music8_song_data`（Music8 軽量スナップショット jsonb・任意）, `created_at` など
+- **song_videos**: `song_id`, `video_id`, `variant`, `youtube_published_at`（YouTube クリップ公開・任意）, …
 
 詳細: `docs/supabase-songs-and-performances-tables.md`
 

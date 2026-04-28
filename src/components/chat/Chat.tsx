@@ -14,6 +14,7 @@ import {
   HandThumbDownIcon,
   ChatBubbleLeftRightIcon,
   AtSymbolIcon,
+  ArrowTopRightOnSquareIcon,
 } from '@heroicons/react/24/outline';
 import type { ChatMessage as ChatMessageType } from '@/types/chat';
 import {
@@ -38,6 +39,7 @@ import {
   extractUiLabelFromBody,
   stripUiLabelPrefixFromBody,
 } from '@/lib/chat-message-ui-labels';
+import type { CommentPackSlotSelection } from '@/lib/comment-pack-slots';
 import type { ThemePlaylistRoomSubmitBanner } from '@/hooks/useThemePlaylistRoomSubmitMission';
 import ThemePlaylistMissionEntriesModal, {
   type ThemePlaylistMissionEntriesModalRoomProps,
@@ -99,6 +101,8 @@ interface ChatProps {
   jpAiUnlockEnabled?: boolean;
   /** オーナー設定: ヘッダー「AI曲解説」ピル（曲紹介スロットが全非オフでない） */
   ownerAiCommentaryEnabled?: boolean;
+  /** オーナー設定: 曲紹介スロット [1..5]（ヘッダー表示に使用） */
+  ownerCommentPackSlots?: CommentPackSlotSelection;
   /** オーナー設定: ヘッダー「曲クイズ」ピル */
   ownerSongQuizEnabled?: boolean;
   /** オーナー設定: ヘッダー「おすすめ曲」ピル */
@@ -498,6 +502,7 @@ function renderAiBodyWithArtistSongHighlight(
               className="inline-flex items-center rounded-md border border-slate-400/60 bg-slate-200/85 px-2 py-0.5 text-[10px] font-semibold text-slate-900 shadow-sm transition hover:-translate-y-[1px] hover:bg-slate-100 hover:shadow"
             >
               検索
+              <ArrowTopRightOnSquareIcon className="ml-1 h-3 w-3" aria-hidden />
             </a>
           </span>
         ) : null}
@@ -548,6 +553,7 @@ function renderAiBodyWithArtistSongHighlight(
             className="inline-flex items-center rounded-md border border-slate-400/60 bg-slate-200/85 px-2 py-0.5 text-[10px] font-semibold text-slate-900 shadow-sm transition hover:-translate-y-[1px] hover:bg-slate-100 hover:shadow"
           >
             検索
+            <ArrowTopRightOnSquareIcon className="ml-1 h-3 w-3" aria-hidden />
           </a>
         </span>
       ) : null}
@@ -568,6 +574,7 @@ export default function Chat({
   onChatSummaryClick,
   jpAiUnlockEnabled = false,
   ownerAiCommentaryEnabled = true,
+  ownerCommentPackSlots,
   ownerSongQuizEnabled = true,
   ownerNextSongRecommendEnabled = true,
   ownerAiCharacterJoinEnabled = true,
@@ -1012,6 +1019,14 @@ export default function Chat({
   const [aiHelpModalOpen, setAiHelpModalOpen] = useState(false);
   const [aiHelpModalTab, setAiHelpModalTab] = useState<'question' | 'comments'>('question');
   const [aiQuestionExamplesOpen, setAiQuestionExamplesOpen] = useState(false);
+  const ownerCommentarySlotNumbers = (ownerCommentPackSlots ?? [])
+    .map((enabled, i) => (enabled ? String(i + 1) : null))
+    .filter((v): v is string => v !== null)
+    .join(' ');
+  const ownerCommentarySlotSuffix =
+    ownerCommentarySlotNumbers === '1 2 3 4 5'
+      ? 'ALL'
+      : ownerCommentarySlotNumbers;
   const aiQuestionExamples = [
     {
       question: '@アヴリル・ラヴィーンのデビュー曲は？',
@@ -1049,7 +1064,7 @@ export default function Chat({
           }`}
         >
           <span className={ownerRoomFeatureHeaderPillClass(ownerAiCommentaryEnabled, 'commentary')}>
-            AI曲解説
+            AI曲解説{ownerCommentarySlotSuffix ? ` ${ownerCommentarySlotSuffix}` : ''}
           </span>
           <span className={ownerRoomFeatureHeaderPillClass(ownerSongQuizEnabled, 'quiz')}>曲クイズ</span>
           <span className={ownerRoomFeatureHeaderPillClass(ownerNextSongRecommendEnabled, 'recommend')}>

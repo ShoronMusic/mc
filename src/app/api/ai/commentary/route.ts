@@ -9,7 +9,7 @@ import {
   shouldSkipAiCommentaryForUncertainArtistResolution,
 } from '@/lib/format-song-display';
 import { generateCommentary } from '@/lib/gemini';
-import { upsertSongAndVideo } from '@/lib/song-entities';
+import { attachMusic8SongDataIfFetched, upsertSongAndVideo } from '@/lib/song-entities';
 import { insertTidbit } from '@/lib/song-tidbits';
 import {
   resolveArtistSongForPackAsync,
@@ -227,6 +227,14 @@ export async function POST(request: Request) {
         });
       } catch (e) {
         console.error('[api/ai/commentary] upsertSongAndVideo', e);
+      }
+    }
+    if (songId) {
+      const writer = createAdminClient() ?? supabase;
+      try {
+        await attachMusic8SongDataIfFetched(writer, songId, musicaichatSong ?? fallbackMusic8Song ?? null);
+      } catch (e) {
+        console.warn('[api/ai/commentary] attachMusic8SongDataIfFetched', e);
       }
     }
 

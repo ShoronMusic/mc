@@ -32,6 +32,60 @@ export interface Music8SongExtract {
   styleIds: number[];
   /** スタイル ID をスタイル名にした配列（例: ["Rock"]）。style_id.txt に無い ID はそのまま文字列で */
   styleNames: string[];
+  /** musicaichat `display.primary_artist_name_ja` */
+  primaryArtistNameJa: string;
+  /** `facts_for_ai` 行の「ボーカル：…」から抽出 */
+  vocalLabel: string;
+  /** `facts_for_ai` 行の「スタイル：…」から抽出（無ければ空） */
+  structuredStyleFromFacts: string;
+}
+
+const KNOWN_STYLE_NAMES = new Set(Object.values(MUSIC8_STYLE_ID_TO_NAME));
+
+/**
+ * facts テキスト先頭付近の「ボーカル：」「スタイル：」行を抽出（改行区切り想定）。
+ */
+export function parseMusicaichatStructuredMetadataFromFactsText(factsText: string): {
+  vocalLabel: string;
+  structuredStyleFromFacts: string;
+} {
+  let vocalLabel = '';
+  let structuredStyleFromFacts = '';
+  const lines = (factsText ?? '').split(/\r?\n/);
+  for (const line of lines) {
+    const v = line.match(/^\s*ボーカル\s*[:：]\s*(.+?)\s*$/i);
+    if (v?.[1]) vocalLabel = v[1].trim();
+    const s = line.match(/^\s*スタイル\s*[:：]\s*(.+?)\s*$/i);
+    if (s?.[1]) structuredStyleFromFacts = s[1].trim();
+  }
+  return { vocalLabel, structuredStyleFromFacts };
+}
+
+/**
+ * `songs.style` 用の代表スタイル。
+ * - **最優先**: 曲 JSON の `styles`（数値 ID）→ `MUSIC8_STYLE_ID_TO_NAME`（WordPress 曲マスタの分類。musicaichat の facts 行より信頼する）
+ * - 次: facts の「スタイル：」行（ID が無いときの補助）
+ * - 最後: `styleNames` のヒューリスティック（classification 流し込みは誤爆し得るため ID より後）
+ */
+export function resolveSongStyleForOverwriteFromMusic8(ex: Music8SongExtract): string | null {
+  for (const id of ex.styleIds) {
+    const name = MUSIC8_STYLE_ID_TO_NAME[String(id)];
+    if (name && name !== 'Others') return name;
+  }
+
+  const fromFacts = (ex.structuredStyleFromFacts ?? '').trim();
+  if (fromFacts) return fromFacts;
+
+  for (const name of ex.styleNames) {
+    const t = (name ?? '').trim();
+    if (t && KNOWN_STYLE_NAMES.has(t)) return t;
+  }
+  for (const name of ex.styleNames) {
+    const t = (name ?? '').trim();
+    if (t.length >= 4 && !/^\d+$/.test(t)) return t;
+  }
+  const first = (ex.styleNames[0] ?? '').trim();
+  return first || null;
 }
 
 function asObj(x: unknown): Record<string, unknown> | null {
@@ -58,6 +112,23 @@ function formatReleaseYearMonth(value: string): string {
   const m2 = s.match(/^(\d{4})\.(\d{2})/);
   if (m2) return `${m2[1]}.${m2[2]}`;
   return s.slice(0, 7).replace(/-/g, '.');
+}
+
+/**
+ * `extractMusic8SongFields` の `releaseDate`（例: "1983.05"）を PostgreSQL `date` 用 `YYYY-MM-DD` にする。
+ * 日は Music8 が年月までのため常に `01`。
+ */
+export function music8ReleaseYearMonthToPostgresDate(releaseYearMonth: string): string | null {
+  const s = (releaseYearMonth ?? '').trim();
+  if (!s) return null;
+  const m = s.match(/^(\d{4})(?:[\.\-](\d{1,2}))?/);
+  if (!m) return null;
+  const y = Number(m[1]);
+  const monthNum = m[2] != null ? Number(m[2]) : 1;
+  if (!Number.isFinite(y) || y < 1000 || y > 2100) return null;
+  if (!Number.isFinite(monthNum) || monthNum < 1 || monthNum > 12) return null;
+  const mm = String(monthNum).padStart(2, '0');
+  return `${String(y).padStart(4, '0')}-${mm}-01`;
 }
 
 /**
@@ -105,9 +176,13 @@ function extractMusicaichatV1SongFields(data: unknown): Music8SongExtract | null
       }
     }
   }
+  const rawFactsJoined = lines.join('\n');
+  const { vocalLabel, structuredStyleFromFacts } =
+    parseMusicaichatStructuredMetadataFromFactsText(rawFactsJoined);
   const descFromFacts = filterMusicaichatFactsBoilerplateLines(lines).join('\n').trim();
   const display = asObj(obj.display as unknown);
   const creditLine = display ? asStr(display.credit_line ?? '') : '';
+  const primaryArtistNameJa = display ? asStr(display.primary_artist_name_ja ?? '').trim() : '';
 
   const genres: string[] = [];
   const cls = obj.classification;
@@ -144,6 +219,9 @@ function extractMusicaichatV1SongFields(data: unknown): Music8SongExtract | null
     releaseDate: dateSrc ? formatReleaseYearMonth(dateSrc) : '',
     styleIds,
     styleNames,
+    primaryArtistNameJa,
+    vocalLabel,
+    structuredStyleFromFacts,
   };
 }
 
@@ -163,6 +241,9 @@ export function extractMusic8SongFields(data: unknown): Music8SongExtract {
     releaseDate: '',
     styleIds: [],
     styleNames: [],
+    primaryArtistNameJa: '',
+    vocalLabel: '',
+    structuredStyleFromFacts: '',
   };
 
   if (!obj) return result;
@@ -204,4 +285,54 @@ export function extractMusic8SongFields(data: unknown): Music8SongExtract {
   }
 
   return result;
+}
+
+/**
+ * DB に保存済みの `music8_song_data`（musicaichat_v1 スナップショット）から `Music8SongExtract` 互換を復元。
+ * 視聴履歴 upsert 等、生 JSON が無い経路で `songs.style` を同期するときに使う。
+ */
+export function extractMusic8SongFieldsFromPersistedSnapshot(data: unknown): Music8SongExtract | null {
+  const o = asObj(data);
+  if (!o || o.kind !== 'musicaichat_v1') return null;
+
+  const genres: string[] = [];
+  if (Array.isArray(o.genres)) {
+    for (const x of o.genres) {
+      if (typeof x === 'string' && x.trim()) genres.push(x.trim());
+    }
+  }
+  const styleNames: string[] = [];
+  if (Array.isArray(o.styleNames)) {
+    for (const x of o.styleNames) {
+      if (typeof x === 'string' && x.trim()) styleNames.push(x.trim());
+    }
+  }
+  const styleIds: number[] = [];
+  if (Array.isArray(o.styleIds)) {
+    for (const x of o.styleIds) {
+      const n = typeof x === 'number' ? x : Number(x);
+      if (!Number.isNaN(n)) styleIds.push(n);
+    }
+  }
+
+  const releaseDate = typeof o.releaseDate_normalized === 'string' ? o.releaseDate_normalized.trim() : '';
+  const vocalLabel = typeof o.vocal === 'string' ? o.vocal.trim() : '';
+  const structuredStyleFromFacts =
+    typeof o.structured_style === 'string' ? o.structured_style.trim() : '';
+  let primaryArtistNameJa = typeof o.primary_artist_name_ja === 'string' ? o.primary_artist_name_ja.trim() : '';
+  if (!primaryArtistNameJa) {
+    const d = asObj(o.display);
+    primaryArtistNameJa = d ? asStr(d.primary_artist_name_ja ?? '').trim() : '';
+  }
+
+  return {
+    description: '',
+    genres,
+    releaseDate,
+    styleIds,
+    styleNames,
+    primaryArtistNameJa,
+    vocalLabel,
+    structuredStyleFromFacts,
+  };
 }

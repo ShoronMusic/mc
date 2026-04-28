@@ -103,6 +103,8 @@ gcloud config set project music8-a161a
 gcloud storage rsync "E:\m8\public\data" gs://music8-json-prod/data --recursive
 ```
 
+musicaichat リポの `log/scripts/update-all-data.js` は、全生成スクリプトが成功したあと **`MUSIC8_GCS_SYNC=1`** のときだけ同様の `gcloud storage rsync` を自動実行する（既定オフ）。ローカル元は `log/public/data`（`MUSIC8_GCS_SYNC_SOURCE` で上書き可）。バケットは `MUSIC8_GCS_BUCKET`（既定 `gs://music8-json-prod/data`）。検証は `MUSIC8_GCS_DRY_RUN=1`。
+
 ### 5. 同期結果の確認
 
 ```powershell

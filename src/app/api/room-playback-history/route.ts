@@ -14,6 +14,9 @@ import {
   formatArtistTitle,
 } from '@/lib/format-song-display';
 import { resolveArtistSongForPackAsync } from '@/lib/youtube-artist-song-for-pack';
+import { fetchMusic8SongDataForPlaybackRow } from '@/lib/music8-song-lookup';
+import { extractMusic8SongFields, music8ReleaseYearMonthToPostgresDate } from '@/lib/music8-song-fields';
+import { buildPersistableMusic8SongSnapshot } from '@/lib/music8-song-persist';
 import { getVideoSnippet } from '@/lib/youtube-search';
 import { resolveJapaneseEconomyWithMusicBrainz } from '@/lib/resolve-japanese-economy';
 import { isJpDomesticOfficialChannelAiException } from '@/lib/jp-official-channel-exception';
@@ -299,6 +302,25 @@ export async function POST(request: Request) {
     authorName && cleanAuthor(authorName) && !isLikelyPersonalChannelName(cleanAuthor(authorName))
       ? authorName
       : null;
+
+  let originalReleaseDateIso: string | null = null;
+  let music8SongData: Record<string, unknown> | null = null;
+  try {
+    const music8Json = await fetchMusic8SongDataForPlaybackRow(
+      (artist ?? effectiveAuthor ?? '').trim() || 'Unknown',
+      title ?? videoId,
+    );
+    if (music8Json) {
+      const m8 = extractMusic8SongFields(music8Json);
+      if (m8.releaseDate?.trim()) {
+        originalReleaseDateIso = music8ReleaseYearMonthToPostgresDate(m8.releaseDate);
+      }
+      music8SongData = buildPersistableMusic8SongSnapshot(music8Json);
+    }
+  } catch (e) {
+    console.warn('[room-playback-history] music8 snapshot / release for songs', e);
+  }
+
   let songId: string | null = null;
   try {
     songId = await upsertSongAndVideo({
@@ -307,6 +329,9 @@ export async function POST(request: Request) {
       mainArtist: artist ?? effectiveAuthor ?? null,
       songTitle: song ?? (title ?? videoId),
       variant: 'official',
+      youtubePublishedAtIso: snippet?.publishedAt ?? null,
+      originalReleaseDateIso,
+      music8SongData: music8SongData ?? undefined,
     });
   } catch (e) {
     console.error('[room-playback-history] upsertSongAndVideo', e);

@@ -32,7 +32,7 @@ import { getGeminiModel, logGeminiUsage } from '@/lib/gemini';
 import { resolveGenerationModelId } from '@/lib/gemini-model-routing';
 import { persistGeminiUsageLog } from '@/lib/gemini-usage-log';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { upsertSongAndVideo } from '@/lib/song-entities';
+import { attachMusic8SongDataIfFetched, upsertSongAndVideo } from '@/lib/song-entities';
 import { isDevMinimalSongAi } from '@/lib/dev-minimal-song-ai';
 import {
   COMMENT_PACK_MAX_FREE_COMMENTS,
@@ -456,6 +456,15 @@ export async function POST(request: Request) {
       song || title,
     );
     const { musicaichatSong, fallbackMusic8Song } = music8Ctx;
+    if (songId) {
+      const writer = createAdminClient() ?? supabase;
+      const rawM8 = musicaichatSong ?? fallbackMusic8Song;
+      try {
+        await attachMusic8SongDataIfFetched(writer, songId, rawM8 ?? null);
+      } catch (e) {
+        console.warn('[api/ai/comment-pack] attachMusic8SongDataIfFetched', e);
+      }
+    }
     const skipMusic8FactInject = skipMusic8FactInjectEnv();
     const bypassLibraryCacheForMusic8 = shouldRegenerateLibraryWhenMusicaichatSong(
       musicaichatSong,

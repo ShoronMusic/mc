@@ -3746,7 +3746,8 @@ export default function RoomWithSync({
                 }
                 scheduledForSlot[i] = true;
                 const delayMs = (shownIdx2 + 1) * COMMENT_PACK_FREE_STAGGER_MS;
-                const labelNoForThisMessage = shownIdx2 + 2;
+                // オーナー設定のスロット番号と一致させる（slot0..3 => ラベル02..05）
+                const labelNoForThisMessage = i + 2;
                 shownIdx2 += 1;
                 const tidN = tidForSlot[i] ?? parseTidbitIdFromPack(idsPhase[i + 1]);
                 const prefixI = prefixForSlot[i];
@@ -3972,12 +3973,12 @@ export default function RoomWithSync({
               equivalentBaseOnlySlots(commentPackSlotsRef.current) || pendingFreeBodies.length > 0;
 
             let shownIdx = 0;
-            const freeLabelBaseOffset = hasBase ? 1 : 0;
             for (let i = 0; i < COMMENT_PACK_MAX_FREE_COMMENTS; i++) {
               const c = freeArr[i]?.trim() ?? '';
               if (!c) continue;
               const delayMs = (shownIdx + 1) * COMMENT_PACK_FREE_STAGGER_MS;
-              const labelNoForThisMessage = shownIdx + 1 + freeLabelBaseOffset;
+              // オーナー設定のスロット番号と一致させる（i=0..3 => ラベル02..05）
+              const labelNoForThisMessage = i + 2;
               shownIdx += 1;
               const tidN =
                 parseTidbitIdFromPack(freeTidbitIdsRaw[i]) ??
@@ -6627,6 +6628,7 @@ export default function RoomWithSync({
             onChatSummaryClick={roomId ? openChatSummaryModal : undefined}
             jpAiUnlockEnabled={jpAiUnlockEnabled}
             ownerAiCommentaryEnabled={!isCommentPackFullyOff(commentPackSlots)}
+            ownerCommentPackSlots={commentPackSlots}
             ownerSongQuizEnabled={ownerSongQuizEnabled}
             ownerNextSongRecommendEnabled={ownerNextSongRecommendEnabled}
             ownerAiCharacterJoinEnabled={ownerAiCharacterJoinEnabled}

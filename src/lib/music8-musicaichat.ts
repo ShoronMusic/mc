@@ -311,10 +311,28 @@ export async function resolveMusic8ContextForCommentPack(
     musicaichatSong == null && name && songTitle
       ? await fetchMusic8SongData(name, songTitle, { fetchJson: fetchJsonWithOptionalGcsAuth })
       : null;
+
+  /** musicaichat に `styles` が無いとき、GCS の WordPress 型曲 JSON（例: police_every-breath-you-take.json）から ID を補完 */
+  let mergedMusicaichatSong: MusicaichatSongJson | null = musicaichatSong;
+  if (mergedMusicaichatSong && name && songTitle) {
+    const raw = mergedMusicaichatSong as unknown as Record<string, unknown>;
+    const stylesArr = raw.styles;
+    const hasStyles = Array.isArray(stylesArr) && stylesArr.length > 0;
+    if (!hasStyles) {
+      const wp = await fetchMusic8SongData(name, songTitle, { fetchJson: fetchJsonWithOptionalGcsAuth });
+      if (wp) {
+        const wpStyles = (wp as Record<string, unknown>).styles;
+        if (Array.isArray(wpStyles) && wpStyles.length > 0) {
+          mergedMusicaichatSong = { ...raw, styles: wpStyles } as unknown as MusicaichatSongJson;
+        }
+      }
+    }
+  }
+
   return {
     artistJsonHit,
-    songJsonHit: musicaichatSong != null || fallbackMusic8Song != null,
-    musicaichatSong,
+    songJsonHit: mergedMusicaichatSong != null || fallbackMusic8Song != null,
+    musicaichatSong: mergedMusicaichatSong,
     fallbackMusic8Song,
   };
 }

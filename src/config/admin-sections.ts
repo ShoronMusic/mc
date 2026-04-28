@@ -11,6 +11,20 @@ export type AdminSection = {
 
 export const ADMIN_SECTIONS: AdminSection[] = [
   {
+    href: '/admin/library',
+    title: 'ライブラリ',
+    description:
+      '曲マスタをアーティスト索引・検索で参照。公開年・スタイル・再生数・YouTube リンク・詳細（DB）',
+    /** `/admin/library-music8-pending` とは被らないよう末尾 `/` 付きで子ページのみ含める */
+    activePathPrefix: '/admin/library/',
+  },
+  {
+    href: '/admin/library-music8-pending',
+    title: 'Music8未連携選曲',
+    description:
+      '視聴履歴ベースで、DB に曲があっても Music8 スナップショット未取得の video を JST 日別に一覧（手動登録のたたき台）',
+  },
+  {
     href: '/admin/gemini-usage',
     title: 'Gemini 利用ログ',
     description: 'API 呼び出し回数・トークン消費の集計と、直近の呼び出し明細',
