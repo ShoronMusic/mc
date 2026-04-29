@@ -45,6 +45,9 @@
   "Salt-N-Pepa",
   "Simon & Garfunkel",
   "T-Pain",
-  "Tegan and Sara",
+  {
+    "canonical": "Tegan and Sara",
+    "aliases": ["Tegan & Sara"]
+  },
   "Tones and I"
 ]
