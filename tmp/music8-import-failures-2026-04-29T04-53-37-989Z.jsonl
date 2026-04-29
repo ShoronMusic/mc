@@ -1,0 +1,6 @@
+{"stage":"fetch_song_json","artistSlug":"98-degrees","songSlug":"thank-god-i-found-you","reason":"song_json_not_found","detail":"http://127.0.0.1:38100/data/songs/98-degrees_thank-god-i-found-you.json"}
+{"stage":"fetch_song_json","artistSlug":"mariah-the-scientist","songSlug":"dreams-rarely-do-come-true","reason":"song_json_not_found","detail":"http://127.0.0.1:38100/data/songs/mariah-the-scientist_dreams-rarely-do-come-true.json"}
+{"stage":"fetch_song_json","artistSlug":"marias","songSlug":"all-i-did-was-dream-of-you","reason":"song_json_not_found","detail":"http://127.0.0.1:38100/data/songs/marias_all-i-did-was-dream-of-you.json"}
+{"stage":"fetch_song_json","artistSlug":"marias","songSlug":"a-room-up-in-the-sky","reason":"song_json_not_found","detail":"http://127.0.0.1:38100/data/songs/marias_a-room-up-in-the-sky.json"}
+{"stage":"fetch_song_json","artistSlug":"marias","songSlug":"separate-ways-ft-the-marias","reason":"song_json_not_found","detail":"http://127.0.0.1:38100/data/songs/marias_separate-ways-ft-the-marias.json"}
+{"stage":"fetch_song_json","artistSlug":"marias","songSlug":"si-me-voy","reason":"song_json_not_found","detail":"http://127.0.0.1:38100/data/songs/marias_si-me-voy.json"}

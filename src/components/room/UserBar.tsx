@@ -6,14 +6,13 @@
  * - モバイル: 1行固定。左＝全員表示トグル、中央＝再生中の選曲者＋波形、右＝アイコン（登録・マイページ・履歴など）。
  */
 
-import { useEffect, useState } from 'react';
+import { useRef } from 'react';
 import {
   UserCircleIcon,
   UserPlusIcon,
   ClockIcon,
-  UsersIcon,
-  ChevronDownIcon,
-  XMarkIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
   HeartIcon,
   DocumentTextIcon,
   IdentificationIcon,
@@ -69,6 +68,8 @@ interface UserBarProps {
   nextTurnClientId?: string;
   /** チャットオーナー基準の選曲ラウンド数（同期部屋。未指定は 1） */
   selectionRoundNumber?: number;
+  /** モバイル行では Round バッジを出さない（プレイヤー側オーバーレイ表示用） */
+  hideMobileRoundBadge?: boolean;
   /** 再生末尾へシークして終了扱い（active 時のみ呼ぶ） */
   onSkipCurrentTrack?: () => void;
   /** 自分の選曲予約のみ取り消し（5分制限・キュー時） */
@@ -144,6 +145,7 @@ export default function UserBar({
   queuedSongPublisherClientIds = [],
   nextTurnClientId = '',
   selectionRoundNumber = 1,
+  hideMobileRoundBadge = false,
   skipCurrentTrackActive = false,
   skipCurrentTrackDisabled = false,
   onSkipCurrentTrack,
@@ -153,7 +155,7 @@ export default function UserBar({
   onParticipantPublicProfileClick,
 }: UserBarProps) {
   const isLg = useIsLgViewport();
-  const [listOpen, setListOpen] = useState(false);
+  const mobileParticipantScrollRef = useRef<HTMLDivElement | null>(null);
   const hasGuestMarkerInLabel =
     /（\s*ゲスト\s*）|\(\s*guest\s*\)|\bguest\b|ゲスト/i.test(displayName);
   const label = isGuest ? `${displayName}${hasGuestMarkerInLabel ? '' : '（ゲスト）'}` : displayName;
@@ -171,31 +173,11 @@ export default function UserBar({
           .join(' ')
       : label;
 
-  useEffect(() => {
-    if (!listOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setListOpen(false);
-    };
-    window.addEventListener('keydown', onKey);
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      window.removeEventListener('keydown', onKey);
-      document.body.style.overflow = prev;
-    };
-  }, [listOpen]);
-
-  const poster =
-    currentSongPosterClientId !== ''
-      ? participants.find((p) => p.clientId === currentSongPosterClientId)
-      : undefined;
-
   const guestRegisterButtonMobile =
     showGuestRegister ? (
       <button
         type="button"
         onClick={() => {
-          setListOpen(false);
           onGuestRegisterClick?.();
         }}
         className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-emerald-700/60 bg-emerald-950/40 text-emerald-100 hover:bg-emerald-900/50"
@@ -211,7 +193,6 @@ export default function UserBar({
       <button
         type="button"
         onClick={() => {
-          setListOpen(false);
           onMyPageClick();
         }}
         className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-600 bg-gray-800 text-gray-200 hover:bg-gray-700"
@@ -227,7 +208,6 @@ export default function UserBar({
       <button
         type="button"
         onClick={() => {
-          setListOpen(false);
           onPlaybackHistoryClick();
         }}
         className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-600 bg-gray-800 text-gray-200 hover:bg-gray-700"
@@ -243,7 +223,6 @@ export default function UserBar({
       <button
         type="button"
         onClick={() => {
-          setListOpen(false);
           onChatSummaryClick();
         }}
         className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-600 bg-gray-800 text-gray-200 hover:bg-gray-700"
@@ -260,14 +239,13 @@ export default function UserBar({
     Boolean(currentVideoId) && Boolean(onFavoriteCurrentClick) && !isGuest;
 
   const favoriteCurrentButton =
-    currentVideoId ? (
+    currentVideoId && onFavoriteCurrentClick ? (
       <button
         type="button"
         onClick={() => {
           if (!currentVideoId) return;
           if (!onFavoriteCurrentClick) return;
           if (isGuest) return;
-          setListOpen(false);
           onFavoriteCurrentClick({ videoId: currentVideoId, isFavorited: currentIsFavorited });
         }}
         disabled={!canToggleCurrentFavorite}
@@ -544,107 +522,11 @@ export default function UserBar({
       </div>
     ) : null;
 
-  /** モバイル: 中央の再生中ユーザー */
-  const mobileCenter =
-    participants.length === 0 ? (
-      <div className="flex min-w-0 max-w-full flex-col items-center justify-center gap-0.5 px-0.5">
-        <span className="min-w-0 truncate text-center text-sm text-gray-200">{label}</span>
-        {skipCurrentTrackActive && onSkipCurrentTrack ? (
-          <button
-            type="button"
-            onClick={onSkipCurrentTrack}
-            className="shrink-0 rounded border border-amber-600/60 bg-amber-950/40 px-2 py-0.5 text-[10px] font-medium text-amber-100 hover:bg-amber-900/50"
-            aria-label="この曲を終了扱いにスキップ"
-            title="再生を最後まで進め、曲終了と同じ扱いにします"
-          >
-            スキップ
-          </button>
-        ) : skipCurrentTrackDisabled ? (
-          <span
-            className="shrink-0 rounded border border-gray-700 bg-gray-800/50 px-2 py-0.5 text-[10px] font-medium text-gray-500"
-            aria-hidden
-            title="選曲した方かチャットオーナーのみスキップできます"
-          >
-            スキップ
-          </span>
-        ) : null}
-      </div>
-    ) : poster ? (
-      <div
-        className="flex min-w-0 max-w-full flex-col items-center justify-center gap-0.5 px-1"
-        title="今の曲の選曲者（再生中）"
-      >
-        <div className="flex min-w-0 max-w-full items-center justify-center gap-1.5">
-          <span
-            className="animate-now-playing-wave inline-flex h-3 shrink-0 items-end gap-0.5"
-            style={{ transformOrigin: 'bottom' }}
-            aria-hidden
-          >
-            {[1, 2, 3, 4, 5].map((j) => (
-              <span
-                key={j}
-                className="inline-block w-0.5 rounded-full bg-amber-400"
-                style={{ height: '0.75rem', transformOrigin: 'bottom' }}
-              />
-            ))}
-          </span>
-          <span className="min-w-0 truncate text-sm font-medium text-amber-100">
-            {participantDisplayName(poster, myClientId, isGuest)}
-          </span>
-          <ParticipantProfileIconButton
-            participant={poster}
-            viewerIsGuest={viewerIsGuest}
-            onParticipantPublicProfileClick={onParticipantPublicProfileClick}
-          />
-          {currentOwnerClientId && poster.clientId === currentOwnerClientId ? (
-            <span
-              className="hidden shrink-0 text-amber-400 lg:inline"
-              title="チャットオーナー"
-              aria-label="チャットオーナー"
-            >
-              👑
-            </span>
-          ) : null}
-        </div>
-        {skipCurrentTrackActive && onSkipCurrentTrack ? (
-          <button
-            type="button"
-            onClick={onSkipCurrentTrack}
-            className="shrink-0 rounded border border-amber-600/60 bg-amber-950/40 px-2 py-0.5 text-[10px] font-medium text-amber-100 hover:bg-amber-900/50"
-            aria-label="この曲を終了扱いにスキップ"
-            title="再生を最後まで進め、曲終了と同じ扱いにします"
-          >
-            スキップ
-          </button>
-        ) : skipCurrentTrackDisabled ? (
-          <span
-            className="shrink-0 rounded border border-gray-700 bg-gray-800/50 px-2 py-0.5 text-[10px] font-medium text-gray-500"
-            aria-hidden
-            title="選曲した方かチャットオーナーのみスキップできます"
-          >
-            スキップ
-          </span>
-        ) : null}
-      </div>
-    ) : nextTurnClientId ? (
-      (() => {
-        const nextP = participants.find((p) => p.clientId === nextTurnClientId);
-        if (!nextP) return null;
-        return (
-          <div
-            className="flex min-w-0 max-w-full flex-col items-center justify-center gap-0.5 px-1"
-            title="次の選曲者（選曲待ち）"
-          >
-            <div className="min-w-0 truncate text-sm font-medium text-emerald-100">
-              {participantDisplayName(nextP, myClientId, isGuest)}
-            </div>
-            <div className="text-[11px] text-emerald-200/85">選曲待ち</div>
-          </div>
-        );
-      })()
-    ) : (
-      <span className="min-w-0 truncate text-center text-xs text-gray-500">再生中の選曲なし</span>
-    );
+  const scrollMobileParticipants = (dx: number) => {
+    const el = mobileParticipantScrollRef.current;
+    if (!el) return;
+    el.scrollBy({ left: dx, behavior: 'smooth' });
+  };
 
   const mobileTrailing =
     favoriteCurrentButton ||
@@ -661,24 +543,6 @@ export default function UserBar({
       </div>
     ) : null;
 
-  const listOpener =
-    participants.length > 0 ? (
-      <button
-        type="button"
-        onClick={() => setListOpen(true)}
-        className="flex h-9 shrink-0 items-center gap-0.5 rounded-lg border border-gray-600 bg-gray-800 px-1.5 text-gray-200 hover:bg-gray-700"
-        aria-expanded={listOpen}
-        aria-haspopup="dialog"
-        aria-label="参加者をすべて表示"
-        title="参加者一覧"
-      >
-        <UsersIcon className="h-5 w-5 shrink-0" aria-hidden />
-        <ChevronDownIcon className="h-4 w-4 shrink-0 opacity-80" aria-hidden />
-      </button>
-    ) : (
-      <div className="w-9 shrink-0" aria-hidden />
-    );
-
   if (isLg) {
     return (
       <div className="flex items-center justify-between gap-3 overflow-x-auto rounded-lg border border-gray-700 bg-gray-900/50 px-3 py-2">
@@ -693,198 +557,102 @@ export default function UserBar({
   }
 
   return (
-    <>
-      <div className="flex min-h-11 shrink-0 items-center gap-2 overflow-x-hidden overflow-y-auto rounded-lg border border-gray-700 bg-gray-900/50 px-2 py-1">
-        {roundBadge}
-        {listOpener}
-        <div className="min-w-0 flex-1 overflow-hidden">{mobileCenter}</div>
-        {mobileTrailing}
-      </div>
-
-      {listOpen && participants.length > 0 && (
-        <div className="fixed inset-0 z-[80]">
-          <button
-            type="button"
-            className="absolute inset-0 bg-black/60"
-            aria-label="参加者一覧を閉じる"
-            onClick={() => setListOpen(false)}
-          />
-          <div
-            className="relative z-10 mx-2 mt-[max(0.5rem,env(safe-area-inset-top))] flex max-h-[min(72vh,520px)] flex-col overflow-hidden rounded-xl border border-gray-600 bg-gray-900 shadow-2xl"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="user-bar-participant-list-title"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-gray-700 px-3 py-2.5">
-              <h2 id="user-bar-participant-list-title" className="text-sm font-semibold text-gray-100">
-                <span className="mr-2 inline-flex align-middle">{roundBadge}</span>
-                参加者（{participants.length}人）
-              </h2>
-              <button
-                type="button"
-                onClick={() => setListOpen(false)}
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-600 bg-gray-800 text-gray-200 hover:bg-gray-700"
-                aria-label="閉じる"
-              >
-                <XMarkIcon className="h-5 w-5" />
-              </button>
-            </div>
-            <ul className="min-h-0 flex-1 overflow-y-auto py-1">
-              {participants.map((p, i) => {
-                const name = participantDisplayName(p, myClientId, isGuest);
-                const away = p.isAway === true;
-                const color = away ? '#9ca3af' : p.textColor ?? '#e5e7eb';
-                const isAiParticipant = p.clientId === AI_PARTICIPANT_CLIENT_ID;
-                const isCurrentSongPoster = p.clientId === currentSongPosterClientId;
-                const isQueuedSongPoster =
-                  queuedSongPublisherClientIds.length > 0 &&
-                  queuedSongPublisherClientIds.includes(p.clientId);
-                const isNextTurnPoster =
-                  Boolean(nextTurnClientId) &&
-                  !isCurrentSongPoster &&
-                  !isQueuedSongPoster &&
-                  p.clientId === nextTurnClientId;
-                const isRoomOwner = Boolean(currentOwnerClientId && p.clientId === currentOwnerClientId);
-                const isMyQueuedSongMobile =
-                  isQueuedSongPoster && myClientId !== '' && p.clientId === myClientId;
-                return (
-                  <li
-                    key={p.clientId}
-                    className={`flex flex-col gap-0.5 border-b border-gray-800/80 px-3 py-2.5 last:border-b-0 ${isCurrentSongPoster ? 'bg-amber-950/25' : ''} ${isQueuedSongPoster && !isCurrentSongPoster ? 'bg-sky-950/20' : ''} ${isNextTurnPoster ? 'bg-emerald-950/20' : ''}`}
-                  >
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                      <span className="text-xs text-gray-500">[{i + 1}]</span>
-                      {isCurrentSongPoster && (
-                        <span
-                          className="animate-now-playing-wave inline-flex h-3 items-end gap-0.5"
-                          style={{ transformOrigin: 'bottom' }}
-                          aria-hidden
-                        >
-                          {[1, 2, 3, 4, 5].map((j) => (
-                            <span
-                              key={j}
-                              className="inline-block w-0.5 rounded-full bg-amber-400"
-                              style={{ height: '0.75rem', transformOrigin: 'bottom' }}
-                            />
-                          ))}
-                        </span>
-                      )}
-                      {isRoomOwner && (
-                        <span
-                          className="hidden text-amber-400 lg:inline"
-                          title="チャットオーナー"
-                          aria-label="チャットオーナー"
-                        >
-                          👑
-                        </span>
-                      )}
-                      {isAiParticipant && (
-                        <span
-                          className="inline-flex items-center rounded border border-violet-500/70 bg-violet-900/35 px-1 py-0 text-[9px] font-semibold leading-tight text-violet-200"
-                          title="AI参加者"
-                          aria-label="AI参加者"
-                        >
-                          AI
-                        </span>
-                      )}
-                      {(p.yellowCards ?? 0) > 0 && (
-                        <span className="text-yellow-300" title={`イエローカード ${p.yellowCards}枚`} aria-label={`イエローカード ${p.yellowCards}枚`}>
-                          {'🟨'.repeat(Math.min(2, p.yellowCards ?? 0))}
-                        </span>
-                      )}
-                      {p.clientId !== myClientId && onParticipantClick ? (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            onParticipantClick(p.displayName);
-                            setListOpen(false);
-                          }}
-                          className="min-w-0 flex-1 cursor-pointer rounded border-0 bg-transparent p-0 text-left text-sm underline decoration-dotted underline-offset-2 hover:opacity-90"
-                          style={{ color }}
-                        >
-                          {name}
-                        </button>
-                      ) : (
-                        <span className="min-w-0 flex-1 text-sm" style={{ color }}>
-                          {name}
-                        </span>
-                      )}
-                      <ParticipantProfileIconButton
-                        participant={p}
-                        viewerIsGuest={viewerIsGuest}
-                        onParticipantPublicProfileClick={onParticipantPublicProfileClick}
-                        onAfterClick={() => setListOpen(false)}
-                      />
-                    </div>
-                    {p.participatesInSelection === false ? (
-                      <span className="pl-6 text-[11px] text-gray-400" title="選曲順に含まれません">
-                        視聴専用
-                      </span>
-                    ) : null}
-                    {isCurrentSongPoster && (
-                      <span className="pl-6 text-[11px] text-amber-200/80">再生中の選曲</span>
-                    )}
-                    {isCurrentSongPoster && skipCurrentTrackActive && onSkipCurrentTrack ? (
-                      <div className="pl-6 pt-0.5">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            onSkipCurrentTrack();
-                            setListOpen(false);
-                          }}
-                          className="rounded border border-amber-600/60 bg-amber-950/40 px-2 py-1 text-[11px] font-medium text-amber-100 hover:bg-amber-900/50"
-                          aria-label="この曲を終了扱いにスキップ"
-                          title="再生を最後まで進め、曲終了と同じ扱いにします"
-                        >
-                          スキップ
-                        </button>
-                      </div>
-                    ) : isCurrentSongPoster && skipCurrentTrackDisabled ? (
-                      <div className="pl-6 pt-0.5">
-                        <span
-                          className="inline-flex rounded border border-gray-700 bg-gray-800/50 px-2 py-1 text-[11px] font-medium text-gray-500"
-                          aria-hidden
-                          title="選曲した方かチャットオーナーのみスキップできます"
-                        >
-                          スキップ
-                        </span>
-                      </div>
-                    ) : null}
-                    {isQueuedSongPoster &&
-                      (isMyQueuedSongMobile && onCancelSongReservation ? (
-                        <div className="pl-6 pt-0.5">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              onCancelSongReservation();
-                              setListOpen(false);
-                            }}
-                            className="rounded border border-sky-600/70 bg-sky-950/50 px-2 py-1 text-left text-[11px] font-medium text-sky-200 hover:bg-sky-900/55"
-                            aria-label="選曲予約の取り消し（確認）"
-                            title="クリックで確認画面が開き、取り消せます"
-                          >
-                            予約済み（順番待ち）
-                          </button>
-                        </div>
-                      ) : (
-                        <span className="pl-6 text-[11px] text-sky-200/85">予約済み（順番待ち）</span>
+    <div className="flex min-h-11 shrink-0 items-center gap-1.5 overflow-hidden rounded-lg border border-gray-700 bg-gray-900/50 px-2 py-1">
+      {!hideMobileRoundBadge ? roundBadge : null}
+      <button
+        type="button"
+        onClick={() => scrollMobileParticipants(-180)}
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded border border-gray-600 bg-gray-800/85 text-gray-200 hover:bg-gray-700"
+        aria-label="参加者を左へスクロール"
+        title="左へ"
+      >
+        <ChevronLeftIcon className="h-4 w-4" aria-hidden />
+      </button>
+      <div
+        ref={mobileParticipantScrollRef}
+        className="mc-scrollbar-stable min-w-0 flex-1 overflow-x-auto overflow-y-hidden"
+      >
+        <div className="flex min-w-max items-center gap-1 pr-1">
+          {participants.length === 0 ? (
+            <span className="rounded border border-gray-700 bg-gray-800/70 px-2 py-1 text-xs text-gray-400">
+              参加者なし
+            </span>
+          ) : (
+            participants.map((p, i) => {
+              const name = participantDisplayName(p, myClientId, isGuest);
+              const away = p.isAway === true;
+              const color = away ? '#9ca3af' : p.textColor ?? '#e5e7eb';
+              const isCurrentSongPoster = p.clientId === currentSongPosterClientId;
+              const isQueuedSongPoster =
+                queuedSongPublisherClientIds.length > 0 &&
+                queuedSongPublisherClientIds.includes(p.clientId);
+              const isNextTurnPoster =
+                Boolean(nextTurnClientId) &&
+                !isCurrentSongPoster &&
+                !isQueuedSongPoster &&
+                p.clientId === nextTurnClientId;
+              const isRoomOwner = Boolean(currentOwnerClientId && p.clientId === currentOwnerClientId);
+              const isAiParticipant = p.clientId === AI_PARTICIPANT_CLIENT_ID;
+              return (
+                <span
+                  key={p.clientId}
+                  className={`inline-flex items-center gap-1 rounded border px-2 py-1 text-xs ${
+                    isCurrentSongPoster
+                      ? 'border-amber-600/70 bg-amber-950/45'
+                      : isQueuedSongPoster
+                        ? 'border-sky-700/60 bg-sky-950/35'
+                        : isNextTurnPoster
+                          ? 'border-emerald-700/60 bg-emerald-950/35'
+                          : 'border-gray-700 bg-gray-900/70'
+                  }`}
+                >
+                  <span className="text-[10px] text-gray-500">[{i + 1}]</span>
+                  {isCurrentSongPoster ? (
+                    <span className="animate-now-playing-wave inline-flex h-3 items-end gap-0.5" aria-hidden>
+                      {[1, 2, 3].map((j) => (
+                        <span key={j} className="inline-block w-0.5 rounded-full bg-amber-400" style={{ height: '0.7rem' }} />
                       ))}
-                    {isNextTurnPoster && (
-                      <span className="pl-6 text-[11px] text-emerald-200/85">NEXT（選曲待ち）</span>
-                    )}
-                    {p.status ? (
-                      <span className="pl-6 text-xs text-gray-400" title={`ステータス: ${p.status}`}>
-                        [{p.status}]
-                      </span>
-                    ) : null}
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
+                    </span>
+                  ) : null}
+                  {isAiParticipant ? (
+                    <span className="inline-flex rounded border border-violet-500/70 bg-violet-900/35 px-1 text-[9px] font-semibold text-violet-200">
+                      AI
+                    </span>
+                  ) : null}
+                  {isRoomOwner ? <span className="text-amber-400">👑</span> : null}
+                  {p.clientId !== myClientId && onParticipantClick ? (
+                    <button
+                      type="button"
+                      onClick={() => onParticipantClick(p.displayName)}
+                      className="underline decoration-dotted underline-offset-1"
+                      style={{ color }}
+                    >
+                      {name}
+                    </button>
+                  ) : (
+                    <span style={{ color }}>{name}</span>
+                  )}
+                  <ParticipantProfileIconButton
+                    participant={p}
+                    viewerIsGuest={viewerIsGuest}
+                    onParticipantPublicProfileClick={onParticipantPublicProfileClick}
+                  />
+                </span>
+              );
+            })
+          )}
         </div>
-      )}
-    </>
+      </div>
+      <button
+        type="button"
+        onClick={() => scrollMobileParticipants(180)}
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded border border-gray-600 bg-gray-800/85 text-gray-200 hover:bg-gray-700"
+        aria-label="参加者を右へスクロール"
+        title="右へ"
+      >
+        <ChevronRightIcon className="h-4 w-4" aria-hidden />
+      </button>
+      {mobileTrailing}
+    </div>
   );
 }

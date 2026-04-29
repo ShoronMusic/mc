@@ -68,6 +68,36 @@ Music8 には概ね次が揃っている想定として相談された。
 | 部屋ライブラリ検索（現状は DB `songs`） | `src/app/api/library/search/route.ts` |
 | Music8 未連携の選曲を JST 日別（管理・手動登録用） | `src/app/admin/library-music8-pending/page.tsx`・`GET /api/admin/library-music8-pending` |
 
+## 手動バッチ（初回2万曲向け）
+
+`scripts/import-music8-songs-bulk.ts` を追加済み。  
+artist簡易JSON（`{artist}_songs.json`）の slug / ytvideoid を基準に、`songs/{artist}_{song}.json` を読んで `songs` + `song_videos` + `songs.music8_song_data` を冪等更新する。
+
+代表コマンド:
+
+```bash
+# まず dry-run（対象抽出確認）
+npm run import:music8:bulk -- --dry-run --artist-slugs=police
+
+# 実投入（1アーティスト）
+npm run import:music8:bulk -- --artist-slugs=police --sleep-ms=120
+
+# artist_index.json から全体を拾って段階投入（例: 先頭100アーティスト）
+npm run import:music8:bulk -- --limit-artists=100 --sleep-ms=120
+```
+
+主なオプション:
+
+- `--artist-slugs=police,queen`（対象を明示）
+- `--artist-slugs-file=tmp/music8-artist-slugs.txt`
+- `--artist-index-url=.../index/artist_index.json`（slug供給元）
+- `--artist-songs-base=https://xs867261.xsrv.jp/data/data/artists`
+- `--songs-base=https://xs867261.xsrv.jp/data/data/songs`
+- `--from-artist=police`（slug の辞書順で `>=` フィルタ。**index の並びの続き**には不向きなことがある）
+- `--skip-artists=3000`（`artist_index.json` のキー順で先頭 N 件を捨てる。**3000 アーティスト処理済みの続き**は `--skip-artists=3000`）
+- `--limit-artists=100` / `--limit-songs-per-artist=200`
+- `--failure-log=tmp/music8-import-failures.jsonl`
+
 ## 未決事項（次に決めると設計が固まる）
 
 1. 同期は **定期バッチ**か **手動トリガー**か  

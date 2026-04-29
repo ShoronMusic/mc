@@ -12,6 +12,7 @@ import { isYouTubeConfigured } from '@/lib/youtube-search';
 import { persistAiCharacterSongPickLog } from '@/lib/ai-character-song-pick-log';
 
 export const dynamic = 'force-dynamic';
+const USER_PICK_EXCLUDE_MAX = 120;
 
 export async function POST(request: Request) {
   try {
@@ -27,6 +28,8 @@ export async function POST(request: Request) {
     const videoId = typeof body?.videoId === 'string' ? body.videoId.trim() : '';
     const roomId = typeof body?.roomId === 'string' ? body.roomId.trim() : '';
     const roomTitle = typeof body?.roomTitle === 'string' ? body.roomTitle.trim() : '';
+    const aiCharacterDisplayName =
+      typeof body?.aiCharacterDisplayName === 'string' ? body.aiCharacterDisplayName.trim() : '';
     const isGuest = body?.isGuest === true;
 
     const rl = checkCharacterSongPickRateLimit(roomId);
@@ -94,7 +97,32 @@ export async function POST(request: Request) {
       if (!ytRl.ok) {
         youtube = { ok: false, reason: 'rate_limit', retryAfterSec: ytRl.retryAfterSec };
       } else {
-        const exclude = videoId ? [videoId] : [];
+        const excludeSet = new Set<string>();
+        if (videoId) excludeSet.add(videoId);
+        if (roomId) {
+          const supabase = await createClient();
+          if (supabase) {
+            const { data: roomHistoryRows, error: roomHistoryError } = await supabase
+              .from('room_playback_history')
+              .select('video_id, display_name')
+              .eq('room_id', roomId)
+              .order('played_at', { ascending: false })
+              .limit(USER_PICK_EXCLUDE_MAX * 3);
+            if (roomHistoryError && roomHistoryError.code !== '42P01') {
+              console.warn('[ai/character-song-pick] room_playback_history read failed', roomHistoryError.message);
+            } else if (Array.isArray(roomHistoryRows)) {
+              for (const row of roomHistoryRows as Array<{ video_id?: string | null; display_name?: string | null }>) {
+                const vid = typeof row.video_id === 'string' ? row.video_id.trim() : '';
+                if (!vid) continue;
+                const who = typeof row.display_name === 'string' ? row.display_name.trim() : '';
+                if (aiCharacterDisplayName && who === aiCharacterDisplayName) continue;
+                excludeSet.add(vid);
+                if (excludeSet.size >= USER_PICK_EXCLUDE_MAX) break;
+              }
+            }
+          }
+        }
+        const exclude = Array.from(excludeSet);
         const resolved = await resolveYoutubeQueryForPaste({
           query: pick.query,
           roomId: roomId || undefined,

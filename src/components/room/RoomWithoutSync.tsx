@@ -1,7 +1,7 @@
 'use client';
 
 import Image from 'next/image';
-import { EnvelopeIcon } from '@heroicons/react/24/outline';
+import { ClockIcon, EnvelopeIcon, HeartIcon, UserCircleIcon } from '@heroicons/react/24/outline';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Chat from '@/components/chat/Chat';
 import ChatInput, { type ChatInputHandle } from '@/components/chat/ChatInput';
@@ -439,6 +439,7 @@ export default function RoomWithoutSync({
     },
     [isGuest, fetchFavoritedIds, displayNameProp]
   );
+  const mobileCurrentIsFavorited = Boolean(videoId && favoritedVideoIds.includes(videoId));
 
   const handleNextSongRecommendReject = useCallback(
     async (messageId: string, recommendationId: string) => {
@@ -1641,6 +1642,7 @@ export default function RoomWithoutSync({
             videoId: videoId ?? undefined,
             roomId: roomId ?? undefined,
             roomTitle: roomDisplayTitleCurrent || roomTitle || undefined,
+            aiCharacterDisplayName: AI_CHARACTER_DEFAULT_NAME,
             isGuest,
           }),
         })
@@ -1956,16 +1958,15 @@ export default function RoomWithoutSync({
       <header className="mb-2 flex shrink-0 flex-row items-center justify-between gap-2 border-b border-gray-800 pb-2 sm:gap-3">
         <div className="flex min-w-0 flex-1 items-center gap-2">
           <Image
-            src="/music_ai_chat_wh.png"
+            src={isLg ? '/music_ai_chat_wh.png' : '/music_ai_chat_beta.png'}
             alt=""
             width={180}
             height={36}
             className="h-10 w-auto max-h-10 shrink-0 object-contain object-left"
             priority
           />
-          <span className="inline-flex shrink-0 items-center rounded bg-lime-400/10 px-1.5 py-0.5 text-[9px] font-semibold text-lime-200 sm:px-2 sm:text-[10px]">
-            <span className="sm:hidden">β</span>
-            <span className="hidden sm:inline">（β）版</span>
+          <span className="hidden shrink-0 items-center rounded bg-lime-400/10 px-1.5 py-0.5 text-[9px] font-semibold text-lime-200 sm:inline-flex sm:px-2 sm:text-[10px]">
+            <span>（β）版</span>
           </span>
           <h1
             className="min-w-0 flex-1 text-xs font-semibold leading-tight text-white sm:truncate sm:text-lg sm:leading-none"
@@ -2021,11 +2022,12 @@ export default function RoomWithoutSync({
           displayName={displayNameProp}
           isGuest={isGuest}
           onGuestRegisterClick={isGuest ? () => setGuestRegisterModalOpen(true) : undefined}
-          onMyPageClick={!isGuest ? () => setMyPageOpen(true) : undefined}
-          onPlaybackHistoryClick={isLg ? undefined : () => setPlaybackHistoryModalOpen(true)}
+          onMyPageClick={!isGuest && isLg ? () => setMyPageOpen(true) : undefined}
+          onPlaybackHistoryClick={undefined}
           currentVideoId={videoId}
           favoritedVideoIds={favoritedVideoIds}
-          onFavoriteCurrentClick={handleFavoriteCurrentClick}
+          onFavoriteCurrentClick={isLg ? handleFavoriteCurrentClick : undefined}
+          hideMobileRoundBadge
           skipCurrentTrackActive={Boolean(videoId && skipUsedForVideoId !== videoId)}
           skipCurrentTrackDisabled={false}
           onSkipCurrentTrack={handleSkipCurrentTrack}
@@ -2170,11 +2172,80 @@ export default function RoomWithoutSync({
         }
         rightTop={
           <>
-            <YouTubePlayer
-              ref={playerRef}
-              videoId={videoId}
-              onStateChange={handlePlayerStateChange}
-            />
+            <div className="relative">
+              <YouTubePlayer
+                ref={playerRef}
+                videoId={videoId}
+                onStateChange={handlePlayerStateChange}
+              />
+              <div className="absolute left-2 top-2 z-20 sm:hidden">
+                <span
+                  className="inline-flex shrink-0 flex-col items-center justify-center rounded border border-amber-800/80 bg-gray-950/85 px-1.5 py-0.5 leading-none text-amber-100 backdrop-blur-sm"
+                  title="選曲ラウンド"
+                  aria-label="選曲ラウンド"
+                >
+                  <span className="text-[6px] font-semibold tracking-wide text-amber-200/85" aria-hidden>
+                    ROUND
+                  </span>
+                  <span className="mt-0.5 font-mono text-[11px] font-semibold tabular-nums">1</span>
+                </span>
+              </div>
+              <div className="absolute right-2 top-2 z-20 flex items-center gap-1 sm:hidden">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!videoId || isGuest) return;
+                    void handleFavoriteCurrentClick({
+                      videoId,
+                      isFavorited: mobileCurrentIsFavorited,
+                    });
+                  }}
+                  disabled={!videoId || isGuest}
+                  className={`flex h-9 w-9 items-center justify-center rounded-lg border border-gray-600 bg-gray-900/90 text-gray-200 backdrop-blur-sm hover:bg-gray-800 disabled:opacity-50 ${
+                    mobileCurrentIsFavorited ? 'ring-1 ring-red-500/60' : ''
+                  }`}
+                  aria-label={
+                    isGuest
+                      ? 'お気に入り（ログインで利用可）'
+                      : mobileCurrentIsFavorited
+                        ? 'お気に入り解除（再生中の曲）'
+                        : 'お気に入りに追加（再生中の曲）'
+                  }
+                  title={
+                    isGuest
+                      ? 'お気に入り（ログインで利用可）'
+                      : mobileCurrentIsFavorited
+                        ? 'お気に入り解除（再生中）'
+                        : 'お気に入りに追加（再生中）'
+                  }
+                >
+                  <HeartIcon
+                    className={`h-5 w-5 ${mobileCurrentIsFavorited ? 'text-red-500' : 'text-gray-300'}`}
+                    aria-hidden
+                  />
+                </button>
+                {!isGuest && (
+                  <button
+                    type="button"
+                    onClick={() => setMyPageOpen(true)}
+                    className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-600 bg-gray-900/90 text-gray-200 backdrop-blur-sm hover:bg-gray-800"
+                    aria-label="マイページを開く"
+                    title="マイページ"
+                  >
+                    <UserCircleIcon className="h-5 w-5" aria-hidden />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setPlaybackHistoryModalOpen(true)}
+                  className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-600 bg-gray-900/90 text-gray-200 backdrop-blur-sm hover:bg-gray-800"
+                  aria-label="視聴履歴を表示"
+                  title="視聴履歴"
+                >
+                  <ClockIcon className="h-5 w-5" aria-hidden />
+                </button>
+              </div>
+            </div>
             <NowPlaying />
           </>
         }

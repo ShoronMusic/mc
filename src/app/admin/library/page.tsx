@@ -6,7 +6,7 @@ import { AdminMenuBar } from '@/components/admin/AdminMenuBar';
 import type { AdminLibraryArtistItem } from '@/app/api/admin/library/artists/route';
 import type { AdminLibrarySongItem } from '@/app/api/admin/library/songs/route';
 
-type SortMode = 'release' | 'plays';
+type SortMode = 'release_new' | 'release_old' | 'spotify_popularity';
 type AdminLibraryArtistInfo = {
   id: string;
   name: string;
@@ -35,11 +35,14 @@ export default function AdminLibraryPage() {
   const [selectedArtist, setSelectedArtist] = useState<string | null>(null);
   const [songs, setSongs] = useState<AdminLibrarySongItem[]>([]);
   const [artistInfo, setArtistInfo] = useState<AdminLibraryArtistInfo | null>(null);
-  const [sort, setSort] = useState<SortMode>('release');
+  const [sort, setSort] = useState<SortMode>('release_new');
   const [loadingSongs, setLoadingSongs] = useState(false);
   const [songsError, setSongsError] = useState<string | null>(null);
   const [loadingArtistInfo, setLoadingArtistInfo] = useState(false);
   const [artistInfoError, setArtistInfoError] = useState<string | null>(null);
+  const [dbDetailModalSong, setDbDetailModalSong] = useState<{ id: string; title: string } | null>(
+    null,
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -123,6 +126,15 @@ export default function AdminLibraryPage() {
     if (!selectedArtist) return;
     void loadArtistInfo(selectedArtist);
   }, [selectedArtist, loadArtistInfo]);
+
+  useEffect(() => {
+    if (!dbDetailModalSong) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setDbDetailModalSong(null);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [dbDetailModalSong]);
 
   const filteredArtists = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -237,8 +249,9 @@ export default function AdminLibraryPage() {
                   onChange={(e) => setSort(e.target.value as SortMode)}
                   className="rounded border border-gray-700 bg-gray-950 px-2 py-1 text-gray-200"
                 >
-                  <option value="release">公開年（新しい順）</option>
-                  <option value="plays">再生数</option>
+                  <option value="release_new">公開日 NEW</option>
+                  <option value="release_old">公開日 OLD</option>
+                  <option value="spotify_popularity">Spotify人気順</option>
                 </select>
               </div>
             )}
@@ -382,9 +395,20 @@ export default function AdminLibraryPage() {
                             )}
                           </td>
                           <td className="py-2 pl-2 align-top">
-                            <Link href={`/admin/songs/${s.id}`} className="text-amber-200/90 hover:underline">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setDbDetailModalSong({
+                                  id: s.id,
+                                  title:
+                                    (s.song_title ?? s.display_title ?? '（タイトル不明）').trim() ||
+                                    '（タイトル不明）',
+                                })
+                              }
+                              className="text-amber-200/90 hover:underline"
+                            >
                               DB
-                            </Link>
+                            </button>
                           </td>
                         </tr>
                       );
@@ -396,6 +420,49 @@ export default function AdminLibraryPage() {
           )}
         </section>
       </div>
+
+      {dbDetailModalSong && (
+        <div
+          className="fixed inset-0 z-[120] flex items-center justify-center bg-black/70 p-3"
+          role="dialog"
+          aria-modal="true"
+          aria-label="曲詳細（DB）"
+          onClick={() => setDbDetailModalSong(null)}
+        >
+          <div
+            className="flex h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-lg border border-gray-700 bg-gray-950 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-gray-800 px-4 py-2">
+              <p className="min-w-0 truncate text-sm text-gray-200">
+                曲詳細（DB）: {dbDetailModalSong.title}
+              </p>
+              <div className="flex items-center gap-3">
+                <a
+                  href={`/admin/songs/${dbDetailModalSong.id}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-sky-400 hover:underline"
+                >
+                  新しいタブで開く
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setDbDetailModalSong(null)}
+                  className="rounded border border-gray-700 px-2.5 py-1 text-xs text-gray-300 hover:bg-gray-800"
+                >
+                  閉じる
+                </button>
+              </div>
+            </div>
+            <iframe
+              title={`song-detail-${dbDetailModalSong.id}`}
+              src={`/admin/songs/${dbDetailModalSong.id}`}
+              className="h-full w-full border-0 bg-gray-950"
+            />
+          </div>
+        </div>
+      )}
 
       <section className="mt-8 rounded-lg border border-dashed border-gray-700 p-4 text-sm text-gray-500">
         <p>

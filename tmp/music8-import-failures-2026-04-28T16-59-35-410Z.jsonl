@@ -1,0 +1,14 @@
+{"stage":"fetch_song_json","artistSlug":"crosses","songSlug":"girls-float-boys-cry","reason":"song_json_not_found","detail":"http://127.0.0.1:38100/data/songs/crosses_girls-float-boys-cry.json"}
+{"stage":"fetch_song_json","artistSlug":"north","songSlug":"breathe-you-in","reason":"song_json_not_found","detail":"http://127.0.0.1:38100/data/songs/north_breathe-you-in.json"}
+{"stage":"fetch_song_json","artistSlug":"north","songSlug":"balance","reason":"song_json_not_found","detail":"http://127.0.0.1:38100/data/songs/north_balance.json"}
+{"stage":"fetch_song_json","artistSlug":"emily-makis","songSlug":"danger-zone","reason":"song_json_not_found","detail":"http://127.0.0.1:38100/data/songs/emily-makis_danger-zone.json"}
+{"stage":"fetch_song_json","artistSlug":"emily-makis","songSlug":"break-it-down","reason":"song_json_not_found","detail":"http://127.0.0.1:38100/data/songs/emily-makis_break-it-down.json"}
+{"stage":"fetch_song_json","artistSlug":"becky-hill","songSlug":"surrender-5","reason":"song_json_not_found","detail":"http://127.0.0.1:38100/data/songs/becky-hill_surrender-5.json"}
+{"stage":"fetch_song_json","artistSlug":"becky-hill","songSlug":"indestructible-2","reason":"song_json_not_found","detail":"http://127.0.0.1:38100/data/songs/becky-hill_indestructible-2.json"}
+{"stage":"fetch_song_json","artistSlug":"becky-hill","songSlug":"crazy-what-love-can-do","reason":"song_json_not_found","detail":"http://127.0.0.1:38100/data/songs/becky-hill_crazy-what-love-can-do.json"}
+{"stage":"fetch_song_json","artistSlug":"becky-hill","songSlug":"run","reason":"song_json_not_found","detail":"http://127.0.0.1:38100/data/songs/becky-hill_run.json"}
+{"stage":"fetch_song_json","artistSlug":"ilira","songSlug":"infinity","reason":"song_json_not_found","detail":"http://127.0.0.1:38100/data/songs/ilira_infinity.json"}
+{"stage":"fetch_song_json","artistSlug":"24kgoldn","songSlug":"its-a-feeling","reason":"song_json_not_found","detail":"http://127.0.0.1:38100/data/songs/24kgoldn_its-a-feeling.json"}
+{"stage":"fetch_song_json","artistSlug":"24kgoldn","songSlug":"oh-my-lord","reason":"song_json_not_found","detail":"http://127.0.0.1:38100/data/songs/24kgoldn_oh-my-lord.json"}
+{"stage":"fetch_song_json","artistSlug":"24kgoldn","songSlug":"overthinking","reason":"song_json_not_found","detail":"http://127.0.0.1:38100/data/songs/24kgoldn_overthinking.json"}
+{"stage":"fetch_song_json","artistSlug":"4batz","songSlug":"sick","reason":"song_json_not_found","detail":"http://127.0.0.1:38100/data/songs/4batz_sick.json"}

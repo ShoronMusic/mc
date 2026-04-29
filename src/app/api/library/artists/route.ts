@@ -1,25 +1,26 @@
 import { NextResponse } from 'next/server';
-import { requireStyleAdminApi } from '@/lib/admin-access';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { fetchAllSongRowsForArtistAggregation } from '@/lib/library-artist-count-rows';
 import { indexLetterForArtist, stripLeadingArticleForSort, compareDisplayTitleCaseInsensitive } from '@/lib/admin-library-index';
 import { songRowLooksJapaneseDomesticForAdminLibrary } from '@/lib/admin-library-jp-exclude';
 
 export const dynamic = 'force-dynamic';
 
-export type AdminLibraryArtistItem = {
+/** 部屋「ライブラリから選曲」用（認証不要・DB は admin クライアント）。管理 `/api/admin/library/artists` と同型。 */
+export type LibraryArtistIndexItem = {
   main_artist: string;
   count: number;
   indexLetter: string;
 };
 
 /**
- * GET: 曲マスタ `songs` を `main_artist` で集計（管理ライブラリ用）。
- * 邦楽寄り行（主要メタに日本語等・英字主体洋楽例外外）は集計から除外。
+ * GET: 曲マスタを `main_artist` で集計（洋楽寄せ・邦楽寄り行は除外）。
  */
 export async function GET() {
-  const gate = await requireStyleAdminApi();
-  if (!gate.ok) return gate.response;
-  const { supabase } = gate;
+  const admin = createAdminClient();
+  if (!admin) {
+    return NextResponse.json({ error: 'DB 設定が未完了です。' }, { status: 503 });
+  }
 
   let rows: {
     main_artist: string | null;
@@ -27,9 +28,9 @@ export async function GET() {
     display_title: string | null;
   }[];
   try {
-    rows = await fetchAllSongRowsForArtistAggregation(supabase);
+    rows = await fetchAllSongRowsForArtistAggregation(admin);
   } catch (e) {
-    console.error('[admin/library/artists]', e);
+    console.error('[api/library/artists]', e);
     const msg = e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : '曲一覧の取得に失敗しました。';
     return NextResponse.json({ error: msg }, { status: 500 });
   }
@@ -41,7 +42,7 @@ export async function GET() {
     counts.set(key, (counts.get(key) ?? 0) + 1);
   }
 
-  const items: AdminLibraryArtistItem[] = Array.from(counts.entries())
+  const items: LibraryArtistIndexItem[] = Array.from(counts.entries())
     .filter(([, count]) => count > 0)
     .map(([main_artist, count]) => ({
       main_artist,

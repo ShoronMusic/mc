@@ -150,7 +150,17 @@ import {
   setCommentPackModeToStorage,
 } from '@/lib/room-owner';
 import { createClient } from '@/lib/supabase/client';
-import { DocumentTextIcon, EnvelopeIcon, LockClosedIcon, LockOpenIcon } from '@heroicons/react/24/outline';
+import {
+  ArrowLeftStartOnRectangleIcon,
+  ChevronDownIcon,
+  ClockIcon,
+  DocumentTextIcon,
+  EnvelopeIcon,
+  HeartIcon,
+  LockClosedIcon,
+  LockOpenIcon,
+  UserCircleIcon,
+} from '@heroicons/react/24/outline';
 import { useIsLgViewport } from '@/hooks/useLgViewport';
 import { useRoomChatLogPersistence } from '@/hooks/useRoomChatLogPersistence';
 import { useRoomAccessLogReport } from '@/hooks/useRoomAccessLogReport';
@@ -393,6 +403,7 @@ export default function RoomWithSync({
   const [cancelReservationModalOpen, setCancelReservationModalOpen] = useState(false);
   const [joinLocked, setJoinLocked] = useState(false);
   const [joinLockSaving, setJoinLockSaving] = useState(false);
+  const [mobileHeaderMenuOpen, setMobileHeaderMenuOpen] = useState(false);
   const [policyTab, setPolicyTab] = useState<'terms' | 'privacy' | 'guide'>('terms');
   const performLogoutAndLeave = useCallback(async () => {
     const supabase = createClient();
@@ -1209,6 +1220,7 @@ export default function RoomWithSync({
     },
     [isGuest, participants, currentSongPosterClientId, effectiveDisplayName, fetchFavoritedIds]
   );
+  const mobileCurrentIsFavorited = Boolean(videoId && favoritedVideoIds.includes(videoId));
 
   const openChatSummaryModal = useCallback(() => {
     const rid = (roomId ?? '').trim();
@@ -2737,6 +2749,54 @@ export default function RoomWithSync({
       return [...prev, msg];
     });
   }, []);
+
+  const handleToggleJoinLock = useCallback(async () => {
+    if (joinLockSaving) return;
+    setJoinLockSaving(true);
+    try {
+      const next = !joinLocked;
+      const needsConfirm =
+        typeof window !== 'undefined' &&
+        window.matchMedia('(max-width: 639px)').matches;
+      if (needsConfirm) {
+        const actionLabel = next ? '新規参加を締め切る' : '新規参加締切を解除する';
+        const ok = window.confirm(`${actionLabel}を実行します。よろしいですか？`);
+        if (!ok) return;
+        const keyword = next ? 'lock' : 'unlock';
+        const typed = window.prompt(
+          `${actionLabel}するには「${keyword}」と入力してください。`,
+          '',
+        );
+        if ((typed ?? '').trim().toLowerCase() !== keyword) {
+          addSystemMessage('新規参加締切の切替をキャンセルしました。');
+          return;
+        }
+      }
+      const r = await fetch('/api/room-gatherings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ action: 'set_lock', roomId, locked: next }),
+      });
+      const d = (await r.json().catch(() => null)) as { joinLocked?: boolean; error?: string } | null;
+      if (!r.ok) {
+        addSystemMessage(
+          d?.error?.trim() || '新規参加締切の更新に失敗しました。時間をおいて再度お試しください。',
+        );
+        return;
+      }
+      setJoinLocked(d?.joinLocked === true);
+      addSystemMessage(
+        d?.joinLocked === true
+          ? 'この会は新規参加を締め切りました（既参加者は再入室できます）。'
+          : 'この会の新規参加締切を解除しました。',
+      );
+    } catch {
+      addSystemMessage('新規参加締切の更新に失敗しました。時間をおいて再度お試しください。');
+    } finally {
+      setJoinLockSaving(false);
+    }
+  }, [addSystemMessage, joinLocked, joinLockSaving, roomId]);
 
   const addSongQuizMessage = useCallback(
     (quiz: SongQuizPayload, videoIdForQuiz: string) => {
@@ -5502,6 +5562,7 @@ export default function RoomWithSync({
             videoId: videoId ?? undefined,
             roomId: roomId ?? undefined,
             roomTitle: roomDisplayTitleCurrent || roomTitle || undefined,
+            aiCharacterDisplayName: ownerAiCharacterNameRef.current || AI_CHARACTER_DEFAULT_NAME,
             isGuest,
           }),
         })
@@ -5991,19 +6052,18 @@ export default function RoomWithSync({
 
   return (
     <main className="flex h-screen flex-col overflow-hidden bg-gray-950 p-3">
-      <header className="mb-2 flex shrink-0 flex-row items-center justify-between gap-2 border-b border-gray-800 pb-2 sm:gap-3">
+      <header className="relative mb-2 flex shrink-0 flex-row items-center justify-between gap-2 border-b border-gray-800 pb-2 sm:gap-3">
         <div className="flex min-w-0 flex-1 items-center gap-2">
           <Image
-            src="/music_ai_chat_wh.png"
+            src={isLg ? '/music_ai_chat_wh.png' : '/music_ai_chat_beta.png'}
             alt=""
             width={180}
             height={36}
             className="h-10 w-auto max-h-10 shrink-0 object-contain object-left"
             priority
           />
-          <span className="inline-flex shrink-0 items-center rounded bg-lime-400/10 px-1.5 py-0.5 text-[9px] font-semibold text-lime-200 sm:px-1 sm:text-[10px]">
-            <span className="sm:hidden">β</span>
-            <span className="hidden sm:inline">（β）版</span>
+          <span className="hidden shrink-0 items-center rounded bg-lime-400/10 px-1.5 py-0.5 text-[9px] font-semibold text-lime-200 sm:inline-flex sm:px-1 sm:text-[10px]">
+            <span>（β）版</span>
           </span>
           <h1
             className="min-w-0 flex-1 text-xs font-semibold leading-tight text-white sm:truncate sm:text-lg sm:leading-none"
@@ -6030,58 +6090,84 @@ export default function RoomWithSync({
           <div className="flex shrink-0 flex-nowrap items-center justify-end gap-1.5 sm:gap-2">
             {!isGuest && (
               <>
+                <button
+                  type="button"
+                  onClick={() => setMobileHeaderMenuOpen((v) => !v)}
+                  className="inline-flex h-10 w-10 items-center justify-center gap-0.5 rounded border border-gray-600 bg-gray-800 px-0 py-0 text-gray-200 hover:bg-gray-700 sm:hidden"
+                  aria-expanded={mobileHeaderMenuOpen}
+                  aria-haspopup="menu"
+                  aria-label="ヘッダーメニューを開く"
+                  title="メニュー"
+                >
+                  <ArrowLeftStartOnRectangleIcon className="h-4 w-4" aria-hidden />
+                  <ChevronDownIcon className="h-3 w-3" aria-hidden />
+                </button>
+                {mobileHeaderMenuOpen && (
+                  <>
+                    <button
+                      type="button"
+                      className="fixed inset-0 z-[90] bg-transparent sm:hidden"
+                      aria-label="ヘッダーメニューを閉じる"
+                      onClick={() => setMobileHeaderMenuOpen(false)}
+                    />
+                    <div className="absolute right-0 top-12 z-[91] w-44 rounded border border-gray-600 bg-gray-900 p-1 shadow-xl sm:hidden">
+                      <button
+                        type="button"
+                        className="flex w-full items-center justify-between rounded px-3 py-2 text-left text-sm text-gray-100 hover:bg-gray-800"
+                        onClick={() => {
+                          setMobileHeaderMenuOpen(false);
+                          handleLeaveClick();
+                        }}
+                      >
+                        <span>退室</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="flex w-full items-center justify-between rounded px-3 py-2 text-left text-sm text-amber-200 hover:bg-amber-900/30"
+                        onClick={() => {
+                          setMobileHeaderMenuOpen(false);
+                          handleLogoutClick();
+                        }}
+                      >
+                        <span>ログアウト</span>
+                      </button>
+                      <button
+                        type="button"
+                        disabled={!canUseOwnerControls || joinLockSaving}
+                        className="flex w-full items-center justify-between rounded px-3 py-2 text-left text-sm text-amber-200 hover:bg-amber-900/30 disabled:opacity-50"
+                        onClick={() => {
+                          setMobileHeaderMenuOpen(false);
+                          void handleToggleJoinLock();
+                        }}
+                      >
+                        <span>{joinLocked ? '鍵を開ける' : '鍵を掛ける'}</span>
+                        {joinLocked ? (
+                          <LockClosedIcon className="h-4 w-4" aria-hidden />
+                        ) : (
+                          <LockOpenIcon className="h-4 w-4" aria-hidden />
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        className="flex w-full items-center justify-between rounded px-3 py-2 text-left text-sm text-sky-200 hover:bg-sky-900/30"
+                        onClick={() => {
+                          setMobileHeaderMenuOpen(false);
+                          handleInviteFriends();
+                        }}
+                      >
+                        <span>招待</span>
+                      </button>
+                    </div>
+                  </>
+                )}
                 {canUseOwnerControls && (
                   <button
                     type="button"
                     disabled={joinLockSaving}
-                    onClick={async () => {
-                      if (joinLockSaving) return;
-                      setJoinLockSaving(true);
-                      try {
-                        const next = !joinLocked;
-                        const needsConfirm =
-                          typeof window !== 'undefined' &&
-                          window.matchMedia('(max-width: 639px)').matches;
-                        if (needsConfirm) {
-                          const actionLabel = next ? '新規参加を締め切る' : '新規参加締切を解除する';
-                          const ok = window.confirm(`${actionLabel}を実行します。よろしいですか？`);
-                          if (!ok) return;
-                          const keyword = next ? 'lock' : 'unlock';
-                          const typed = window.prompt(
-                            `${actionLabel}するには「${keyword}」と入力してください。`,
-                            '',
-                          );
-                          if ((typed ?? '').trim().toLowerCase() !== keyword) {
-                            addSystemMessage('新規参加締切の切替をキャンセルしました。');
-                            return;
-                          }
-                        }
-                        const r = await fetch('/api/room-gatherings', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          credentials: 'include',
-                          body: JSON.stringify({ action: 'set_lock', roomId, locked: next }),
-                        });
-                        const d = (await r.json().catch(() => null)) as { joinLocked?: boolean; error?: string } | null;
-                        if (!r.ok) {
-                          addSystemMessage(
-                            d?.error?.trim() || '新規参加締切の更新に失敗しました。時間をおいて再度お試しください。',
-                          );
-                          return;
-                        }
-                        setJoinLocked(d?.joinLocked === true);
-                        addSystemMessage(
-                          d?.joinLocked === true
-                            ? 'この会は新規参加を締め切りました（既参加者は再入室できます）。'
-                            : 'この会の新規参加締切を解除しました。',
-                        );
-                      } catch {
-                        addSystemMessage('新規参加締切の更新に失敗しました。時間をおいて再度お試しください。');
-                      } finally {
-                        setJoinLockSaving(false);
-                      }
+                    onClick={() => {
+                      void handleToggleJoinLock();
                     }}
-                    className="inline-flex h-10 w-10 items-center justify-center gap-0 rounded border border-amber-700 bg-amber-900/30 px-0 py-0 text-xs text-amber-200 hover:bg-amber-800/50 disabled:opacity-50 sm:w-auto sm:gap-1 sm:px-2.5 sm:py-1.5"
+                    className="hidden h-10 w-10 items-center justify-center gap-0 rounded border border-amber-700 bg-amber-900/30 px-0 py-0 text-xs text-amber-200 hover:bg-amber-800/50 disabled:opacity-50 sm:inline-flex sm:w-auto sm:gap-1 sm:px-2.5 sm:py-1.5"
                     title="新規参加を締め切る / 解除する（既参加者の再入室は可）"
                     aria-label="新規参加締切の切替"
                   >
@@ -6117,7 +6203,7 @@ export default function RoomWithSync({
                 <button
                   type="button"
                   onClick={handleInviteFriends}
-                  className="h-10 w-10 rounded border border-sky-700 bg-sky-900/35 px-0 py-0 text-[11px] font-medium leading-none text-sky-200 hover:bg-sky-800/55 sm:w-auto sm:px-3 sm:py-2 sm:text-sm"
+                  className="hidden h-10 w-10 rounded border border-sky-700 bg-sky-900/35 px-0 py-0 text-[11px] font-medium leading-none text-sky-200 hover:bg-sky-800/55 sm:block sm:w-auto sm:px-3 sm:py-2 sm:text-sm"
                   title="この部屋の招待リンクを共有"
                   aria-label="友達を招待"
                 >
@@ -6127,7 +6213,7 @@ export default function RoomWithSync({
                 <button
                   type="button"
                   onClick={handleLogoutClick}
-                  className="inline-flex h-10 w-10 items-center justify-center rounded border border-amber-700 bg-amber-900/40 px-0 py-0 text-xs text-amber-200 hover:bg-amber-800/60 sm:w-auto sm:px-3 sm:py-2 sm:text-sm"
+                  className="hidden h-10 w-10 items-center justify-center rounded border border-amber-700 bg-amber-900/40 px-0 py-0 text-xs text-amber-200 hover:bg-amber-800/60 sm:inline-flex sm:w-auto sm:px-3 sm:py-2 sm:text-sm"
                   aria-label="ログアウトして最初の画面に戻る"
                 >
                   <span className="inline-flex flex-col leading-none sm:hidden">
@@ -6165,7 +6251,9 @@ export default function RoomWithSync({
             <button
               type="button"
               onClick={handleLeaveClick}
-              className="h-10 w-10 rounded border border-gray-600 bg-gray-800 px-0 py-0 text-[11px] font-medium leading-none text-gray-200 hover:bg-gray-700 hover:text-white sm:w-auto sm:px-4 sm:py-2 sm:text-sm"
+              className={`h-10 w-10 rounded border border-gray-600 bg-gray-800 px-0 py-0 text-[11px] font-medium leading-none text-gray-200 hover:bg-gray-700 hover:text-white ${
+                isGuest ? 'block sm:w-auto sm:px-4 sm:py-2 sm:text-sm' : 'hidden sm:block sm:w-auto sm:px-4 sm:py-2 sm:text-sm'
+              }`}
               aria-label="部屋を退室して最初の画面に戻る"
             >
               退室
@@ -6179,11 +6267,12 @@ export default function RoomWithSync({
           displayName={effectiveDisplayName}
           isGuest={isGuest}
           onGuestRegisterClick={isGuest ? () => setGuestRegisterModalOpen(true) : undefined}
-          onMyPageClick={() => setMyPageOpen(true)}
-          onPlaybackHistoryClick={isLg ? undefined : () => setPlaybackHistoryModalOpen(true)}
+          onMyPageClick={isLg ? () => setMyPageOpen(true) : undefined}
+          onPlaybackHistoryClick={undefined}
           currentVideoId={videoId}
           favoritedVideoIds={favoritedVideoIds}
-          onFavoriteCurrentClick={handleFavoriteCurrentClick}
+          onFavoriteCurrentClick={isLg ? handleFavoriteCurrentClick : undefined}
+          hideMobileRoundBadge
           participants={participants}
           myClientId={myClientId}
           currentOwnerClientId={ownerLeftAt === null ? ownerClientId : ''}
@@ -6656,11 +6745,82 @@ export default function RoomWithSync({
           />
         }
         rightTop={
-          <YouTubePlayer
-            ref={playerRef}
-            videoId={videoId}
-            onStateChange={handlePlayerStateChange}
-          />
+          <div className="relative">
+            <YouTubePlayer
+              ref={playerRef}
+              videoId={videoId}
+              onStateChange={handlePlayerStateChange}
+            />
+            <div className="absolute left-2 top-2 z-20 sm:hidden">
+              <span
+                className="inline-flex shrink-0 flex-col items-center justify-center rounded border border-amber-800/80 bg-gray-950/85 px-1.5 py-0.5 leading-none text-amber-100 backdrop-blur-sm"
+                title="選曲ラウンド"
+                aria-label="選曲ラウンド"
+              >
+                <span className="text-[6px] font-semibold tracking-wide text-amber-200/85" aria-hidden>
+                  ROUND
+                </span>
+                <span className="mt-0.5 font-mono text-[11px] font-semibold tabular-nums">
+                  {selectionRoundNumber}
+                </span>
+              </span>
+            </div>
+            <div className="absolute right-2 top-2 z-20 flex items-center gap-1 sm:hidden">
+              <button
+                type="button"
+                onClick={() => {
+                  if (!videoId || isGuest) return;
+                  void handleFavoriteCurrentClick({
+                    videoId,
+                    isFavorited: mobileCurrentIsFavorited,
+                  });
+                }}
+                disabled={!videoId || isGuest}
+                className={`flex h-9 w-9 items-center justify-center rounded-lg border border-gray-600 bg-gray-900/90 text-gray-200 backdrop-blur-sm hover:bg-gray-800 disabled:opacity-50 ${
+                  mobileCurrentIsFavorited ? 'ring-1 ring-red-500/60' : ''
+                }`}
+                aria-label={
+                  isGuest
+                    ? 'お気に入り（ログインで利用可）'
+                    : mobileCurrentIsFavorited
+                      ? 'お気に入り解除（再生中の曲）'
+                      : 'お気に入りに追加（再生中の曲）'
+                }
+                title={
+                  isGuest
+                    ? 'お気に入り（ログインで利用可）'
+                    : mobileCurrentIsFavorited
+                      ? 'お気に入り解除（再生中）'
+                      : 'お気に入りに追加（再生中）'
+                }
+              >
+                <HeartIcon
+                  className={`h-5 w-5 ${mobileCurrentIsFavorited ? 'text-red-500' : 'text-gray-300'}`}
+                  aria-hidden
+                />
+              </button>
+              {!isGuest && (
+                <button
+                  type="button"
+                  onClick={() => setMyPageOpen(true)}
+                  className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-600 bg-gray-900/90 text-gray-200 backdrop-blur-sm hover:bg-gray-800"
+                  aria-label="マイページを開く"
+                  title="マイページ"
+                >
+                  <UserCircleIcon className="h-5 w-5" aria-hidden />
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setPlaybackHistoryModalOpen(true)}
+                className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-600 bg-gray-900/90 text-gray-200 backdrop-blur-sm hover:bg-gray-800"
+                aria-label="視聴履歴を表示"
+                title="視聴履歴"
+              >
+                <ClockIcon className="h-5 w-5" aria-hidden />
+              </button>
+            </div>
+          </div>
         }
         rightBottom={
           <RoomPlaybackHistory

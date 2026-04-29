@@ -11,17 +11,20 @@ export type AdminLibrarySongItem = {
   song_title: string | null;
   style: string | null;
   play_count: number | null;
+  spotify_popularity: number | null;
   original_release_date: string | null;
   video_id: string | null;
 };
 
-function parseSort(raw: string | null): 'release' | 'plays' {
-  return raw === 'plays' ? 'plays' : 'release';
+function parseSort(raw: string | null): 'release_new' | 'release_old' | 'spotify_popularity' {
+  if (raw === 'release_old') return 'release_old';
+  if (raw === 'spotify_popularity') return 'spotify_popularity';
+  return 'release_new';
 }
 
 /**
  * GET: 指定 `main_artist` の曲一覧（代表 `video_id` 付き）
- * Query: artist（必須・main_artist と完全一致）, sort=release|plays
+ * Query: artist（必須・main_artist と完全一致）, sort=release_new|release_old|spotify_popularity
  * 邦楽寄り行は返さない（管理ライブラリは洋楽寄せ）。
  */
 export async function GET(request: Request) {
@@ -39,7 +42,9 @@ export async function GET(request: Request) {
 
   const { data: songRows, error: songErr } = await supabase
     .from('songs')
-    .select('id, display_title, main_artist, song_title, style, play_count, original_release_date')
+    .select(
+      'id, display_title, main_artist, song_title, style, play_count, spotify_popularity, original_release_date',
+    )
     .eq('main_artist', artist);
 
   if (songErr) {
@@ -79,10 +84,18 @@ export async function GET(request: Request) {
   const nullsLast = (v: string | null | undefined) => (v == null || v === '' ? null : v);
 
   items.sort((a, b) => {
-    if (sort === 'plays') {
-      const pa = a.play_count ?? 0;
-      const pb = b.play_count ?? 0;
+    if (sort === 'spotify_popularity') {
+      const pa = a.spotify_popularity ?? -1;
+      const pb = b.spotify_popularity ?? -1;
       if (pb !== pa) return pb - pa;
+    } else if (sort === 'release_old') {
+      const da = nullsLast(a.original_release_date);
+      const db = nullsLast(b.original_release_date);
+      if (da && db) {
+        const c = da.localeCompare(db);
+        if (c !== 0) return c;
+      } else if (db && !da) return 1;
+      else if (da && !db) return -1;
     } else {
       const da = nullsLast(a.original_release_date);
       const db = nullsLast(b.original_release_date);
