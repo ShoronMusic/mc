@@ -1618,3 +1618,6 @@
 {"stage":"fetch_song_json","artistSlug":"idles","songSlug":"the-god-of-lying-ft-idles","reason":"song_json_not_found","detail":"http://127.0.0.1:38100/data/songs/idles_the-god-of-lying-ft-idles.json"}
 {"stage":"fetch_song_json","artistSlug":"iggy-pop","songSlug":"gods-lonely-man","reason":"song_json_not_found","detail":"http://127.0.0.1:38100/data/songs/iggy-pop_gods-lonely-man.json"}
 {"stage":"fetch_song_json","artistSlug":"iggy-pop","songSlug":"anna-von-hausswolff-the-whole-woman","reason":"song_json_not_found","detail":"http://127.0.0.1:38100/data/songs/iggy-pop_anna-von-hausswolff-the-whole-woman.json"}
+{"stage":"fetch_song_json","artistSlug":"iggy-pop","songSlug":"kick-me","reason":"song_json_not_found","detail":"http://127.0.0.1:38100/data/songs/iggy-pop_kick-me.json"}
+{"stage":"fetch_song_json","artistSlug":"iggy-pop","songSlug":"bells-circles","reason":"song_json_not_found","detail":"http://127.0.0.1:38100/data/songs/iggy-pop_bells-circles.json"}
+{"stage":"fetch_song_json","artistSlug":"ilira","songSlug":"infinity","reason":"song_json_not_found","detail":"http://127.0.0.1:38100/data/songs/ilira_infinity.json"}
