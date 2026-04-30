@@ -273,17 +273,36 @@ async function ensureArtistAndLinkSong(
 
   let artistId: string | null = null;
   if (slug) {
-    const { data, error } = await supabase
+    // 部分ユニーク index (WHERE slug IS NOT NULL) は PostgREST の onConflict と一致せず 42P10 になるため、
+    // slug 一致で SELECT → UPDATE / INSERT に分ける。
+    const { data: hit, error: selErr } = await supabase
       .from('artists')
-      .upsert(artistPayload, { onConflict: 'music8_artist_slug' })
       .select('id')
-      .single();
-    if (error?.code === '42P01' || error?.code === '42703') return;
-    if (error) {
-      console.error('[song-entities] ensureArtist upsert by music8_artist_slug', error.code, error.message);
+      .eq('music8_artist_slug', slug)
+      .maybeSingle();
+    if (selErr?.code === '42P01' || selErr?.code === '42703') return;
+    if (selErr) {
+      console.error('[song-entities] ensureArtist select by music8_artist_slug', selErr.code, selErr.message);
       return;
     }
-    artistId = (data as { id?: string } | null)?.id ?? null;
+    const hitId = (hit as { id?: string } | null)?.id?.trim() ?? '';
+    if (hitId) {
+      const { error: upErr } = await supabase.from('artists').update(artistPayload).eq('id', hitId);
+      if (upErr?.code === '42P01' || upErr?.code === '42703') return;
+      if (upErr) {
+        console.error('[song-entities] ensureArtist update by id', upErr.code, upErr.message);
+        return;
+      }
+      artistId = hitId;
+    } else {
+      const { data, error } = await supabase.from('artists').insert(artistPayload).select('id').single();
+      if (error?.code === '42P01' || error?.code === '42703') return;
+      if (error) {
+        console.error('[song-entities] ensureArtist insert by music8_artist_slug', error.code, error.message);
+        return;
+      }
+      artistId = (data as { id?: string } | null)?.id ?? null;
+    }
   } else {
     const { data, error } = await supabase
       .from('artists')

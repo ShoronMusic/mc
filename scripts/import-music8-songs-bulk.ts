@@ -21,8 +21,17 @@ type CliOptions = {
 };
 
 type ArtistSongsListRow = {
+  id?: unknown;
   slug?: unknown;
+  date?: unknown;
+  title?: { rendered?: unknown } | unknown;
+  style?: unknown;
   ytvideoid?: unknown;
+  spotify_track_id?: unknown;
+  spotify_name?: unknown;
+  spotify_artists?: unknown;
+  spotify_popularity?: unknown;
+  featured_media_url?: unknown;
   acf?: { ytvideoid?: unknown } | null;
 };
 
@@ -351,6 +360,54 @@ function pickSongTitleFromListRow(listRow: ArtistSongsListRow): string | null {
   return null;
 }
 
+function asStringOrNull(v: unknown): string | null {
+  return typeof v === 'string' && v.trim() ? v.trim() : null;
+}
+
+function asNumberOrNull(v: unknown): number | null {
+  if (typeof v === 'number' && Number.isFinite(v)) return v;
+  if (typeof v === 'string' && v.trim()) {
+    const n = Number(v);
+    if (Number.isFinite(n)) return n;
+  }
+  return null;
+}
+
+/**
+ * `songs/{artist}_{slug}.json` が見つからない場合の補完用。
+ * artist list (`*_songs.json`) の行から、取り込める最小限の JSON 形を合成する。
+ */
+function buildFallbackSongJsonFromListRow(
+  listRow: ArtistSongsListRow,
+  mainArtist: string,
+  songSlug: string,
+): SongJson {
+  const title = pickSongTitleFromListRow(listRow) ?? songSlug.replace(/-/g, ' ');
+  const yt = asStringOrNull(listRow.ytvideoid) ?? asStringOrNull(listRow.acf?.ytvideoid);
+  const spotifyTrackId = asStringOrNull(listRow.spotify_track_id);
+  const spotifyName = asStringOrNull(listRow.spotify_name);
+  const spotifyArtists = asStringOrNull(listRow.spotify_artists);
+  const spotifyPopularity = asNumberOrNull(listRow.spotify_popularity);
+  const date = asStringOrNull(listRow.date);
+  const style = listRow.style ?? null;
+  const featuredMediaUrl = asStringOrNull(listRow.featured_media_url);
+
+  return {
+    title,
+    ...(yt ? { videoId: yt, ytvideoid: yt } : {}),
+    artists: [{ name: mainArtist }],
+    ...(date ? { date, original_release_date: date } : {}),
+    ...(style != null ? { style } : {}),
+    ...(spotifyTrackId ? { spotify_track_id: spotifyTrackId } : {}),
+    ...(spotifyName ? { spotify_name: spotifyName } : {}),
+    ...(spotifyArtists ? { spotify_artists: spotifyArtists } : {}),
+    ...(spotifyPopularity != null ? { spotify_popularity: spotifyPopularity } : {}),
+    ...(featuredMediaUrl ? { featured_media_url: featuredMediaUrl } : {}),
+    ...(typeof listRow.id === 'number' ? { music8_song_id: listRow.id } : {}),
+    music8_song_slug: songSlug,
+  };
+}
+
 function pickMainArtist(songJson: SongJson): string | null {
   if (Array.isArray(songJson.artists) && songJson.artists.length > 0) {
     const first = songJson.artists[0];
@@ -409,6 +466,7 @@ type Counters = {
   songsListed: number;
   songsAttempted: number;
   songsImported: number;
+  songsImportedWithListFallback: number;
   songsDryRun: number;
   songsSkippedMissingSlug: number;
   songsSkippedMissingSongJson: number;
@@ -452,6 +510,7 @@ async function main(): Promise<void> {
     songsListed: 0,
     songsAttempted: 0,
     songsImported: 0,
+    songsImportedWithListFallback: 0,
     songsDryRun: 0,
     songsSkippedMissingSlug: 0,
     songsSkippedMissingSongJson: 0,
@@ -499,6 +558,7 @@ async function main(): Promise<void> {
       const directSongUrl = `${opts.songsBase}/${encodeURIComponent(artistSlug)}_${encodeURIComponent(songSlug)}.json`;
       let songJson = await fetchJsonWithOptionalGcsAuth<SongJson>(directSongUrl);
       let effectiveSongSlug = songSlug;
+      let importedWithListFallback = false;
       if (!songJson || typeof songJson !== 'object' || Array.isArray(songJson)) {
         const altSlug = await resolveSongSlugFromArtistPages(opts.artistSongsBase, artistSlug, songSlug);
         if (altSlug && altSlug !== songSlug) {
@@ -508,6 +568,17 @@ async function main(): Promise<void> {
             songJson = altSongJson;
             effectiveSongSlug = altSlug;
           }
+        }
+      }
+      if (!songJson || typeof songJson !== 'object' || Array.isArray(songJson)) {
+        const fallbackMainArtist = artistSlug.replace(/-/g, ' ');
+        const fallbackSongJson = buildFallbackSongJsonFromListRow(row, fallbackMainArtist, songSlug);
+        const fallbackVideoId = pickVideoId(row, fallbackSongJson);
+        const fallbackSongTitle = pickSongTitle(fallbackSongJson);
+        if (fallbackVideoId && fallbackSongTitle) {
+          songJson = fallbackSongJson;
+          importedWithListFallback = true;
+          console.log(`[fallback] use artist list row: ${artistSlug}_${songSlug}`);
         }
       }
       if (!songJson || typeof songJson !== 'object' || Array.isArray(songJson)) {
@@ -584,6 +655,7 @@ async function main(): Promise<void> {
         } else {
           await attachMusic8SongDataIfFetched(admin, songId, songJson);
           counters.songsImported += 1;
+          if (importedWithListFallback) counters.songsImportedWithListFallback += 1;
         }
       } catch (e) {
         counters.failures += 1;

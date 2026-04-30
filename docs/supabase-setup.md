@@ -856,3 +856,43 @@ AIキャラの選曲が YouTube まで解決したとき、**サービスロー�
 **SQL・列の説明・保存条件**は **docs/supabase-ai-character-song-pick-logs-table.md** を開き、**Supabase SQL Editor** で同ファイルの `create table` ブロックを実行してください。
 
 - **オフ**: サーバー環境変数 `AI_CHARACTER_SONG_PICK_LOG_PERSIST=0` で INSERT を止められます。
+
+---
+
+## 22. YouTube playlist 取込の外部メタ保存（`song_external_metrics`）
+
+管理画面 **`/admin/youtube-playlist-import`** で取り込んだ際、MusicBrainz / YouTube から解決した公開日・ジャンル候補・再生指標を `video_id` 単位で保持するためのテーブルです。  
+`dry-run` では保存せず、実保存実行時のみ **サービスロール**で upsert します（既存 `video_id` は上書き更新）。
+
+**SQL（SQL Editor で実行）:**
+
+```sql
+create table if not exists public.song_external_metrics (
+  video_id text primary key,
+  song_id uuid references public.songs (id) on delete set null,
+  last_playlist_id text,
+  main_artist text not null,
+  song_title text not null,
+  raw_title text,
+  channel_title text,
+  original_release_date date,
+  youtube_published_at timestamptz,
+  date_source text not null default 'none' check (date_source in ('musicbrainz', 'youtube', 'none')),
+  genres text[] not null default '{}',
+  view_count bigint,
+  like_count bigint,
+  comment_count bigint,
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists song_external_metrics_song_id_idx
+  on public.song_external_metrics (song_id);
+
+create index if not exists song_external_metrics_updated_at_idx
+  on public.song_external_metrics (updated_at desc);
+
+alter table public.song_external_metrics enable row level security;
+```
+
+- **想定用途**: 将来の再取り込み時に、外部メタ（人気度比較・ジャンル候補）を再利用しやすくする。
+- **RLS**: ポリシーは付けず、アプリ側は **`SUPABASE_SERVICE_ROLE_KEY`** で書き込み（既存管理APIと同様）。

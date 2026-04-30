@@ -30,6 +30,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { SongSelectionHowtoModal } from '@/components/chat/SongSelectionHowtoModal';
 import { isYoutubeKeywordSearchEnabled } from '@/lib/youtube-keyword-search-ui';
+import { useIsLgViewport } from '@/hooks/useLgViewport';
 
 type SearchResultRow = {
   videoId: string;
@@ -268,6 +269,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
   const [librarySelectedVideoId, setLibrarySelectedVideoId] = useState<string | null>(null);
   const [libraryVideoLoading, setLibraryVideoLoading] = useState(false);
   const [libraryVideoError, setLibraryVideoError] = useState<string | null>(null);
+  const isLg = useIsLgViewport();
   const [libraryArtistInfo, setLibraryArtistInfo] = useState<LibraryArtistInfo | null>(null);
   const [libraryArtistInfoLoading, setLibraryArtistInfoLoading] = useState(false);
   const [libraryArtistInfoError, setLibraryArtistInfoError] = useState<string | null>(null);
@@ -1883,7 +1885,8 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                 </div>
               </section>
               {/* 4列目: 曲詳細・動画 */}
-              <section className="hidden min-h-0 flex-col lg:col-span-5 lg:flex">
+              {isLg && (
+              <section className="min-h-0 flex-col lg:col-span-5 lg:flex">
                 <div className="border-b border-lime-900/60 px-3 py-2">
                   <p className="text-xs text-gray-400">
                     左の「曲一覧」で選ぶと、動画バージョン（公式優先）を選べます。
@@ -2013,8 +2016,9 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                   )}
                 </div>
               </section>
+              )}
             </div>
-            {selectedLibraryRow ? (
+            {!isLg && selectedLibraryRow ? (
               <section className="absolute inset-x-0 bottom-0 z-20 flex h-[38vh] min-h-0 flex-col border-t border-lime-900/60 bg-gray-950 lg:hidden">
               <div className="border-b border-lime-900/60 px-3 py-2">
                 <p className="text-xs text-gray-400">

@@ -17,5 +17,15 @@ export function createAdminClient() {
   const url = getSupabaseUrl();
   const key = getServiceRoleKey();
   if (!url || !key) return null;
-  return createClient(url, key, { auth: { persistSession: false } });
+  return createClient(url, key, {
+    auth: { persistSession: false },
+    global: {
+      fetch: (input, init) =>
+        fetch(input, {
+          ...init,
+          // Next.js のサーバー fetch キャッシュで PostgREST 応答が古く残るのを防ぐ。
+          cache: 'no-store',
+        }),
+    },
+  });
 }

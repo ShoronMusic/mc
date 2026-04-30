@@ -25,6 +25,12 @@ export const ADMIN_SECTIONS: AdminSection[] = [
       '視聴履歴ベースで、DB に曲があっても Music8 スナップショット未取得の video を JST 日別に一覧（手動登録のたたき台）',
   },
   {
+    href: '/admin/youtube-playlist-import',
+    title: 'YouTubeプレイリスト取込',
+    description:
+      'YouTube playlist URL から artist/title/videoId を抽出し、既存 videoId を除外して曲マスタへ取り込み。結果を全件表示',
+  },
+  {
     href: '/admin/gemini-usage',
     title: 'Gemini 利用ログ',
     description: 'API 呼び出し回数・トークン消費の集計と、直近の呼び出し明細',

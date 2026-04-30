@@ -70,9 +70,10 @@ create table if not exists public.artists (
   updated_at timestamptz not null default now()
 );
 create unique index if not exists idx_artists_name on public.artists (lower(name));
+-- music8_artist_slug: **部分ユニーク**は Supabase JS の upsert(onConflict: 'music8_artist_slug') と
+-- PostgreSQL の ON CONFLICT 推論が一致せず **42P10** になる。非部分の unique index にする（NULL は複数行可）。
 create unique index if not exists idx_artists_music8_artist_slug
-  on public.artists (music8_artist_slug)
-  where music8_artist_slug is not null;
+  on public.artists (music8_artist_slug);
 alter table public.songs add column if not exists artist_id uuid null references public.artists(id);
 -- Music8 曲JSON由来メタ（2026-04 追加）
 alter table public.songs add column if not exists music8_video_id text null;            -- Music8 canonical YouTube video_id
