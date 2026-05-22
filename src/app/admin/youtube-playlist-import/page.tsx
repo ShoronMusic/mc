@@ -199,7 +199,11 @@ export default function AdminYoutubePlaylistImportPage() {
           mainArtist: artist,
         }),
       });
-      const data = (await res.json().catch(() => ({}))) as { error?: string; updatedCount?: number };
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        updatedCount?: number;
+        mergedCount?: number;
+      };
       if (!res.ok) {
         setBulkArtistMessage(data.error ?? '一括アーティスト補正に失敗しました。');
         return;

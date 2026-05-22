@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { requireStyleAdminApi } from '@/lib/admin-access';
-import { formatMusic8ArtistDisplayLines, type Music8ArtistJson } from '@/lib/music8-artist-display';
+import {
+  normalizeMusic8ArtistSource,
+  upsertArtistFromMusic8Json,
+} from '@/lib/music8-artist-import';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,24 +13,6 @@ type ReqBody = {
   jsonText?: unknown;
   jsonUrl?: unknown;
 };
-
-function asObj(x: unknown): Record<string, unknown> | null {
-  if (x && typeof x === 'object' && !Array.isArray(x)) return x as Record<string, unknown>;
-  return null;
-}
-
-function normalizeArtistNameLoose(name: string): string {
-  return name.replace(/^\s*(?:The|A|An)\s+/i, '').trim().toLowerCase();
-}
-
-function normalizeArtistSource(raw: unknown): Music8ArtistJson | null {
-  const obj = asObj(raw);
-  if (!obj) return null;
-  const acf = asObj(obj.acf);
-  const merged = acf ? { ...obj, ...acf } : obj;
-  if (typeof merged.name !== 'string' || !merged.name.trim()) return null;
-  return merged as Music8ArtistJson;
-}
 
 /**
  * POST: 管理画面のアーティストページで貼り付けた Music8 個別 JSON から artists を補完更新。
@@ -57,7 +42,6 @@ export async function POST(request: Request) {
   }
 
   let resolvedJsonText = jsonText;
-  // URL 指定時は貼り付けテキストより優先（サンプル入力が残っていても実URLを使う）
   if (jsonUrl) {
     let url: URL;
     try {
@@ -93,84 +77,24 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'JSON の形式が不正です。' }, { status: 400 });
   }
 
-  const src = normalizeArtistSource(parsedUnknown);
-  if (!src) {
+  if (!normalizeMusic8ArtistSource(parsedUnknown)) {
     return NextResponse.json({ error: 'Music8 アーティスト JSON として解釈できません。' }, { status: 400 });
   }
 
-  const fmt = formatMusic8ArtistDisplayLines(src);
-  // ライブラリの表示名（The Police など）を優先して維持する
-  const name = artistName || (src.name ?? '').trim();
-  const slug = typeof src.slug === 'string' && src.slug.trim() ? src.slug.trim() : null;
-  const nameJa = typeof src.artistjpname === 'string' && src.artistjpname.trim() ? src.artistjpname.trim() : null;
-  const kind = fmt.occupationDisplay?.trim() || null;
-  const originCountry = fmt.origin?.trim() || null;
-  const activePeriod = fmt.activeYears?.trim() || null;
-  const members = fmt.memberDisplay?.trim() || null;
-  const youtubeChannelUrl = fmt.youtubeChannelHref?.trim() || null;
-  const youtubeChannelTitle = youtubeChannelUrl ? `${fmt.nameDisplay || name} YouTube Channel` : null;
-  const imageUrl = fmt.imageUrl?.trim() || null;
-  const profileText = fmt.descriptionJa?.trim() || null;
+  const result = await upsertArtistFromMusic8Json({
+    admin,
+    rawJson: parsedUnknown,
+    displayNameOverride: artistName,
+  });
 
-  const normalizedQuery = normalizeArtistNameLoose(artistName);
-  let existing: { id?: string } | null = null;
-  const { data: exactByName, error: selErr } = await admin
-    .from('artists')
-    .select('id, name')
-    .ilike('name', artistName);
-  if (selErr && selErr.code !== '42P01') {
-    console.error('[admin/artist-master-import-json] select', selErr);
-    return NextResponse.json({ error: selErr.message }, { status: 500 });
-  }
-  if (Array.isArray(exactByName) && exactByName.length > 0) {
-    existing = exactByName[0] as { id?: string };
-  } else if (slug) {
-    const { data: bySlug, error: slugErr } = await admin
-      .from('artists')
-      .select('id')
-      .eq('music8_artist_slug', slug)
-      .limit(1)
-      .maybeSingle();
-    if (slugErr && slugErr.code !== '42P01') {
-      console.error('[admin/artist-master-import-json] select by slug', slugErr);
-      return NextResponse.json({ error: slugErr.message }, { status: 500 });
-    }
-    existing = (bySlug as { id?: string } | null) ?? null;
+  if ('error' in result) {
+    return NextResponse.json({ error: result.error }, { status: 500 });
   }
 
-  if (!existing && Array.isArray(exactByName)) {
-    const loose = exactByName.find((r) => normalizeArtistNameLoose(String((r as { name?: string }).name ?? '')) === normalizedQuery);
-    if (loose) existing = loose as { id?: string };
-  }
-
-  const patch = {
-    name,
-    music8_artist_slug: slug,
-    name_ja: nameJa,
-    kind,
-    origin_country: originCountry,
-    active_period: activePeriod,
-    members,
-    youtube_channel_title: youtubeChannelTitle,
-    youtube_channel_url: youtubeChannelUrl,
-    image_url: imageUrl,
-    profile_text: profileText,
-  };
-
-  if (existing?.id) {
-    const { error: updErr } = await admin.from('artists').update(patch).eq('id', existing.id);
-    if (updErr) {
-      console.error('[admin/artist-master-import-json] update', updErr);
-      return NextResponse.json({ error: updErr.message }, { status: 500 });
-    }
-    return NextResponse.json({ ok: true, artistId: existing.id, mode: 'update' });
-  }
-
-  const { data: ins, error: insErr } = await admin.from('artists').insert(patch).select('id').single();
-  if (insErr) {
-    console.error('[admin/artist-master-import-json] insert', insErr);
-    return NextResponse.json({ error: insErr.message }, { status: 500 });
-  }
-  return NextResponse.json({ ok: true, artistId: (ins as { id?: string } | null)?.id ?? null, mode: 'insert' });
+  return NextResponse.json({
+    ok: true,
+    artistId: result.artistId,
+    mode: result.mode === 'dry-run' ? 'update' : result.mode,
+    patchKeys: Object.keys(result.patch),
+  });
 }
-

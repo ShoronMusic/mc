@@ -36,13 +36,41 @@ try {
     true,
   );
 
-  // 音声 ja のみ → 従来どおり節約対象
+  // 音声 ja でも主要メタが英字主体なら節約にしない（洋楽公式 MV の defaultAudioLanguage 誤メタ対策）
   assert.equal(
     shouldUseJapaneseEconomyCommentPack({
       title: 'Some English Title',
       artistDisplay: 'Some Artist',
       artist: 'Some Artist',
       song: 'Some English Title',
+      description: null,
+      channelTitle: null,
+      defaultAudioLanguage: 'ja',
+    }),
+    false,
+  );
+
+  // US 系アーティスト例: 概要日本語 + 音声 ja でも主要メタが洋楽なら節約にしない
+  assert.equal(
+    shouldUseJapaneseEconomyCommentPack({
+      title: 'Billie Eilish - bad guy',
+      artistDisplay: 'Billie Eilish',
+      artist: 'Billie Eilish',
+      song: 'bad guy',
+      description: '高画質でお楽しみください。',
+      channelTitle: 'BillieEilishVEVO',
+      defaultAudioLanguage: 'ja',
+    }),
+    false,
+  );
+
+  // メタが乏しい＋音声 ja → 従来どおり節約（主要メタだけでは洋楽と断定できない）
+  assert.equal(
+    shouldUseJapaneseEconomyCommentPack({
+      title: 'X',
+      artistDisplay: 'A',
+      artist: 'A',
+      song: 'X',
       description: null,
       channelTitle: null,
       defaultAudioLanguage: 'ja',

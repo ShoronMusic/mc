@@ -6,6 +6,9 @@
  * 概要欄・チャンネル名だけに日本語がある場合（洋楽の来日公演で日本語の案内が付く等）は、
  * アーティスト名・曲名が英字主体で主要メタに日本語が無い限り邦楽扱いにしない（誤判定防止）。
  *
+ * 主要メタが英字主体の洋楽と分かるときは、YouTube の defaultAudioLanguage が ja だけでは節約にしない。
+ *（公式 MV でメタが誤って ja になる例がある。Billie Eilish 等の US アーティストを邦楽扱いしない）
+ *
  * COMMENT_PACK_JP_ECONOMY=0 で無効（常に基本＋自由4本）。
  */
 
@@ -48,7 +51,9 @@ export function shouldUseJapaneseEconomyCommentPack(opts: {
   if (process.env.COMMENT_PACK_JP_ECONOMY === '0') return false;
 
   const lang = opts.defaultAudioLanguage?.trim().toLowerCase();
-  if (lang && (lang === 'ja' || lang.startsWith('ja-'))) return true;
+  if (lang && (lang === 'ja' || lang.startsWith('ja-'))) {
+    if (!primaryMetadataLooksWesternLatin(opts)) return true;
+  }
 
   const primaryBlob = [opts.title, opts.artistDisplay, opts.artist, opts.song]
     .filter((x): x is string => typeof x === 'string' && x.length > 0)

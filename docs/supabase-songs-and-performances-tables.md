@@ -98,6 +98,45 @@ alter table public.artists add column if not exists spotify_artist_popularity sm
 alter table public.artists add column if not exists wikipedia_page text null;           -- Wikipedia スラッグ（例: "The_Police"）
 ```
 
+### アーティスト m8 整合（2026-05・SQL Editor で実行）
+
+Music8 アーティスト JSON 一括取り込み用。詳細は `docs/music8-artist-import-and-integration-plan.md`。
+
+```sql
+-- m8 準拠列（未適用 DB では import が存在列だけ書き込む）
+alter table public.artists add column if not exists name_base text null;
+alter table public.artists add column if not exists the_prefix text null;
+alter table public.artists add column if not exists name_sort text null;
+alter table public.artists add column if not exists music8_artist_id integer null;
+alter table public.artists add column if not exists active_year_start text null;
+alter table public.artists add column if not exists description_en text null;
+alter table public.artists add column if not exists music8_members jsonb null;
+alter table public.artists add column if not exists music8_synced_at timestamptz null;
+
+create unique index if not exists idx_artists_music8_artist_id
+  on public.artists (music8_artist_id)
+  where music8_artist_id is not null;
+
+create index if not exists idx_artists_name_sort on public.artists (name_sort);
+```
+
+- **`name`**: 表示名（`The Strokes`）。既存ライブラリ `ilike` 互換。
+- **`name_base` + `the_prefix`**: m8 の `name` / `thePrefix` と同義。
+- **`music8_artist_id`**: m8 WP `id`（例: 4834）。統合時の固定キー。
+
+### `artists.music8_artist_slug` が部分ユニーク index のままの DB（42P10）
+
+`upsert(..., onConflict: 'music8_artist_slug')` は **部分 unique index** と一致せず PostgreSQL **42P10** になる。アプリ側は `song-entities.ts` で **slug 一致の SELECT → UPDATE / INSERT** に変更済み（index 形態に依存しない）。
+
+PostgREST の upsert や将来の raw SQL 用に index を直す場合（SQL Editor）:
+
+```sql
+drop index if exists public.idx_artists_music8_artist_slug;
+create unique index idx_artists_music8_artist_slug on public.artists (music8_artist_slug);
+```
+
+（PostgreSQL では `UNIQUE` 列に **複数行 NULL** を許す。slug 非 null の重複だけ禁止される。）
+
 - **`original_release_date`**: 新規再生時、`Music8` 曲 JSON のリリース年月が取れたときだけ埋める（既に値がある行は上書きしない）。
 - **`music8_song_data`**: Music8 取得成功時に **`buildPersistableMusic8SongSnapshot`** の結果を `songs` に保存（同一曲で再取得したときは **上書き**）。`kind` は `musicaichat_v1` または `music8_wp_song`。巨大 HTML は含めない。musicaichat では `genres` / `styleNames` / `releaseDate_normalized` / `display` / `identifiers`（例: `spotify_track_id`）に加え、拡張用フラット列として **`primary_artist_name_ja`** / **`vocal`**（facts の「ボーカル：」行）/ **`structured_style`**（facts の「スタイル：」行）を持つ。あわせて **`attachMusic8SongDataIfFetched` または `upsertSongAndVideo`（スナップショット保存後）** で `songs.style` を Music8 由来に **上書き**し、`original_release_date` は **空欄のときのみ** Music8 の年月から補完する。
 - **`youtube_published_at`**: 同一 POST で取得済みの `videos.list` / `videos` の **snippet.publishedAt** を `song_videos` に upsert（列が無い古い DB では API が該当フィールドなしで upsert し、42703 は握りつぶす）。
@@ -107,7 +146,7 @@ alter table public.artists add column if not exists wikipedia_page text null;   
   - `music8_song_id`（WP 曲 ID）
   - `music8_artist_slug` / `music8_song_slug`（musicaichat stable_key）
   - `primary_artist_name_ja` / `vocal` / `structured_style`
-- **artists 基本マスタ**: `upsertSongAndVideo` / `attachMusic8SongDataIfFetched` が `artists` へ upsert し、`songs.artist_id` を自動更新（`artists` が未作成でも既存動作は維持）。
+- **artists 基本マスタ**: `upsertSongAndVideo` / `attachMusic8SongDataIfFetched` が `artists` を **slug で検索して更新または挿入**し、`songs.artist_id` を自動更新（`artists` が未作成でも既存動作は維持）。
 
 ### 利用イメージ
 

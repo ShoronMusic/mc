@@ -1,0 +1,5 @@
+﻿--artist-songs-base=http://127.0.0.1:38100/data/artists
+--songs-base=http://127.0.0.1:38100/data/songs
+--songs-local-dir=E:/m8/public/data/songs
+--sleep-ms=80
+--failure-log=tmp/music8-import.jsonl

@@ -7,6 +7,12 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { buildPersistableMusic8SongSnapshot } from '@/lib/music8-song-persist';
 import {
+  buildSongDisplayTitle,
+  primaryArtistNameFromMusic8Snapshot,
+  resolveMainArtistForNewSongRegistration,
+  shouldNormalizePrefixOnlyArtistName,
+} from '@/lib/music8-canonical-artist-name';
+import {
   extractMusic8SongFields,
   extractMusic8SongFieldsFromPersistedSnapshot,
   music8ReleaseYearMonthToPostgresDate,
@@ -47,6 +53,11 @@ function normalizeYoutubePublishedAtForDb(iso: string | null | undefined): strin
   const ms = Date.parse(t);
   if (Number.isNaN(ms)) return null;
   return new Date(ms).toISOString();
+}
+
+/** `ILIKE` でワイルドカードなしの「大文字小文字無視の一致」にする（DB の `lower(name)` 一意と整合） */
+function escapeIlikeExact(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
 }
 
 async function patchSongOriginalReleaseDateIfUnset(
@@ -188,7 +199,8 @@ function parseArtistInfoFromMusic8Payload(
   mainArtist: string | null | undefined,
   payload: Record<string, unknown> | null | undefined,
 ): ParsedArtistInfo {
-  const displayName = (mainArtist ?? '').trim() || null;
+  const fromSnap = primaryArtistNameFromMusic8Snapshot(payload);
+  const displayName = fromSnap || (mainArtist ?? '').trim() || null;
   let music8ArtistSlug: string | null = null;
   let primaryArtistNameJa: string | null = null;
   let spotifyArtistId: string | null = null;
@@ -297,24 +309,92 @@ async function ensureArtistAndLinkSong(
     } else {
       const { data, error } = await supabase.from('artists').insert(artistPayload).select('id').single();
       if (error?.code === '42P01' || error?.code === '42703') return;
-      if (error) {
+      if (error?.code === '23505') {
+        const { data: raceHit } = await supabase.from('artists').select('id').eq('music8_artist_slug', slug).maybeSingle();
+        let raceId = (raceHit as { id?: string } | null)?.id?.trim() ?? '';
+        if (!raceId) {
+          const displayName = String(artistPayload.name ?? '').trim();
+          if (displayName) {
+            const ilikePattern = escapeIlikeExact(displayName);
+            const { data: nameHits } = await supabase
+              .from('artists')
+              .select('id, music8_artist_slug')
+              .ilike('name', ilikePattern)
+              .limit(1);
+            const row = nameHits?.[0] as { id?: string; music8_artist_slug?: string | null } | undefined;
+            const nid = row?.id?.trim() ?? '';
+            const exSlug = (row?.music8_artist_slug ?? '').trim().toLowerCase();
+            if (nid && (!exSlug || exSlug === slug.toLowerCase())) {
+              raceId = nid;
+            }
+          }
+        }
+        if (raceId) {
+          const { error: upRace } = await supabase.from('artists').update(artistPayload).eq('id', raceId);
+          if (upRace?.code === '42P01' || upRace?.code === '42703') return;
+          if (upRace) {
+            console.error('[song-entities] ensureArtist update after slug insert race', upRace.code, upRace.message);
+            return;
+          }
+          artistId = raceId;
+        } else if (error) {
+          console.error('[song-entities] ensureArtist insert by music8_artist_slug', error.code, error.message);
+          return;
+        }
+      } else if (error) {
         console.error('[song-entities] ensureArtist insert by music8_artist_slug', error.code, error.message);
         return;
+      } else {
+        artistId = (data as { id?: string } | null)?.id ?? null;
       }
-      artistId = (data as { id?: string } | null)?.id ?? null;
     }
   } else {
-    const { data, error } = await supabase
+    const displayName = artistPayload.name as string;
+    const ilikePattern = escapeIlikeExact(displayName);
+    const { data: nameHits, error: nameSelErr } = await supabase
       .from('artists')
-      .upsert(artistPayload, { onConflict: 'name' })
       .select('id')
-      .single();
-    if (error?.code === '42P01' || error?.code === '42703') return;
-    if (error) {
-      console.error('[song-entities] ensureArtist upsert by name', error.code, error.message);
+      .ilike('name', ilikePattern)
+      .limit(1);
+    if (nameSelErr?.code === '42P01' || nameSelErr?.code === '42703') return;
+    if (nameSelErr) {
+      console.error('[song-entities] ensureArtist select by name', nameSelErr.code, nameSelErr.message);
       return;
     }
-    artistId = (data as { id?: string } | null)?.id ?? null;
+    const nameHitId = (nameHits?.[0] as { id?: string } | undefined)?.id?.trim() ?? '';
+    if (nameHitId) {
+      const { error: upName } = await supabase.from('artists').update(artistPayload).eq('id', nameHitId);
+      if (upName?.code === '42P01' || upName?.code === '42703') return;
+      if (upName) {
+        console.error('[song-entities] ensureArtist update by name id', upName.code, upName.message);
+        return;
+      }
+      artistId = nameHitId;
+    } else {
+      const { data: insData, error: insErr } = await supabase.from('artists').insert(artistPayload).select('id').single();
+      if (insErr?.code === '42P01' || insErr?.code === '42703') return;
+      if (insErr?.code === '23505') {
+        const { data: retryHits } = await supabase.from('artists').select('id').ilike('name', ilikePattern).limit(1);
+        const retryId = (retryHits?.[0] as { id?: string } | undefined)?.id?.trim() ?? '';
+        if (retryId) {
+          const { error: upRetry } = await supabase.from('artists').update(artistPayload).eq('id', retryId);
+          if (upRetry?.code === '42P01' || upRetry?.code === '42703') return;
+          if (upRetry) {
+            console.error('[song-entities] ensureArtist update after name insert race', upRetry.code, upRetry.message);
+            return;
+          }
+          artistId = retryId;
+        } else if (insErr) {
+          console.error('[song-entities] ensureArtist insert by name', insErr.code, insErr.message);
+          return;
+        }
+      } else if (insErr) {
+        console.error('[song-entities] ensureArtist insert by name', insErr.code, insErr.message);
+        return;
+      } else {
+        artistId = (insData as { id?: string } | null)?.id ?? null;
+      }
+    }
   }
   if (!artistId) return;
 
@@ -395,6 +475,49 @@ function normalizeDisplayTitle(displayTitle: string): string {
  * - songs は display_title（正規化済み）で検索して、なければ insert。
  * - song_videos は video_id 主キーで upsert。
  */
+async function patchSongMainArtistWhenMusic8Canonical(
+  supabase: SupabaseClient,
+  songId: string,
+  youtubeMainArtist: string | null | undefined,
+  music8SongSnapshot: Record<string, unknown>,
+): Promise<void> {
+  const fromSnap = primaryArtistNameFromMusic8Snapshot(music8SongSnapshot);
+  const resolved = await resolveMainArtistForNewSongRegistration({
+    youtubeMainArtist,
+    music8SongSnapshot,
+    admin: supabase,
+  });
+  const nextArtist = resolved.mainArtist?.trim();
+  if (!nextArtist) return;
+
+  const { data: row, error: selErr } = await supabase
+    .from('songs')
+    .select('main_artist, song_title')
+    .eq('id', songId)
+    .maybeSingle();
+  if (selErr?.code === '42703' || selErr?.code === '42P01') return;
+  if (selErr || !row) return;
+
+  const cur = ((row as { main_artist?: string | null }).main_artist ?? '').trim();
+  const songTitle = ((row as { song_title?: string | null }).song_title ?? '').trim();
+  const shouldPatch =
+    cur !== nextArtist &&
+    (!cur ||
+      Boolean(fromSnap) ||
+      shouldNormalizePrefixOnlyArtistName(cur, nextArtist));
+  if (!shouldPatch) return;
+
+  const displayTitle = buildSongDisplayTitle(nextArtist, songTitle);
+  const payload: Record<string, unknown> = { main_artist: nextArtist };
+  if (displayTitle) payload.display_title = displayTitle;
+
+  const { error: uErr } = await supabase.from('songs').update(payload).eq('id', songId);
+  if (uErr?.code === '42703' || uErr?.code === '42P01') return;
+  if (uErr) {
+    console.error('[song-entities] patchSongMainArtistWhenMusic8Canonical', uErr.code, uErr.message);
+  }
+}
+
 export async function upsertSongAndVideo(params: UpsertSongAndVideoParams): Promise<string | null> {
   const {
     supabase,
@@ -409,7 +532,17 @@ export async function upsertSongAndVideo(params: UpsertSongAndVideoParams): Prom
   } = params;
   if (!supabase || !videoId || !videoId.trim()) return null;
 
-  const displayTitle = buildDisplayTitle(mainArtist, songTitle);
+  let effectiveMainArtist = (mainArtist ?? '').trim() || null;
+  if (effectiveMainArtist || music8SongData) {
+    const resolved = await resolveMainArtistForNewSongRegistration({
+      youtubeMainArtist: effectiveMainArtist,
+      music8SongSnapshot: music8SongData ?? null,
+      admin: supabase,
+    });
+    if (resolved.mainArtist) effectiveMainArtist = resolved.mainArtist;
+  }
+
+  const displayTitle = buildDisplayTitle(effectiveMainArtist, songTitle);
   if (!displayTitle) return null;
 
   const trimmedVideoId = videoId.trim();
@@ -465,7 +598,7 @@ export async function upsertSongAndVideo(params: UpsertSongAndVideoParams): Prom
     const { data: insertedSong, error: songInsertError } = await supabase
       .from('songs')
       .insert({
-        main_artist: (canonArtist ?? mainArtist ?? '').trim() || null,
+        main_artist: (canonArtist ?? effectiveMainArtist ?? '').trim() || null,
         song_title: canonSongTitle || null,
         display_title: canonicalTitle,
       })
@@ -530,7 +663,7 @@ export async function upsertSongAndVideo(params: UpsertSongAndVideoParams): Prom
     }
   }
   try {
-    await syncArtistMasterFromMusic8(supabase, songId, mainArtist, music8SongData ?? null);
+    await syncArtistMasterFromMusic8(supabase, songId, effectiveMainArtist, music8SongData ?? null);
   } catch (e) {
     console.warn('[song-entities] syncArtistMasterFromMusic8 (upsert)', e);
   }
@@ -558,7 +691,14 @@ export async function attachMusic8SongDataIfFetched(
   try {
     await syncSongLibraryColumnsFromMusic8Extract(supabase, songId.trim(), ex);
     await patchSongFutureColumnsFromMusic8(supabase, songId.trim(), ex, snap);
-    await syncArtistMasterFromMusic8(supabase, songId.trim(), null, snap);
+    const { data: curRow } = await supabase
+      .from('songs')
+      .select('main_artist')
+      .eq('id', songId.trim())
+      .maybeSingle();
+    const curMain = (curRow as { main_artist?: string | null } | null)?.main_artist ?? null;
+    await syncArtistMasterFromMusic8(supabase, songId.trim(), curMain, snap);
+    await patchSongMainArtistWhenMusic8Canonical(supabase, songId.trim(), curMain, snap);
   } catch (e) {
     console.warn('[song-entities] syncSongLibraryColumnsFromMusic8Extract (attach)', e);
   }

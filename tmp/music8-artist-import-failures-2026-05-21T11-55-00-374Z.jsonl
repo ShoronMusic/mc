@@ -1,0 +1,2 @@
+{"at":"2026-05-21T11:55:04.304Z","artistSlug":"amadou-mariam","stage":"upsert_artist","reason":"upsert_failed","detail":"duplicate key value violates unique constraint \"idx_artists_music8_artist_slug\""}
+{"at":"2026-05-21T11:55:22.070Z","artistSlug":"dee-dee-bridgewater","stage":"upsert_artist","reason":"upsert_failed","detail":"too many column retries"}

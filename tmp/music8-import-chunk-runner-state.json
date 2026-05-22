@@ -1,0 +1,86 @@
+{
+  "version": 1,
+  "chunksDir": "E:\\mc\\tmp\\music8-import-chunks",
+  "completedBasenames": [
+    "chunk-00001.txt",
+    "chunk-00002.txt",
+    "chunk-00003.txt",
+    "chunk-00004.txt",
+    "chunk-00005.txt",
+    "chunk-00006.txt",
+    "chunk-00007.txt",
+    "chunk-00008.txt",
+    "chunk-00009.txt",
+    "chunk-00010.txt",
+    "chunk-00011.txt",
+    "chunk-00012.txt",
+    "chunk-00013.txt"
+  ],
+  "runs": [
+    {
+      "chunk": "chunk-00001.txt",
+      "finishedAt": "2026-05-01T08:44:40.904Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00002.txt",
+      "finishedAt": "2026-05-01T08:49:22.277Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00003.txt",
+      "finishedAt": "2026-05-01T08:53:49.834Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00004.txt",
+      "finishedAt": "2026-05-01T08:58:35.425Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00005.txt",
+      "finishedAt": "2026-05-01T09:03:11.174Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00006.txt",
+      "finishedAt": "2026-05-01T09:07:48.382Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00007.txt",
+      "finishedAt": "2026-05-01T09:12:43.446Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00008.txt",
+      "finishedAt": "2026-05-01T09:17:03.030Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00009.txt",
+      "finishedAt": "2026-05-01T09:21:56.289Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00010.txt",
+      "finishedAt": "2026-05-01T09:26:37.128Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00011.txt",
+      "finishedAt": "2026-05-01T09:31:27.930Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00012.txt",
+      "finishedAt": "2026-05-01T09:36:00.859Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00013.txt",
+      "finishedAt": "2026-05-01T09:40:21.443Z",
+      "exitCode": 0
+    }
+  ]
+}

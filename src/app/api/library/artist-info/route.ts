@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { artistNameToMusic8Slug } from '@/lib/music8-artist-display';
 
 export const dynamic = 'force-dynamic';
 
@@ -39,14 +40,53 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'artist query is required' }, { status: 400 });
   }
 
-  const { data, error } = await admin.from('artists').select('*').ilike('name', artist).limit(50);
+  const slug = artistNameToMusic8Slug(artist);
+  const rows: ArtistInfo[] = [];
+  const seen = new Set<string>();
+  const appendRows = (list: ArtistInfo[] | null | undefined) => {
+    if (!Array.isArray(list)) return;
+    for (const r of list) {
+      if (!r?.id || seen.has(r.id)) continue;
+      seen.add(r.id);
+      rows.push(r);
+    }
+  };
+
+  if (slug) {
+    const { data: bySlug, error: slugErr } = await admin
+      .from('artists')
+      .select('*')
+      .eq('music8_artist_slug', slug)
+      .limit(50);
+    if (slugErr && slugErr.code !== '42P01') {
+      console.error('[api/library/artist-info] artists by slug', slugErr);
+      return NextResponse.json({ error: 'アーティスト情報の取得に失敗しました。' }, { status: 500 });
+    }
+    appendRows((bySlug ?? []) as ArtistInfo[]);
+  }
+
+  const { data: byName, error } = await admin.from('artists').select('*').ilike('name', artist).limit(50);
   if (error) {
     if (error.code === '42P01') return NextResponse.json({ artist: null as ArtistInfo | null });
     console.error('[api/library/artist-info] artists', error);
     return NextResponse.json({ error: 'アーティスト情報の取得に失敗しました。' }, { status: 500 });
   }
+  appendRows((byName ?? []) as ArtistInfo[]);
 
-  const rows = (data ?? []) as ArtistInfo[];
+  if (rows.length === 0) {
+    const escaped = artist.replace(/[%_]/g, '\\$&');
+    const { data: byNameLike, error: likeErr } = await admin
+      .from('artists')
+      .select('*')
+      .ilike('name', `%${escaped}%`)
+      .limit(100);
+    if (likeErr && likeErr.code !== '42P01') {
+      console.error('[api/library/artist-info] artists by name like', likeErr);
+      return NextResponse.json({ error: 'アーティスト情報の取得に失敗しました。' }, { status: 500 });
+    }
+    appendRows((byNameLike ?? []) as ArtistInfo[]);
+  }
+
   const q = normalizeArtistNameLoose(artist);
   const picked =
     rows.find((r) => normalizeArtistNameLoose(r.name ?? '') === q) ??
@@ -56,4 +96,3 @@ export async function GET(request: Request) {
 
   return NextResponse.json({ artist: picked });
 }
-

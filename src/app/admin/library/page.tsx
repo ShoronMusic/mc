@@ -145,6 +145,8 @@ export default function AdminLibraryPage() {
     });
   }, [artists, query, letterFilter]);
 
+  const totalSongCount = useMemo(() => artists.reduce((sum, a) => sum + a.count, 0), [artists]);
+
   return (
     <main className="mx-auto min-h-screen max-w-5xl bg-gray-950 p-4 text-gray-100 sm:p-6">
       <AdminMenuBar />
@@ -152,6 +154,12 @@ export default function AdminLibraryPage() {
       <p className="mt-2 text-sm text-gray-400">
         DB の <code className="rounded bg-gray-800 px-1">songs</code> をアーティスト別に参照します。主要メタに日本語等がある邦楽寄り行は一覧に出しません（英字主体の洋楽例外は維持）。公開年・再生数は列がある環境でのみ表示されます。
       </p>
+      {!loadingArtists && !artistsError && (
+        <p className="mt-2 text-sm text-gray-400">
+          登録曲数：<span className="font-semibold text-amber-200">{totalSongCount.toLocaleString()}</span> 曲
+          <span className="ml-2 text-xs text-gray-600">（{artists.length} アーティスト）</span>
+        </p>
+      )}
 
       <section className="mt-6 rounded-lg border border-gray-800 bg-gray-900/50 p-4">
         <h2 className="text-sm font-semibold text-amber-200">検索・索引</h2>
