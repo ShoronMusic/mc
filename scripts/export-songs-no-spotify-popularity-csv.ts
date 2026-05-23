@@ -108,6 +108,7 @@ function buildCsv(rows: Record<string, string | number>[]): string {
 
 async function fetchAll(): Promise<SongRow[]> {
   const supabase = createAdminClient();
+  if (!supabase) throw new Error('createAdminClient failed');
   const all: SongRow[] = [];
   let from = 0;
 
