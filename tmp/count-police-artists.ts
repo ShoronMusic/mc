@@ -29,9 +29,10 @@ async function main(): Promise<void> {
     console.error('createAdminClient が null。.env.local の SUPABASE_* を確認してください。');
     process.exit(1);
   }
+  const db = admin;
 
   async function countExact(mainArtist: string): Promise<number> {
-    const { count, error } = await admin
+    const { count, error } = await db
       .from('songs')
       .select('id', { count: 'exact', head: true })
       .eq('main_artist', mainArtist);
@@ -39,7 +40,7 @@ async function main(): Promise<void> {
     return count ?? 0;
   }
 
-  const { data: rows, error: rowsErr } = await admin
+  const { data: rows, error: rowsErr } = await db
     .from('songs')
     .select('main_artist')
     .ilike('main_artist', '%police%');
@@ -52,13 +53,13 @@ async function main(): Promise<void> {
   }
   const sorted = [...groups.entries()].sort((a, b) => b[1] - a[1]);
 
-  const { data: artists, error: artErr } = await admin
+  const { data: artists, error: artErr } = await db
     .from('artists')
     .select('id, name, name_ja, music8_artist_slug')
     .or('name.ilike.%police%,music8_artist_slug.eq.police');
   if (artErr) throw artErr;
 
-  const { count: slugCount, error: slugErr } = await admin
+  const { count: slugCount, error: slugErr } = await db
     .from('songs')
     .select('id', { count: 'exact', head: true })
     .eq('music8_artist_slug', 'police');
