@@ -112,16 +112,13 @@ async function fetchAll(): Promise<SongRow[]> {
   const all: SongRow[] = [];
   let from = 0;
 
-  const select =
-    'id, main_artist, song_title, display_title, spotify_track_id, spotify_name, spotify_artists, ' +
-    'spotify_release_date, music8_song_id, music8_artist_slug, music8_song_slug, music8_video_id, ' +
-    'original_release_date, play_count, created_at, music8_song_data';
-
   for (;;) {
     const to = from + PAGE - 1;
     const { data, error } = await supabase
       .from('songs')
-      .select(select)
+      .select(
+        'id, main_artist, song_title, display_title, spotify_track_id, spotify_name, spotify_artists, spotify_release_date, music8_song_id, music8_artist_slug, music8_song_slug, music8_video_id, original_release_date, play_count, created_at, music8_song_data',
+      )
       .is('spotify_popularity', null)
       .order('display_title', { ascending: true })
       .range(from, to);
