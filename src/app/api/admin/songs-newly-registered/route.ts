@@ -104,27 +104,31 @@ export async function GET(request: Request) {
   const fromIso =
     fromParam ?? new Date(new Date(toIso).getTime() - days * 24 * 60 * 60 * 1000).toISOString();
 
-  let selectCols =
-    'id, display_title, main_artist, song_title, style, play_count, created_at, music8_song_data';
-  let { data, error } = await supabase
+  const primary = await supabase
     .from('songs')
-    .select(selectCols)
+    .select(
+      'id, display_title, main_artist, song_title, style, play_count, created_at, music8_song_data',
+    )
     .gte('created_at', fromIso)
     .lte('created_at', toIso)
     .order('created_at', { ascending: false })
     .limit(MAX_ROWS);
 
-  if (error?.code === '42703') {
-    selectCols = 'id, display_title, main_artist, song_title, style, play_count, created_at';
-    const retry = await supabase
+  let rows: SongRow[];
+  let error = primary.error;
+
+  if (primary.error?.code === '42703') {
+    const fallback = await supabase
       .from('songs')
-      .select(selectCols)
+      .select('id, display_title, main_artist, song_title, style, play_count, created_at')
       .gte('created_at', fromIso)
       .lte('created_at', toIso)
       .order('created_at', { ascending: false })
       .limit(MAX_ROWS);
-    data = retry.data;
-    error = retry.error;
+    rows = (fallback.data ?? []) as SongRow[];
+    error = fallback.error;
+  } else {
+    rows = (primary.data ?? []) as SongRow[];
   }
 
   if (error) {
@@ -141,7 +145,6 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const rows = (data ?? []) as SongRow[];
   const truncated = rows.length >= MAX_ROWS;
   const songIds = rows.map((r) => r.id);
   const videoIdsBySong = await loadVideoIdsBySongId(supabase, songIds);
