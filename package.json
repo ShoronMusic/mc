@@ -61,6 +61,8 @@
     "gen:music8:video-overrides": "tsx scripts/gen-music8-video-overrides-from-failures.ts",
     "diff:music8:songs-dir-vs-db": "tsx scripts/diff-music8-songs-dir-vs-db-slugs.ts",
     "normalize:songs:main-artist": "tsx scripts/normalize-songs-main-artist-from-music8.ts",
+    "backfill:song-credits": "tsx scripts/backfill-song-credits-from-metadata.ts",
+    "test:song-credits": "tsx src/lib/song-credits-resolve.unit-test.ts",
     "import:music8:artists": "tsx scripts/import-music8-artists-bulk.ts --dry-run --slug=strokes",
     "test:music8-artists-bulk": "tsx scripts/import-music8-artists-bulk.unit-test.ts",
     "import:youtube:playlist": "tsx scripts/import-youtube-playlist.ts",

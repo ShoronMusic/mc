@@ -19,6 +19,7 @@ import {
   resolveSongStyleForOverwriteFromMusic8,
   type Music8SongExtract,
 } from '@/lib/music8-song-fields';
+import { syncSongCreditsFromSongId } from '@/lib/song-credits-sync';
 
 export interface UpsertSongAndVideoParams {
   supabase: SupabaseClient | null;
@@ -667,6 +668,11 @@ export async function upsertSongAndVideo(params: UpsertSongAndVideoParams): Prom
   } catch (e) {
     console.warn('[song-entities] syncArtistMasterFromMusic8 (upsert)', e);
   }
+  try {
+    await syncSongCreditsFromSongId(supabase, songId, true);
+  } catch (e) {
+    console.warn('[song-entities] syncSongCreditsFromSongId (upsert)', e);
+  }
 
   return songId;
 }
@@ -699,6 +705,7 @@ export async function attachMusic8SongDataIfFetched(
     const curMain = (curRow as { main_artist?: string | null } | null)?.main_artist ?? null;
     await syncArtistMasterFromMusic8(supabase, songId.trim(), curMain, snap);
     await patchSongMainArtistWhenMusic8Canonical(supabase, songId.trim(), curMain, snap);
+    await syncSongCreditsFromSongId(supabase, songId.trim(), true);
   } catch (e) {
     console.warn('[song-entities] syncSongLibraryColumnsFromMusic8Extract (attach)', e);
   }

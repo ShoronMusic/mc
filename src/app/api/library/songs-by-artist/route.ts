@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 import { songRowLooksJapaneseDomesticForAdminLibrary } from '@/lib/admin-library-jp-exclude';
+import { fetchSongsForLibraryArtistSelection } from '@/lib/library-search-query';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,11 +17,14 @@ export type LibrarySongByArtistItem = {
   play_count: number | null;
   my_play_count: number | null;
   original_release_date: string | null;
+  spotify_popularity: number | null;
   video_id: string | null;
 };
 
-function parseSort(raw: string | null): 'release' | 'plays' {
-  return raw === 'plays' ? 'plays' : 'release';
+function parseSort(raw: string | null): 'release' | 'plays' | 'popularity' {
+  if (raw === 'plays') return 'plays';
+  if (raw === 'popularity' || raw === 'spotify_popularity') return 'popularity';
+  return 'release';
 }
 
 function rankVariant(variant: string | null | undefined): number {
@@ -35,7 +39,7 @@ function rankVariant(variant: string | null | undefined): number {
 
 /**
  * GET: 指定 `main_artist` の曲一覧（代表 video は `/api/library/search` と同様に variant 優先）。
- * Query: artist（必須）, sort=release|plays
+ * Query: artist（必須）, sort=release|plays|popularity
  */
 export async function GET(request: Request) {
   const admin = createAdminClient();
@@ -51,19 +55,10 @@ export async function GET(request: Request) {
 
   const sort = parseSort(searchParams.get('sort'));
 
-  const { data: songRows, error: songErr } = await admin
-    .from('songs')
-    .select(
-      'id, display_title, main_artist, song_title, style, genres, vocal, play_count, original_release_date',
-    )
-    .eq('main_artist', artist);
+  const SONG_SELECT =
+    'id, display_title, main_artist, song_title, style, genres, vocal, play_count, original_release_date, spotify_popularity';
 
-  if (songErr) {
-    console.error('[api/library/songs-by-artist] songs', songErr);
-    return NextResponse.json({ error: songErr.message }, { status: 500 });
-  }
-
-  const songsRaw = (songRows ?? []) as {
+  let songsRaw: {
     id: string;
     display_title: string | null;
     main_artist: string | null;
@@ -73,7 +68,16 @@ export async function GET(request: Request) {
     vocal: string | null;
     play_count: number | null;
     original_release_date: string | null;
+    spotify_popularity: number | null;
   }[];
+
+  try {
+    songsRaw = await fetchSongsForLibraryArtistSelection(admin, artist, SONG_SELECT, 500);
+  } catch (songErr) {
+    const msg = songErr instanceof Error ? songErr.message : '曲一覧の取得に失敗しました。';
+    console.error('[api/library/songs-by-artist] songs', msg);
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
 
   const songs = songsRaw.filter((s) => !songRowLooksJapaneseDomesticForAdminLibrary(s));
   const ids = songs.map((s) => s.id).filter(Boolean);
@@ -169,13 +173,21 @@ export async function GET(request: Request) {
     play_count: s.play_count,
     my_play_count: myPlayBySong.get(s.id) ?? null,
     original_release_date: s.original_release_date,
+    spotify_popularity:
+      typeof s.spotify_popularity === 'number' && Number.isFinite(s.spotify_popularity)
+        ? s.spotify_popularity
+        : null,
     video_id: videoBySong.get(s.id) ?? null,
   }));
 
   const nullsLast = (v: string | null | undefined) => (v == null || v === '' ? null : v);
 
   items.sort((a, b) => {
-    if (sort === 'plays') {
+    if (sort === 'popularity') {
+      const pa = a.spotify_popularity ?? -1;
+      const pb = b.spotify_popularity ?? -1;
+      if (pb !== pa) return pb - pa;
+    } else if (sort === 'plays') {
       const pa = a.play_count ?? 0;
       const pb = b.play_count ?? 0;
       if (pb !== pa) return pb - pa;

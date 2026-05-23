@@ -1,6 +1,13 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
+import {
+  expandLibrarySearchQueryVariants,
+  escapeLikeForIlike,
+  fetchSongsForLibraryArtistSelection,
+  resolveMainArtistsForLibrarySearch,
+} from '@/lib/library-search-query';
+import { songRowLooksJapaneseDomesticForAdminLibrary } from '@/lib/admin-library-jp-exclude';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,8 +22,25 @@ type LibrarySongItem = {
   play_count: number | null;
   my_play_count: number | null;
   original_release_date: string | null;
+  spotify_popularity: number | null;
   video_id: string | null;
 };
+
+type SongRow = {
+  id: string;
+  display_title: string | null;
+  song_title: string | null;
+  main_artist: string | null;
+  style: string | null;
+  genres: string[] | string | null;
+  vocal: string | null;
+  play_count: number | null;
+  original_release_date: string | null;
+  spotify_popularity: number | null;
+};
+
+const SONG_SELECT =
+  'id, display_title, song_title, main_artist, style, genres, vocal, play_count, original_release_date, spotify_popularity, primary_artist_name_ja';
 
 function clampLimit(raw: string | null): number {
   const n = Number.parseInt(raw ?? '', 10);
@@ -24,8 +48,80 @@ function clampLimit(raw: string | null): number {
   return Math.max(1, Math.min(100, n));
 }
 
-function escapeLikeForIlike(input: string): string {
-  return input.replace(/[%_]/g, '\\$&');
+async function fetchSongsByTextVariants(
+  admin: NonNullable<ReturnType<typeof createAdminClient>>,
+  variants: string[],
+  perVariantLimit: number,
+): Promise<SongRow[]> {
+  const byId = new Map<string, SongRow>();
+  for (const v of variants) {
+    const escaped = escapeLikeForIlike(v);
+    const orFilter = [
+      `main_artist.ilike.%${escaped}%`,
+      `song_title.ilike.%${escaped}%`,
+      `display_title.ilike.%${escaped}%`,
+      `primary_artist_name_ja.ilike.%${escaped}%`,
+    ].join(',');
+    const { data, error } = await admin.from('songs').select(SONG_SELECT).or(orFilter).limit(perVariantLimit);
+    if (error) {
+      if (error.code === '42703') {
+        const { data: fallback } = await admin
+          .from('songs')
+          .select(
+            'id, display_title, song_title, main_artist, style, genres, vocal, play_count, original_release_date, spotify_popularity',
+          )
+          .or(
+            [
+              `main_artist.ilike.%${escaped}%`,
+              `song_title.ilike.%${escaped}%`,
+              `display_title.ilike.%${escaped}%`,
+            ].join(','),
+          )
+          .limit(perVariantLimit);
+        for (const row of (fallback ?? []) as SongRow[]) {
+          if (!songRowLooksJapaneseDomesticForAdminLibrary(row)) byId.set(row.id, row);
+        }
+        continue;
+      }
+      console.warn('[api/library/search] songs variant', v, error.message);
+      continue;
+    }
+    for (const row of (data ?? []) as SongRow[]) {
+      if (!songRowLooksJapaneseDomesticForAdminLibrary(row)) byId.set(row.id, row);
+    }
+  }
+  return [...byId.values()];
+}
+
+async function fetchSongsByMainArtists(
+  admin: NonNullable<ReturnType<typeof createAdminClient>>,
+  mainArtists: string[],
+  limit: number,
+): Promise<SongRow[]> {
+  const byId = new Map<string, SongRow>();
+  for (const name of mainArtists) {
+    try {
+      const rows = await fetchSongsForLibraryArtistSelection<SongRow>(admin, name, SONG_SELECT, limit);
+      for (const row of rows) {
+        if (!songRowLooksJapaneseDomesticForAdminLibrary(row)) byId.set(row.id, row);
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.warn('[api/library/search] songs by artist', name, msg);
+    }
+  }
+  return [...byId.values()];
+}
+
+function sortSongRows(rows: SongRow[]): SongRow[] {
+  return [...rows].sort((a, b) => {
+    const pa = a.play_count ?? 0;
+    const pb = b.play_count ?? 0;
+    if (pb !== pa) return pb - pa;
+    const ta = (a.display_title ?? a.song_title ?? '').trim();
+    const tb = (b.display_title ?? b.song_title ?? '').trim();
+    return ta.localeCompare(tb, 'en', { sensitivity: 'base' });
+  });
 }
 
 export async function GET(request: Request) {
@@ -38,41 +134,34 @@ export async function GET(request: Request) {
   const q = (url.searchParams.get('q') ?? '').trim();
   const limit = clampLimit(url.searchParams.get('limit'));
 
-  let songsQuery = admin
-    .from('songs')
-    .select('id, display_title, song_title, main_artist, style, genres, vocal, play_count, original_release_date')
-    .limit(limit);
+  let songs: SongRow[] = [];
 
   if (q) {
-    const escaped = escapeLikeForIlike(q);
-    songsQuery = songsQuery.or(
-      `main_artist.ilike.%${escaped}%,song_title.ilike.%${escaped}%,display_title.ilike.%${escaped}%`,
-    );
+    const variants = expandLibrarySearchQueryVariants(q);
+    const mainArtistsFromTable = await resolveMainArtistsForLibrarySearch(admin, q);
+    const perVariant = Math.min(limit, 80);
+    const fromText = await fetchSongsByTextVariants(admin, variants, perVariant);
+    const fromArtists =
+      mainArtistsFromTable.length > 0
+        ? await fetchSongsByMainArtists(admin, mainArtistsFromTable, perVariant)
+        : [];
+    const merged = new Map<string, SongRow>();
+    for (const row of [...fromText, ...fromArtists]) merged.set(row.id, row);
+    songs = sortSongRows([...merged.values()]).slice(0, limit);
+  } else {
+    const { data: songRows, error: songErr } = await admin
+      .from('songs')
+      .select(SONG_SELECT)
+      .order('play_count', { ascending: false, nullsFirst: false })
+      .order('original_release_date', { ascending: false, nullsFirst: false })
+      .limit(limit);
+    if (songErr) {
+      console.error('[api/library/search] songs', songErr);
+      return NextResponse.json({ error: '曲一覧の取得に失敗しました。' }, { status: 500 });
+    }
+    songs = ((songRows ?? []) as SongRow[]).filter((r) => !songRowLooksJapaneseDomesticForAdminLibrary(r));
   }
 
-  songsQuery = q
-    ? songsQuery.order('play_count', { ascending: false, nullsFirst: false })
-    : songsQuery
-        .order('play_count', { ascending: false, nullsFirst: false })
-        .order('original_release_date', { ascending: false, nullsFirst: false });
-
-  const { data: songRows, error: songErr } = await songsQuery;
-  if (songErr) {
-    console.error('[api/library/search] songs', songErr);
-    return NextResponse.json({ error: '曲一覧の取得に失敗しました。' }, { status: 500 });
-  }
-
-  const songs = (songRows ?? []) as {
-    id: string;
-    display_title: string | null;
-    song_title: string | null;
-    main_artist: string | null;
-    style: string | null;
-    genres: string[] | string | null;
-    vocal: string | null;
-    play_count: number | null;
-    original_release_date: string | null;
-  }[];
   const ids = songs.map((s) => s.id).filter(Boolean);
   const videoBySong = new Map<string, string>();
   const songIdByVideo = new Map<string, string>();
@@ -174,6 +263,10 @@ export async function GET(request: Request) {
     play_count: s.play_count,
     my_play_count: myPlayBySong.get(s.id) ?? null,
     original_release_date: s.original_release_date,
+    spotify_popularity:
+      typeof s.spotify_popularity === 'number' && Number.isFinite(s.spotify_popularity)
+        ? s.spotify_popularity
+        : null,
     video_id: videoBySong.get(s.id) ?? null,
   }));
 

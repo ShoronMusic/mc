@@ -32,6 +32,10 @@ import {
 import { SongSelectionHowtoModal } from '@/components/chat/SongSelectionHowtoModal';
 import { isYoutubeKeywordSearchEnabled } from '@/lib/youtube-keyword-search-ui';
 import { useIsLgViewport } from '@/hooks/useLgViewport';
+import {
+  expandMainArtistNamesForLibraryFilter,
+  songMainArtistIncludesArtist,
+} from '@/lib/library-search-query';
 
 type SearchResultRow = {
   videoId: string;
@@ -53,6 +57,7 @@ type LibrarySongRow = {
   play_count: number | null;
   my_play_count: number | null;
   original_release_date: string | null;
+  spotify_popularity: number | null;
   video_id: string | null;
 };
 
@@ -289,6 +294,8 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
   const [themePlaylistConfirmOpen, setThemePlaylistConfirmOpen] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [libraryQuery, setLibraryQuery] = useState('');
+  /** 索引モード: 日本語名（artists.name_ja）から解決した main_artist 候補 */
+  const [libraryJaMainArtistMatches, setLibraryJaMainArtistMatches] = useState<string[]>([]);
   const [libraryLoading, setLibraryLoading] = useState(false);
   const [libraryError, setLibraryError] = useState<string | null>(null);
   const [libraryRows, setLibraryRows] = useState<LibrarySongRow[]>([]);
@@ -302,8 +309,10 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
   const [libraryArtistIndexActive, setLibraryArtistIndexActive] = useState(false);
   /** idle=索引のみ／browse=アーティスト別全曲API／search=キーワード検索API */
   const [librarySongSource, setLibrarySongSource] = useState<'idle' | 'browse' | 'search'>('idle');
-  /** 曲一覧: 公開日で並べ替え（NEW=新しい順・OLD=古い順） */
-  const [librarySongReleaseSort, setLibrarySongReleaseSort] = useState<'new' | 'old'>('new');
+  /** 曲一覧の並べ替え（NEW/OLD=公開日・popularity=Spotify人気降順・title_asc=曲名A-Z） */
+  const [librarySongListSort, setLibrarySongListSort] = useState<
+    'release_new' | 'release_old' | 'popularity' | 'title_asc'
+  >('release_new');
   /** 選択した字母（A–Z / # / その他）。未選択時は null */
   const [libraryArtistLetter, setLibraryArtistLetter] = useState<string | null>(null);
   /** null = アーティスト未選択（レター内の全曲）。指定時は当該アーティスト曲に絞る */
@@ -574,6 +583,10 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                 my_play_count: typeof r.my_play_count === 'number' ? r.my_play_count : null,
                 original_release_date:
                   typeof r.original_release_date === 'string' ? r.original_release_date : null,
+                spotify_popularity:
+                  typeof r.spotify_popularity === 'number' && Number.isFinite(r.spotify_popularity)
+                    ? r.spotify_popularity
+                    : null,
                 video_id: typeof r.video_id === 'string' ? r.video_id : null,
               }))
           : [];
@@ -677,6 +690,10 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
               my_play_count: typeof r.my_play_count === 'number' ? r.my_play_count : null,
               original_release_date:
                 typeof r.original_release_date === 'string' ? r.original_release_date : null,
+              spotify_popularity:
+                typeof r.spotify_popularity === 'number' && Number.isFinite(r.spotify_popularity)
+                  ? r.spotify_popularity
+                  : null,
               video_id: typeof r.video_id === 'string' ? r.video_id : null,
             }))
         : [];
@@ -803,14 +820,43 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
   const searchArtistNameCandidates = useMemo(() => {
     const uniq = new Set<string>();
     for (const row of letterFilteredLibraryRows) {
-      const name = (row.main_artist ?? '').trim();
-      if (!name) continue;
-      uniq.add(name);
+      for (const name of expandMainArtistNamesForLibraryFilter(row.main_artist ?? '')) {
+        uniq.add(name);
+      }
     }
-    return [...uniq].sort((a, b) => a.localeCompare(b, 'en'));
+    return [...uniq].sort((a, b) => a.localeCompare(b, 'en', { sensitivity: 'base' }));
   }, [letterFilteredLibraryRows]);
 
   /** ブラウズモード: 索引から（字母＋入力欄の部分一致でアーティスト名を絞り込み） */
+  useEffect(() => {
+    if (!libraryOpen || librarySongSource === 'search') {
+      setLibraryJaMainArtistMatches([]);
+      return;
+    }
+    const q = libraryQuery.trim();
+    if (q.length < 2) {
+      setLibraryJaMainArtistMatches([]);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch(`/api/library/match-main-artists?q=${encodeURIComponent(q)}`);
+        const data = await res.json().catch(() => null);
+        if (cancelled) return;
+        const names = Array.isArray(data?.main_artists)
+          ? data.main_artists.filter((x: unknown) => typeof x === 'string' && x.trim())
+          : [];
+        setLibraryJaMainArtistMatches(names);
+      } catch {
+        if (!cancelled) setLibraryJaMainArtistMatches([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [libraryQuery, libraryOpen, librarySongSource]);
+
   const browseArtistIndexRows = useMemo(() => {
     if (librarySongSource === 'search') return [];
     if (!libraryArtistIndexActive || !libraryArtistsReady || libraryArtistLetter === null) {
@@ -821,7 +867,11 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
     );
     const q = libraryQuery.trim().toLowerCase();
     if (q) {
-      items = items.filter((a) => a.main_artist.toLowerCase().includes(q));
+      const jaMatch = new Set(libraryJaMainArtistMatches.map((n) => n.toLowerCase()));
+      items = items.filter((a) => {
+        const ma = a.main_artist.toLowerCase();
+        return ma.includes(q) || jaMatch.has(ma);
+      });
     }
     return [...items].sort((a, b) =>
       a.main_artist.localeCompare(b.main_artist, 'en', { sensitivity: 'base' }),
@@ -831,6 +881,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
     libraryArtistLetter,
     librarySongSource,
     libraryQuery,
+    libraryJaMainArtistMatches,
     libraryArtistIndexActive,
     libraryArtistsReady,
   ]);
@@ -861,26 +912,50 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
 
   const filteredLibraryRows = useMemo(() => {
     if (!librarySelectedArtistName) return letterFilteredLibraryRows;
-    return letterFilteredLibraryRows.filter((r) => (r.main_artist ?? '').trim() === librarySelectedArtistName);
+    return letterFilteredLibraryRows.filter((r) =>
+      songMainArtistIncludesArtist(r.main_artist, librarySelectedArtistName),
+    );
   }, [letterFilteredLibraryRows, librarySelectedArtistName]);
 
   const librarySongRowsSortedForList = useMemo(() => {
     const rows = [...filteredLibraryRows];
     rows.sort((a, b) => {
-      const ta = parseReleaseDateMsForSort(a.original_release_date);
-      const tb = parseReleaseDateMsForSort(b.original_release_date);
-      const aMissing = ta == null;
-      const bMissing = tb == null;
-      if (aMissing && bMissing) {
-        return (a.title ?? '').localeCompare(b.title ?? '', 'en', { sensitivity: 'base' });
+      if (librarySongListSort === 'title_asc') {
+        return librarySongListPrimaryTitle(a).localeCompare(
+          librarySongListPrimaryTitle(b),
+          'en',
+          { sensitivity: 'base' },
+        );
       }
-      if (aMissing) return 1;
-      if (bMissing) return -1;
-      const newerFirst = (tb as number) - (ta as number);
-      return librarySongReleaseSort === 'new' ? newerFirst : -newerFirst;
+      if (librarySongListSort === 'popularity') {
+        const pa = a.spotify_popularity ?? -1;
+        const pb = b.spotify_popularity ?? -1;
+        if (pb !== pa) return pb - pa;
+      } else {
+        const ta = parseReleaseDateMsForSort(a.original_release_date);
+        const tb = parseReleaseDateMsForSort(b.original_release_date);
+        const aMissing = ta == null;
+        const bMissing = tb == null;
+        if (aMissing && bMissing) {
+          return librarySongListPrimaryTitle(a).localeCompare(
+            librarySongListPrimaryTitle(b),
+            'en',
+            { sensitivity: 'base' },
+          );
+        }
+        if (aMissing) return 1;
+        if (bMissing) return -1;
+        const newerFirst = (tb as number) - (ta as number);
+        return librarySongListSort === 'release_new' ? newerFirst : -newerFirst;
+      }
+      return librarySongListPrimaryTitle(a).localeCompare(
+        librarySongListPrimaryTitle(b),
+        'en',
+        { sensitivity: 'base' },
+      );
     });
     return rows;
-  }, [filteredLibraryRows, librarySongReleaseSort]);
+  }, [filteredLibraryRows, librarySongListSort]);
 
   const selectedLibraryRow =
     libraryOpen && librarySelectedSongId
@@ -927,7 +1002,8 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
     setLibraryVideoError(null);
     setLibraryRows([]);
     setLibrarySongSource('idle');
-    setLibrarySongReleaseSort('new');
+    setLibrarySongListSort('release_new');
+    setLibraryJaMainArtistMatches([]);
     if (librarySongListScrollRef.current) librarySongListScrollRef.current.scrollTop = 0;
   }, []);
 
@@ -1940,34 +2016,60 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                     </p>
                   </div>
                   <div
-                    className="flex items-center gap-1"
+                    className="flex flex-wrap items-center gap-x-2 gap-y-1"
                     role="group"
-                    aria-label="公開日で並べ替え"
+                    aria-label="曲一覧の並べ替え"
                   >
-                    <span className="text-[10px] text-gray-500">公開日</span>
+                    <div className="flex items-center gap-1">
+                      <span className="text-[10px] text-gray-500">公開日</span>
+                      <button
+                        type="button"
+                        onClick={() => setLibrarySongListSort('release_new')}
+                        aria-pressed={librarySongListSort === 'release_new'}
+                        className={`rounded px-2 py-0.5 text-[10px] font-medium tabular-nums ${
+                          librarySongListSort === 'release_new'
+                            ? 'bg-lime-700 text-white'
+                            : 'border border-gray-700 text-gray-400 hover:bg-gray-800'
+                        }`}
+                      >
+                        NEW
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setLibrarySongListSort('release_old')}
+                        aria-pressed={librarySongListSort === 'release_old'}
+                        className={`rounded px-2 py-0.5 text-[10px] font-medium tabular-nums ${
+                          librarySongListSort === 'release_old'
+                            ? 'bg-lime-700 text-white'
+                            : 'border border-gray-700 text-gray-400 hover:bg-gray-800'
+                        }`}
+                      >
+                        OLD
+                      </button>
+                    </div>
                     <button
                       type="button"
-                      onClick={() => setLibrarySongReleaseSort('new')}
-                      aria-pressed={librarySongReleaseSort === 'new'}
-                      className={`rounded px-2 py-0.5 text-[10px] font-medium tabular-nums ${
-                        librarySongReleaseSort === 'new'
+                      onClick={() => setLibrarySongListSort('popularity')}
+                      aria-pressed={librarySongListSort === 'popularity'}
+                      className={`rounded px-2 py-0.5 text-[10px] font-medium ${
+                        librarySongListSort === 'popularity'
                           ? 'bg-lime-700 text-white'
                           : 'border border-gray-700 text-gray-400 hover:bg-gray-800'
                       }`}
                     >
-                      NEW
+                      人気順
                     </button>
                     <button
                       type="button"
-                      onClick={() => setLibrarySongReleaseSort('old')}
-                      aria-pressed={librarySongReleaseSort === 'old'}
-                      className={`rounded px-2 py-0.5 text-[10px] font-medium tabular-nums ${
-                        librarySongReleaseSort === 'old'
+                      onClick={() => setLibrarySongListSort('title_asc')}
+                      aria-pressed={librarySongListSort === 'title_asc'}
+                      className={`rounded px-2 py-0.5 text-[10px] font-medium ${
+                        librarySongListSort === 'title_asc'
                           ? 'bg-lime-700 text-white'
                           : 'border border-gray-700 text-gray-400 hover:bg-gray-800'
                       }`}
                     >
-                      OLD
+                      A-Z
                     </button>
                   </div>
                 </div>

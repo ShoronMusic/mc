@@ -152,7 +152,9 @@ async function main(): Promise<void> {
   npx tsx scripts/backfill-songs-spotify-metadata.ts [--limit=100] [--offset=0] [--delay-ms=400]
   npx tsx scripts/backfill-songs-spotify-metadata.ts --apply [--limit=100] [--offset=0]
 
-Dry-run by default. Targets songs where spotify_popularity IS NULL.`);
+Dry-run by default. Targets songs where spotify_popularity IS NULL.
+
+重要: 反映済み行は対象外になるため、続きは --offset=0 のまま繰り返す（100,200…と増やすと取りこぼし）。`);
     return;
   }
 
@@ -182,8 +184,6 @@ Dry-run by default. Targets songs where spotify_popularity IS NULL.`);
       const payload = buildUpdatePayload(row, meta);
       const hasPop =
         typeof meta.spotifyPopularity === 'number' && Number.isFinite(meta.spotifyPopularity);
-
-      const payload = buildUpdatePayload(row, meta);
 
       if (!meta.spotifyTrackId && !hasPop) {
         noMatch++;
@@ -234,10 +234,13 @@ Dry-run by default. Targets songs where spotify_popularity IS NULL.`);
   }
 
   logStream.end();
-  const nextOffset = offset + rows.length;
   console.log(`done ok=${ok} no_match=${noMatch} err=${err} log=${logPath}`);
   if (rows.length === limit) {
-    console.log(`次のバッチ例: --offset=${nextOffset} --limit=${limit}${apply ? ' --apply' : ''}`);
+    console.log(
+      `次のバッチ例: --offset=0 --limit=${limit}${apply ? ' --apply' : ''}  ※未設定行だけが対象のため offset は常に 0 でよい`,
+    );
+  } else if (rows.length > 0) {
+    console.log('残りは --offset=0 で再実行するか、件数が limit 未満なら完了に近いです。');
   }
 }
 

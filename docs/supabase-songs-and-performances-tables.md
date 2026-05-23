@@ -98,6 +98,95 @@ alter table public.artists add column if not exists spotify_artist_popularity sm
 alter table public.artists add column if not exists wikipedia_page text null;           -- Wikipedia スラッグ（例: "The_Police"）
 ```
 
+### 曲クレジット（共演・複数アーティスト・2026-05）
+
+`spotify_artists` / Music8 `main_artists` / `main_artist` から **1曲に複数 `artists` を紐づけ**る。  
+`songs.artist_id` は互換用の**代表1人**（`display_order = 0`）。バックフィル: `npx tsx scripts/backfill-song-credits-from-metadata.ts --apply`
+
+```sql
+create table if not exists public.song_credits (
+  id uuid primary key default gen_random_uuid(),
+  song_id uuid not null references public.songs(id) on delete cascade,
+  artist_id uuid not null references public.artists(id) on delete cascade,
+  role text not null default 'main',       -- main | featured
+  display_order smallint not null default 0,
+  is_display_main boolean not null default false,
+  source text null,                        -- spotify_artists | music8_main_artists | main_artist
+  created_at timestamptz not null default now()
+);
+
+create unique index if not exists idx_song_credits_song_artist
+  on public.song_credits (song_id, artist_id);
+
+create index if not exists idx_song_credits_artist_id
+  on public.song_credits (artist_id);
+
+create index if not exists idx_song_credits_song_order
+  on public.song_credits (song_id, display_order);
+```
+
+#### バックフィル引継ぎ（2026-05-22・別 PC 用）
+
+**目的**: `spotify_artists`（なければ Music8 `main_artists` → `main_artist`）から `song_credits` を埋め、`songs.artist_id` を先頭クレジットに合わせる。
+
+**前提（別 PC）**
+
+- リポジトリ `e:\mc`（または clone）を同じコミット／変更一式で用意
+- `.env.local` に `NEXT_PUBLIC_SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY`
+- Supabase で上記 **`song_credits` の SQL は実行済み**（未実行なら先に SQL Editor で実行）
+
+**実装ファイル（この作業で追加・変更）**
+
+| パス | 内容 |
+|------|------|
+| `src/lib/song-credits-resolve.ts` | 名前分解・`artists` 解決 |
+| `src/lib/song-credits-sync.ts` | 1曲同期・バッチ用 `planSongCreditDbRows` |
+| `scripts/backfill-song-credits-from-metadata.ts` | 全曲バックフィル（**PAGE=100** 推奨） |
+| `src/lib/song-entities.ts` | 選曲登録後に `syncSongCreditsFromSongId` |
+| `src/lib/library-search-query.ts` | ライブラリ共演絞り込み（別件） |
+| `scripts/fix-die-with-a-smile-gaga-mars-title-once.ts` | タイトル修正済み（1回限り） |
+
+**本 PC で実行したバックフィル（2026-05-22）**
+
+| 区間 | コマンド | 結果（ログ要約） |
+|------|----------|------------------|
+| `offset=0` `limit=3000` | `--apply` | processed 3000 / credits 行 3575 / 失敗 18 件 → `tmp/song-credits-backfill-failures-2026-05-22T08-26-09-249Z.jsonl` |
+| `offset=3000` 以降〜末尾 | `--apply` | processed 17897 / credits 行 21432 / 失敗 112 件 → `tmp/song-credits-backfill-failures-2026-05-22T08-25-17-168Z.jsonl` |
+
+※ 初回 `PAGE=500` は **statement timeout**（`57014`）で 3000 曲付近で中断。**`PAGE=100` に変更後**に上記 2 区間で再実行済み。
+
+**別 PC でやること（残作業）**
+
+1. **未コミット変更を持っていく**（git pull またはパッチ／USB）。`tmp/*.jsonl` は **コミットしない**（手元にコピーするか再生成）。
+2. **全体の再実行（安全・冪等）** — タイムアウトしにくい設定で全件やり直してもよい（曲ごと delete→insert）:
+   ```bash
+   npm install
+   npx tsx scripts/backfill-song-credits-from-metadata.ts          # dry-run
+   npx tsx scripts/backfill-song-credits-from-metadata.ts --apply  # 全件（PAGE=100 既定）
+   ```
+3. **失敗分だけ** — 上記 JSONL の `song_id` を見て `artists` 追加 or 表記修正後、該当曲だけ再同期:
+   ```bash
+   # 例: 1曲だけ（要 song-entities 経由か、小スクリプトで songId 指定）
+   npx tsx tmp/verify-die-with-a-smile-credits-once.ts
+   ```
+4. **手作業リスト** — `tmp/song-credits-backfill-failures-*.jsonl`（合計 **約 130 行**）。`unresolved` に名前、`credit_names` に分解結果。`artists` に無い名前はマスタ追加が必要。
+5. **確認クエリ（SQL Editor）**
+   ```sql
+   select count(*) from song_credits;
+   select count(distinct song_id) from song_credits;
+   select count(*) from songs s where not exists (
+     select 1 from song_credits c where c.song_id = s.id
+   );
+   ```
+6. **代表例（Die With A Smile）** — `music8_song_slug = 'die-with-a-smile'` で `song_credits` 2 行（Lady Gaga order 0、Bruno Mars order 1）、`songs.artist_id` = Lady Gaga。
+
+**注意**
+
+- `--limit` 未指定で全件。`--offset` / `--limit` で分割可（例: `--offset=0 --limit=5000`）。
+- 同一アーティストが `spotify_artists` に重複している曲は **artist_id 重複を除去**して insert（`23505` 対策済み）。
+- `spotify_artists` が無い **約 53 曲**は Music8 / `main_artist` フォールバック。それでも無い曲は JSONL に載る。
+- 単体テスト: `npm run test:song-credits`
+
 ### アーティスト m8 整合（2026-05・SQL Editor で実行）
 
 Music8 アーティスト JSON 一括取り込み用。詳細は `docs/music8-artist-import-and-integration-plan.md`。
@@ -147,6 +236,10 @@ create unique index idx_artists_music8_artist_slug on public.artists (music8_art
   - `music8_artist_slug` / `music8_song_slug`（musicaichat stable_key）
   - `primary_artist_name_ja` / `vocal` / `structured_style`
 - **artists 基本マスタ**: `upsertSongAndVideo` / `attachMusic8SongDataIfFetched` が `artists` を **slug で検索して更新または挿入**し、`songs.artist_id` を自動更新（`artists` が未作成でも既存動作は維持）。
+
+### 選曲時の新規登録（項目・ロジックの全体像）
+
+部屋選曲・視聴履歴 POST 時に `songs` / `song_videos` / `artists` へ何をどう書くか（表記解決・一意キー・Music8 後追い）→ **`docs/song-registration-on-selection-spec.md`**
 
 ### 利用イメージ
 

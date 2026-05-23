@@ -209,6 +209,13 @@ npx tsx scripts/import-music8-songs-bulk.ts `
 - 個別: `E:\m8\public\data\artists\{slug}.json` のみ（`*_songs.json` / `*_spngs.json` は読まない）
 - 例: `npx tsx scripts/import-music8-artists-bulk.ts --dry-run --artists-list=E:/m8/public/data/artists.json --artists-dir=E:/m8/public/data/artists --limit=5`
 
+## Spotify popularity バックフィル（2026-05 完了）
+
+m8 取り込み後も `spotify_popularity` が NULL だった約 2,972 曲を、Spotify API 一括検索＋手動 track ID で **20,892 / 20,897 曲（残り 5 は Live 等で意図的に NULL）** まで補完した記録。
+
+- **手順・コマンド・最終件数:** `docs/spotify-popularity-backfill-2026-05.md`
+- スクリプト: `scripts/backfill-songs-spotify-metadata.ts`・`scripts/export-songs-no-spotify-popularity-csv.ts`・`scripts/apply-manual-spotify-metadata-patches.ts`・`scripts/count-songs-spotify-popularity.ts`
+
 ## 未決事項（次に決めると設計が固まる）
 
 1. 同期は **定期バッチ**か **手動トリガー**か  
