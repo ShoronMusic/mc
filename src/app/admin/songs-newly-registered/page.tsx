@@ -187,6 +187,22 @@ export default function AdminSongsNewlyRegisteredPage() {
                         <span className="ml-2 text-amber-300/80">Music8 未連携</span>
                       )}
                     </p>
+                    <p className="mt-1 text-xs text-gray-400">
+                      部屋:{' '}
+                      {item.room_display_title ? (
+                        <>
+                          <span className="text-gray-200">{item.room_display_title}</span>
+                          {item.room_id ? (
+                            <span className="ml-1 font-mono text-gray-500">({item.room_id})</span>
+                          ) : null}
+                        </>
+                      ) : (
+                        <span className="text-gray-500">—（視聴履歴なし）</span>
+                      )}
+                      {' · '}
+                      選曲者:{' '}
+                      <span className="text-gray-200">{item.selector_display_name ?? '—'}</span>
+                    </p>
                     <p className="mt-1 font-mono text-xs text-gray-500">
                       song_id=
                       <Link href={item.admin_song_href} className="text-amber-200/90 hover:text-amber-100">

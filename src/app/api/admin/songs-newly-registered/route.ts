@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requireStyleAdminApi } from '@/lib/admin-access';
+import { createAdminClient } from '@/lib/supabase/admin';
 import {
   chunkArray,
   jstDateKeyFromPlayedAt,
@@ -22,6 +23,9 @@ export type SongsNewlyRegisteredItem = {
   created_at: string;
   has_music8: boolean;
   video_ids: string[];
+  room_id: string | null;
+  room_display_title: string | null;
+  selector_display_name: string | null;
   admin_song_href: string;
 };
 
@@ -82,6 +86,105 @@ async function loadVideoIdsBySongId(
       const list = out.get(sid) ?? [];
       if (!list.includes(vid)) list.push(vid);
       out.set(sid, list);
+    }
+  }
+
+  return out;
+}
+
+type PlaybackRow = {
+  video_id: string;
+  room_id: string;
+  display_name: string | null;
+  played_at: string;
+};
+
+async function loadPlaybackRowsInRange(
+  admin: NonNullable<ReturnType<typeof createAdminClient>>,
+  videoIds: string[],
+  fromIso: string,
+  toIso: string,
+): Promise<Map<string, PlaybackRow[]>> {
+  const byVideo = new Map<string, PlaybackRow[]>();
+  const unique = [...new Set(videoIds.filter(Boolean))];
+  if (unique.length === 0) return byVideo;
+
+  for (const chunk of chunkArray(unique, 120)) {
+    const { data, error } = await admin
+      .from('room_playback_history')
+      .select('video_id, room_id, display_name, played_at')
+      .in('video_id', chunk)
+      .gte('played_at', fromIso)
+      .lte('played_at', toIso)
+      .order('played_at', { ascending: true });
+
+    if (error) {
+      if (error.code === '42P01') return byVideo;
+      console.error('[admin/songs-newly-registered] room_playback_history', error);
+      continue;
+    }
+
+    for (const raw of (data ?? []) as PlaybackRow[]) {
+      const vid = typeof raw.video_id === 'string' ? raw.video_id.trim() : '';
+      const roomId = typeof raw.room_id === 'string' ? raw.room_id.trim() : '';
+      const playedAt = typeof raw.played_at === 'string' ? raw.played_at : '';
+      if (!vid || !roomId || !playedAt) continue;
+      const list = byVideo.get(vid) ?? [];
+      list.push({
+        video_id: vid,
+        room_id: roomId,
+        display_name: typeof raw.display_name === 'string' ? raw.display_name : null,
+        played_at: playedAt,
+      });
+      byVideo.set(vid, list);
+    }
+  }
+
+  return byVideo;
+}
+
+function pickPlaybackForSong(rows: PlaybackRow[] | undefined, createdAt: string): PlaybackRow | null {
+  if (!rows?.length) return null;
+  const createdMs = Date.parse(createdAt);
+  if (Number.isNaN(createdMs)) return rows[0];
+
+  let best = rows[0];
+  let bestDist = Math.abs(Date.parse(best.played_at) - createdMs);
+  for (const row of rows.slice(1)) {
+    const dist = Math.abs(Date.parse(row.played_at) - createdMs);
+    if (dist < bestDist) {
+      best = row;
+      bestDist = dist;
+    }
+  }
+  return best;
+}
+
+async function loadRoomDisplayTitles(
+  admin: NonNullable<ReturnType<typeof createAdminClient>>,
+  roomIds: string[],
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  const unique = [...new Set(roomIds.filter(Boolean))];
+  if (unique.length === 0) return out;
+
+  for (const chunk of chunkArray(unique, 120)) {
+    const { data, error } = await admin
+      .from('room_lobby_message')
+      .select('room_id, display_title')
+      .in('room_id', chunk);
+
+    if (error) {
+      if (error.code === '42P01') return out;
+      console.error('[admin/songs-newly-registered] room_lobby_message', error);
+      continue;
+    }
+
+    for (const row of (data ?? []) as { room_id?: string; display_title?: string | null }[]) {
+      const rid = typeof row.room_id === 'string' ? row.room_id.trim() : '';
+      if (!rid || out.has(rid)) continue;
+      const title = typeof row.display_title === 'string' ? row.display_title.trim() : '';
+      out.set(rid, title || rid);
     }
   }
 
@@ -149,11 +252,31 @@ export async function GET(request: Request) {
   const songIds = rows.map((r) => r.id);
   const videoIdsBySong = await loadVideoIdsBySongId(supabase, songIds);
 
+  const allVideoIds = [...new Set([...videoIdsBySong.values()].flat())];
+  const admin = createAdminClient();
+  const playbackByVideo =
+    admin != null ? await loadPlaybackRowsInRange(admin, allVideoIds, fromIso, toIso) : new Map();
+  const roomIdsForTitles = [
+    ...new Set(
+      [...playbackByVideo.values()]
+        .flat()
+        .map((row) => row.room_id)
+        .filter(Boolean),
+    ),
+  ];
+  const roomTitleMap =
+    admin != null ? await loadRoomDisplayTitles(admin, roomIdsForTitles) : new Map<string, string>();
+
   const byDate = new Map<string, SongsNewlyRegisteredItem[]>();
 
   for (const row of rows) {
     const createdAt = typeof row.created_at === 'string' ? row.created_at : '';
     if (!createdAt) continue;
+
+    const videoIds = videoIdsBySong.get(row.id) ?? [];
+    const primaryVideoId = videoIds[0] ?? null;
+    const playback = primaryVideoId ? pickPlaybackForSong(playbackByVideo.get(primaryVideoId), createdAt) : null;
+    const roomId = playback?.room_id ?? null;
 
     const dateKey = jstDateKeyFromPlayedAt(createdAt);
     const item: SongsNewlyRegisteredItem = {
@@ -165,7 +288,12 @@ export async function GET(request: Request) {
       play_count: typeof row.play_count === 'number' ? row.play_count : 0,
       created_at: createdAt,
       has_music8: songRowHasPersistedMusic8(row.music8_song_data),
-      video_ids: videoIdsBySong.get(row.id) ?? [],
+      video_ids: videoIds,
+      room_id: roomId,
+      room_display_title: roomId ? (roomTitleMap.get(roomId) ?? roomId) : null,
+      selector_display_name: playback
+        ? (playback.display_name ?? '').trim() || null
+        : null,
       admin_song_href: `/admin/songs/${row.id}`,
     };
 
