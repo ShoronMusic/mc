@@ -117,8 +117,9 @@ export async function fetchSongsForLibraryArtistSelection<T extends SongRowWithM
   if (!sel) return [];
 
   const byId = new Map<string, T>();
-  const add = (rows: T[] | null | undefined) => {
-    for (const row of rows ?? []) {
+  const add = (rows: unknown) => {
+    const list = (Array.isArray(rows) ? rows : []) as unknown as T[];
+    for (const row of list) {
       if (!row?.id || !songMainArtistIncludesArtist(row.main_artist, sel)) continue;
       byId.set(row.id, row);
     }
@@ -130,7 +131,7 @@ export async function fetchSongsForLibraryArtistSelection<T extends SongRowWithM
     .eq('main_artist', sel)
     .limit(limit);
   if (exactErr) throw new Error(exactErr.message);
-  add(exact as T[]);
+  add(exact);
 
   const escaped = escapeLikeForIlike(sel);
   const { data: fuzzy, error: fuzzyErr } = await admin
@@ -139,7 +140,7 @@ export async function fetchSongsForLibraryArtistSelection<T extends SongRowWithM
     .ilike('main_artist', `%${escaped}%`)
     .limit(Math.min(limit * 4, 400));
   if (fuzzyErr) throw new Error(fuzzyErr.message);
-  add(fuzzy as T[]);
+  add(fuzzy);
 
   return [...byId.values()];
 }
