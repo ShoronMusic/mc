@@ -133,6 +133,12 @@ export const ADMIN_SECTIONS: AdminSection[] = [
     description: '完了したお題ミッションの日時・部屋名・オーナー・参加者・曲（選曲者）を確認',
   },
   {
+    href: '/admin/songs-newly-registered',
+    title: '新規登録曲（日別）',
+    description:
+      '選曲 upsert で songs に新規 insert された曲を created_at 基準で JST 日付ごとに一覧（Music8 連携状態・video_id 付き）',
+  },
+  {
     href: '/admin/songs',
     title: '曲ダッシュボード',
     description: '曲の検索、詳細ページ（動画・コメント・豆知識・フィードバック）',
