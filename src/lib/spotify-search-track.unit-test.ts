@@ -1,15 +1,13 @@
-import { describe, expect, it } from 'vitest';
-import { parseArtistTitleFromDisplayTitle } from './spotify-search-track';
+import assert from 'node:assert/strict';
+import { parseArtistTitleFromDisplayTitle } from '@/lib/spotify-search-track';
 
-describe('parseArtistTitleFromDisplayTitle', () => {
-  it('splits on first " - "', () => {
-    expect(parseArtistTitleFromDisplayTitle('The Beatles - Let It Be')).toEqual({
-      artist: 'The Beatles',
-      title: 'Let It Be',
-    });
+function run() {
+  assert.deepEqual(parseArtistTitleFromDisplayTitle('The Beatles - Let It Be'), {
+    artist: 'The Beatles',
+    title: 'Let It Be',
   });
+  assert.equal(parseArtistTitleFromDisplayTitle('Let It Be'), null);
+  console.log('spotify-search-track.unit-test: ok');
+}
 
-  it('returns null when separator missing', () => {
-    expect(parseArtistTitleFromDisplayTitle('Let It Be')).toBeNull();
-  });
-});
+run();
