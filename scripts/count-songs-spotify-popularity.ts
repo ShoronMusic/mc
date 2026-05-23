@@ -25,6 +25,10 @@ function loadDotEnvLocal(): void {
 async function main(): Promise<void> {
   loadDotEnvLocal();
   const admin = createAdminClient();
+  if (!admin) {
+    console.error('createAdminClient failed');
+    process.exit(1);
+  }
   const { count: total, error: e1 } = await admin.from('songs').select('*', { count: 'exact', head: true });
   const { count: withPop, error: e2 } = await admin
     .from('songs')

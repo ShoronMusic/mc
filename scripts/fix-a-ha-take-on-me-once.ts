@@ -31,6 +31,10 @@ async function main(): Promise<void> {
   loadDotEnvLocal();
   const apply = process.argv.includes('--apply');
   const admin = createAdminClient();
+  if (!admin) {
+    console.error('createAdminClient failed');
+    process.exit(1);
+  }
 
   const { data: wrongRows, error } = await admin
     .from('songs')

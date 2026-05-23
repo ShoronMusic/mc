@@ -91,6 +91,7 @@ function sleep(ms: number): Promise<void> {
 
 async function fetchCandidates(limit: number, offset: number): Promise<SongCandidate[]> {
   const supabase = createAdminClient();
+  if (!supabase) throw new Error('createAdminClient failed');
   const { data, error } = await supabase
     .from('songs')
     .select('id, main_artist, song_title, display_title, spotify_track_id, spotify_popularity')
@@ -175,6 +176,10 @@ Dry-run by default. Targets songs where spotify_popularity IS NULL.
   let err = 0;
 
   const supabase = createAdminClient();
+  if (!supabase) {
+    console.error('createAdminClient failed');
+    process.exit(1);
+  }
 
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i]!;
