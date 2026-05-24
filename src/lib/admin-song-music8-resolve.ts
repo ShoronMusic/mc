@@ -11,6 +11,14 @@ export type AdminSongMusic8Context = {
   music8SongId: number | null;
 };
 
+type SongLookupRow = {
+  id: string;
+  main_artist: string | null;
+  song_title: string | null;
+  display_title: string | null;
+  music8_song_id?: number | null;
+};
+
 export function isValidAdminSongId(songId: string): boolean {
   return Boolean(songId && UUID_RE.test(songId));
 }
@@ -52,7 +60,7 @@ export async function loadAdminSongMusic8Context(
     .eq('id', songId)
     .maybeSingle();
 
-  let song = primary.data;
+  let song: SongLookupRow | null = (primary.data as SongLookupRow | null) ?? null;
   let selErr = primary.error;
 
   if (primary.error?.code === '42703') {
@@ -61,7 +69,7 @@ export async function loadAdminSongMusic8Context(
       .select('id, main_artist, song_title, display_title')
       .eq('id', songId)
       .maybeSingle();
-    song = fallback.data;
+    song = (fallback.data as SongLookupRow | null) ?? null;
     selErr = fallback.error;
   }
 
@@ -73,9 +81,7 @@ export async function loadAdminSongMusic8Context(
     return { ok: false, status: 404, error: '曲が見つかりません。' };
   }
 
-  const lookup = resolveArtistSongLookupForAdmin(
-    song as { main_artist: string | null; song_title: string | null; display_title: string | null },
-  );
+  const lookup = resolveArtistSongLookupForAdmin(song);
   if (!lookup) {
     return {
       ok: false,
@@ -100,7 +106,7 @@ export async function loadAdminSongMusic8Context(
     videoId = firstVideo.video_id.trim();
   }
 
-  const rawM8Id = (song as { music8_song_id?: number | null }).music8_song_id;
+  const rawM8Id = song.music8_song_id;
   const music8SongId =
     typeof rawM8Id === 'number' && Number.isFinite(rawM8Id) && rawM8Id > 0 ? Math.floor(rawM8Id) : null;
 
