@@ -63,6 +63,22 @@ function escapeIlikeExact(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
 }
 
+async function patchSongOriginalReleaseDate(
+  supabase: SupabaseClient,
+  songId: string,
+  isoDate: string | null | undefined,
+): Promise<void> {
+  const d = (isoDate ?? '').trim();
+  if (!d) return;
+
+  const { error: u } = await supabase.from('songs').update({ original_release_date: d }).eq('id', songId);
+  if (u?.code === '42703' || u?.code === '42P01') return;
+  if (u) {
+    console.error('[song-entities] patchSongOriginalReleaseDate update', u.code, u.message);
+  }
+}
+
+/** 空欄のときだけ補完（視聴履歴 upsert の `originalReleaseDateIso` 等） */
 async function patchSongOriginalReleaseDateIfUnset(
   supabase: SupabaseClient,
   songId: string,
@@ -86,11 +102,7 @@ async function patchSongOriginalReleaseDateIfUnset(
   const cur = (data as { original_release_date?: string | null } | null)?.original_release_date;
   if (cur != null && String(cur).trim() !== '') return;
 
-  const { error: u } = await supabase.from('songs').update({ original_release_date: d }).eq('id', songId);
-  if (u?.code === '42703') return;
-  if (u) {
-    console.error('[song-entities] patchSongOriginalReleaseDateIfUnset update', u.code, u.message);
-  }
+  await patchSongOriginalReleaseDate(supabase, songId, d);
 }
 
 async function patchSongMusic8SongData(
@@ -742,7 +754,7 @@ export async function updateSongStyle(
 }
 
 /**
- * Music8 由来の `Music8SongExtract` で `songs.style` を上書きし、原盤日は空欄のときのみ補完。
+ * Music8 由来の `Music8SongExtract` で `songs.style` を上書きし、原盤日も Music8 取得値で上書き。
  */
 async function syncSongLibraryColumnsFromMusic8Extract(
   supabase: SupabaseClient | null,
@@ -765,7 +777,7 @@ async function syncSongLibraryColumnsFromMusic8Extract(
     iso = music8ReleaseYearMonthToPostgresDate(ex.releaseDate);
   }
   if (iso) {
-    await patchSongOriginalReleaseDateIfUnset(supabase, songId, iso);
+    await patchSongOriginalReleaseDate(supabase, songId, iso);
   }
 }
 
