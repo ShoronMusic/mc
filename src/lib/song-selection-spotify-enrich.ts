@@ -21,8 +21,10 @@ import { resolveArtistIdFromIndex } from '@/lib/song-credits-resolve';
 
 export function isSongSelectionSpotifyEnrichEnabled(): boolean {
   const v = process.env.SONG_SELECTION_SPOTIFY_ENRICH?.trim();
-  if (v === '0' || v.toLowerCase() === 'false') return false;
-  return v === '1' || v.toLowerCase() === 'true';
+  if (!v) return false;
+  const lower = v.toLowerCase();
+  if (v === '0' || lower === 'false') return false;
+  return v === '1' || lower === 'true';
 }
 
 async function ensureSpotifyArtistsInDb(
