@@ -125,6 +125,37 @@ create index if not exists idx_song_credits_song_order
   on public.song_credits (song_id, display_order);
 ```
 
+### Spotify 要確認キュー（選曲時・2026-05）
+
+選曲後の非同期 Spotify 照合で **確定できなかった**候補を記録（`songs.spotify_track_id` は書かない）。
+
+```sql
+create table if not exists public.song_spotify_review_queue (
+  id uuid primary key default gen_random_uuid(),
+  song_id uuid not null references public.songs(id) on delete cascade,
+  display_title text null,
+  main_artist text null,
+  song_title text null,
+  spotify_search_query text null,
+  candidate_rank smallint null,
+  spotify_track_id text null,
+  spotify_name text null,
+  spotify_artists text null,
+  reason text not null,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_song_spotify_review_queue_created
+  on public.song_spotify_review_queue (created_at desc);
+
+create index if not exists idx_song_spotify_review_queue_song
+  on public.song_spotify_review_queue (song_id);
+```
+
+管理: `/admin/spotify-review-queue` · API: `GET /api/admin/spotify-review-queue`
+
+**有効化**: サーバー `SONG_SELECTION_SPOTIFY_ENRICH=1`（`SPOTIFY_CLIENT_ID` / `SECRET` 必須）。既存 `spotify_track_id` がある曲は上書きしない。m8 後追いは従来どおり m8 優先。
+
 #### バックフィル引継ぎ（2026-05-22・別 PC 用）
 
 **目的**: `spotify_artists`（なければ Music8 `main_artists` → `main_artist`）から `song_credits` を埋め、`songs.artist_id` を先頭クレジットに合わせる。

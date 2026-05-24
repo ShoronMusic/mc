@@ -139,6 +139,16 @@ export const ADMIN_SECTIONS: AdminSection[] = [
       'room_playback_history を JST 日別に一覧。新規 insert と既存曲の再選曲を区別（部屋名・選曲者付き）',
   },
   {
+    href: '/admin/artists-newly-registered',
+    title: '選曲登録アーティスト（日別）',
+    description: '選曲で新規 insert された artists（m8 未照会）。slug で WP JSON 照会用',
+  },
+  {
+    href: '/admin/spotify-review-queue',
+    title: 'Spotify 要確認（日別）',
+    description: '選曲時 Spotify 自動照合で確定できなかった曲（候補 track ID 付き）',
+  },
+  {
     href: '/admin/songs',
     title: '曲ダッシュボード',
     description: '曲の検索、詳細ページ（動画・コメント・豆知識・フィードバック）',

@@ -21,6 +21,9 @@ import {
   resolveSongStyleForOverwriteFromMusic8,
   type Music8SongExtract,
 } from '@/lib/music8-song-fields';
+import { ensureArtistForSongRegistration } from '@/lib/artist-selection-register';
+import { normalizeArtistAndTitleForRegistration } from '@/lib/song-registration-normalize';
+import { scheduleSongSelectionSpotifyEnrich } from '@/lib/song-selection-spotify-enrich';
 import { syncSongCreditsFromSongId } from '@/lib/song-credits-sync';
 
 export interface UpsertSongAndVideoParams {
@@ -553,6 +556,7 @@ export async function upsertSongAndVideo(params: UpsertSongAndVideoParams): Prom
   if (!supabase || !videoId || !videoId.trim()) return null;
 
   let effectiveMainArtist = (mainArtist ?? '').trim() || null;
+  let effectiveSongTitle = (songTitle ?? '').trim() || null;
   if (effectiveMainArtist || music8SongData) {
     const resolved = await resolveMainArtistForNewSongRegistration({
       youtubeMainArtist: effectiveMainArtist,
@@ -562,7 +566,20 @@ export async function upsertSongAndVideo(params: UpsertSongAndVideoParams): Prom
     if (resolved.mainArtist) effectiveMainArtist = resolved.mainArtist;
   }
 
-  const displayTitle = buildDisplayTitle(effectiveMainArtist, songTitle);
+  let registrationArtistId: string | null = null;
+  const normalized = normalizeArtistAndTitleForRegistration(effectiveMainArtist, effectiveSongTitle);
+  if (normalized) {
+    effectiveMainArtist = normalized.displayArtist;
+    effectiveSongTitle = normalized.songTitle;
+    try {
+      const ensured = await ensureArtistForSongRegistration(supabase, normalized.displayArtist);
+      if (ensured) registrationArtistId = ensured.artistId;
+    } catch (e) {
+      console.warn('[song-entities] ensureArtistForSongRegistration', e);
+    }
+  }
+
+  const displayTitle = buildDisplayTitle(effectiveMainArtist, effectiveSongTitle);
   if (!displayTitle) return null;
 
   const trimmedVideoId = videoId.trim();
@@ -614,7 +631,7 @@ export async function upsertSongAndVideo(params: UpsertSongAndVideoParams): Prom
   if (!songId) {
     // 3) どちらにも無ければ insert（正規化したタイトルで1曲1行）
     const [canonArtist, ...canonTitleParts] = canonicalTitle.split(' - ');
-    const canonSongTitle = canonTitleParts.join(' - ').trim() || (songTitle ?? '').trim();
+    const canonSongTitle = canonTitleParts.join(' - ').trim() || (effectiveSongTitle ?? '').trim();
     const { data: insertedSong, error: songInsertError } = await supabase
       .from('songs')
       .insert({
@@ -692,6 +709,18 @@ export async function upsertSongAndVideo(params: UpsertSongAndVideoParams): Prom
   } catch (e) {
     console.warn('[song-entities] syncSongCreditsFromSongId (upsert)', e);
   }
+
+  if (registrationArtistId) {
+    const { error: linkRegErr } = await supabase
+      .from('songs')
+      .update({ artist_id: registrationArtistId })
+      .eq('id', songId);
+    if (linkRegErr && linkRegErr.code !== '42703' && linkRegErr.code !== '42P01') {
+      console.warn('[song-entities] link registration artist_id', linkRegErr.message);
+    }
+  }
+
+  scheduleSongSelectionSpotifyEnrich(songId);
 
   return songId;
 }

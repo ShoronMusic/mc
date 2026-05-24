@@ -218,17 +218,34 @@ m8 アーティスト一括 import で入る `name_base`, `the_prefix`, `music8_
 
 ---
 
-## 7. 環境変数（挙動切替）
+## 7. 選曲時 Spotify 自動照合（2026-05 追加）
+
+`upsertSongAndVideo` 成功後、**非同期**で Spotify 検索（`SONG_SELECTION_SPOTIFY_ENRICH=1` 時）。
+
+| 段階 | 処理 |
+|------|------|
+| 1 | `normalizeArtistAndTitleForRegistration` — `(Official Video)` 除去、`feat.` → `, ` 共演、**Remix は曲名に残す** |
+| 2 | `ensureArtistForSongRegistration` — `name_base` + `the_prefix` + `music8_artist_slug`（m8/WP 同型） |
+| 3 | Spotify `limit=8` 検索 → スコア・拒否リスト → **先頭クレジット**一致 |
+| 確定 | `spotify_track_id` 等 + `song_credits`（**既存 track ID は上書きしない**） |
+| 要確認 | `song_spotify_review_queue` に候補のみ記録（DB の spotify 列は触らない） |
+
+m8 後追い（`attachMusic8SongDataIfFetched`）は **m8 優先**（Spotify 確定分を上書き可）。
+
+管理: `/admin/artists-newly-registered` · `/admin/spotify-review-queue`
+
+## 8. 環境変数（挙動切替）
 
 | 変数 | 効果 |
 |------|------|
+| `SONG_SELECTION_SPOTIFY_ENRICH=1` | 選曲後の非同期 Spotify 照合（要 `SPOTIFY_CLIENT_ID` / `SECRET`） |
 | `YT_ARTIST_TITLE_MODE=mylist_oembed` | 表記解決を oEmbed 簡易分割のみに（`AGENTS.md` 参照） |
 | `DEBUG_YT_ARTIST=1` | アーティスト解決ログ |
 | `MUSIC8_MUSICAICHAT_BASE_URL=0` | Music8 曲 JSON 取得オフ → §3 の m8 列は入らない |
 
 ---
 
-## 8. 運用上の注意
+## 9. 運用上の注意
 
 | 現象 | 原因・対策 |
 |------|------------|
@@ -239,11 +256,14 @@ m8 アーティスト一括 import で入る `name_base`, `the_prefix`, `music8_
 
 ---
 
-## 9. 関連コード索引
+## 10. 関連コード索引
 
 | 用途 | パス |
 |------|------|
 | upsert 本体 | `src/lib/song-entities.ts` |
+| 選曲正規化 | `src/lib/song-registration-normalize.ts` |
+| 選曲 artists 登録 | `src/lib/artist-selection-register.ts` |
+| Spotify 照合 | `src/lib/spotify-track-match.ts`, `src/lib/song-selection-spotify-enrich.ts` |
 | YouTube 表記解決 | `src/lib/youtube-artist-song-for-pack.ts`, `src/lib/format-song-display.ts` |
 | m8 正式アーティスト名 | `src/lib/music8-canonical-artist-name.ts` |
 | m8 スナップショット構築 | `src/lib/music8-song-persist.ts` |

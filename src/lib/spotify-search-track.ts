@@ -12,10 +12,15 @@ export type SpotifyTrackMeta = {
   spotifyName: string | null;
   spotifyArtists: string | null;
   spotifyReleaseDate: string | null;
+  spotifyImages: string | null;
 };
 
 type SpotifyTrackArtist = { id?: string; name?: string };
-type SpotifyTrackAlbum = { name?: string; release_date?: string };
+type SpotifyTrackAlbum = {
+  name?: string;
+  release_date?: string;
+  images?: Array<{ url?: string }>;
+};
 type SpotifyTrackItem = {
   id?: string;
   name?: string;
@@ -50,6 +55,12 @@ function trim(s: unknown): string {
   return typeof s === 'string' ? s.trim() : '';
 }
 
+function albumImageUrl(track: SpotifyTrackItem | undefined): string | null {
+  const images = track?.album?.images;
+  if (!Array.isArray(images) || images.length === 0) return null;
+  return trim(images[0]?.url) || null;
+}
+
 function mapTrackItem(track: SpotifyTrackItem | undefined): SpotifyTrackMeta {
   if (!track) {
     return {
@@ -58,6 +69,7 @@ function mapTrackItem(track: SpotifyTrackItem | undefined): SpotifyTrackMeta {
       spotifyName: null,
       spotifyArtists: null,
       spotifyReleaseDate: null,
+      spotifyImages: null,
     };
   }
   const artists = Array.isArray(track.artists)
@@ -71,6 +83,7 @@ function mapTrackItem(track: SpotifyTrackItem | undefined): SpotifyTrackMeta {
     spotifyName: trim(track.name) || null,
     spotifyArtists: artists || null,
     spotifyReleaseDate: trim(track.album?.release_date) || null,
+    spotifyImages: albumImageUrl(track),
   };
 }
 
@@ -153,6 +166,7 @@ function emptyTrackMeta(): SpotifyTrackMeta {
     spotifyName: null,
     spotifyArtists: null,
     spotifyReleaseDate: null,
+    spotifyImages: null,
   };
 }
 
@@ -212,50 +226,57 @@ export async function fetchSpotifyArtistsByIds(ids: string[]): Promise<SpotifyAr
 }
 
 /** `artist:… track:…` フィールド検索（管理 YouTube プレイリスト import と同系） */
-export async function fetchSpotifyTrackByArtistTitle(
+/** 選曲登録：複数候補（最大 limit 件） */
+export async function searchSpotifyTrackCandidatesByArtistTitle(
   artist: string,
   title: string,
-): Promise<SpotifyTrackMeta> {
+  limit = 8,
+): Promise<SpotifyTrackWithArtists[]> {
   const token = await getSpotifyAccessToken();
-  if (!token) {
-    return {
-      spotifyTrackId: null,
-      spotifyPopularity: null,
-      spotifyName: null,
-      spotifyArtists: null,
-      spotifyReleaseDate: null,
-    };
-  }
+  if (!token) return [];
 
-  const q = `artist:${artist} track:${title}`;
+  const primaryArtist = artist.split(',')[0]?.trim() || artist.trim();
+  const q = `artist:${primaryArtist} track:${title}`;
   const url = new URL('https://api.spotify.com/v1/search');
   url.searchParams.set('q', q);
   url.searchParams.set('type', 'track');
-  url.searchParams.set('limit', '1');
+  url.searchParams.set('limit', String(Math.max(1, Math.min(10, limit))));
   url.searchParams.set('market', spotifyMarket());
 
   try {
     const res = await spotifyFetchJson(url.toString(), token);
-    if (!res?.ok) {
-      return {
-        spotifyTrackId: null,
-        spotifyPopularity: null,
-        spotifyName: null,
-        spotifyArtists: null,
-        spotifyReleaseDate: null,
-      };
-    }
+    if (!res?.ok) return [];
     const data = (await res.json()) as SpotifySearchJson;
-    return mapTrackItem(data?.tracks?.items?.[0]);
+    const items = data?.tracks?.items ?? [];
+    return items
+      .map((item) => ({
+        ...mapTrackItem(item),
+        artists: mapTrackArtists(item),
+      }))
+      .filter((t) => t.spotifyTrackId && t.artists.length > 0);
   } catch {
+    return [];
+  }
+}
+
+export async function fetchSpotifyTrackByArtistTitle(
+  artist: string,
+  title: string,
+): Promise<SpotifyTrackMeta> {
+  const list = await searchSpotifyTrackCandidatesByArtistTitle(artist, title, 1);
+  const first = list[0];
+  if (!first) {
     return {
       spotifyTrackId: null,
       spotifyPopularity: null,
       spotifyName: null,
       spotifyArtists: null,
       spotifyReleaseDate: null,
+      spotifyImages: null,
     };
   }
+  const { artists: _a, ...meta } = first;
+  return meta;
 }
 
 /** display_title をそのまま q にした汎用検索（精度は落ちるがフォールバック用） */
@@ -268,6 +289,7 @@ export async function fetchSpotifyTrackByFreeTextQuery(query: string): Promise<S
       spotifyName: null,
       spotifyArtists: null,
       spotifyReleaseDate: null,
+      spotifyImages: null,
     };
   }
   const url = new URL('https://api.spotify.com/v1/search');
@@ -278,23 +300,11 @@ export async function fetchSpotifyTrackByFreeTextQuery(query: string): Promise<S
   try {
     const res = await spotifyFetchJson(url.toString(), token);
     if (!res?.ok) {
-      return {
-        spotifyTrackId: null,
-        spotifyPopularity: null,
-        spotifyName: null,
-        spotifyArtists: null,
-        spotifyReleaseDate: null,
-      };
+      return emptyTrackMeta();
     }
     const data = (await res.json()) as SpotifySearchJson;
     return mapTrackItem(data?.tracks?.items?.[0]);
   } catch {
-    return {
-      spotifyTrackId: null,
-      spotifyPopularity: null,
-      spotifyName: null,
-      spotifyArtists: null,
-      spotifyReleaseDate: null,
-    };
+    return emptyTrackMeta();
   }
 }
