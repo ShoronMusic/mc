@@ -3,7 +3,7 @@
  * 将来の Music8 起点インポート・突合用。巨大 HTML（content 等）は含めない。
  */
 
-import { extractMusic8SongFields } from '@/lib/music8-song-fields';
+import { extractMusic8SongFields, resolveSongStyleForOverwriteFromMusic8 } from '@/lib/music8-song-fields';
 
 function asObj(x: unknown): Record<string, unknown> | null {
   if (x != null && typeof x === 'object' && !Array.isArray(x)) return x as Record<string, unknown>;
@@ -113,6 +113,7 @@ export function buildPersistableMusic8SongSnapshot(data: unknown): Record<string
 
     // acf（曲レベルの Spotify メタ）
     const acf = asObj(obj.acf as unknown);
+    const acfSpotifyTrackId    = acf ? asStr(acf.spotify_track_id ?? '') : '';
     const acfSpotifyReleaseDate = acf ? asStr(acf.spotify_release_date ?? '') : '';
     const acfSpotifyName       = acf ? asStr(acf.spotify_name ?? '') : '';
     const acfSpotifyArtists    = acf ? asStr(acf.spotify_artists ?? '') : '';
@@ -134,6 +135,9 @@ export function buildPersistableMusic8SongSnapshot(data: unknown): Record<string
     // spotify_images: acf > top-level
     const spotifyImages = (acfSpotifyImages || asStr(obj.spotify_images ?? '')).trim();
 
+    const structuredStyle =
+      ex.structuredStyleFromFacts.trim() || resolveSongStyleForOverwriteFromMusic8(ex) || '';
+
     return {
       kind: 'music8_wp_song',
       captured_at: capturedAt,
@@ -148,8 +152,9 @@ export function buildPersistableMusic8SongSnapshot(data: unknown): Record<string
       styleNames: ex.styleNames,
       primary_artist_name_ja: ex.primaryArtistNameJa.trim() || null,
       vocal: ex.vocalLabel.trim() || null,
-      structured_style: ex.structuredStyleFromFacts.trim() || null,
+      structured_style: structuredStyle || null,
       // Spotify（曲レベル）
+      ...(acfSpotifyTrackId ? { spotify_track_id: acfSpotifyTrackId } : {}),
       ...(acfSpotifyReleaseDate ? { spotify_release_date: acfSpotifyReleaseDate } : {}),
       ...(acfSpotifyName        ? { spotify_name: acfSpotifyName } : {}),
       ...(acfSpotifyArtists     ? { spotify_artists: acfSpotifyArtists } : {}),

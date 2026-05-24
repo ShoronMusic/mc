@@ -44,6 +44,8 @@ function run() {
   const snap = buildPersistableMusic8SongSnapshot(converted);
   assert.equal(snap?.kind, 'music8_wp_song');
   assert.equal((snap as { id?: number }).id, 133074);
+  assert.equal((snap as { spotify_track_id?: string }).spotify_track_id, '3gmEzilP9BzF45wIMvA16l');
+  assert.equal((snap as { structured_style?: string }).structured_style, 'Metal');
 
   console.log('music8-wp-rest.unit-test: ok');
 }

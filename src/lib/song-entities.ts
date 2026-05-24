@@ -126,7 +126,12 @@ async function patchSongFutureColumnsFromMusic8(
   if (ex.genres.length > 0) basePayload.genres = ex.genres;
   if (ex.primaryArtistNameJa.trim()) basePayload.primary_artist_name_ja = ex.primaryArtistNameJa.trim();
   if (ex.vocalLabel.trim()) basePayload.vocal = ex.vocalLabel.trim();
-  if (ex.structuredStyleFromFacts.trim()) basePayload.structured_style = ex.structuredStyleFromFacts.trim();
+  const structuredStyle =
+    ex.structuredStyleFromFacts.trim() ||
+    (payload && typeof payload.structured_style === 'string' ? payload.structured_style.trim() : '') ||
+    resolveSongStyleForOverwriteFromMusic8(ex) ||
+    '';
+  if (structuredStyle) basePayload.structured_style = structuredStyle;
   if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
     const p = payload as Record<string, unknown>;
     const music8SongId = p.id;

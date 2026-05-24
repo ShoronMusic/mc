@@ -32,9 +32,12 @@ function run() {
     videoId: 'OMOGaugKpzs',
     date: '1983-05-01',
     styles: [2849],
+    acf: { spotify_track_id: 'abc123track' },
   });
   assert.equal(wp?.kind, 'music8_wp_song');
   assert.equal((wp as { id?: number }).id, 48794);
+  assert.equal((wp as { spotify_track_id?: string }).spotify_track_id, 'abc123track');
+  assert.equal((wp as { structured_style?: string }).structured_style, 'Rock');
   assert.ok(Array.isArray((wp as { main_artists?: unknown[] }).main_artists));
 
   assert.equal(buildPersistableMusic8SongSnapshot(null), null);

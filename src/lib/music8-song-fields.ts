@@ -310,7 +310,7 @@ export function extractMusic8SongFields(data: unknown): Music8SongExtract {
  */
 export function extractMusic8SongFieldsFromPersistedSnapshot(data: unknown): Music8SongExtract | null {
   const o = asObj(data);
-  if (!o || o.kind !== 'musicaichat_v1') return null;
+  if (!o || (o.kind !== 'musicaichat_v1' && o.kind !== 'music8_wp_song')) return null;
 
   const genres: string[] = [];
   if (Array.isArray(o.genres)) {
