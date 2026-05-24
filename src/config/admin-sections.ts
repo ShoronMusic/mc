@@ -134,9 +134,9 @@ export const ADMIN_SECTIONS: AdminSection[] = [
   },
   {
     href: '/admin/songs-newly-registered',
-    title: '新規登録曲（日別）',
+    title: '選曲・DB登録（日別）',
     description:
-      '選曲 upsert で songs に新規 insert された曲を created_at 基準で JST 日付ごとに一覧（Music8 連携状態・video_id 付き）',
+      'room_playback_history を JST 日別に一覧。新規 insert と既存曲の再選曲を区別（部屋名・選曲者付き）',
   },
   {
     href: '/admin/songs',

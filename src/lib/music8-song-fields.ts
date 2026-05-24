@@ -107,6 +107,8 @@ function asArr(x: unknown): unknown[] {
 function formatReleaseYearMonth(value: string): string {
   const s = (value ?? '').trim();
   if (!s) return '';
+  const slash = s.match(/^(\d{4})\/(\d{1,2})/);
+  if (slash) return `${slash[1]}.${String(Number(slash[2])).padStart(2, '0')}`;
   const m = s.match(/^(\d{4})-(\d{2})/);
   if (m) return `${m[1]}.${m[2]}`;
   const m2 = s.match(/^(\d{4})\.(\d{2})/);
@@ -272,6 +274,21 @@ export function extractMusic8SongFields(data: unknown): Music8SongExtract {
 
   const dateSrc = asStr(obj.releaseDate ?? obj.date ?? obj.date_gmt ?? '');
   result.releaseDate = dateSrc ? formatReleaseYearMonth(dateSrc) : '';
+
+  const vocalData = obj.vocal_data;
+  if (Array.isArray(vocalData) && vocalData.length > 0) {
+    const first = asObj(vocalData[0]);
+    const vocalName = first ? asStr(first.name ?? first.slug ?? '').trim() : '';
+    if (vocalName) result.vocalLabel = vocalName;
+  }
+
+  const artistsSrc = obj.artists;
+  if (Array.isArray(artistsSrc) && artistsSrc.length > 0) {
+    const firstArtist = asObj(artistsSrc[0]);
+    const artistAcf = firstArtist ? asObj(firstArtist.acf as unknown) : null;
+    const jpName = artistAcf ? asStr(artistAcf.artistjpname ?? '').trim() : '';
+    if (jpName) result.primaryArtistNameJa = jpName;
+  }
 
   const styleIdsSrc = obj.styles ?? obj.style ?? [];
   const ids = Array.isArray(styleIdsSrc) ? styleIdsSrc : [styleIdsSrc];

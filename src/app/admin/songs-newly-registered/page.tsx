@@ -22,7 +22,7 @@ function startOfLocalDayToIso(value: string): string | null {
   return d.toISOString();
 }
 
-function fmtCreatedAt(iso: string): string {
+function fmtJst(iso: string): string {
   try {
     return new Date(iso).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' });
   } catch {
@@ -32,6 +32,7 @@ function fmtCreatedAt(iso: string): string {
 
 export default function AdminSongsNewlyRegisteredPage() {
   const [days, setDays] = useState(14);
+  const [kind, setKind] = useState<'all' | 'new'>('all');
   const [fromInput, setFromInput] = useState('');
   const [toInput, setToInput] = useState(defaultToInputValue);
   const [loading, setLoading] = useState(false);
@@ -40,7 +41,10 @@ export default function AdminSongsNewlyRegisteredPage() {
     fromIso: string;
     toIso: string;
     truncated: boolean;
-    totalSongs: number;
+    scannedRows: number;
+    totalItems: number;
+    newCount: number;
+    existingCount: number;
   } | null>(null);
   const [dayGroups, setDayGroups] = useState<SongsNewlyRegisteredDay[]>([]);
 
@@ -59,6 +63,7 @@ export default function AdminSongsNewlyRegisteredPage() {
       if (fromIso) q.set('from', fromIso);
       if (toIso) q.set('to', toIso);
       if (!fromIso && !toIso) q.set('days', String(days));
+      q.set('kind', kind);
 
       const res = await fetch(`/api/admin/songs-newly-registered?${q.toString()}`, {
         credentials: 'include',
@@ -74,7 +79,10 @@ export default function AdminSongsNewlyRegisteredPage() {
         fromIso: data.fromIso,
         toIso: data.toIso,
         truncated: Boolean(data.truncated),
-        totalSongs: typeof data.total_songs === 'number' ? data.total_songs : 0,
+        scannedRows: typeof data.scanned_rows === 'number' ? data.scanned_rows : 0,
+        totalItems: typeof data.total_items === 'number' ? data.total_items : 0,
+        newCount: typeof data.new_count === 'number' ? data.new_count : 0,
+        existingCount: typeof data.existing_count === 'number' ? data.existing_count : 0,
       });
       setDayGroups(Array.isArray(data.days) ? data.days : []);
     } catch {
@@ -84,7 +92,7 @@ export default function AdminSongsNewlyRegisteredPage() {
     } finally {
       setLoading(false);
     }
-  }, [days, fromInput, toInput]);
+  }, [days, fromInput, toInput, kind]);
 
   useEffect(() => {
     void load();
@@ -94,17 +102,17 @@ export default function AdminSongsNewlyRegisteredPage() {
   return (
     <main className="mx-auto min-h-screen max-w-5xl bg-gray-950 p-4 text-gray-100 sm:p-6">
       <AdminMenuBar />
-      <h1 className="text-xl font-semibold text-white sm:text-2xl">新規登録曲（日別）</h1>
+      <h1 className="text-xl font-semibold text-white sm:text-2xl">選曲・DB登録（日別）</h1>
       <p className="mt-2 text-sm text-gray-400">
-        選曲時の <code className="rounded bg-gray-800 px-1">upsertSongAndVideo</code> で{' '}
-        <code className="rounded bg-gray-800 px-1">songs</code> テーブルに新規 insert された曲を、
-        <code className="rounded bg-gray-800 px-1">created_at</code> を基準に{' '}
-        <strong className="text-gray-200">JST の日付</strong>ごとに表示します。既存曲の再選曲（再利用）や
-        Music8 一括 import は含みません。
+        部屋の <code className="rounded bg-gray-800 px-1">room_playback_history</code>（視聴履歴）を
+        JST 日付ごとに一覧します。各行は選曲1回です。
+        <span className="ml-1 text-emerald-400/90">新規</span> はその選曲で{' '}
+        <code className="rounded bg-gray-800 px-1">songs</code> に insert された曲、
+        <span className="ml-1 text-sky-400/90">既存</span> は DB に既にあった曲の再選曲です。
       </p>
 
       <section className="mt-6 rounded-lg border border-gray-800 bg-gray-900/50 p-4">
-        <h2 className="text-sm font-semibold text-amber-200">期間</h2>
+        <h2 className="text-sm font-semibold text-amber-200">期間・表示</h2>
         <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
           <label className="flex flex-col text-xs text-gray-400">
             from（任意・ローカル日時 → ISO）
@@ -136,6 +144,17 @@ export default function AdminSongsNewlyRegisteredPage() {
               className="mt-1 w-24 rounded border border-gray-700 bg-gray-950 px-2 py-1.5 text-sm text-white disabled:opacity-40"
             />
           </label>
+          <label className="flex flex-col text-xs text-gray-400">
+            表示
+            <select
+              value={kind}
+              onChange={(e) => setKind(e.target.value === 'new' ? 'new' : 'all')}
+              className="mt-1 rounded border border-gray-700 bg-gray-950 px-2 py-1.5 text-sm text-white"
+            >
+              <option value="all">すべて（新規＋既存）</option>
+              <option value="new">新規登録のみ</option>
+            </select>
+          </label>
           <button
             type="button"
             onClick={() => void load()}
@@ -147,9 +166,9 @@ export default function AdminSongsNewlyRegisteredPage() {
         </div>
         {meta ? (
           <p className="mt-3 text-xs text-gray-500">
-            対象 {meta.totalSongs} 曲
-            {meta.truncated ? '（上限 5000 件で打ち切り）' : ''} · UTC {meta.fromIso.slice(0, 19)} 〜{' '}
-            {meta.toIso.slice(0, 19)} · 表示 {totalItems} 曲 / {dayGroups.length} 日
+            走査 {meta.scannedRows} 行
+            {meta.truncated ? '（上限で打ち切り）' : ''} · 新規 {meta.newCount} / 既存 {meta.existingCount} · 表示{' '}
+            {totalItems} 件 / {dayGroups.length} 日
           </p>
         ) : null}
         {error ? <p className="mt-2 text-sm text-red-400">{error}</p> : null}
@@ -166,12 +185,21 @@ export default function AdminSongsNewlyRegisteredPage() {
             <ul className="mt-3 divide-y divide-gray-800 rounded-lg border border-gray-800 bg-gray-900/40">
               {group.items.map((item: SongsNewlyRegisteredItem) => (
                 <li
-                  key={item.song_id}
+                  key={`${item.played_at}-${item.video_id}-${item.room_id}`}
                   className="flex flex-col gap-2 px-3 py-3 sm:flex-row sm:items-start sm:justify-between"
                 >
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium text-white">
-                      {item.display_title ?? '（display_title なし）'}
+                      {item.registration_kind === 'new' ? (
+                        <span className="mr-2 rounded bg-emerald-900/50 px-1.5 py-0.5 text-xs font-normal text-emerald-300">
+                          新規
+                        </span>
+                      ) : (
+                        <span className="mr-2 rounded bg-sky-900/40 px-1.5 py-0.5 text-xs font-normal text-sky-300">
+                          既存
+                        </span>
+                      )}
+                      {item.display_title ?? '（タイトル不明）'}
                     </p>
                     <p className="mt-1 text-xs text-gray-500">
                       {item.main_artist ?? '—'} · {item.song_title ?? '—'}
@@ -189,52 +217,51 @@ export default function AdminSongsNewlyRegisteredPage() {
                     </p>
                     <p className="mt-1 text-xs text-gray-400">
                       部屋:{' '}
-                      {item.room_display_title ? (
-                        <>
-                          <span className="text-gray-200">{item.room_display_title}</span>
-                          {item.room_id ? (
-                            <span className="ml-1 font-mono text-gray-500">({item.room_id})</span>
-                          ) : null}
-                        </>
-                      ) : (
-                        <span className="text-gray-500">—（視聴履歴なし）</span>
-                      )}
+                      <span className="text-gray-200">{item.room_display_title}</span>
+                      <span className="ml-1 font-mono text-gray-500">({item.room_id})</span>
                       {' · '}
                       選曲者:{' '}
                       <span className="text-gray-200">{item.selector_display_name ?? '—'}</span>
                     </p>
                     <p className="mt-1 font-mono text-xs text-gray-500">
-                      song_id=
-                      <Link href={item.admin_song_href} className="text-amber-200/90 hover:text-amber-100">
-                        {item.song_id}
-                      </Link>
-                      {item.video_ids.length > 0 ? (
+                      video_id={item.video_id}
+                      {item.song_id ? (
                         <>
                           {' '}
-                          · video_id={item.video_ids.join(', ')}
+                          · song_id=
+                          <Link
+                            href={item.admin_song_href ?? '#'}
+                            className="text-amber-200/90 hover:text-amber-100"
+                          >
+                            {item.song_id}
+                          </Link>
                         </>
                       ) : (
                         <span className="text-amber-300/80"> · song_videos 未登録</span>
                       )}
                     </p>
                     <p className="mt-1 text-xs text-gray-500">
-                      登録 {fmtCreatedAt(item.created_at)} · play_count {item.play_count}
+                      選曲 {fmtJst(item.played_at)}
+                      {item.song_created_at && item.registration_kind === 'new'
+                        ? ` · DB登録 ${fmtJst(item.song_created_at)}`
+                        : null}
+                      {item.play_count != null ? ` · play_count ${item.play_count}` : null}
                     </p>
                   </div>
                   <div className="flex shrink-0 flex-col gap-2 sm:items-end">
-                    {item.video_ids[0] ? (
-                      <a
-                        href={`https://www.youtube.com/watch?v=${encodeURIComponent(item.video_ids[0])}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-sm text-sky-400 hover:text-sky-300"
-                      >
-                        YouTube を開く
-                      </a>
+                    <a
+                      href={`https://www.youtube.com/watch?v=${encodeURIComponent(item.video_id)}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-sm text-sky-400 hover:text-sky-300"
+                    >
+                      YouTube を開く
+                    </a>
+                    {item.admin_song_href ? (
+                      <Link href={item.admin_song_href} className="text-sm text-amber-200/90 hover:text-amber-100">
+                        曲ダッシュボード
+                      </Link>
                     ) : null}
-                    <Link href={item.admin_song_href} className="text-sm text-amber-200/90 hover:text-amber-100">
-                      曲ダッシュボード
-                    </Link>
                   </div>
                 </li>
               ))}
@@ -244,7 +271,7 @@ export default function AdminSongsNewlyRegisteredPage() {
       </section>
 
       {!loading && dayGroups.length === 0 && !error && meta ? (
-        <p className="mt-8 text-sm text-gray-500">この期間に新規登録された曲はありません。</p>
+        <p className="mt-8 text-sm text-gray-500">この期間に該当する選曲はありません。</p>
       ) : null}
     </main>
   );
