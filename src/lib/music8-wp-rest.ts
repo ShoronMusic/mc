@@ -4,11 +4,14 @@
  */
 
 import { artistNameToMusic8Slug } from '@/lib/music8-artist-display';
+import { getMainArtist } from '@/lib/format-song-display';
 import { resolveArtistNameForMusic8Lookup } from '@/lib/music8-main-artist-lookup';
 import {
   normalizeSongTitleForLookup,
   songTitleToMusic8Slug,
 } from '@/lib/music8-song-lookup';
+
+const MAX_ARTIST_POSTS_SCAN_FOR_VIDEO_ID = 120;
 
 const DEFAULT_WP_REST_BASE = 'https://xs867261.xsrv.jp/md/wp-json';
 const FETCH_TIMEOUT_MS = 15_000;
@@ -80,7 +83,16 @@ async function fetchWpJson<T>(url: string): Promise<T | null> {
   }
 }
 
-function artistSlugCandidates(artistNameOrSlug: string): string[] {
+/** Music8 曲 slug 生成（`B.I.G.` → `b-i-g`）と WP カテゴリ slug（`big`）の差を吸収 */
+export function wpArtistSlugAliasesFromMusic8Slug(slug: string): string[] {
+  const s = slug.trim();
+  if (!s) return [];
+  const collapsed = s.includes('-b-i-g') ? s.replace(/-b-i-g/g, '-big') : null;
+  if (collapsed && collapsed !== s) return [collapsed];
+  return [];
+}
+
+export function artistSlugCandidates(artistNameOrSlug: string): string[] {
   const resolved = resolveArtistNameForMusic8Lookup(artistNameOrSlug);
   const primary = artistNameToMusic8Slug(resolved) || resolved.trim().toLowerCase().replace(/\s+/g, '-');
   const out: string[] = [];
@@ -90,7 +102,34 @@ function artistSlugCandidates(artistNameOrSlug: string): string[] {
   };
   add(primary);
   if (primary.startsWith('the-')) add(primary.slice(4));
+  for (const alias of wpArtistSlugAliasesFromMusic8Slug(primary)) {
+    add(alias);
+  }
   return out;
+}
+
+async function resolveArtistCategoryIdByNameSearch(
+  base: string,
+  artistNameOrSlug: string,
+): Promise<number | null> {
+  const label = getMainArtist(resolveArtistNameForMusic8Lookup(artistNameOrSlug)).trim();
+  if (!label) return null;
+  const rows = await fetchWpJson<Array<{ id?: number; name?: string }>>(
+    `${base}/wp/v2/categories?search=${encodeURIComponent(label)}&per_page=15`,
+  );
+  if (!Array.isArray(rows) || rows.length === 0) return null;
+
+  const want = normalizeTitleForMatch(label);
+  for (const row of rows) {
+    const got = normalizeTitleForMatch(row.name ?? '');
+    if (!got) continue;
+    if (got === want || got.includes(want) || want.includes(got)) {
+      const id = row.id;
+      if (typeof id === 'number' && id > 0) return id;
+    }
+  }
+  const fallback = rows[0]?.id;
+  return typeof fallback === 'number' && fallback > 0 ? fallback : null;
 }
 
 async function resolveArtistCategoryId(base: string, artistNameOrSlug: string): Promise<number | null> {
@@ -101,13 +140,111 @@ async function resolveArtistCategoryId(base: string, artistNameOrSlug: string): 
     const id = rows?.[0]?.id;
     if (typeof id === 'number' && id > 0) return id;
   }
-  return null;
+  return resolveArtistCategoryIdByNameSearch(base, artistNameOrSlug);
+}
+
+export function isLikelyYoutubeVideoId(videoId: string): boolean {
+  return /^[A-Za-z0-9_-]{11}$/.test((videoId ?? '').trim());
 }
 
 function postVideoId(post: WpRestSongPost): string {
   const acf = post.acf ?? {};
   const vid = acf.ytvideoid;
   return typeof vid === 'string' ? vid.trim() : '';
+}
+
+function dedupePosts(posts: WpRestSongPost[]): WpRestSongPost[] {
+  const seen = new Set<number>();
+  const out: WpRestSongPost[] = [];
+  for (const p of posts) {
+    if (!p?.id || seen.has(p.id)) continue;
+    seen.add(p.id);
+    out.push(p);
+  }
+  return out;
+}
+
+async function fetchPostsBySlugGlobal(base: string, titleSlug: string): Promise<WpRestSongPost[]> {
+  const rows = await fetchWpJson<WpRestSongPost[]>(
+    `${base}/wp/v2/posts?slug=${encodeURIComponent(titleSlug)}&status=publish&per_page=5`,
+  );
+  return Array.isArray(rows) ? rows.filter((p) => p?.id) : [];
+}
+
+/** 曲 slug と `-2`…`-5` を category 付き／なしで取得 */
+async function fetchPostsBySongSlugVariants(
+  base: string,
+  songSlug: string,
+  categoryId?: number | null,
+): Promise<WpRestSongPost[]> {
+  const slug = (songSlug ?? '').trim();
+  if (!slug) return [];
+  const slugs = [slug, `${slug}-2`, `${slug}-3`, `${slug}-4`, `${slug}-5`];
+  const batches = await Promise.all(
+    slugs.map((s) =>
+      categoryId && categoryId > 0
+        ? fetchPostsBySlugAndCategory(base, s, categoryId)
+        : fetchPostsBySlugGlobal(base, s),
+    ),
+  );
+  return dedupePosts(batches.flat());
+}
+
+async function fetchPostByVideoIdInArtistCatalog(
+  base: string,
+  artistNameOrSlug: string,
+  videoId: string,
+): Promise<WpRestSongPost | null> {
+  const vid = videoId.trim();
+  if (!vid) return null;
+
+  for (const artistSlug of artistSlugCandidates(artistNameOrSlug)) {
+    const list = await fetchWpJson<Array<{ id?: number }>>(
+      `${base}/mytheme/v1/artist-posts/${encodeURIComponent(artistSlug)}`,
+    );
+    if (!Array.isArray(list) || list.length === 0) continue;
+
+    for (const row of list.slice(0, MAX_ARTIST_POSTS_SCAN_FOR_VIDEO_ID)) {
+      const id = row.id;
+      if (typeof id !== 'number' || id <= 0) continue;
+      const post = await fetchPostById(base, id);
+      if (post && postVideoId(post) === vid) return post;
+    }
+  }
+  return null;
+}
+
+/**
+ * YouTube videoId で WP 曲投稿を特定（WP の meta 検索は未対応のため索引＋ slug 照合）。
+ * 1) musicaichat `youtube_to_song.json` → artist/song slug → WP slug 取得（ytvideoid 一致確認）
+ * 2) 失敗時 `mytheme/v1/artist-posts` を走査（artistLookup がある場合）
+ */
+export async function fetchWpPostByVideoId(
+  base: string,
+  videoId: string,
+  artistLookup?: string,
+): Promise<WpRestSongPost | null> {
+  const vid = (videoId ?? '').trim();
+  if (!vid || !isLikelyYoutubeVideoId(vid)) return null;
+
+  const { resolveMusicaichatSongKeyForVideoId } = await import('@/lib/music8-musicaichat');
+  const entry = await resolveMusicaichatSongKeyForVideoId(vid);
+  if (entry?.artist_slug && entry.song_slug) {
+    const categoryId = await resolveArtistCategoryId(base, entry.artist_slug);
+    let posts = await fetchPostsBySongSlugVariants(base, entry.song_slug, categoryId);
+    let match = posts.find((p) => postVideoId(p) === vid);
+    if (!match && categoryId) {
+      posts = await fetchPostsBySongSlugVariants(base, entry.song_slug, null);
+      match = posts.find((p) => postVideoId(p) === vid);
+    }
+    if (match) return match;
+  }
+
+  const artist = (artistLookup ?? '').trim();
+  if (artist) {
+    return fetchPostByVideoIdInArtistCatalog(base, artist, vid);
+  }
+  return null;
 }
 
 function titleMatches(post: WpRestSongPost, songTitle: string): boolean {
@@ -238,6 +375,13 @@ export async function fetchMusic8SongFromWpRest(
   const artistLookup = (params.artistLookup ?? '').trim();
   const songLookupTitle = (params.songLookupTitle ?? '').trim();
   const videoId = (params.videoId ?? '').trim();
+  if (!videoId && (!artistLookup || !songLookupTitle)) return null;
+
+  if (videoId) {
+    const byVideo = await fetchWpPostByVideoId(base, videoId, artistLookup || undefined);
+    if (byVideo) return wpRestPostToMusic8SongJson(byVideo);
+  }
+
   if (!artistLookup || !songLookupTitle) return null;
 
   const wpPostId = params.music8SongId;
@@ -254,6 +398,9 @@ export async function fetchMusic8SongFromWpRest(
 
   if (categoryId && titleSlug) {
     candidates.push(...(await fetchPostsBySlugAndCategory(base, titleSlug, categoryId)));
+    for (const n of [2, 3, 4, 5]) {
+      candidates.push(...(await fetchPostsBySlugAndCategory(base, `${titleSlug}-${n}`, categoryId)));
+    }
   }
 
   if (candidates.length === 0 && categoryId) {

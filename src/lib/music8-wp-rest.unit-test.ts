@@ -1,9 +1,20 @@
 import assert from 'node:assert/strict';
-import { wpRestPostToMusic8SongJson } from '@/lib/music8-wp-rest';
+import {
+  artistSlugCandidates,
+  isLikelyYoutubeVideoId,
+  wpArtistSlugAliasesFromMusic8Slug,
+  wpRestPostToMusic8SongJson,
+} from '@/lib/music8-wp-rest';
 import { buildPersistableMusic8SongSnapshot } from '@/lib/music8-song-persist';
 import { extractMusic8SongFields, resolveOriginalReleaseDateFromMusic8Json } from '@/lib/music8-song-fields';
 
 function run() {
+  assert.deepEqual(wpArtistSlugAliasesFromMusic8Slug('notorious-b-i-g'), ['notorious-big']);
+  const slugs = artistSlugCandidates('The Notorious B.i.g.');
+  assert.ok(slugs.includes('notorious-big'), `expected notorious-big in ${JSON.stringify(slugs)}`);
+  assert.equal(isLikelyYoutubeVideoId('_JZom_gVfuw'), true);
+  assert.equal(isLikelyYoutubeVideoId(''), false);
+
   const converted = wpRestPostToMusic8SongJson({
     id: 133074,
     slug: 'i-miss-the-misery',
