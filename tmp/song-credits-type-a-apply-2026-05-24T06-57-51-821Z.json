@@ -1,0 +1,864 @@
+{
+  "cleared": 70,
+  "synced": 70,
+  "fixed": 13,
+  "stillFailed": [
+    {
+      "song_id": "0104e5d9-5d64-43a4-82b3-513d0f4ae3fe",
+      "display_title": "Dino Jelusick, Mike Portnoy - Jane",
+      "result": {
+        "songId": "0104e5d9-5d64-43a4-82b3-513d0f4ae3fe",
+        "applied": false,
+        "creditCount": 0,
+        "unresolved": [
+          "Dino Jelusick",
+          "Mike Portnoy"
+        ],
+        "source": "main_artist",
+        "primaryArtistId": null,
+        "skippedReason": "all_unresolved"
+      }
+    },
+    {
+      "song_id": "0601b359-27cb-4ea7-9c71-d7ff5ba62948",
+      "display_title": "Fantasy Bgm - Eyes On Meアイズオンミー◆フェイウォンff8日本語歌詞 Faye Wong ファイナルファンタジー8lyrics和訳付き",
+      "result": {
+        "songId": "0601b359-27cb-4ea7-9c71-d7ff5ba62948",
+        "applied": false,
+        "creditCount": 0,
+        "unresolved": [
+          "Fantasy Bgm"
+        ],
+        "source": "main_artist",
+        "primaryArtistId": null,
+        "skippedReason": "all_unresolved"
+      }
+    },
+    {
+      "song_id": "13e7fc0d-42fb-487d-a519-01dc9ab9111c",
+      "display_title": "Broken Heart - Justin Bieber & Tyga Ft. Gunna",
+      "result": {
+        "songId": "13e7fc0d-42fb-487d-a519-01dc9ab9111c",
+        "applied": false,
+        "creditCount": 0,
+        "unresolved": [
+          "Broken Heart"
+        ],
+        "source": "main_artist",
+        "primaryArtistId": null,
+        "skippedReason": "all_unresolved"
+      }
+    },
+    {
+      "song_id": "1cba9bcc-8bdc-43b8-9f07-d83ae0084b3b",
+      "display_title": "Lozzagermain - Stevie Wonder Superstition",
+      "result": {
+        "songId": "1cba9bcc-8bdc-43b8-9f07-d83ae0084b3b",
+        "applied": false,
+        "creditCount": 0,
+        "unresolved": [
+          "Lozzagermain"
+        ],
+        "source": "main_artist",
+        "primaryArtistId": null,
+        "skippedReason": "all_unresolved"
+      }
+    },
+    {
+      "song_id": "20a54b6a-f6d0-451c-8084-436562942045",
+      "display_title": "T-series Bhakti Sagar - श्री हनुमान चालीसा 🌺🙏| Shree Hanuman Chalisa Original Video |🙏🌺| Gulshan Kumar | Hariharan",
+      "result": {
+        "songId": "20a54b6a-f6d0-451c-8084-436562942045",
+        "applied": false,
+        "creditCount": 0,
+        "unresolved": [
+          "T-series Bhakti Sagar"
+        ],
+        "source": "main_artist",
+        "primaryArtistId": null,
+        "skippedReason": "all_unresolved"
+      }
+    },
+    {
+      "song_id": "214a4c35-9ab9-4519-aab3-5f4a9755e187",
+      "display_title": "穴釣りペンギン - 【穴釣り】超ライトタックルで遊んでいたらとんでもないサイズが来ました。",
+      "result": {
+        "songId": "214a4c35-9ab9-4519-aab3-5f4a9755e187",
+        "applied": false,
+        "creditCount": 0,
+        "unresolved": [
+          "穴釣りペンギン"
+        ],
+        "source": "main_artist",
+        "primaryArtistId": null,
+        "skippedReason": "all_unresolved"
+      }
+    },
+    {
+      "song_id": "394a739b-8bed-4bbe-b474-cb77685dbfc2",
+      "display_title": "Released On: 2013 - 08 - 21",
+      "result": {
+        "songId": "394a739b-8bed-4bbe-b474-cb77685dbfc2",
+        "applied": false,
+        "creditCount": 0,
+        "unresolved": [
+          "Released On: 2013"
+        ],
+        "source": "main_artist",
+        "primaryArtistId": null,
+        "skippedReason": "all_unresolved"
+      }
+    },
+    {
+      "song_id": "398e6aed-fe93-4eb2-8e40-3fb44eec0b2e",
+      "display_title": "ルージュの伝言 - 荒井由実（松任谷由実）（フル）",
+      "result": {
+        "songId": "398e6aed-fe93-4eb2-8e40-3fb44eec0b2e",
+        "applied": false,
+        "creditCount": 0,
+        "unresolved": [
+          "ルージュの伝言"
+        ],
+        "source": "main_artist",
+        "primaryArtistId": null,
+        "skippedReason": "all_unresolved"
+      }
+    },
+    {
+      "song_id": "4513ecb5-bbce-4dc0-8369-c576557583b4",
+      "display_title": "山下達郎 Tatsuro Yamashita - 山下達郎「クリスマス・イブ (Christmas Eve)」 Mv",
+      "result": {
+        "songId": "4513ecb5-bbce-4dc0-8369-c576557583b4",
+        "applied": false,
+        "creditCount": 0,
+        "unresolved": [
+          "山下達郎 Tatsuro Yamashita"
+        ],
+        "source": "main_artist",
+        "primaryArtistId": null,
+        "skippedReason": "all_unresolved"
+      }
+    },
+    {
+      "song_id": "4676b5ab-3fe1-4d42-ace6-ea2789cea882",
+      "display_title": "The Breaks - Kurtis Blow",
+      "result": {
+        "songId": "4676b5ab-3fe1-4d42-ace6-ea2789cea882",
+        "applied": false,
+        "creditCount": 0,
+        "unresolved": [
+          "The Breaks"
+        ],
+        "source": "main_artist",
+        "primaryArtistId": null,
+        "skippedReason": "all_unresolved"
+      }
+    },
+    {
+      "song_id": "579b6d64-c64c-4bc9-b9c2-5f9d2b8c51f7",
+      "display_title": "たけ【アニメ】 - 【無双】主人公最強おすすめアニメTop30!!【おすすめアニメ】",
+      "result": {
+        "songId": "579b6d64-c64c-4bc9-b9c2-5f9d2b8c51f7",
+        "applied": false,
+        "creditCount": 0,
+        "unresolved": [
+          "たけ【アニメ】"
+        ],
+        "source": "main_artist",
+        "primaryArtistId": null,
+        "skippedReason": "all_unresolved"
+      }
+    },
+    {
+      "song_id": "627d4c11-ab94-43c0-abb0-2636ce695661",
+      "display_title": "Amazon Music - Shaboozey Performs \"Amen\" At Amazon Music Live",
+      "result": {
+        "songId": "627d4c11-ab94-43c0-abb0-2636ce695661",
+        "applied": false,
+        "creditCount": 0,
+        "unresolved": [
+          "Amazon Music"
+        ],
+        "source": "main_artist",
+        "primaryArtistId": null,
+        "skippedReason": "all_unresolved"
+      }
+    },
+    {
+      "song_id": "66786bb2-2897-43d6-88ec-a732d83ec2c3",
+      "display_title": "Pokotanconcorde - Uボートのサントラ",
+      "result": {
+        "songId": "66786bb2-2897-43d6-88ec-a732d83ec2c3",
+        "applied": false,
+        "creditCount": 0,
+        "unresolved": [
+          "Pokotanconcorde"
+        ],
+        "source": "main_artist",
+        "primaryArtistId": null,
+        "skippedReason": "all_unresolved"
+      }
+    },
+    {
+      "song_id": "695e8d8c-e082-4816-a6db-7b41648790db",
+      "display_title": "M.c. Hammer - U Can't Touch This",
+      "result": {
+        "songId": "695e8d8c-e082-4816-a6db-7b41648790db",
+        "applied": false,
+        "creditCount": 0,
+        "unresolved": [
+          "M.c. Hammer"
+        ],
+        "source": "main_artist",
+        "primaryArtistId": null,
+        "skippedReason": "all_unresolved"
+      }
+    },
+    {
+      "song_id": "731dfdf2-9c8f-4473-b99b-cb11b8c643fb",
+      "display_title": "Skv90s - Art Of Noise - Moments In Love (1985) Hd",
+      "result": {
+        "songId": "731dfdf2-9c8f-4473-b99b-cb11b8c643fb",
+        "applied": false,
+        "creditCount": 0,
+        "unresolved": [
+          "Skv90s"
+        ],
+        "source": "main_artist",
+        "primaryArtistId": null,
+        "skippedReason": "all_unresolved"
+      }
+    },
+    {
+      "song_id": "7a64a362-37a5-42b8-a3a2-fc2395e01bf7",
+      "display_title": "Ayase / Yoasobi - Yoasobi「undead」 Official Music Video／『〈物語〉シリーズ オフ&モンスターシーズン』主題歌",
+      "result": {
+        "songId": "7a64a362-37a5-42b8-a3a2-fc2395e01bf7",
+        "applied": false,
+        "creditCount": 0,
+        "unresolved": [
+          "Ayase / Yoasobi"
+        ],
+        "source": "main_artist",
+        "primaryArtistId": null,
+        "skippedReason": "all_unresolved"
+      }
+    },
+    {
+      "song_id": "83605c3d-61ac-4b2e-aeda-449b83a0a3de",
+      "display_title": "やさしさに包まれたなら - 荒井由実（松任谷由実）",
+      "result": {
+        "songId": "83605c3d-61ac-4b2e-aeda-449b83a0a3de",
+        "applied": false,
+        "creditCount": 0,
+        "unresolved": [
+          "やさしさに包まれたなら"
+        ],
+        "source": "main_artist",
+        "primaryArtistId": null,
+        "skippedReason": "all_unresolved"
+      }
+    },
+    {
+      "song_id": "842658b0-44d9-4129-87e3-d2f032ed51ae",
+      "display_title": "Dame Tu Cosita - El Chombo, Dancing Green Alien Ft. Cutty Ranks",
+      "result": {
+        "songId": "842658b0-44d9-4129-87e3-d2f032ed51ae",
+        "applied": false,
+        "creditCount": 0,
+        "unresolved": [
+          "Dame Tu Cosita"
+        ],
+        "source": "main_artist",
+        "primaryArtistId": null,
+        "skippedReason": "all_unresolved"
+      }
+    },
+    {
+      "song_id": "863b388d-c9c4-415d-8c88-19bd10c0d4d2",
+      "display_title": "Owlkitty - Owlkitty In Vogue",
+      "result": {
+        "songId": "863b388d-c9c4-415d-8c88-19bd10c0d4d2",
+        "applied": false,
+        "creditCount": 0,
+        "unresolved": [
+          "Owlkitty"
+        ],
+        "source": "main_artist",
+        "primaryArtistId": null,
+        "skippedReason": "all_unresolved"
+      }
+    },
+    {
+      "song_id": "89d4a1c6-2cd7-4494-b0c3-bc723aca84ca",
+      "display_title": "K. Ch - ゴジラ",
+      "result": {
+        "songId": "89d4a1c6-2cd7-4494-b0c3-bc723aca84ca",
+        "applied": false,
+        "creditCount": 0,
+        "unresolved": [
+          "K. Ch"
+        ],
+        "source": "main_artist",
+        "primaryArtistId": null,
+        "skippedReason": "all_unresolved"
+      }
+    },
+    {
+      "song_id": "8d34167a-2362-482d-a981-f152e1c38594",
+      "display_title": "Max 1999 - Opus Iii - It's A Fine Day",
+      "result": {
+        "songId": "8d34167a-2362-482d-a981-f152e1c38594",
+        "applied": false,
+        "creditCount": 0,
+        "unresolved": [
+          "Max 1999"
+        ],
+        "source": "main_artist",
+        "primaryArtistId": null,
+        "skippedReason": "all_unresolved"
+      }
+    },
+    {
+      "song_id": "8eba5921-af34-45ac-972a-523b4251790c",
+      "display_title": "Stream The Official, Professionally Mixed Audio Of The Full Show In The Nugs App. Cds - Res Downloads Are Also Available For Order. Sign Up At Nugs.net/brucespringsteen To Get Access To Every Show From The Tour And The Live Archive Series.",
+      "result": {
+        "songId": "8eba5921-af34-45ac-972a-523b4251790c",
+        "applied": false,
+        "creditCount": 0,
+        "unresolved": [
+          "Stream The Official",
+          "Professionally Mixed Audio Of The Full Show In The Nugs App. Cds"
+        ],
+        "source": "main_artist",
+        "primaryArtistId": null,
+        "skippedReason": "all_unresolved"
+      }
+    },
+    {
+      "song_id": "90403db1-b96c-4f67-a5f3-5405a403ee76",
+      "display_title": "Oldkids Memories - 紅の豚 @時には昔の話を 加藤登紀子 宮崎駿 Porco Rosso Japanese Anime Music Pure Music 飛天紅豬俠 日本動畫",
+      "result": {
+        "songId": "90403db1-b96c-4f67-a5f3-5405a403ee76",
+        "applied": false,
+        "creditCount": 0,
+        "unresolved": [
+          "Oldkids Memories"
+        ],
+        "source": "main_artist",
+        "primaryArtistId": null,
+        "skippedReason": "all_unresolved"
+      }
+    },
+    {
+      "song_id": "90ffa840-4de6-46d0-9366-9e13c2e618fc",
+      "display_title": "Tom Petty, The Heartbreakers - American Girl",
+      "result": {
+        "songId": "90ffa840-4de6-46d0-9366-9e13c2e618fc",
+        "applied": true,
+        "creditCount": 1,
+        "unresolved": [
+          "The Heartbreakers"
+        ],
+        "source": "main_artist",
+        "primaryArtistId": "711cdbea-5a19-43ae-b544-d9d24458e83d"
+      }
+    },
+    {
+      "song_id": "9404637c-8b24-4841-bb65-ed5633ec6c2c",
+      "display_title": "Acid Black Cherry - So Goodnight (Acoustic Ver) Live 2015",
+      "result": {
+        "songId": "9404637c-8b24-4841-bb65-ed5633ec6c2c",
+        "applied": false,
+        "creditCount": 0,
+        "unresolved": [
+          "Acid Black Cherry"
+        ],
+        "source": "main_artist",
+        "primaryArtistId": null,
+        "skippedReason": "all_unresolved"
+      }
+    },
+    {
+      "song_id": "97c56ebd-eb6d-4464-9c3f-e5b395687c8a",
+      "display_title": "King Gnu Official Youtube Channel - King Gnu - Aizo",
+      "result": {
+        "songId": "97c56ebd-eb6d-4464-9c3f-e5b395687c8a",
+        "applied": false,
+        "creditCount": 0,
+        "unresolved": [
+          "King Gnu Official Youtube Channel"
+        ],
+        "source": "main_artist",
+        "primaryArtistId": null,
+        "skippedReason": "all_unresolved"
+      }
+    },
+    {
+      "song_id": "97e6de6c-fe6f-4c42-a179-cbef62d2093d",
+      "display_title": "Heal The World - Music Travel Love & Friends",
+      "result": {
+        "songId": "97e6de6c-fe6f-4c42-a179-cbef62d2093d",
+        "applied": false,
+        "creditCount": 0,
+        "unresolved": [
+          "Heal The World"
+        ],
+        "source": "main_artist",
+        "primaryArtistId": null,
+        "skippedReason": "all_unresolved"
+      }
+    },
+    {
+      "song_id": "9aec59cf-a227-49f9-b054-a1b8c1370b9c",
+      "display_title": "Specialz - King Gnu",
+      "result": {
+        "songId": "9aec59cf-a227-49f9-b054-a1b8c1370b9c",
+        "applied": false,
+        "creditCount": 0,
+        "unresolved": [
+          "Specialz"
+        ],
+        "source": "main_artist",
+        "primaryArtistId": null,
+        "skippedReason": "all_unresolved"
+      }
+    },
+    {
+      "song_id": "9c4284f3-ab61-41c6-86b3-25fbf1748b44",
+      "display_title": "The Traveling Wilburys - Handle With Care.",
+      "result": {
+        "songId": "9c4284f3-ab61-41c6-86b3-25fbf1748b44",
+        "applied": false,
+        "creditCount": 0,
+        "unresolved": [
+          "The Traveling Wilburys"
+        ],
+        "source": "main_artist",
+        "primaryArtistId": null,
+        "skippedReason": "all_unresolved"
+      }
+    },
+    {
+      "song_id": "aac912ad-c96f-4cf0-928c-86066ff60118",
+      "display_title": "Genius - Xg \"Hypnotize\"",
+      "result": {
+        "songId": "aac912ad-c96f-4cf0-928c-86066ff60118",
+        "applied": false,
+        "creditCount": 0,
+        "unresolved": [
+          "Genius"
+        ],
+        "source": "main_artist",
+        "primaryArtistId": null,
+        "skippedReason": "all_unresolved"
+      }
+    },
+    {
+      "song_id": "acb71a18-8f18-42be-999e-db94593ad742",
+      "display_title": "Dino Jelusick - Just Before The Dawn",
+      "result": {
+        "songId": "acb71a18-8f18-42be-999e-db94593ad742",
+        "applied": false,
+        "creditCount": 0,
+        "unresolved": [
+          "Dino Jelusick"
+        ],
+        "source": "main_artist",
+        "primaryArtistId": null,
+        "skippedReason": "all_unresolved"
+      }
+    },
+    {
+      "song_id": "ad2b5a16-1c1c-4600-9b2f-f3c72ce35923",
+      "display_title": "So Bad - King Gnu",
+      "result": {
+        "songId": "ad2b5a16-1c1c-4600-9b2f-f3c72ce35923",
+        "applied": false,
+        "creditCount": 0,
+        "unresolved": [
+          "So Bad"
+        ],
+        "source": "main_artist",
+        "primaryArtistId": null,
+        "skippedReason": "all_unresolved"
+      }
+    },
+    {
+      "song_id": "ad55d8bf-3e52-49bd-b80b-d81edf8d9115",
+      "display_title": "Ayase / Yoasobi - Yoasobi「アイドル」 Official Music Video",
+      "result": {
+        "songId": "ad55d8bf-3e52-49bd-b80b-d81edf8d9115",
+        "applied": false,
+        "creditCount": 0,
+        "unresolved": [
+          "Ayase / Yoasobi"
+        ],
+        "source": "main_artist",
+        "primaryArtistId": null,
+        "skippedReason": "all_unresolved"
+      }
+    },
+    {
+      "song_id": "ae8170d3-7893-4aca-ac6c-71eda6bf585d",
+      "display_title": "Fujii Kaze Cover⏐sting / Englishman In New York - 2017/11/03",
+      "result": {
+        "songId": "ae8170d3-7893-4aca-ac6c-71eda6bf585d",
+        "applied": false,
+        "creditCount": 0,
+        "unresolved": [
+          "Fujii Kaze Cover⏐sting / Englishman In New York"
+        ],
+        "source": "main_artist",
+        "primaryArtistId": null,
+        "skippedReason": "all_unresolved"
+      }
+    },
+    {
+      "song_id": "bbda83db-3ace-4c89-967c-24064bfa842a",
+      "display_title": "O Helga Natt (Oh Holy Night - Swedish Version)",
+      "result": {
+        "songId": "bbda83db-3ace-4c89-967c-24064bfa842a",
+        "applied": false,
+        "creditCount": 0,
+        "unresolved": [
+          "O Helga Natt (Oh Holy Night"
+        ],
+        "source": "main_artist",
+        "primaryArtistId": null,
+        "skippedReason": "all_unresolved"
+      }
+    },
+    {
+      "song_id": "c02c9738-db54-445c-bcfa-62831803d9ab",
+      "display_title": "Ghost In The Shell: Stand Alone Complex - Opening Theme - Get 9",
+      "result": {
+        "songId": "c02c9738-db54-445c-bcfa-62831803d9ab",
+        "applied": false,
+        "creditCount": 0,
+        "unresolved": [
+          "Ghost In The Shell: Stand Alone Complex"
+        ],
+        "source": "main_artist",
+        "primaryArtistId": null,
+        "skippedReason": "all_unresolved"
+      }
+    },
+    {
+      "song_id": "c5a3987b-e7ee-4690-8420-33ac0a360a10",
+      "display_title": "Apple Music - Givēon: \"Heartbreak Anniversary\" Live",
+      "result": {
+        "songId": "c5a3987b-e7ee-4690-8420-33ac0a360a10",
+        "applied": false,
+        "creditCount": 0,
+        "unresolved": [
+          "Apple Music"
+        ],
+        "source": "main_artist",
+        "primaryArtistId": null,
+        "skippedReason": "all_unresolved"
+      }
+    },
+    {
+      "song_id": "c5f6f3e0-effd-4918-9d03-6739c077be9e",
+      "display_title": "The Traveling Wilburys - End Of The Line",
+      "result": {
+        "songId": "c5f6f3e0-effd-4918-9d03-6739c077be9e",
+        "applied": false,
+        "creditCount": 0,
+        "unresolved": [
+          "The Traveling Wilburys"
+        ],
+        "source": "main_artist",
+        "primaryArtistId": null,
+        "skippedReason": "all_unresolved"
+      }
+    },
+    {
+      "song_id": "c78ff814-63e2-44cc-835c-47fbbcc1e4be",
+      "display_title": "King Gnu Official Youtube Channel - King Gnu - So Bad",
+      "result": {
+        "songId": "c78ff814-63e2-44cc-835c-47fbbcc1e4be",
+        "applied": false,
+        "creditCount": 0,
+        "unresolved": [
+          "King Gnu Official Youtube Channel"
+        ],
+        "source": "main_artist",
+        "primaryArtistId": null,
+        "skippedReason": "all_unresolved"
+      }
+    },
+    {
+      "song_id": "c8181c4e-f0a7-4dda-b967-a218d71adcfc",
+      "display_title": "Wheels On The Bus + More Nursery Rhymes - Cocomelon",
+      "result": {
+        "songId": "c8181c4e-f0a7-4dda-b967-a218d71adcfc",
+        "applied": false,
+        "creditCount": 0,
+        "unresolved": [
+          "Wheels On The Bus + More Nursery Rhymes"
+        ],
+        "source": "main_artist",
+        "primaryArtistId": null,
+        "skippedReason": "all_unresolved"
+      }
+    },
+    {
+      "song_id": "c996d1ab-f003-408d-ba63-b1d929268160",
+      "display_title": "Frontiers Music Srl - Kee Of Hearts \"Bridge To Heaven\"",
+      "result": {
+        "songId": "c996d1ab-f003-408d-ba63-b1d929268160",
+        "applied": false,
+        "creditCount": 0,
+        "unresolved": [
+          "Frontiers Music Srl"
+        ],
+        "source": "main_artist",
+        "primaryArtistId": null,
+        "skippedReason": "all_unresolved"
+      }
+    },
+    {
+      "song_id": "d017c9a2-a448-4adc-b197-d6886d1c1dee",
+      "display_title": "Best Instrumental Songs Ghibli - Nausicaä Of The Valley Of The Wind Soundtrack Collection",
+      "result": {
+        "songId": "d017c9a2-a448-4adc-b197-d6886d1c1dee",
+        "applied": false,
+        "creditCount": 0,
+        "unresolved": [
+          "Best Instrumental Songs Ghibli"
+        ],
+        "source": "main_artist",
+        "primaryArtistId": null,
+        "skippedReason": "all_unresolved"
+      }
+    },
+    {
+      "song_id": "d0440d2a-b150-4921-92d3-d79a2ec2f3bd",
+      "display_title": "Prince & The New Power Generation - Cream",
+      "result": {
+        "songId": "d0440d2a-b150-4921-92d3-d79a2ec2f3bd",
+        "applied": true,
+        "creditCount": 1,
+        "unresolved": [
+          "The New Power Generation"
+        ],
+        "source": "main_artist",
+        "primaryArtistId": "36d0fbfe-2fbb-422b-b6c7-17f3fcf81f7c"
+      }
+    },
+    {
+      "song_id": "d21d15a3-a3a2-4263-bca6-c2829367cd39",
+      "display_title": "I Kept On Loving You · Roger Nichols - Williams",
+      "result": {
+        "songId": "d21d15a3-a3a2-4263-bca6-c2829367cd39",
+        "applied": false,
+        "creditCount": 0,
+        "unresolved": [
+          "I Kept On Loving You · Roger Nichols"
+        ],
+        "source": "main_artist",
+        "primaryArtistId": null,
+        "skippedReason": "all_unresolved"
+      }
+    },
+    {
+      "song_id": "d530442e-78ba-45f2-b87c-76b0a58bedab",
+      "display_title": "One Iii Notes - Shadow And Truth",
+      "result": {
+        "songId": "d530442e-78ba-45f2-b87c-76b0a58bedab",
+        "applied": false,
+        "creditCount": 0,
+        "unresolved": [
+          "One Iii Notes"
+        ],
+        "source": "main_artist",
+        "primaryArtistId": null,
+        "skippedReason": "all_unresolved"
+      }
+    },
+    {
+      "song_id": "d98c74ef-92ab-463c-a370-ea9287797f56",
+      "display_title": "Rongravy - Virus Sigue Sigue Sputnik",
+      "result": {
+        "songId": "d98c74ef-92ab-463c-a370-ea9287797f56",
+        "applied": false,
+        "creditCount": 0,
+        "unresolved": [
+          "Rongravy"
+        ],
+        "source": "main_artist",
+        "primaryArtistId": null,
+        "skippedReason": "all_unresolved"
+      }
+    },
+    {
+      "song_id": "e2113872-705c-4382-83d5-1631d5babff5",
+      "display_title": "Dino Jelusick - Vocals, Keyboards, Acoustic Guitars",
+      "result": {
+        "songId": "e2113872-705c-4382-83d5-1631d5babff5",
+        "applied": false,
+        "creditCount": 0,
+        "unresolved": [
+          "Dino Jelusick"
+        ],
+        "source": "main_artist",
+        "primaryArtistId": null,
+        "skippedReason": "all_unresolved"
+      }
+    },
+    {
+      "song_id": "e2793024-3949-4606-9d6a-67babeb0cb87",
+      "display_title": "Only Yesterday - Omoide Poro Poro - Ending - The Rose - Ai Wa Hana, Kimi Wa Sono Tane",
+      "result": {
+        "songId": "e2793024-3949-4606-9d6a-67babeb0cb87",
+        "applied": false,
+        "creditCount": 0,
+        "unresolved": [
+          "Only Yesterday"
+        ],
+        "source": "main_artist",
+        "primaryArtistId": null,
+        "skippedReason": "all_unresolved"
+      }
+    },
+    {
+      "song_id": "e39c755b-4207-4565-8b2d-89e5464b7e60",
+      "display_title": "Babyland \"Omaha\" Hd - 16mm",
+      "result": {
+        "songId": "e39c755b-4207-4565-8b2d-89e5464b7e60",
+        "applied": false,
+        "creditCount": 0,
+        "unresolved": [
+          "Babyland \"Omaha\" Hd"
+        ],
+        "source": "main_artist",
+        "primaryArtistId": null,
+        "skippedReason": "all_unresolved"
+      }
+    },
+    {
+      "song_id": "e4ef44a7-4f77-4b85-bbe1-f718e6e036c1",
+      "display_title": "Emerson, Lake - Nut Rocker - Live In Switzerland, 1970",
+      "result": {
+        "songId": "e4ef44a7-4f77-4b85-bbe1-f718e6e036c1",
+        "applied": false,
+        "creditCount": 0,
+        "unresolved": [
+          "Emerson",
+          "Lake"
+        ],
+        "source": "main_artist",
+        "primaryArtistId": null,
+        "skippedReason": "all_unresolved"
+      }
+    },
+    {
+      "song_id": "e7030ed3-13c0-4ad9-9f01-b902f757583e",
+      "display_title": "Warner Music Japan - 【公式】中森明菜／飾りじゃないのよ涙は (Live In '87・a Hundred Days At 東京厚生年金会館, 1987.10.17) Akina Nakamori",
+      "result": {
+        "songId": "e7030ed3-13c0-4ad9-9f01-b902f757583e",
+        "applied": false,
+        "creditCount": 0,
+        "unresolved": [
+          "Warner Music Japan"
+        ],
+        "source": "main_artist",
+        "primaryArtistId": null,
+        "skippedReason": "all_unresolved"
+      }
+    },
+    {
+      "song_id": "e7fc3327-a3c1-430f-af2c-431aad0a089f",
+      "display_title": "D.c.j - ♪となりのトトロ/井上あずみ",
+      "result": {
+        "songId": "e7fc3327-a3c1-430f-af2c-431aad0a089f",
+        "applied": false,
+        "creditCount": 0,
+        "unresolved": [
+          "D.c.j"
+        ],
+        "source": "main_artist",
+        "primaryArtistId": null,
+        "skippedReason": "all_unresolved"
+      }
+    },
+    {
+      "song_id": "eb94055e-e38e-499c-894a-be95909f88d8",
+      "display_title": "Suisei Channel - もうどうなってもいいや / 星街すいせい",
+      "result": {
+        "songId": "eb94055e-e38e-499c-894a-be95909f88d8",
+        "applied": false,
+        "creditCount": 0,
+        "unresolved": [
+          "Suisei Channel"
+        ],
+        "source": "main_artist",
+        "primaryArtistId": null,
+        "skippedReason": "all_unresolved"
+      }
+    },
+    {
+      "song_id": "ec666035-e630-4ab0-8acf-932b566a3de3",
+      "display_title": "Someday, Whoa - Oh - Oh",
+      "result": {
+        "songId": "ec666035-e630-4ab0-8acf-932b566a3de3",
+        "applied": false,
+        "creditCount": 0,
+        "unresolved": [
+          "Someday",
+          "Whoa"
+        ],
+        "source": "main_artist",
+        "primaryArtistId": null,
+        "skippedReason": "all_unresolved"
+      }
+    },
+    {
+      "song_id": "ed90446e-d91c-4ad8-bf62-435c813d0499",
+      "display_title": "Vj/motion Graphics : Koshi - Kun Https://twitter.com/koshi_kun",
+      "result": {
+        "songId": "ed90446e-d91c-4ad8-bf62-435c813d0499",
+        "applied": false,
+        "creditCount": 0,
+        "unresolved": [
+          "Vj/motion Graphics : Koshi"
+        ],
+        "source": "main_artist",
+        "primaryArtistId": null,
+        "skippedReason": "all_unresolved"
+      }
+    },
+    {
+      "song_id": "f5fd62b3-7711-4a97-b010-0b9b7e6b5e79",
+      "display_title": "Yoasobi「怪物」official Music Video (Yoasobi - Monster)",
+      "result": {
+        "songId": "f5fd62b3-7711-4a97-b010-0b9b7e6b5e79",
+        "applied": false,
+        "creditCount": 0,
+        "unresolved": [
+          "Yoasobi「怪物」official Music Video (Yoasobi"
+        ],
+        "source": "main_artist",
+        "primaryArtistId": null,
+        "skippedReason": "all_unresolved"
+      }
+    },
+    {
+      "song_id": "ffe71ae1-5897-4aa3-9a41-1f5cf924a334",
+      "display_title": "Psy - Gangnam Style(강남스타일) M/v",
+      "result": {
+        "songId": "ffe71ae1-5897-4aa3-9a41-1f5cf924a334",
+        "applied": false,
+        "creditCount": 0,
+        "unresolved": [
+          "Psy"
+        ],
+        "source": "main_artist",
+        "primaryArtistId": null,
+        "skippedReason": "all_unresolved"
+      }
+    }
+  ]
+}

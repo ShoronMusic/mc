@@ -14,7 +14,7 @@ export type SpotifyTrackMeta = {
   spotifyReleaseDate: string | null;
 };
 
-type SpotifyTrackArtist = { name?: string };
+type SpotifyTrackArtist = { id?: string; name?: string };
 type SpotifyTrackAlbum = { name?: string; release_date?: string };
 type SpotifyTrackItem = {
   id?: string;
@@ -25,6 +25,26 @@ type SpotifyTrackItem = {
   external_urls?: { spotify?: string };
 };
 type SpotifySearchJson = { tracks?: { items?: SpotifyTrackItem[] } };
+
+export type SpotifyTrackArtistRef = { id: string; name: string };
+
+export type SpotifyTrackWithArtists = SpotifyTrackMeta & {
+  artists: SpotifyTrackArtistRef[];
+};
+
+export type SpotifyArtistMeta = {
+  id: string;
+  name: string;
+  popularity: number | null;
+  images: string | null;
+};
+
+type SpotifyArtistsBatchJson = { artists?: Array<{
+  id?: string;
+  name?: string;
+  popularity?: number;
+  images?: Array<{ url?: string }>;
+}> };
 
 function trim(s: unknown): string {
   return typeof s === 'string' ? s.trim() : '';
@@ -115,41 +135,80 @@ export function parseArtistTitleFromDisplayTitle(displayTitle: string): { artist
   return { artist, title };
 }
 
-export async function fetchSpotifyTrackById(trackId: string): Promise<SpotifyTrackMeta> {
-  const token = await getSpotifyAccessToken();
-  if (!token) {
-    return {
-      spotifyTrackId: null,
-      spotifyPopularity: null,
-      spotifyName: null,
-      spotifyArtists: null,
-      spotifyReleaseDate: null,
-    };
+function mapTrackArtists(track: SpotifyTrackItem | undefined): SpotifyTrackArtistRef[] {
+  if (!track || !Array.isArray(track.artists)) return [];
+  const out: SpotifyTrackArtistRef[] = [];
+  for (const a of track.artists) {
+    const id = trim(a?.id);
+    const name = trim(a?.name);
+    if (id && name) out.push({ id, name });
   }
+  return out;
+}
+
+function emptyTrackMeta(): SpotifyTrackMeta {
+  return {
+    spotifyTrackId: null,
+    spotifyPopularity: null,
+    spotifyName: null,
+    spotifyArtists: null,
+    spotifyReleaseDate: null,
+  };
+}
+
+/** GET /v1/tracks/{id} — アーティスト ID 付き */
+export async function fetchSpotifyTrackWithArtistsById(trackId: string): Promise<SpotifyTrackWithArtists> {
+  const token = await getSpotifyAccessToken();
+  if (!token) return { ...emptyTrackMeta(), artists: [] };
+
   const id = trackId.trim();
   const url = `https://api.spotify.com/v1/tracks/${encodeURIComponent(id)}?market=${encodeURIComponent(spotifyMarket())}`;
   try {
     const res = await spotifyFetchJson(url, token);
-    if (!res?.ok) {
-      return {
-        spotifyTrackId: null,
-        spotifyPopularity: null,
-        spotifyName: null,
-        spotifyArtists: null,
-        spotifyReleaseDate: null,
-      };
-    }
+    if (!res?.ok) return { ...emptyTrackMeta(), artists: [] };
     const track = (await res.json()) as SpotifyTrackItem;
-    return mapTrackItem(track);
+    return { ...mapTrackItem(track), artists: mapTrackArtists(track) };
   } catch {
-    return {
-      spotifyTrackId: null,
-      spotifyPopularity: null,
-      spotifyName: null,
-      spotifyArtists: null,
-      spotifyReleaseDate: null,
-    };
+    return { ...emptyTrackMeta(), artists: [] };
   }
+}
+
+export async function fetchSpotifyTrackById(trackId: string): Promise<SpotifyTrackMeta> {
+  const full = await fetchSpotifyTrackWithArtistsById(trackId);
+  const { artists: _a, ...meta } = full;
+  return meta;
+}
+
+/** GET /v1/artists?ids=…（最大 50） */
+export async function fetchSpotifyArtistsByIds(ids: string[]): Promise<SpotifyArtistMeta[]> {
+  const token = await getSpotifyAccessToken();
+  if (!token || ids.length === 0) return [];
+
+  const out: SpotifyArtistMeta[] = [];
+  const unique = [...new Set(ids.map((id) => id.trim()).filter(Boolean))];
+
+  for (let i = 0; i < unique.length; i += 50) {
+    const chunk = unique.slice(i, i + 50);
+    const url = new URL('https://api.spotify.com/v1/artists');
+    url.searchParams.set('ids', chunk.join(','));
+    try {
+      const res = await spotifyFetchJson(url.toString(), token);
+      if (!res?.ok) continue;
+      const data = (await res.json()) as SpotifyArtistsBatchJson;
+      for (const a of data.artists ?? []) {
+        const id = trim(a?.id);
+        const name = trim(a?.name);
+        if (!id || !name) continue;
+        const pop =
+          typeof a.popularity === 'number' && Number.isFinite(a.popularity) ? Math.round(a.popularity) : null;
+        const images = Array.isArray(a.images) ? trim(a.images[0]?.url) || null : null;
+        out.push({ id, name, popularity: pop, images });
+      }
+    } catch {
+      /* skip chunk */
+    }
+  }
+  return out;
 }
 
 /** `artist:… track:…` フィールド検索（管理 YouTube プレイリスト import と同系） */

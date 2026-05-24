@@ -1,0 +1,59 @@
+[
+  {
+    "song_id": "07a55af0-b5a7-49bb-96d3-bbf8f3126da6",
+    "display_title": "Dayton - Cutie Pie",
+    "spotify_track_id": "4KOBgd1zk3vDYp1ibZNGe5",
+    "spotify_api_artists": [
+      "Dayton"
+    ],
+    "credit_count": 1,
+    "unresolved": [],
+    "applied": true
+  },
+  {
+    "song_id": "8e7985c5-3e8c-4e99-b8c9-073d11f1237e",
+    "display_title": "Dagny - Highs &#038; Lows",
+    "spotify_track_id": "698xO1FAsZqETbRvdDHz8T",
+    "spotify_api_artists": [
+      "Dagny"
+    ],
+    "credit_count": 1,
+    "unresolved": [],
+    "applied": true
+  },
+  {
+    "song_id": "bbab239f-ac0b-4ae7-9f86-8b1c6855be53",
+    "display_title": "KAS:ST - The Tribe",
+    "spotify_track_id": "4UTDJfQJr7my95FERZXg9Q",
+    "spotify_api_artists": [
+      "KAS:ST"
+    ],
+    "credit_count": 1,
+    "unresolved": [],
+    "applied": true
+  },
+  {
+    "song_id": "d1a92cff-f2a0-4c45-9b50-5bce079a35d9",
+    "display_title": "A$ap Rocky - Live Fast",
+    "spotify_track_id": "1VUGWjzlqudhTqvhc17miB",
+    "spotify_api_artists": [
+      "Alan Walker",
+      "A$AP Rocky",
+      "Kameron"
+    ],
+    "credit_count": 3,
+    "unresolved": [],
+    "applied": true
+  },
+  {
+    "song_id": "eecd6ea6-dd88-469e-bc44-5bb82ac37a40",
+    "display_title": "Aerosmith - Girls Of Summer",
+    "spotify_track_id": "10C1hpvpjws3qgZBxriUlE",
+    "spotify_api_artists": [
+      "Aerosmith"
+    ],
+    "credit_count": 1,
+    "unresolved": [],
+    "applied": true
+  }
+]

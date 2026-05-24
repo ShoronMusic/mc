@@ -3,6 +3,7 @@
  */
 
 import { parseCollabArtistNamesFromMainArtist } from '@/lib/library-search-query';
+import { parseArtistTitleFromDisplayTitle } from '@/lib/spotify-search-track';
 
 export type SongCreditSource = 'spotify_artists' | 'music8_main_artists' | 'main_artist';
 
@@ -34,20 +35,77 @@ export function parseSpotifyArtistsString(raw: string | null | undefined): strin
   const s = (raw ?? '').trim();
   if (!s) return [];
 
-  const tokens = s.split(', ');
+  const tokens = s.split(', ').map((t) => t.trim()).filter(Boolean);
   const out: string[] = [];
-  let buf = '';
 
-  const shouldMergeNext = (next: string): boolean =>
-    /^(The|A|An|Los|Las|Le|La|Du|De|Van|Von|Mc|DJ|St\.?|Ft\.?)\b/i.test(next.trim());
+  const shouldMergePrefixNext = (next: string): boolean =>
+    /^(The|A|An|Los|Las|Le|La|Du|De|Van|Von|Mc|DJ|St\.?|Ft\.?)\b/i.test(next);
 
   for (let i = 0; i < tokens.length; i++) {
-    let chunk = tokens[i].trim();
-    while (i + 1 < tokens.length && shouldMergeNext(tokens[i + 1])) {
-      i++;
-      chunk += ', ' + tokens[i].trim();
+    let chunk = tokens[i];
+    while (i + 1 < tokens.length) {
+      const next = tokens[i + 1];
+      // "Earth" + "Wind & Fire" など、バンド名中の & を含む断片を結合
+      if (next.includes('&') && !chunk.includes('&')) {
+        i++;
+        chunk += ', ' + next;
+        continue;
+      }
+      // "Tyler" + "The Creator"（単語1つのあとだけ。Roscoe Dash + DJ Spinz は分離）
+      if (shouldMergePrefixNext(next) && !chunk.includes('&') && !chunk.includes(' ')) {
+        i++;
+        chunk += ', ' + next;
+        continue;
+      }
+      break;
     }
     if (chunk) out.push(chunk);
+  }
+  return expandCompoundArtistTokens(out);
+}
+
+function compactAlpha(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+/** display_title のアーティスト部とトークン列が同じバンドなら 1 名に寄せる（black country new road 等） */
+export function reconcileCreditNamesWithDisplayTitle(
+  names: string[],
+  displayTitle: string,
+): string[] {
+  if (names.length < 2) return names;
+  const parsed = parseArtistTitleFromDisplayTitle(displayTitle.trim());
+  if (!parsed?.artist) return names;
+  const titleArtist = parsed.artist.trim();
+  if (!titleArtist) return names;
+
+  if (normName(names.join(', ')) === normName(titleArtist)) return names;
+
+  const joinedCompact = compactAlpha(names.join(''));
+  const titleCompact = compactAlpha(titleArtist);
+  if (joinedCompact === titleCompact) return [titleArtist];
+
+  return names;
+}
+
+/** 1 トークンに複数名が入ったものを分割（Tyler, The Creator は維持） */
+export function expandCompoundArtistTokens(names: string[]): string[] {
+  const out: string[] = [];
+  for (const name of names) {
+    if (!name.includes(', ') || name.includes('&')) {
+      out.push(name);
+      continue;
+    }
+    const parts = name.split(', ').map((p) => p.trim()).filter(Boolean);
+    if (parts.length < 2) {
+      out.push(name);
+      continue;
+    }
+    if (parts.length === 2 && /^The\s+/i.test(parts[1]!)) {
+      out.push(name);
+      continue;
+    }
+    for (const p of parts) out.push(p);
   }
   return out;
 }
@@ -122,16 +180,34 @@ export type SongCreditInput = {
   spotify_artists: string | null;
   main_artist: string | null;
   music8_song_data: Record<string, unknown> | null;
+  display_title?: string | null;
+  /** GET /v1/tracks/{id} の artists[].name（文字列分解より優先） */
+  trackArtistNames?: string[] | null;
+  /** 手動指定のクレジット名（最優先） */
+  explicitCreditArtists?: string[] | null;
 };
 
-/** クレジット名リストとソース（優先: spotify_artists → music8 → main_artist） */
+/** クレジット名リストとソース（優先: track API → spotify_artists → music8 → main_artist） */
 export function extractCreditNamesFromSong(input: SongCreditInput): {
   names: string[];
   source: SongCreditSource;
 } | null {
-  const fromSpotify = parseSpotifyArtistsString(input.spotify_artists);
-  if (fromSpotify.length > 0) {
-    return { names: fromSpotify, source: 'spotify_artists' };
+  const explicit = (input.explicitCreditArtists ?? []).map((n) => n.trim()).filter(Boolean);
+  if (explicit.length > 0) {
+    return { names: explicit, source: 'spotify_artists' };
+  }
+
+  const fromTrack = (input.trackArtistNames ?? []).map((n) => n.trim()).filter(Boolean);
+  if (fromTrack.length > 0) {
+    return { names: fromTrack, source: 'spotify_artists' };
+  }
+
+  const fromSpotifyRaw = parseSpotifyArtistsString(input.spotify_artists);
+  if (fromSpotifyRaw.length > 0) {
+    const names = input.display_title
+      ? reconcileCreditNamesWithDisplayTitle(fromSpotifyRaw, input.display_title)
+      : fromSpotifyRaw;
+    return { names, source: 'spotify_artists' };
   }
 
   const m8 = music8MainArtistsFromSnapshot(input.music8_song_data);

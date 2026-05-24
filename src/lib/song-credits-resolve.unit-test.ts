@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import {
   buildArtistLookupIndex,
+  expandCompoundArtistTokens,
   parseSpotifyArtistsString,
+  reconcileCreditNamesWithDisplayTitle,
   resolveArtistIdFromIndex,
   resolveSongCreditsFromInput,
 } from '@/lib/song-credits-resolve';
@@ -10,6 +12,25 @@ function run() {
   assert.deepEqual(parseSpotifyArtistsString('Lady Gaga, Bruno Mars'), ['Lady Gaga', 'Bruno Mars']);
   assert.deepEqual(parseSpotifyArtistsString('Tyler, The Creator'), ['Tyler, The Creator']);
   assert.deepEqual(parseSpotifyArtistsString('Simon & Garfunkel'), ['Simon & Garfunkel']);
+  assert.deepEqual(parseSpotifyArtistsString('Earth, Wind & Fire'), ['Earth, Wind & Fire']);
+  assert.deepEqual(parseSpotifyArtistsString('Earth, Wind & Fire, The Emotions'), [
+    'Earth, Wind & Fire',
+    'The Emotions',
+  ]);
+  assert.deepEqual(parseSpotifyArtistsString('Metro Boomin, Roscoe Dash, DJ Spinz'), [
+    'Metro Boomin',
+    'Roscoe Dash',
+    'DJ Spinz',
+  ]);
+  assert.deepEqual(expandCompoundArtistTokens(['Gunplay, A$AP Ferg']), ['Gunplay', 'A$AP Ferg']);
+  assert.deepEqual(expandCompoundArtistTokens(['Tyler, The Creator']), ['Tyler, The Creator']);
+  assert.deepEqual(
+    reconcileCreditNamesWithDisplayTitle(
+      ['Black Country', 'New Road'],
+      'black country new road - Happy Birthday',
+    ),
+    ['black country new road'],
+  );
 
   const index = buildArtistLookupIndex([
     { id: 'g1', name: 'Lady Gaga', music8_artist_slug: 'lady-gaga' },
@@ -41,6 +62,18 @@ function run() {
     resolveArtistIdFromIndex(index, 'Lady Gaga', { name: 'Lady Gaga', slug: 'lady-gaga' }),
     'g1',
   );
+
+  const { credits: bcnr, unresolved: bcnrU } = resolveSongCreditsFromInput(
+    {
+      trackArtistNames: ['Black Country, New Road'],
+      spotify_artists: 'Black Country, New Road',
+      main_artist: 'Black Country, New Road',
+      music8_song_data: null,
+    },
+    buildArtistLookupIndex([{ id: 'bcnr', name: 'Black Country, New Road', music8_artist_slug: null }]),
+  );
+  assert.equal(bcnrU.length, 0);
+  assert.equal(bcnr.length, 1);
 
   console.log('song-credits-resolve.unit-test: ok');
 }

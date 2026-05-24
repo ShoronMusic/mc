@@ -10,6 +10,7 @@ import {
   type ArtistLookupRow,
   type SongCreditInput,
 } from '@/lib/song-credits-resolve';
+import { fetchSpotifyTrackWithArtistsById } from '@/lib/spotify-search-track';
 
 export type SyncSongCreditsResult = {
   songId: string;
@@ -176,19 +177,30 @@ export async function syncSongCreditsFromSongId(
 
   const { data: row, error } = await admin
     .from('songs')
-    .select('id, spotify_artists, main_artist, music8_song_data')
+    .select('id, display_title, spotify_artists, main_artist, music8_song_data, spotify_track_id')
     .eq('id', songId)
     .maybeSingle();
   if (error?.code === '42P01' || error?.code === '42703') return null;
   if (error) throw error;
   if (!row) return null;
 
+  const trackId = (row as { spotify_track_id?: string | null }).spotify_track_id?.trim() ?? '';
+  let trackArtistNames: string[] | null = null;
+  if (trackId) {
+    const track = await fetchSpotifyTrackWithArtistsById(trackId);
+    if (track.artists.length > 0) {
+      trackArtistNames = track.artists.map((a) => a.name);
+    }
+  }
+
   const idx = index ?? (await loadArtistLookupIndex(admin));
   const input: SongCreditInput = {
+    display_title: (row as { display_title?: string | null }).display_title ?? null,
     spotify_artists: (row as { spotify_artists?: string | null }).spotify_artists ?? null,
     main_artist: (row as { main_artist?: string | null }).main_artist ?? null,
     music8_song_data:
       (row as { music8_song_data?: Record<string, unknown> | null }).music8_song_data ?? null,
+    trackArtistNames,
   };
 
   return syncSongCreditsForSong(admin, songId, input, idx, apply);
