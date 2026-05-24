@@ -96,18 +96,21 @@ export function pickBestSpotifyCandidate(
 ): { best: SpotifyTrackCandidate | null; decision: SpotifyMatchDecision } {
   let bestCandidate: SpotifyTrackCandidate | null = null;
   let bestDecision: SpotifyMatchDecision = { action: 'skip', reason: 'no_candidates' };
+  let bestScore = -1;
 
   for (const c of candidates) {
     const d = scoreSpotifyTrackCandidate(c, expectedDisplayArtist, expectedSongTitle);
     if (d.action === 'apply') {
-      if (!bestCandidate || d.score > (bestDecision as { score: number }).score) {
+      if (!bestCandidate || bestDecision.action !== 'apply' || d.score > bestScore) {
         bestCandidate = c;
         bestDecision = d;
+        bestScore = d.score;
       }
     } else if (d.action === 'review' && bestDecision.action !== 'apply') {
-      if (!bestCandidate || d.score > bestDecision.score) {
+      if (!bestCandidate || d.score > bestScore) {
         bestCandidate = c;
         bestDecision = d;
+        bestScore = d.score;
       }
     }
   }
