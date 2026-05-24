@@ -133,6 +133,104 @@ export function music8ReleaseYearMonthToPostgresDate(releaseYearMonth: string): 
   return `${String(y).padStart(4, '0')}-${mm}-01`;
 }
 
+/** WordPress REST `post.date`（ISO8601）→ PostgreSQL `date` 用 `YYYY-MM-DD` */
+export function wordpressPublishDateToPostgresDate(value: string): string | null {
+  const s = (value ?? '').trim();
+  if (!s) return null;
+  const ymd = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (ymd) return `${ymd[1]}-${ymd[2]}-${ymd[3]}`;
+  const ms = Date.parse(s);
+  if (Number.isNaN(ms)) return null;
+  const d = new Date(ms);
+  const y = d.getUTCFullYear();
+  const mo = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(d.getUTCDate()).padStart(2, '0');
+  if (y < 1000 || y > 2100) return null;
+  return `${String(y).padStart(4, '0')}-${mo}-${day}`;
+}
+
+/** Music8 の各種日付文字列（ISO / YYYY/MM/DD / 年月）→ `YYYY-MM-DD` */
+export function parseFlexibleMusic8DateToPostgresDate(value: string): string | null {
+  const s = (value ?? '').trim();
+  if (!s) return null;
+  const iso = wordpressPublishDateToPostgresDate(s);
+  if (iso) return iso;
+  const slash = s.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})/);
+  if (slash) {
+    const y = slash[1];
+    const mo = String(Number(slash[2])).padStart(2, '0');
+    const day = String(Number(slash[3])).padStart(2, '0');
+    return `${y}-${mo}-${day}`;
+  }
+  return music8ReleaseYearMonthToPostgresDate(formatReleaseYearMonth(s));
+}
+
+function isMusic8WpRestLikeJson(obj: Record<string, unknown>): boolean {
+  const sk = asObj(obj.stable_key);
+  if (sk && typeof sk.artist_slug === 'string') return false;
+  const idRaw = obj.id;
+  const idNum = typeof idRaw === 'number' ? idRaw : typeof idRaw === 'string' ? Number(idRaw) : NaN;
+  return Number.isFinite(idNum) && idNum > 0;
+}
+
+/**
+ * `songs.original_release_date` 用。WP REST 曲は **投稿公開日（`date`）** を最優先。
+ */
+export function resolveOriginalReleaseDateFromMusic8Json(data: unknown): string | null {
+  const obj = asObj(data);
+  if (!obj) return null;
+
+  const sk = asObj(obj.stable_key);
+  if (sk && typeof sk.artist_slug === 'string' && typeof sk.song_slug === 'string') {
+    const releases = asObj(obj.releases);
+    if (releases) {
+      const d = asStr(releases.original_release_date ?? releases.this_release_date ?? '').trim();
+      if (d) return parseFlexibleMusic8DateToPostgresDate(d);
+    }
+    const ex = extractMusicaichatV1SongFields(data);
+    if (ex?.releaseDate.trim()) return music8ReleaseYearMonthToPostgresDate(ex.releaseDate);
+    return null;
+  }
+
+  if (isMusic8WpRestLikeJson(obj)) {
+    const wpDate = asStr(obj.date ?? '').trim();
+    if (wpDate) {
+      const parsed = wordpressPublishDateToPostgresDate(wpDate);
+      if (parsed) return parsed;
+    }
+    const acf = asObj(obj.acf);
+    if (acf) {
+      const yt = asStr(acf.ytreleasedate ?? '').trim();
+      if (yt) {
+        const p = parseFlexibleMusic8DateToPostgresDate(yt);
+        if (p) return p;
+      }
+      const sp = asStr(acf.spotify_release_date ?? '').trim();
+      if (sp) {
+        const p = parseFlexibleMusic8DateToPostgresDate(sp);
+        if (p) return p;
+      }
+    }
+    const releaseDate = asStr(obj.releaseDate ?? '').trim();
+    if (releaseDate) return parseFlexibleMusic8DateToPostgresDate(releaseDate);
+  }
+
+  return null;
+}
+
+/** 保存済み `music8_song_data` から原盤日を復元 */
+export function resolveOriginalReleaseDateFromPersistedSnapshot(data: unknown): string | null {
+  const o = asObj(data);
+  if (!o) return null;
+  if (o.kind === 'music8_wp_song') {
+    const wp = asStr(o.wp_published_date ?? '').trim();
+    if (wp) return wp;
+  }
+  const releaseDate = asStr(o.releaseDate_normalized ?? '').trim();
+  if (releaseDate) return music8ReleaseYearMonthToPostgresDate(releaseDate);
+  return null;
+}
+
 /**
  * facts_for_ai の定型文（「Music8 に掲載…」「文脈で分類されています」等）。
  * ソングデータ UI と AI 注入の両方で除外する。

@@ -3,7 +3,9 @@ import {
   extractMusic8SongFields,
   extractMusic8SongFieldsFromPersistedSnapshot,
   parseMusicaichatStructuredMetadataFromFactsText,
+  resolveOriginalReleaseDateFromMusic8Json,
   resolveSongStyleForOverwriteFromMusic8,
+  wordpressPublishDateToPostgresDate,
 } from '@/lib/music8-song-fields';
 
 function run() {
@@ -51,6 +53,16 @@ function run() {
   assert.equal(back!.vocalLabel, 'V');
   assert.equal(back!.structuredStyleFromFacts, 'Alt');
   assert.equal(back!.primaryArtistNameJa, '名');
+
+  assert.equal(wordpressPublishDateToPostgresDate('2012-11-01T15:43:00'), '2012-11-01');
+  assert.equal(
+    resolveOriginalReleaseDateFromMusic8Json({
+      id: 133101,
+      date: '2012-11-01T15:43:00',
+      acf: { spotify_release_date: '2003-10-28' },
+    }),
+    '2012-11-01',
+  );
 
   console.log('music8-song-fields.unit-test: ok');
 }

@@ -16,6 +16,8 @@ import {
   extractMusic8SongFields,
   extractMusic8SongFieldsFromPersistedSnapshot,
   music8ReleaseYearMonthToPostgresDate,
+  resolveOriginalReleaseDateFromMusic8Json,
+  resolveOriginalReleaseDateFromPersistedSnapshot,
   resolveSongStyleForOverwriteFromMusic8,
   type Music8SongExtract,
 } from '@/lib/music8-song-fields';
@@ -661,7 +663,7 @@ export async function upsertSongAndVideo(params: UpsertSongAndVideoParams): Prom
     const ex = extractMusic8SongFieldsFromPersistedSnapshot(music8SongData);
     if (ex) {
       try {
-        await syncSongLibraryColumnsFromMusic8Extract(supabase, songId, ex);
+        await syncSongLibraryColumnsFromMusic8Extract(supabase, songId, ex, music8SongData);
         await patchSongFutureColumnsFromMusic8(supabase, songId, ex, music8SongData);
       } catch (e) {
         console.warn('[song-entities] syncSongLibraryColumnsFromMusic8Extract (upsert)', e);
@@ -700,7 +702,7 @@ export async function attachMusic8SongDataIfFetched(
   await patchSongMusic8SongData(supabase, songId.trim(), snap);
   const ex = extractMusic8SongFields(music8RootJson);
   try {
-    await syncSongLibraryColumnsFromMusic8Extract(supabase, songId.trim(), ex);
+    await syncSongLibraryColumnsFromMusic8Extract(supabase, songId.trim(), ex, music8RootJson);
     await patchSongFutureColumnsFromMusic8(supabase, songId.trim(), ex, snap);
     const { data: curRow } = await supabase
       .from('songs')
@@ -746,17 +748,24 @@ async function syncSongLibraryColumnsFromMusic8Extract(
   supabase: SupabaseClient | null,
   songId: string,
   ex: Music8SongExtract,
+  music8Context?: unknown,
 ): Promise<void> {
   if (!supabase || !songId) return;
   const style = resolveSongStyleForOverwriteFromMusic8(ex);
   if (style) {
     await updateSongStyle(supabase, songId, style);
   }
-  if (ex.releaseDate?.trim()) {
-    const iso = music8ReleaseYearMonthToPostgresDate(ex.releaseDate);
-    if (iso) {
-      await patchSongOriginalReleaseDateIfUnset(supabase, songId, iso);
-    }
+  let iso: string | null = null;
+  if (music8Context != null) {
+    iso =
+      resolveOriginalReleaseDateFromMusic8Json(music8Context) ??
+      resolveOriginalReleaseDateFromPersistedSnapshot(music8Context);
+  }
+  if (!iso && ex.releaseDate?.trim()) {
+    iso = music8ReleaseYearMonthToPostgresDate(ex.releaseDate);
+  }
+  if (iso) {
+    await patchSongOriginalReleaseDateIfUnset(supabase, songId, iso);
   }
 }
 

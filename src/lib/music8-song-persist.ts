@@ -3,7 +3,11 @@
  * 将来の Music8 起点インポート・突合用。巨大 HTML（content 等）は含めない。
  */
 
-import { extractMusic8SongFields, resolveSongStyleForOverwriteFromMusic8 } from '@/lib/music8-song-fields';
+import {
+  extractMusic8SongFields,
+  resolveSongStyleForOverwriteFromMusic8,
+  wordpressPublishDateToPostgresDate,
+} from '@/lib/music8-song-fields';
 
 function asObj(x: unknown): Record<string, unknown> | null {
   if (x != null && typeof x === 'object' && !Array.isArray(x)) return x as Record<string, unknown>;
@@ -137,6 +141,7 @@ export function buildPersistableMusic8SongSnapshot(data: unknown): Record<string
 
     const structuredStyle =
       ex.structuredStyleFromFacts.trim() || resolveSongStyleForOverwriteFromMusic8(ex) || '';
+    const wpPublishedDate = wordpressPublishDateToPostgresDate(asStr(obj.date ?? ''));
 
     return {
       kind: 'music8_wp_song',
@@ -148,6 +153,7 @@ export function buildPersistableMusic8SongSnapshot(data: unknown): Record<string
       videoId: typeof obj.videoId === 'string' ? obj.videoId : null,
       genres: ex.genres,
       releaseDate_normalized: ex.releaseDate || null,
+      wp_published_date: wpPublishedDate,
       styleIds: ex.styleIds,
       styleNames: ex.styleNames,
       primary_artist_name_ja: ex.primaryArtistNameJa.trim() || null,

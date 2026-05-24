@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { wpRestPostToMusic8SongJson } from '@/lib/music8-wp-rest';
 import { buildPersistableMusic8SongSnapshot } from '@/lib/music8-song-persist';
-import { extractMusic8SongFields } from '@/lib/music8-song-fields';
+import { extractMusic8SongFields, resolveOriginalReleaseDateFromMusic8Json } from '@/lib/music8-song-fields';
 
 function run() {
   const converted = wpRestPostToMusic8SongJson({
@@ -46,6 +46,8 @@ function run() {
   assert.equal((snap as { id?: number }).id, 133074);
   assert.equal((snap as { spotify_track_id?: string }).spotify_track_id, '3gmEzilP9BzF45wIMvA16l');
   assert.equal((snap as { structured_style?: string }).structured_style, 'Metal');
+  assert.equal((snap as { wp_published_date?: string }).wp_published_date, '2012-06-22');
+  assert.equal(resolveOriginalReleaseDateFromMusic8Json(converted), '2012-06-22');
 
   console.log('music8-wp-rest.unit-test: ok');
 }
