@@ -2172,8 +2172,8 @@ export default function RoomWithoutSync({
 
       <RoomMainLayout
         left={
-          <div className="flex min-h-0 flex-1 flex-col">
-            <div className="min-h-0 flex-1">
+          <div className="flex min-h-full flex-col">
+            <div className={`min-h-0 ${isMobileLandscape ? 'h-[min(32vh,14rem)] shrink-0' : 'flex-1'}`}>
               <Chat
                 messages={messages}
                 currentUserDisplayName={displayNameProp}
@@ -2208,7 +2208,7 @@ export default function RoomWithoutSync({
               />
             </div>
             {isMobileLandscape ? (
-              <section className="mt-2 shrink-0 space-y-2">
+              <section className="mt-2 shrink-0 space-y-2 pb-1">
                 {chatInputNode}
               </section>
             ) : null}
