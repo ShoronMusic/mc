@@ -1961,7 +1961,9 @@ export default function RoomWithoutSync({
   return (
     <main
       className={`flex flex-col bg-gray-950 p-3 ${
-        isMobileLandscape ? 'min-h-screen overflow-x-hidden overflow-y-auto' : 'h-screen overflow-hidden'
+        isMobileLandscape
+          ? 'h-screen overflow-x-hidden overflow-y-scroll mc-landscape-room-scroll mc-scrollbar-stable'
+          : 'h-screen overflow-hidden'
       }`}
     >
       <div className="mb-2 shrink-0 rounded border border-amber-700 bg-amber-900/50 px-3 py-2 text-sm leading-snug text-amber-200">

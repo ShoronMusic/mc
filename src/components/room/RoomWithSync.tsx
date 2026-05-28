@@ -6105,7 +6105,9 @@ export default function RoomWithSync({
   return (
     <main
       className={`flex flex-col bg-gray-950 p-3 ${
-        isMobileLandscape ? 'min-h-screen overflow-x-hidden overflow-y-auto' : 'h-screen overflow-hidden'
+        isMobileLandscape
+          ? 'h-screen overflow-x-hidden overflow-y-scroll mc-landscape-room-scroll mc-scrollbar-stable'
+          : 'h-screen overflow-hidden'
       }`}
     >
       <header className="relative mb-2 flex shrink-0 flex-row items-center justify-between gap-2 border-b border-gray-800 pb-2 sm:gap-3">

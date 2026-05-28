@@ -46,6 +46,13 @@ html.mc-prevent-pull-refresh body {
   -webkit-overflow-scrolling: touch;
 }
 
+/** スマホ横向き: 画面全体ではなく部屋コンテナ内で縦スクロールさせる */
+.mc-landscape-room-scroll {
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+}
+
 /* 選曲者「再生中」インジケーター：波形 */
 @keyframes now-playing-wave {
   0%, 100% { transform: scaleY(0.4); }
