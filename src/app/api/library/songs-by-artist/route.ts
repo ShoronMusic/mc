@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 import { songRowLooksJapaneseDomesticForAdminLibrary } from '@/lib/admin-library-jp-exclude';
+import { fetchMyPlayCountByVideoIds } from '@/lib/library-my-play-count';
 import { fetchSongsForLibraryArtistSelection } from '@/lib/library-search-query';
 
 export const dynamic = 'force-dynamic';
@@ -72,7 +73,7 @@ export async function GET(request: Request) {
   }[];
 
   try {
-    songsRaw = await fetchSongsForLibraryArtistSelection(admin, artist, SONG_SELECT, 500);
+    songsRaw = await fetchSongsForLibraryArtistSelection(admin, artist, SONG_SELECT, 500, 'indexed_pick');
   } catch (songErr) {
     const msg = songErr instanceof Error ? songErr.message : '曲一覧の取得に失敗しました。';
     console.error('[api/library/songs-by-artist] songs', msg);
@@ -120,37 +121,11 @@ export async function GET(request: Request) {
       const uid = user?.id ?? null;
       const videoIds = Array.from(songIdByVideo.keys());
       if (uid && videoIds.length > 0) {
-        const PAGE = 1000;
-        const MAX_SCAN = 12000;
-        let scanned = 0;
-        const myPlayByVideo = new Map<string, number>();
-        for (let offset = 0; ; offset += PAGE) {
-          const { data: rows, error } = await admin
-            .from('room_playback_history')
-            .select('video_id')
-            .eq('user_id', uid)
-            .in('video_id', videoIds)
-            .range(offset, offset + PAGE - 1);
-          if (error) {
-            if (error.code !== '42P01') {
-              console.error('[api/library/songs-by-artist] room_playback_history', error);
-            }
-            break;
-          }
-          const batch = (rows ?? []) as { video_id?: string }[];
-          for (const r of batch) {
-            const vid = typeof r.video_id === 'string' ? r.video_id : '';
-            if (!vid) continue;
-            myPlayByVideo.set(vid, (myPlayByVideo.get(vid) ?? 0) + 1);
-          }
-          scanned += batch.length;
-          if (batch.length < PAGE) break;
-          if (scanned >= MAX_SCAN) break;
-        }
+        const myPlayByVideo = await fetchMyPlayCountByVideoIds(admin, uid, videoIds);
         for (const [vid, c] of myPlayByVideo.entries()) {
           const sid = songIdByVideo.get(vid);
           if (!sid) continue;
-          myPlayBySong.set(sid, (myPlayBySong.get(sid) ?? 0) + c);
+          myPlayBySong.set(sid, c);
         }
       }
     }

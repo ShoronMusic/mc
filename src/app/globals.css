@@ -13,6 +13,39 @@ body {
   background: var(--background);
 }
 
+/**
+ * 部屋（スマホ/PWA）: 誤った縦スクロールでプルリフレッシュ・全体リロードされ再生が切れるのを抑止。
+ * `usePreventRoomPullToRefresh` が html に付与する。
+ */
+html.mc-prevent-pull-refresh,
+html.mc-prevent-pull-refresh body {
+  overscroll-behavior: none;
+  height: 100%;
+  overflow: hidden;
+}
+
+@supports (-webkit-touch-callout: none) {
+  html.mc-prevent-pull-refresh {
+    position: fixed;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  html.mc-prevent-pull-refresh body {
+    position: fixed;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+  }
+}
+
+/** 部屋内の縦スクロール: バウンスを親（document）へ伝播させない */
+.mc-room-scroll-pane {
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
 /* 選曲者「再生中」インジケーター：波形 */
 @keyframes now-playing-wave {
   0%, 100% { transform: scaleY(0.4); }

@@ -104,6 +104,9 @@ export function expandMainArtistNamesForLibraryFilter(mainArtist: string): strin
 
 type SongRowWithMainArtist = { id: string; main_artist: string | null };
 
+/** indexed_pick: 索引からの確定名（広い %…% を避ける）。search_broad: キーワード検索用 */
+export type FetchSongsForLibraryArtistMode = 'indexed_pick' | 'search_broad';
+
 /**
  * 単独アーティスト名で曲を取得（ソロ＋「A, B」共演のいずれかに含まれる行）。
  */
@@ -112,6 +115,7 @@ export async function fetchSongsForLibraryArtistSelection<T extends SongRowWithM
   artist: string,
   select: string,
   limit: number,
+  mode: FetchSongsForLibraryArtistMode = 'search_broad',
 ): Promise<T[]> {
   const sel = artist.trim();
   if (!sel) return [];
@@ -134,6 +138,22 @@ export async function fetchSongsForLibraryArtistSelection<T extends SongRowWithM
   add(exact);
 
   const escaped = escapeLikeForIlike(sel);
+
+  if (mode === 'indexed_pick') {
+    const perPattern = Math.min(limit, 150);
+    const collabPatterns = [`${escaped},%`, `%, ${escaped}`, `%, ${escaped},%`];
+    for (const pat of collabPatterns) {
+      const { data, error } = await admin
+        .from('songs')
+        .select(select)
+        .ilike('main_artist', pat)
+        .limit(perPattern);
+      if (error) throw new Error(error.message);
+      add(data);
+    }
+    return [...byId.values()];
+  }
+
   const { data: fuzzy, error: fuzzyErr } = await admin
     .from('songs')
     .select(select)

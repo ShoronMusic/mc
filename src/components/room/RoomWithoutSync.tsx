@@ -65,6 +65,7 @@ import type { ChatMessage, SystemMessageOptions } from '@/types/chat';
 import { useIsLgViewport } from '@/hooks/useLgViewport';
 import { useRoomChatLogPersistence } from '@/hooks/useRoomChatLogPersistence';
 import { useRoomAccessLogReport } from '@/hooks/useRoomAccessLogReport';
+import { usePreventRoomPullToRefresh } from '@/hooks/usePreventRoomPullToRefresh';
 import { createClient } from '@/lib/supabase/client';
 import {
   clearAiQuestionWarnStorage,
@@ -146,6 +147,7 @@ export default function RoomWithoutSync({
     isGuest,
     displayName: displayNameProp.trim() || 'ゲスト',
   });
+  usePreventRoomPullToRefresh();
   useEffect(() => {
     rememberRoomForGuideReturn(roomId);
   }, [roomId]);

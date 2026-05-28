@@ -91,6 +91,23 @@ type LibraryArtistIndexRow = {
 const LIBRARY_MODAL_INDEX_HASH = '#';
 const LIBRARY_MODAL_INDEX_OTHER = 'その他';
 
+function LibraryArtistListLoading({ compact = false }: { compact?: boolean }) {
+  return (
+    <div
+      className={`flex items-center justify-center gap-2 ${compact ? 'py-6' : 'px-2 py-8'}`}
+      role="status"
+      aria-live="polite"
+      aria-label="アーティスト一覧を読み込み中"
+    >
+      <ArrowPathIcon
+        className={`${compact ? 'h-5 w-5' : 'h-6 w-6'} shrink-0 animate-spin text-lime-400/90`}
+        aria-hidden
+      />
+      <span className={`${compact ? 'text-xs' : 'text-[11px]'} text-lime-200/70`}>読み込み中…</span>
+    </div>
+  );
+}
+
 function libraryModalArtistNameForIndexing(name: string | null): string {
   const t = (name ?? '').trim();
   const m = /^the\s+/i.exec(t);
@@ -640,10 +657,8 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
 
   const selectLibraryArtistIndex = useCallback(
     async (letter: string | null) => {
-      const ok = await loadLibraryArtists();
-      if (!ok) return;
-      setLibraryArtistIndexActive(true);
       setLibraryArtistLetter(letter);
+      setLibraryArtistIndexActive(true);
       setLibrarySelectedArtistName(null);
       setLibraryRows([]);
       setLibrarySongSource('idle');
@@ -651,6 +666,11 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
       setLibrarySongVideos([]);
       setLibrarySelectedVideoId(null);
       setLibraryVideoError(null);
+      const ok = await loadLibraryArtists();
+      if (!ok) {
+        setLibraryArtistIndexActive(false);
+        setLibraryArtistLetter(null);
+      }
     },
     [loadLibraryArtists],
   );
@@ -1856,18 +1876,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                         </>
                       ) : null}
                       {libraryArtistsLoading && libraryArtistIndexActive ? (
-                        <div
-                          className="flex items-center justify-center gap-2 px-2 py-8"
-                          role="status"
-                          aria-live="polite"
-                          aria-label="アーティスト一覧を読み込み中"
-                        >
-                          <ArrowPathIcon
-                            className="h-6 w-6 shrink-0 animate-spin text-lime-400/90"
-                            aria-hidden
-                          />
-                          <span className="text-[11px] text-lime-200/70">読み込み中…</span>
-                        </div>
+                        <LibraryArtistListLoading />
                       ) : null}
                       {libraryArtistIndexActive &&
                       !libraryArtistsLoading &&
@@ -2494,9 +2503,13 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                     </p>
                     <div className="mc-scrollbar-stable max-h-60 overflow-y-auto">
                       <div className="flex flex-col gap-1">
-                        {modalArtistRows.length === 0 ? (
+                        {libraryArtistsLoading && libraryArtistIndexActive ? (
+                          <LibraryArtistListLoading compact />
+                        ) : modalArtistRows.length === 0 ? (
                           <p className="rounded border border-gray-800 bg-gray-900 px-2 py-2 text-xs text-gray-500">
-                            該当アーティストがありません。
+                            {libraryArtistLetter
+                              ? '該当アーティストがありません。'
+                              : '頭文字を選ぶと一覧が表示されます。'}
                           </p>
                         ) : (
                           modalArtistRows.map((a) => (

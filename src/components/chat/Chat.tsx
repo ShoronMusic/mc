@@ -1260,7 +1260,7 @@ export default function Chat({
           </span>
         </div>
       ) : null}
-      <div className="flex-1 overflow-y-auto p-2">
+      <div className="mc-room-scroll-pane flex-1 overflow-y-auto p-2">
         {messages.length === 0 ? (
           <p className="py-4 text-center text-sm text-gray-500">
             メッセージがまだありません

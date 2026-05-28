@@ -164,6 +164,7 @@ import {
 import { useIsLgViewport } from '@/hooks/useLgViewport';
 import { useRoomChatLogPersistence } from '@/hooks/useRoomChatLogPersistence';
 import { useRoomAccessLogReport } from '@/hooks/useRoomAccessLogReport';
+import { usePreventRoomPullToRefresh } from '@/hooks/usePreventRoomPullToRefresh';
 import { useSupabaseAuthUserId } from '@/hooks/useSupabaseAuthUserId';
 import { isAiQuestionGuardKickExemptUserId } from '@/lib/ai-question-guard-exempt-user-ids';
 import { lineFromJoinGreetingApi } from '@/lib/join-greeting-logic';
@@ -643,6 +644,7 @@ export default function RoomWithSync({
     isGuest,
     displayName: effectiveDisplayName.trim() || 'ゲスト',
   });
+  usePreventRoomPullToRefresh();
   const authUserId = useSupabaseAuthUserId(isGuest);
   /** マイページ設定: このクライアントが曲解説 API を呼ぶか・最古入室者のクイズ API を呼ぶか */
   const userRoomAiCommentaryEnabledRef = useRef(true);
