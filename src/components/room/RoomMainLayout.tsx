@@ -65,12 +65,16 @@ export default function RoomMainLayout({
         </div>
       ) : isMobileLandscape ? (
         <div className="flex w-full shrink-0 items-center py-1">
-          <div className="grid w-full min-h-[20rem] grid-cols-2 gap-1">
+          <div className="grid h-[min(58vh,25rem)] w-full grid-cols-2 gap-1 overflow-hidden">
             <div className="flex min-h-0 flex-col overflow-hidden border-r border-gray-800 pr-1">
               {left}
             </div>
-            <div className="flex min-h-[18rem] flex-col justify-center pl-1">
-              {rightTop}
+            <div className="min-h-0 overflow-y-auto pl-1 mc-scrollbar-stable mc-room-scroll-pane">
+              <div className="flex min-h-full items-center justify-center">
+                <div className="w-full">
+                  {rightTop}
+                </div>
+              </div>
             </div>
           </div>
         </div>
