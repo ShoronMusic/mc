@@ -2437,16 +2437,33 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                     : 'max-lg:hidden'
                 }`}
               >
-              <div className="flex items-center gap-2 border-b border-amber-700/45 bg-amber-900/50 px-3 py-2">
-                <span
-                  className={`${LIBRARY_MOBILE_PANEL.stepBadge} bg-amber-600`}
-                  aria-hidden
+              <div className="flex items-center justify-between gap-2 border-b border-amber-700/45 bg-amber-900/50 px-3 py-2">
+                <div className="flex min-w-0 items-center gap-2">
+                  <span
+                    className={`${LIBRARY_MOBILE_PANEL.stepBadge} bg-amber-600`}
+                    aria-hidden
+                  >
+                    4
+                  </span>
+                  <p className="truncate text-xs font-medium text-amber-50">
+                    曲・動画を選ぶ（上の「曲一覧」で曲を選択）
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLibrarySelectedSongId(null);
+                    setLibrarySongVideos([]);
+                    setLibrarySelectedVideoId(null);
+                    setLibraryVideoError(null);
+                    setLibraryCopyState('idle');
+                  }}
+                  className="shrink-0 rounded border border-amber-500/60 bg-amber-950/60 px-2 py-0.5 text-[11px] font-medium text-amber-100 hover:bg-amber-900/70"
+                  aria-label="選択した曲を解除"
+                  title="選択した曲を解除"
                 >
-                  4
-                </span>
-                <p className="text-xs font-medium text-amber-50">
-                  曲・動画を選ぶ（上の「曲一覧」で曲を選択）
-                </p>
+                  X 解除
+                </button>
               </div>
               <div className="mc-scrollbar-stable min-h-0 flex-1 overflow-y-auto p-3">
                   <>

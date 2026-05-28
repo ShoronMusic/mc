@@ -49,7 +49,7 @@ export default function RoomMainLayout({
   }, [playbackHistoryModalOpen, closeHistoryModal]);
 
   return (
-    <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
+    <div className={`flex min-h-0 w-full flex-1 flex-col ${isMobileLandscape ? 'overflow-visible' : 'overflow-hidden'}`}>
       {isLg ? (
         <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
           <ResizableSection
@@ -60,12 +60,14 @@ export default function RoomMainLayout({
           />
         </div>
       ) : isMobileLandscape ? (
-        <div className="grid min-h-0 flex-1 grid-cols-2 gap-1 overflow-hidden">
-          <div className="flex min-h-0 flex-col overflow-hidden border-r border-gray-800 pr-1">
-            {left}
-          </div>
-          <div className="flex min-h-0 flex-col overflow-hidden pl-1">
-            {rightTop}
+        <div className="flex min-h-[min(62vh,26rem)] w-full flex-1 items-center">
+          <div className="grid w-full min-h-[18rem] grid-cols-2 gap-1">
+            <div className="flex min-h-0 flex-col overflow-hidden border-r border-gray-800 pr-1">
+              {left}
+            </div>
+            <div className="flex min-h-[16rem] flex-col justify-center pl-1">
+              {rightTop}
+            </div>
           </div>
         </div>
       ) : (
