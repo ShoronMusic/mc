@@ -6800,63 +6800,54 @@ export default function RoomWithSync({
       <RoomMainLayout
         desktopSwapColumns
         left={
-          <div className="flex min-h-full flex-col">
-            <div className={`min-h-0 ${isMobileLandscape ? 'h-[min(32vh,14rem)] shrink-0' : 'flex-1'}`}>
-              <Chat
-                messages={messages}
-                currentUserDisplayName={effectiveDisplayName}
-                userTextColor={userTextColor}
-                participantTextColors={Object.fromEntries(
-                  participants.filter((p) => p.textColor).map((p) => [p.clientId, p.textColor!])
-                )}
-                participantsWithColor={participants
-                  .filter((p) => p.textColor)
-                  .map((p) => ({ displayName: p.displayName, textColor: p.textColor }))}
-                currentVideoId={videoId}
-                canRejectTidbit={canRejectTidbit && !isGuest}
-                onTidbitLibraryReject={handleTidbitLibraryReject}
-                onNextSongRecommendReject={handleNextSongRecommendReject}
-                onChatSummaryClick={roomId ? openChatSummaryModal : undefined}
-                jpAiUnlockEnabled={jpAiUnlockEnabled}
-                ownerAiCommentaryEnabled={!isCommentPackFullyOff(commentPackSlots)}
-                ownerCommentPackSlots={commentPackSlots}
-                ownerSongQuizEnabled={ownerSongQuizEnabled}
-                ownerNextSongRecommendEnabled={ownerNextSongRecommendEnabled}
-                ownerAiCharacterJoinEnabled={ownerAiCharacterJoinEnabled}
-                roomId={roomId ?? undefined}
-                myClientId={myClientId || undefined}
-                styleAdminChatTools={chatStyleAdminTools}
-                onYoutubeSearchFromAi={
-                  isYoutubeKeywordSearchEnabled()
-                    ? (q) => chatInputRef.current?.searchYoutubeWithQuery(q)
-                    : undefined
-                }
-                onNextSongRecommendSelect={handleNextSongRecommendSelect}
-                myListAddEnabled={!isGuest}
-                onMyListAddNotice={!isGuest ? addSystemMessage : undefined}
-                onPreviewStart={handlePreviewStart}
-                onPreviewStop={handlePreviewStop}
-                onSongQuizPick={publishSongQuizAnswer}
-                themePlaylistActiveMission={themePlaylistRoomSubmit}
-                themePlaylistMissionRoom={{
-                  roomId: roomId?.trim() || undefined,
-                  roomClientId: myClientId || undefined,
-                  isGuest,
-                  favoritedVideoIds,
-                  onFavoriteClick: handleFavoriteClick,
-                  participantsWithColor: participants
-                    .filter((p) => p.textColor)
-                    .map((p) => ({ displayName: p.displayName, textColor: p.textColor })),
-                  currentVideoId: videoId,
-                }}
-              />
-            </div>
-            {isMobileLandscape ? (
-              <section className="mt-2 shrink-0 space-y-2 pb-1">
-                {chatInputNode}
-              </section>
-            ) : null}
-          </div>
+          <Chat
+            messages={messages}
+            currentUserDisplayName={effectiveDisplayName}
+            userTextColor={userTextColor}
+            participantTextColors={Object.fromEntries(
+              participants.filter((p) => p.textColor).map((p) => [p.clientId, p.textColor!])
+            )}
+            participantsWithColor={participants
+              .filter((p) => p.textColor)
+              .map((p) => ({ displayName: p.displayName, textColor: p.textColor }))}
+            currentVideoId={videoId}
+            canRejectTidbit={canRejectTidbit && !isGuest}
+            onTidbitLibraryReject={handleTidbitLibraryReject}
+            onNextSongRecommendReject={handleNextSongRecommendReject}
+            onChatSummaryClick={roomId ? openChatSummaryModal : undefined}
+            jpAiUnlockEnabled={jpAiUnlockEnabled}
+            ownerAiCommentaryEnabled={!isCommentPackFullyOff(commentPackSlots)}
+            ownerCommentPackSlots={commentPackSlots}
+            ownerSongQuizEnabled={ownerSongQuizEnabled}
+            ownerNextSongRecommendEnabled={ownerNextSongRecommendEnabled}
+            ownerAiCharacterJoinEnabled={ownerAiCharacterJoinEnabled}
+            roomId={roomId ?? undefined}
+            myClientId={myClientId || undefined}
+            styleAdminChatTools={chatStyleAdminTools}
+            onYoutubeSearchFromAi={
+              isYoutubeKeywordSearchEnabled()
+                ? (q) => chatInputRef.current?.searchYoutubeWithQuery(q)
+                : undefined
+            }
+            onNextSongRecommendSelect={handleNextSongRecommendSelect}
+            myListAddEnabled={!isGuest}
+            onMyListAddNotice={!isGuest ? addSystemMessage : undefined}
+            onPreviewStart={handlePreviewStart}
+            onPreviewStop={handlePreviewStop}
+            onSongQuizPick={publishSongQuizAnswer}
+            themePlaylistActiveMission={themePlaylistRoomSubmit}
+            themePlaylistMissionRoom={{
+              roomId: roomId?.trim() || undefined,
+              roomClientId: myClientId || undefined,
+              isGuest,
+              favoritedVideoIds,
+              onFavoriteClick: handleFavoriteClick,
+              participantsWithColor: participants
+                .filter((p) => p.textColor)
+                .map((p) => ({ displayName: p.displayName, textColor: p.textColor })),
+              currentVideoId: videoId,
+            }}
+          />
         }
         rightTop={
           <div className="relative">
@@ -6955,11 +6946,9 @@ export default function RoomWithSync({
         onPlaybackHistoryModalClose={() => setPlaybackHistoryModalOpen(false)}
       />
 
-      {!isMobileLandscape ? (
-        <section className="mt-2 shrink-0 space-y-2">
-          {chatInputNode}
-        </section>
-      ) : null}
+      <section className="mt-2 shrink-0 space-y-2">
+        {chatInputNode}
+      </section>
 
       {candidateOpen && isYoutubeKeywordSearchEnabled() && (
         <div

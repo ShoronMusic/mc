@@ -2172,47 +2172,38 @@ export default function RoomWithoutSync({
 
       <RoomMainLayout
         left={
-          <div className="flex min-h-full flex-col">
-            <div className={`min-h-0 ${isMobileLandscape ? 'h-[min(32vh,14rem)] shrink-0' : 'flex-1'}`}>
-              <Chat
-                messages={messages}
-                currentUserDisplayName={displayNameProp}
-                userTextColor={userTextColor}
-                currentVideoId={videoId}
-                onChatSummaryClick={roomId ? openChatSummaryModal : undefined}
-                roomId={roomId ?? 'local'}
-                myClientId="local-client"
-                styleAdminChatTools={chatStyleAdminTools}
-                canRejectTidbit={canRejectTidbit && !isGuest}
-                onNextSongRecommendReject={handleNextSongRecommendReject}
-                onYoutubeSearchFromAi={
-                  isYoutubeKeywordSearchEnabled()
-                    ? (q) => chatInputRef.current?.searchYoutubeWithQuery(q)
-                    : undefined
-                }
-                onNextSongRecommendSelect={handleVideoUrlFromChat}
-                myListAddEnabled={!isGuest}
-                onMyListAddNotice={!isGuest ? addSystemMessage : undefined}
-                onPreviewStart={handlePreviewStart}
-                onPreviewStop={handlePreviewStop}
-                onSongQuizPick={handleSongQuizPick}
-                themePlaylistActiveMission={themePlaylistRoomSubmit}
-                themePlaylistMissionRoom={{
-                  roomId: roomId?.trim() || undefined,
-                  isGuest,
-                  favoritedVideoIds,
-                  onFavoriteClick: handleFavoriteClick,
-                  participantsWithColor: [{ displayName: displayNameProp, textColor: userTextColor }],
-                  currentVideoId: videoId,
-                }}
-              />
-            </div>
-            {isMobileLandscape ? (
-              <section className="mt-2 shrink-0 space-y-2 pb-1">
-                {chatInputNode}
-              </section>
-            ) : null}
-          </div>
+          <Chat
+            messages={messages}
+            currentUserDisplayName={displayNameProp}
+            userTextColor={userTextColor}
+            currentVideoId={videoId}
+            onChatSummaryClick={roomId ? openChatSummaryModal : undefined}
+            roomId={roomId ?? 'local'}
+            myClientId="local-client"
+            styleAdminChatTools={chatStyleAdminTools}
+            canRejectTidbit={canRejectTidbit && !isGuest}
+            onNextSongRecommendReject={handleNextSongRecommendReject}
+            onYoutubeSearchFromAi={
+              isYoutubeKeywordSearchEnabled()
+                ? (q) => chatInputRef.current?.searchYoutubeWithQuery(q)
+                : undefined
+            }
+            onNextSongRecommendSelect={handleVideoUrlFromChat}
+            myListAddEnabled={!isGuest}
+            onMyListAddNotice={!isGuest ? addSystemMessage : undefined}
+            onPreviewStart={handlePreviewStart}
+            onPreviewStop={handlePreviewStop}
+            onSongQuizPick={handleSongQuizPick}
+            themePlaylistActiveMission={themePlaylistRoomSubmit}
+            themePlaylistMissionRoom={{
+              roomId: roomId?.trim() || undefined,
+              isGuest,
+              favoritedVideoIds,
+              onFavoriteClick: handleFavoriteClick,
+              participantsWithColor: [{ displayName: displayNameProp, textColor: userTextColor }],
+              currentVideoId: videoId,
+            }}
+          />
         }
         rightTop={
           <>
@@ -2308,11 +2299,9 @@ export default function RoomWithoutSync({
         onPlaybackHistoryModalClose={() => setPlaybackHistoryModalOpen(false)}
       />
 
-      {!isMobileLandscape ? (
-        <section className="mt-2 shrink-0 space-y-2">
-          {chatInputNode}
-        </section>
-      ) : null}
+      <section className="mt-2 shrink-0 space-y-2">
+        {chatInputNode}
+      </section>
     </main>
   );
 }
