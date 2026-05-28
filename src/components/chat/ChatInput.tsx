@@ -1840,13 +1840,19 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
             <div
               className={`grid min-h-0 flex-1 grid-cols-1 gap-3 px-2 pb-2 pt-1 max-lg:gap-2 max-lg:bg-gray-950/80 lg:gap-0 lg:p-0 lg:bg-transparent lg:grid-cols-12 lg:pb-0 ${
                 isMobileLandscape
-                  ? 'max-lg:grid-cols-[minmax(0,0.37fr)_minmax(0,0.63fr)]'
+                  ? selectedLibraryRow
+                    ? 'max-lg:grid-cols-[minmax(0,0.42fr)_minmax(0,0.38fr)_minmax(0,0.20fr)]'
+                    : 'max-lg:grid-cols-[minmax(0,0.40fr)_minmax(0,0.60fr)]'
                   : 'max-lg:flex max-lg:flex-col'
               }`}
             >
               <div
                 className={`flex min-h-0 flex-col border-b border-lime-900/60 max-lg:border-0 lg:col-span-3 lg:flex-row lg:border-b-0 lg:border-r lg:border-r-lime-900/60 ${
-                  !isMobileLandscape && !isLg && libraryMobileFocus === 'split' ? 'max-lg:hidden' : ''
+                  !isMobileLandscape && !isLg && libraryMobileFocus === 'split'
+                    ? 'max-lg:hidden'
+                    : isMobileLandscape && selectedLibraryRow
+                      ? 'max-lg:hidden'
+                      : ''
                 }`}
               >
               <aside
@@ -2293,6 +2299,126 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                   </ul>
                 </div>
               </section>
+              {isMobileLandscape && selectedLibraryRow ? (
+                <section className="min-h-0 grid grid-cols-[minmax(0,0.68fr)_minmax(0,0.32fr)] gap-2 max-lg:col-span-2">
+                  <div className="mc-scrollbar-stable min-h-0 overflow-y-auto rounded-lg border border-amber-700/55 bg-amber-950/35 p-2.5">
+                    <div className="mb-2 rounded border border-gray-800 bg-gray-900/60 px-3 py-2">
+                      <p className="text-sm font-medium text-gray-100">{selectedLibraryRow.title}</p>
+                      <p className="mt-1 text-xs text-gray-400">
+                        {selectedLibraryRow.main_artist ?? '—'} / {selectedLibraryRow.style ?? '—'}
+                      </p>
+                    </div>
+                    <div className="mb-2">
+                      <p className="mb-1 text-[11px] text-gray-500">動画バージョン</p>
+                      {libraryVideoLoading ? (
+                        <p className="text-xs text-gray-500">読み込み中…</p>
+                      ) : libraryVideoError ? (
+                        <p className="text-xs text-amber-300">{libraryVideoError}</p>
+                      ) : librarySongVideos.length === 0 ? (
+                        <p className="text-xs text-gray-500">候補動画がありません。</p>
+                      ) : (
+                        <div className="flex flex-wrap gap-1.5">
+                          {librarySongVideos.map((v) => {
+                            const active = v.video_id === librarySelectedVideoId;
+                            return (
+                              <button
+                                key={`landscape-variant-${v.video_id}`}
+                                type="button"
+                                onClick={() => {
+                                  setLibrarySelectedVideoId(v.video_id);
+                                  setLibraryCopyState('idle');
+                                }}
+                                className={`rounded px-2 py-1 text-xs ${
+                                  active
+                                    ? 'bg-lime-700 text-white'
+                                    : 'border border-gray-700 bg-gray-900 text-gray-300 hover:bg-gray-800'
+                                }`}
+                              >
+                                {libraryVariantLabel(v.variant)}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                    {librarySelectedVideoId ? (
+                      <div className="aspect-video overflow-hidden rounded border border-gray-800 bg-black">
+                        <iframe
+                          title="Library landscape preview"
+                          src={`https://www.youtube.com/embed/${encodeURIComponent(
+                            librarySelectedVideoId,
+                          )}?autoplay=1&controls=1&modestbranding=1`}
+                          className="h-full w-full"
+                          allow="autoplay; encrypted-media"
+                          allowFullScreen
+                        />
+                      </div>
+                    ) : (
+                      <div className="flex aspect-video items-center justify-center rounded border border-gray-800 bg-black/50 text-xs text-gray-500">
+                        動画候補を選んでください
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex min-h-0 flex-col gap-2 rounded-lg border border-amber-700/55 bg-amber-950/35 p-2.5">
+                    <button
+                      type="button"
+                      disabled={!onVideoUrl || !selectedLibraryUrl}
+                      className="h-11 rounded border border-lime-500/70 bg-lime-900/40 px-2 text-sm font-semibold text-lime-100 hover:bg-lime-900/70 disabled:opacity-50"
+                      onClick={() => {
+                        if (!onVideoUrl) return;
+                        onVideoUrl(selectedLibraryUrl);
+                        setValue('');
+                        setLibraryOpen(false);
+                      }}
+                    >
+                      この曲を選曲
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!selectedLibraryUrl}
+                      className="h-11 rounded border border-gray-600 bg-gray-800 px-2 text-sm text-gray-100 hover:bg-gray-700"
+                      onClick={() => {
+                        void copyLibraryUrl();
+                      }}
+                    >
+                      URLをコピー
+                    </button>
+                    {!isGuest && onSystemMessage ? (
+                      <button
+                        type="button"
+                        disabled={!selectedLibraryUrl || libraryMyListAddBusy}
+                        className="h-11 rounded border border-violet-600/60 bg-violet-900/40 px-2 text-sm font-semibold text-violet-100 hover:bg-violet-900/60 disabled:cursor-not-allowed disabled:opacity-50"
+                        title="マイページのマイリストに追加（部屋の選曲とは別）"
+                        onClick={() => {
+                          void addLibrarySelectionToMyList();
+                        }}
+                      >
+                        {libraryMyListAddBusy ? '追加中…' : 'マイリスト追加'}
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLibrarySelectedSongId(null);
+                        setLibrarySongVideos([]);
+                        setLibrarySelectedVideoId(null);
+                        setLibraryVideoError(null);
+                        setLibraryCopyState('idle');
+                      }}
+                      className="h-9 rounded border border-amber-500/60 bg-amber-950/60 px-2 text-xs font-medium text-amber-100 hover:bg-amber-900/70"
+                      aria-label="選択した曲を解除"
+                      title="選択した曲を解除"
+                    >
+                      X 解除
+                    </button>
+                    {libraryCopyState !== 'idle' ? (
+                      <p className="mt-1 text-[11px] text-gray-300">
+                        {libraryCopyState === 'ok' ? 'URLをコピーしました。' : 'URLコピーに失敗しました。'}
+                      </p>
+                    ) : null}
+                  </div>
+                </section>
+              ) : null}
               {/* 5列目: 曲詳細・動画 */}
               {isLg && (
               <section className="min-h-0 flex-col lg:col-span-4 lg:flex">
@@ -2444,7 +2570,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
               <section
                 className={`flex min-h-0 flex-col border-t-2 border-amber-600/50 bg-amber-950/40 lg:hidden ${
                   isMobileLandscape
-                    ? 'max-lg:mt-1 max-lg:max-h-[44vh] max-lg:overflow-hidden'
+                    ? 'max-lg:hidden'
                     : libraryMobileFocus === 'split'
                     ? 'max-lg:flex-1 max-lg:min-h-0 max-lg:basis-1/2 max-lg:border-t max-lg:shadow-none'
                     : 'max-lg:hidden'
