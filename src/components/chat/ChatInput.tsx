@@ -1780,13 +1780,27 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
           aria-label="ライブラリ"
         >
           <div
-            className="relative flex h-[88vh] w-full max-w-[100rem] flex-col overflow-hidden rounded-lg border border-lime-600/60 bg-gray-950"
+            className={`relative flex w-full max-w-[100rem] flex-col overflow-hidden rounded-lg border border-lime-600/60 bg-gray-950 ${
+              isMobileLandscape ? 'h-[92vh]' : 'h-[88vh]'
+            }`}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex flex-col gap-2 border-b border-lime-900/60 px-3 py-2.5 sm:px-4 sm:py-3 lg:flex-row lg:flex-wrap lg:items-center lg:gap-3">
-              <div className="flex min-w-0 flex-1 items-baseline gap-2 overflow-hidden">
-                <h2 className="shrink-0 text-sm font-semibold text-white">ライブラリから選曲</h2>
-                {libraryArtistsReady && !libraryArtistsError && libraryArtistItems.length > 0 ? (
+            <div
+              className={`border-b border-lime-900/60 ${
+                isMobileLandscape
+                  ? 'flex items-center gap-2 px-2 py-1.5'
+                  : 'flex flex-col gap-2 px-3 py-2.5 sm:px-4 sm:py-3 lg:flex-row lg:flex-wrap lg:items-center lg:gap-3'
+              }`}
+            >
+              <div
+                className={`flex min-w-0 flex-1 gap-2 overflow-hidden ${
+                  isMobileLandscape ? 'items-center' : 'items-baseline'
+                }`}
+              >
+                <h2 className={`shrink-0 font-semibold text-white ${isMobileLandscape ? 'text-xs' : 'text-sm'}`}>
+                  ライブラリから選曲
+                </h2>
+                {!isMobileLandscape && libraryArtistsReady && !libraryArtistsError && libraryArtistItems.length > 0 ? (
                   <p className="min-w-0 truncate text-[11px] text-gray-400">
                     登録曲数{' '}
                     <span className="font-semibold tabular-nums text-lime-200/90">
@@ -1796,32 +1810,57 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                     <span className="text-gray-600">（{libraryArtistItems.length} アーティスト）</span>
                   </p>
                 ) : null}
+                {isMobileLandscape ? (
+                  <input
+                    type="search"
+                    value={libraryQuery}
+                    onChange={(e) => setLibraryQuery(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleLibrarySearch();
+                      }
+                    }}
+                    placeholder="アーティスト名・曲名で検索"
+                    className="h-8 min-w-0 flex-1 rounded border border-gray-700 bg-gray-900 px-2 text-xs text-gray-100 outline-none focus:border-lime-500"
+                  />
+                ) : null}
               </div>
-              <div className="flex min-w-0 items-center gap-2 lg:ml-auto lg:shrink-0">
-                <input
-                  type="search"
-                  value={libraryQuery}
-                  onChange={(e) => setLibraryQuery(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      handleLibrarySearch();
-                    }
-                  }}
-                  placeholder="アーティスト名・曲名で検索"
-                  className="h-9 min-w-0 flex-1 rounded border border-gray-700 bg-gray-900 px-3 text-sm text-gray-100 outline-none focus:border-lime-500 sm:w-[16rem] sm:flex-none md:w-[18rem]"
-                />
+              <div
+                className={`flex min-w-0 items-center gap-2 ${
+                  isMobileLandscape ? 'shrink-0 gap-1' : 'lg:ml-auto lg:shrink-0'
+                }`}
+              >
+                {!isMobileLandscape ? (
+                  <input
+                    type="search"
+                    value={libraryQuery}
+                    onChange={(e) => setLibraryQuery(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleLibrarySearch();
+                      }
+                    }}
+                    placeholder="アーティスト名・曲名で検索"
+                    className="h-9 min-w-0 flex-1 rounded border border-gray-700 bg-gray-900 px-3 text-sm text-gray-100 outline-none focus:border-lime-500 sm:w-[16rem] sm:flex-none md:w-[18rem]"
+                  />
+                ) : null}
                 <button
                   type="button"
                   onClick={handleLibrarySearch}
                   disabled={libraryLoading}
-                  className="inline-flex h-9 shrink-0 items-center justify-center rounded border border-lime-500/70 bg-lime-900/30 px-3 text-xs text-lime-100 hover:bg-lime-900/60 disabled:opacity-50"
+                  className={`inline-flex shrink-0 items-center justify-center rounded border border-lime-500/70 bg-lime-900/30 text-xs text-lime-100 hover:bg-lime-900/60 disabled:opacity-50 ${
+                    isMobileLandscape ? 'h-8 px-2.5' : 'h-9 px-3'
+                  }`}
                 >
                   検索
                 </button>
                 <button
                   type="button"
-                  className="inline-flex h-9 shrink-0 items-center justify-center rounded border border-lime-700/60 bg-gray-800 px-3 text-xs text-lime-100 hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-40"
+                  className={`inline-flex shrink-0 items-center justify-center rounded border border-lime-700/60 bg-gray-800 text-xs text-lime-100 hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-40 ${
+                    isMobileLandscape ? 'h-8 px-2.5' : 'h-9 px-3'
+                  }`}
                   onClick={resetLibraryExpanded}
                   disabled={!libraryHasExpandedContent}
                   aria-label="ライブラリの展開状態をリセット"
@@ -1830,7 +1869,9 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                 </button>
                 <button
                   type="button"
-                  className="inline-flex h-9 shrink-0 items-center justify-center rounded border border-lime-700/60 bg-gray-800 px-3 text-xs text-lime-100 hover:bg-gray-700"
+                  className={`inline-flex shrink-0 items-center justify-center rounded border border-lime-700/60 bg-gray-800 text-xs text-lime-100 hover:bg-gray-700 ${
+                    isMobileLandscape ? 'h-8 px-2.5' : 'h-9 px-3'
+                  }`}
                   onClick={() => setLibraryOpen(false)}
                 >
                   閉じる
@@ -1842,7 +1883,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                 isMobileLandscape
                   ? selectedLibraryRow
                     ? 'max-lg:grid-cols-[minmax(0,0.42fr)_minmax(0,0.38fr)_minmax(0,0.20fr)]'
-                    : 'max-lg:grid-cols-[minmax(0,0.40fr)_minmax(0,0.60fr)]'
+                    : 'max-lg:grid-cols-[minmax(0,0.40fr)_minmax(0,0.60fr)] max-lg:pt-0.5'
                   : 'max-lg:flex max-lg:flex-col'
               }`}
             >
