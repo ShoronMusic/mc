@@ -15,7 +15,9 @@ import {
   ChatBubbleLeftRightIcon,
   AtSymbolIcon,
   ArrowTopRightOnSquareIcon,
+  ChevronDownIcon,
 } from '@heroicons/react/24/outline';
+import { useIsLgViewport } from '@/hooks/useLgViewport';
 import type { ChatMessage as ChatMessageType } from '@/types/chat';
 import {
   getAiChatDisclaimerCommentsTabForDisplay,
@@ -1143,6 +1145,19 @@ export default function Chat({
   const [aiHelpModalOpen, setAiHelpModalOpen] = useState(false);
   const [aiHelpModalTab, setAiHelpModalTab] = useState<'question' | 'comments'>('question');
   const [aiQuestionExamplesOpen, setAiQuestionExamplesOpen] = useState(false);
+  const [chatHeaderMoreOpen, setChatHeaderMoreOpen] = useState(false);
+  const chatHeaderMoreRef = useRef<HTMLDivElement>(null);
+  const isLg = useIsLgViewport();
+
+  useEffect(() => {
+    if (!chatHeaderMoreOpen) return;
+    const onDocPointer = (e: MouseEvent) => {
+      if (chatHeaderMoreRef.current?.contains(e.target as Node)) return;
+      setChatHeaderMoreOpen(false);
+    };
+    document.addEventListener('mousedown', onDocPointer);
+    return () => document.removeEventListener('mousedown', onDocPointer);
+  }, [chatHeaderMoreOpen]);
   const ownerCommentarySlotNumbers = (ownerCommentPackSlots ?? [])
     .map((enabled, i) => (enabled ? String(i + 1) : null))
     .filter((v): v is string => v !== null)
@@ -1171,7 +1186,7 @@ export default function Chat({
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden rounded-lg border border-gray-700 bg-gray-900/50">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-gray-700 px-3 py-2">
+      <div className="flex flex-nowrap items-center gap-x-2 gap-y-0 border-b border-gray-700 px-3 py-2 max-lg:py-1.5 lg:flex-wrap lg:gap-x-3 lg:gap-y-1">
         <span
           className="shrink-0 text-sm font-medium text-gray-300"
           title="参加者同士のチャット欄です。"
@@ -1179,7 +1194,7 @@ export default function Chat({
           チャット
         </span>
         <div
-          className="inline-flex flex-wrap items-center gap-x-2 gap-y-1"
+          className="inline-flex min-w-0 flex-1 flex-nowrap items-center gap-x-1.5 overflow-x-auto lg:flex-wrap lg:gap-x-2 lg:gap-y-1 lg:overflow-visible"
           role="status"
           aria-label={`部屋のAI機能: 曲解説${ownerAiCommentaryEnabled ? 'オン' : 'オフ'}、曲クイズ${
             ownerSongQuizEnabled ? 'オン' : 'オフ'
@@ -1197,40 +1212,89 @@ export default function Chat({
           <span className={ownerRoomFeatureHeaderPillClass(ownerAiCharacterJoinEnabled, 'character')}>
             AI参加
           </span>
-        </div>
-        <div className="ml-auto inline-flex min-w-0 flex-wrap items-center justify-end gap-x-3 gap-y-1">
-          {onChatSummaryClick ? (
-            <button
-              type="button"
-              onClick={onChatSummaryClick}
-              className="text-[11px] text-cyan-300/90 underline decoration-dotted underline-offset-2 hover:text-cyan-200"
-              aria-label="チャットサマリーを表示"
-              title="ここまでの流れ"
-            >
-              チャットサマリー
-            </button>
-          ) : null}
-          <button
-            type="button"
-            onClick={() => {
-              setAiHelpModalTab('question');
-              setAiHelpModalOpen(true);
-            }}
-            className="inline-flex items-center gap-1 text-xs text-amber-200/90 hover:text-amber-100"
-            aria-haspopup="dialog"
-            aria-expanded={aiHelpModalOpen}
-            aria-label="AIに質問する方法とAIのコメントについて（案内を表示）"
-            title="AIに質問・AIのコメントについて"
-          >
-            <AtSymbolIcon className="h-3.5 w-3.5 shrink-0" aria-hidden />
-            <span className="underline decoration-dotted underline-offset-2">AIに質問…</span>
-          </button>
           {jpAiUnlockEnabled ? (
             <span className="shrink-0 rounded border border-emerald-600/70 bg-emerald-900/40 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-200">
               邦楽解禁
             </span>
           ) : null}
         </div>
+        {isLg ? (
+          <div className="ml-auto inline-flex min-w-0 flex-wrap items-center justify-end gap-x-3 gap-y-1">
+            {onChatSummaryClick ? (
+              <button
+                type="button"
+                onClick={onChatSummaryClick}
+                className="text-[11px] text-cyan-300/90 underline decoration-dotted underline-offset-2 hover:text-cyan-200"
+                aria-label="チャットサマリーを表示"
+                title="ここまでの流れ"
+              >
+                チャットサマリー
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => {
+                setAiHelpModalTab('question');
+                setAiHelpModalOpen(true);
+              }}
+              className="inline-flex items-center gap-1 text-xs text-amber-200/90 hover:text-amber-100"
+              aria-haspopup="dialog"
+              aria-expanded={aiHelpModalOpen}
+              aria-label="AIに質問する方法とAIのコメントについて（案内を表示）"
+              title="AIに質問・AIのコメントについて"
+            >
+              <AtSymbolIcon className="h-3.5 w-3.5 shrink-0" aria-hidden />
+              <span className="underline decoration-dotted underline-offset-2">AIに質問…</span>
+            </button>
+          </div>
+        ) : (
+          <div ref={chatHeaderMoreRef} className="relative shrink-0">
+            <button
+              type="button"
+              onClick={() => setChatHeaderMoreOpen((o) => !o)}
+              className="inline-flex h-7 w-7 items-center justify-center rounded border border-gray-600 bg-gray-800/90 text-gray-200 hover:bg-gray-700"
+              aria-haspopup="menu"
+              aria-expanded={chatHeaderMoreOpen}
+              aria-label="チャットサマリー・AI質問メニュー"
+              title="その他"
+            >
+              <ChevronDownIcon className="h-4 w-4" aria-hidden />
+            </button>
+            {chatHeaderMoreOpen ? (
+              <div
+                className="absolute right-0 top-full z-30 mt-1 min-w-[11rem] rounded-md border border-gray-600 bg-gray-900 py-1 shadow-lg"
+                role="menu"
+              >
+                {onChatSummaryClick ? (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setChatHeaderMoreOpen(false);
+                      onChatSummaryClick();
+                    }}
+                    className="block w-full px-3 py-2 text-left text-[11px] text-cyan-300 hover:bg-gray-800"
+                  >
+                    チャットサマリー
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setChatHeaderMoreOpen(false);
+                    setAiHelpModalTab('question');
+                    setAiHelpModalOpen(true);
+                  }}
+                  className="inline-flex w-full items-center gap-1.5 px-3 py-2 text-left text-xs text-amber-200 hover:bg-gray-800"
+                >
+                  <AtSymbolIcon className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                  AIに質問…
+                </button>
+              </div>
+            ) : null}
+          </div>
+        )}
       </div>
       {themePlaylistActiveMission ? (
         <div

@@ -108,6 +108,74 @@ function LibraryArtistListLoading({ compact = false }: { compact?: boolean }) {
   );
 }
 
+function LibrarySongListLoading() {
+  return (
+    <div
+      className="flex items-center justify-center gap-2 px-2 py-14"
+      role="status"
+      aria-live="polite"
+      aria-label="曲一覧を読み込み中"
+    >
+      <ArrowPathIcon className="h-6 w-6 shrink-0 animate-spin text-violet-400/90" aria-hidden />
+      <span className="text-xs text-violet-200/75">曲一覧を読み込み中…</span>
+    </div>
+  );
+}
+
+/** 部屋ライブラリ・モバイルでどの段を主表示にするか */
+type LibraryMobileFocus = 'idle' | 'artists' | 'songs' | 'split';
+
+function resolveLibraryMobileFocus(input: {
+  libraryArtistIndexActive: boolean;
+  librarySelectedArtistName: string | null;
+  librarySelectedSongId: string | null;
+  hasSelectedLibraryRow: boolean;
+  librarySongSource: 'idle' | 'browse' | 'search';
+  libraryQuery: string;
+}): LibraryMobileFocus {
+  if (input.hasSelectedLibraryRow && input.librarySelectedSongId) return 'split';
+  if (
+    input.librarySelectedArtistName ||
+    input.librarySongSource === 'browse' ||
+    (input.librarySongSource === 'search' && input.libraryQuery.trim() !== '')
+  ) {
+    return 'songs';
+  }
+  if (input.libraryArtistIndexActive) return 'artists';
+  return 'idle';
+}
+
+function libraryMobileArtistListSectionExtra(focus: LibraryMobileFocus): string {
+  switch (focus) {
+    case 'artists':
+      return 'max-lg:flex-1 max-lg:min-h-0 max-lg:max-h-none';
+    case 'songs':
+      return 'max-lg:max-h-[24vh] max-lg:shrink-0';
+    case 'split':
+      return 'max-lg:hidden';
+    default:
+      return 'max-lg:max-h-[28vh] max-lg:shrink-0';
+  }
+}
+
+function libraryMobileArtistDetailSectionExtra(focus: LibraryMobileFocus): string {
+  return focus === 'idle' ? 'max-lg:max-h-[18vh] max-lg:shrink-0' : 'max-lg:hidden';
+}
+
+function libraryMobileSongListSectionExtra(focus: LibraryMobileFocus): string {
+  switch (focus) {
+    case 'artists':
+    case 'idle':
+      return 'max-lg:max-h-[20vh] max-lg:shrink-0';
+    case 'songs':
+      return 'max-lg:flex-1 max-lg:min-h-0 max-lg:max-h-none';
+    case 'split':
+      return 'max-lg:flex-1 max-lg:min-h-0 max-lg:max-h-none max-lg:basis-1/2';
+    default:
+      return '';
+  }
+}
+
 function libraryModalArtistNameForIndexing(name: string | null): string {
   const t = (name ?? '').trim();
   const m = /^the\s+/i.exec(t);
@@ -169,7 +237,7 @@ const LIBRARY_MOBILE_PANEL = {
     'flex h-5 w-5 shrink-0 items-center justify-center rounded text-[10px] font-bold tabular-nums text-white shadow-sm',
   artistList: {
     section:
-      'max-lg:overflow-hidden max-lg:rounded-lg max-lg:border-2 max-lg:border-lime-600/55 max-lg:bg-lime-950/55 max-lg:shadow-[inset_0_1px_0_0_rgba(163,230,53,0.12)] max-lg:max-h-[34vh]',
+      'max-lg:overflow-hidden max-lg:rounded-lg max-lg:border-2 max-lg:border-lime-600/55 max-lg:bg-lime-950/55 max-lg:shadow-[inset_0_1px_0_0_rgba(163,230,53,0.12)] max-lg:flex max-lg:flex-col',
     header:
       'max-lg:flex max-lg:items-center max-lg:justify-between max-lg:gap-2 max-lg:border-b max-lg:border-lime-600/45 max-lg:bg-lime-900/75 max-lg:px-3 max-lg:py-2.5',
     badge: 'bg-lime-600',
@@ -178,7 +246,7 @@ const LIBRARY_MOBILE_PANEL = {
   },
   artistDetail: {
     section:
-      'max-lg:overflow-hidden max-lg:rounded-lg max-lg:border-2 max-lg:border-sky-600/50 max-lg:bg-sky-950/50 max-lg:shadow-[inset_0_1px_0_0_rgba(56,189,248,0.1)] max-lg:max-h-[28vh]',
+      'max-lg:overflow-hidden max-lg:rounded-lg max-lg:border-2 max-lg:border-sky-600/50 max-lg:bg-sky-950/50 max-lg:shadow-[inset_0_1px_0_0_rgba(56,189,248,0.1)] max-lg:flex max-lg:flex-col',
     header:
       'max-lg:border-sky-600/40 max-lg:bg-sky-900/60 max-lg:px-3 max-lg:py-2.5',
     badge: 'bg-sky-600',
@@ -187,7 +255,7 @@ const LIBRARY_MOBILE_PANEL = {
   },
   songList: {
     section:
-      'max-lg:overflow-hidden max-lg:rounded-lg max-lg:border-2 max-lg:border-violet-600/50 max-lg:bg-violet-950/45 max-lg:shadow-[inset_0_1px_0_0_rgba(167,139,250,0.1)] max-lg:min-h-[32vh] max-lg:flex-1',
+      'max-lg:overflow-hidden max-lg:rounded-lg max-lg:border-2 max-lg:border-violet-600/50 max-lg:bg-violet-950/45 max-lg:shadow-[inset_0_1px_0_0_rgba(167,139,250,0.1)] max-lg:flex max-lg:flex-col',
     header:
       'max-lg:border-violet-600/40 max-lg:bg-violet-900/55 max-lg:px-3 max-lg:py-2.5',
     badge: 'bg-violet-600',
@@ -984,6 +1052,26 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
       ? filteredLibraryRows.find((r) => r.id === librarySelectedSongId) ?? null
       : null;
 
+  const libraryMobileFocus = useMemo(
+    () =>
+      resolveLibraryMobileFocus({
+        libraryArtistIndexActive,
+        librarySelectedArtistName,
+        librarySelectedSongId,
+        hasSelectedLibraryRow: Boolean(selectedLibraryRow),
+        librarySongSource,
+        libraryQuery,
+      }),
+    [
+      libraryArtistIndexActive,
+      librarySelectedArtistName,
+      librarySelectedSongId,
+      selectedLibraryRow,
+      librarySongSource,
+      libraryQuery,
+    ],
+  );
+
   const selectedLibraryUrl = librarySelectedVideoId
     ? `https://www.youtube.com/watch?v=${encodeURIComponent(librarySelectedVideoId)}`
     : '';
@@ -1741,11 +1829,15 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
               </div>
             </div>
             <div
-              className={`grid min-h-0 flex-1 grid-cols-1 gap-3 px-2 pb-2 pt-1 max-lg:bg-gray-950/80 lg:gap-0 lg:p-0 lg:bg-transparent ${
-                selectedLibraryRow ? 'pb-[38vh]' : 'pb-0'
-              } lg:grid-cols-12 lg:pb-0`}
+              className={`grid min-h-0 flex-1 grid-cols-1 gap-3 px-2 pb-2 pt-1 max-lg:flex max-lg:flex-col max-lg:gap-2 max-lg:bg-gray-950/80 lg:gap-0 lg:p-0 lg:bg-transparent lg:grid-cols-12 lg:pb-0 ${
+                !isLg && libraryMobileFocus === 'split' ? 'max-lg:min-h-0' : ''
+              }`}
             >
-              <div className="flex min-h-0 flex-col border-b border-lime-900/60 max-lg:border-0 lg:col-span-3 lg:flex-row lg:border-b-0 lg:border-r lg:border-r-lime-900/60">
+              <div
+                className={`flex min-h-0 flex-col border-b border-lime-900/60 max-lg:border-0 lg:col-span-3 lg:flex-row lg:border-b-0 lg:border-r lg:border-r-lime-900/60 ${
+                  !isLg && libraryMobileFocus === 'split' ? 'max-lg:hidden' : ''
+                }`}
+              >
               <aside
                 className="hidden max-h-[40vh] w-[3.5rem] shrink-0 flex-col border-b border-lime-900/60 lg:flex lg:max-h-none lg:border-b-0 lg:border-r lg:border-r-lime-900/60"
                 aria-label="アーティスト頭文字"
@@ -1785,7 +1877,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
               </aside>
               {/* アーティスト一覧（索引と密着・選択後も表示） */}
               <section
-                className={`flex min-h-0 w-full min-w-0 flex-col border-b border-lime-900/60 lg:w-[11rem] lg:shrink-0 lg:border-b-0 xl:w-[12.5rem] ${LIBRARY_MOBILE_PANEL.artistList.section}`}
+                className={`flex min-h-0 w-full min-w-0 flex-col border-b border-lime-900/60 lg:w-[11rem] lg:shrink-0 lg:border-b-0 xl:w-[12.5rem] ${LIBRARY_MOBILE_PANEL.artistList.section} ${libraryMobileArtistListSectionExtra(libraryMobileFocus)}`}
               >
                 <div className="shrink-0 border-b border-lime-900/60 px-2 py-2 max-lg:border-lime-700/35 max-lg:bg-lime-950/40 lg:hidden">
                   <button
@@ -1968,7 +2060,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
               </div>
               {/* 3列目: 選択アーティスト詳細 */}
               <section
-                className={`flex min-h-0 flex-col border-b border-lime-900/60 lg:col-span-2 lg:border-b-0 lg:border-r lg:border-r-lime-900/60 ${LIBRARY_MOBILE_PANEL.artistDetail.section}`}
+                className={`flex min-h-0 flex-col border-b border-lime-900/60 lg:col-span-2 lg:border-b-0 lg:border-r lg:border-r-lime-900/60 ${LIBRARY_MOBILE_PANEL.artistDetail.section} ${libraryMobileArtistDetailSectionExtra(libraryMobileFocus)}`}
               >
                 <div
                   className={`shrink-0 border-b border-lime-900/60 px-3 py-2 ${LIBRARY_MOBILE_PANEL.artistDetail.header}`}
@@ -2055,7 +2147,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
               </section>
               {/* 4列目: 曲一覧 */}
               <section
-                className={`flex min-h-0 flex-col border-b border-lime-900/60 lg:col-span-3 lg:border-b-0 lg:border-r lg:border-r-lime-900/60 ${LIBRARY_MOBILE_PANEL.songList.section}`}
+                className={`flex min-h-0 flex-col border-b border-lime-900/60 lg:col-span-3 lg:border-b-0 lg:border-r lg:border-r-lime-900/60 ${LIBRARY_MOBILE_PANEL.songList.section} ${libraryMobileSongListSectionExtra(libraryMobileFocus)}`}
               >
                 <div
                   className={`flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-lime-900/60 px-3 py-2 ${LIBRARY_MOBILE_PANEL.songList.header}`}
@@ -2133,7 +2225,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                   ref={librarySongListScrollRef}
                   className={`mc-scrollbar-stable min-h-0 flex-1 overflow-y-auto p-2 ${LIBRARY_MOBILE_PANEL.songList.body}`}
                 >
-                  {libraryLoading && <p className="px-2 py-2 text-xs text-gray-400">読み込み中…</p>}
+                  {libraryLoading ? <LibrarySongListLoading /> : null}
                   {libraryError && <p className="px-2 py-2 text-xs text-amber-300">{libraryError}</p>}
                   {!libraryLoading && !libraryError && filteredLibraryRows.length === 0 && (
                     <p className="px-2 py-2 text-xs text-gray-500 max-lg:text-violet-200/55">
@@ -2338,7 +2430,13 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
               )}
             </div>
             {!isLg && selectedLibraryRow ? (
-              <section className="absolute inset-x-0 bottom-0 z-20 flex h-[38vh] min-h-0 flex-col border-t-2 border-amber-600/50 bg-amber-950/40 shadow-[0_-8px_24px_rgba(0,0,0,0.45)] lg:hidden">
+              <section
+                className={`flex min-h-0 flex-col border-t-2 border-amber-600/50 bg-amber-950/40 lg:hidden ${
+                  libraryMobileFocus === 'split'
+                    ? 'max-lg:flex-1 max-lg:min-h-0 max-lg:basis-1/2 max-lg:border-t max-lg:shadow-none'
+                    : 'max-lg:hidden'
+                }`}
+              >
               <div className="flex items-center gap-2 border-b border-amber-700/45 bg-amber-900/50 px-3 py-2">
                 <span
                   className={`${LIBRARY_MOBILE_PANEL.stepBadge} bg-amber-600`}
