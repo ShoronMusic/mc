@@ -69,7 +69,7 @@ export default function RoomMainLayout({
             <div className="flex min-h-0 flex-col overflow-hidden border-r border-gray-800 pr-1">
               {left}
             </div>
-            <div className="min-h-0 overflow-y-auto pl-1 mc-scrollbar-stable mc-room-scroll-pane">
+            <div className="min-h-0 overflow-hidden pl-1">
               <div className="flex min-h-full items-center justify-center">
                 <div className="w-full">
                   {rightTop}

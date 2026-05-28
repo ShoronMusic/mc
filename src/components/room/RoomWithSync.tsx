@@ -6102,6 +6102,48 @@ export default function RoomWithSync({
     ]
   );
 
+  const chatInputNode = (
+    <ChatInput
+      ref={chatInputRef}
+      onSendMessage={handleSendMessage}
+      onVideoUrl={handleVideoUrlFromChat}
+      themePlaylistRoomSubmit={themePlaylistRoomSubmit}
+      isGuest={isGuest}
+      onSystemMessage={addSystemMessage}
+      onOpenTerms={() => {
+        setPolicyTab('terms');
+        setTermsModalOpen(true);
+      }}
+      onOpenSiteFeedback={handleOpenSiteFeedbackFromHeader}
+      onAddCandidate={
+        isYoutubeKeywordSearchEnabled() ? handleAddCandidateFromSearch : undefined
+      }
+      onPreviewStart={handlePreviewStart}
+      onPreviewStop={handlePreviewStop}
+      onClearLocalAiQuestionGuard={
+        chatStyleAdminTools ? clearLocalAiQuestionGuardState : undefined
+      }
+      trailingSlot={
+        isYoutubeKeywordSearchEnabled() ? (
+          <button
+            type="button"
+            className={`flex h-[3.75rem] w-full shrink-0 items-center justify-center gap-0.5 rounded border border-emerald-600 bg-emerald-900/40 px-2 text-xs font-semibold text-emerald-100 hover:bg-emerald-800/70 lg:w-auto lg:px-3 ${
+              candidateButtonFlash ? 'animate-pulse ring-2 ring-emerald-300' : ''
+            }`}
+            onClick={() => setCandidateOpen(true)}
+          >
+            候補リスト
+            {candidateSongs.length > 0 && (
+              <span className="inline-block rounded bg-emerald-700 px-1 text-[10px]">
+                {candidateSongs.length}
+              </span>
+            )}
+          </button>
+        ) : undefined
+      }
+    />
+  );
+
   return (
     <main
       className={`flex flex-col bg-gray-950 p-3 ${
@@ -6758,54 +6800,63 @@ export default function RoomWithSync({
       <RoomMainLayout
         desktopSwapColumns
         left={
-          <Chat
-            messages={messages}
-            currentUserDisplayName={effectiveDisplayName}
-            userTextColor={userTextColor}
-            participantTextColors={Object.fromEntries(
-              participants.filter((p) => p.textColor).map((p) => [p.clientId, p.textColor!])
-            )}
-            participantsWithColor={participants
-              .filter((p) => p.textColor)
-              .map((p) => ({ displayName: p.displayName, textColor: p.textColor }))}
-            currentVideoId={videoId}
-            canRejectTidbit={canRejectTidbit && !isGuest}
-            onTidbitLibraryReject={handleTidbitLibraryReject}
-            onNextSongRecommendReject={handleNextSongRecommendReject}
-            onChatSummaryClick={roomId ? openChatSummaryModal : undefined}
-            jpAiUnlockEnabled={jpAiUnlockEnabled}
-            ownerAiCommentaryEnabled={!isCommentPackFullyOff(commentPackSlots)}
-            ownerCommentPackSlots={commentPackSlots}
-            ownerSongQuizEnabled={ownerSongQuizEnabled}
-            ownerNextSongRecommendEnabled={ownerNextSongRecommendEnabled}
-            ownerAiCharacterJoinEnabled={ownerAiCharacterJoinEnabled}
-            roomId={roomId ?? undefined}
-            myClientId={myClientId || undefined}
-            styleAdminChatTools={chatStyleAdminTools}
-            onYoutubeSearchFromAi={
-              isYoutubeKeywordSearchEnabled()
-                ? (q) => chatInputRef.current?.searchYoutubeWithQuery(q)
-                : undefined
-            }
-            onNextSongRecommendSelect={handleNextSongRecommendSelect}
-            myListAddEnabled={!isGuest}
-            onMyListAddNotice={!isGuest ? addSystemMessage : undefined}
-            onPreviewStart={handlePreviewStart}
-            onPreviewStop={handlePreviewStop}
-            onSongQuizPick={publishSongQuizAnswer}
-            themePlaylistActiveMission={themePlaylistRoomSubmit}
-            themePlaylistMissionRoom={{
-              roomId: roomId?.trim() || undefined,
-              roomClientId: myClientId || undefined,
-              isGuest,
-              favoritedVideoIds,
-              onFavoriteClick: handleFavoriteClick,
-              participantsWithColor: participants
-                .filter((p) => p.textColor)
-                .map((p) => ({ displayName: p.displayName, textColor: p.textColor })),
-              currentVideoId: videoId,
-            }}
-          />
+          <div className="flex min-h-0 flex-1 flex-col">
+            <div className="min-h-0 flex-1">
+              <Chat
+                messages={messages}
+                currentUserDisplayName={effectiveDisplayName}
+                userTextColor={userTextColor}
+                participantTextColors={Object.fromEntries(
+                  participants.filter((p) => p.textColor).map((p) => [p.clientId, p.textColor!])
+                )}
+                participantsWithColor={participants
+                  .filter((p) => p.textColor)
+                  .map((p) => ({ displayName: p.displayName, textColor: p.textColor }))}
+                currentVideoId={videoId}
+                canRejectTidbit={canRejectTidbit && !isGuest}
+                onTidbitLibraryReject={handleTidbitLibraryReject}
+                onNextSongRecommendReject={handleNextSongRecommendReject}
+                onChatSummaryClick={roomId ? openChatSummaryModal : undefined}
+                jpAiUnlockEnabled={jpAiUnlockEnabled}
+                ownerAiCommentaryEnabled={!isCommentPackFullyOff(commentPackSlots)}
+                ownerCommentPackSlots={commentPackSlots}
+                ownerSongQuizEnabled={ownerSongQuizEnabled}
+                ownerNextSongRecommendEnabled={ownerNextSongRecommendEnabled}
+                ownerAiCharacterJoinEnabled={ownerAiCharacterJoinEnabled}
+                roomId={roomId ?? undefined}
+                myClientId={myClientId || undefined}
+                styleAdminChatTools={chatStyleAdminTools}
+                onYoutubeSearchFromAi={
+                  isYoutubeKeywordSearchEnabled()
+                    ? (q) => chatInputRef.current?.searchYoutubeWithQuery(q)
+                    : undefined
+                }
+                onNextSongRecommendSelect={handleNextSongRecommendSelect}
+                myListAddEnabled={!isGuest}
+                onMyListAddNotice={!isGuest ? addSystemMessage : undefined}
+                onPreviewStart={handlePreviewStart}
+                onPreviewStop={handlePreviewStop}
+                onSongQuizPick={publishSongQuizAnswer}
+                themePlaylistActiveMission={themePlaylistRoomSubmit}
+                themePlaylistMissionRoom={{
+                  roomId: roomId?.trim() || undefined,
+                  roomClientId: myClientId || undefined,
+                  isGuest,
+                  favoritedVideoIds,
+                  onFavoriteClick: handleFavoriteClick,
+                  participantsWithColor: participants
+                    .filter((p) => p.textColor)
+                    .map((p) => ({ displayName: p.displayName, textColor: p.textColor })),
+                  currentVideoId: videoId,
+                }}
+              />
+            </div>
+            {isMobileLandscape ? (
+              <section className="mt-2 shrink-0 space-y-2">
+                {chatInputNode}
+              </section>
+            ) : null}
+          </div>
         }
         rightTop={
           <div className="relative">
@@ -6904,47 +6955,11 @@ export default function RoomWithSync({
         onPlaybackHistoryModalClose={() => setPlaybackHistoryModalOpen(false)}
       />
 
-      <section className="mt-2 shrink-0 space-y-2">
-        <ChatInput
-          ref={chatInputRef}
-          onSendMessage={handleSendMessage}
-          onVideoUrl={handleVideoUrlFromChat}
-          themePlaylistRoomSubmit={themePlaylistRoomSubmit}
-          isGuest={isGuest}
-          onSystemMessage={addSystemMessage}
-          onOpenTerms={() => {
-            setPolicyTab('terms');
-            setTermsModalOpen(true);
-          }}
-          onOpenSiteFeedback={handleOpenSiteFeedbackFromHeader}
-          onAddCandidate={
-            isYoutubeKeywordSearchEnabled() ? handleAddCandidateFromSearch : undefined
-          }
-          onPreviewStart={handlePreviewStart}
-          onPreviewStop={handlePreviewStop}
-          onClearLocalAiQuestionGuard={
-            chatStyleAdminTools ? clearLocalAiQuestionGuardState : undefined
-          }
-          trailingSlot={
-            isYoutubeKeywordSearchEnabled() ? (
-              <button
-                type="button"
-                className={`flex h-[3.75rem] w-full shrink-0 items-center justify-center gap-0.5 rounded border border-emerald-600 bg-emerald-900/40 px-2 text-xs font-semibold text-emerald-100 hover:bg-emerald-800/70 lg:w-auto lg:px-3 ${
-                  candidateButtonFlash ? 'animate-pulse ring-2 ring-emerald-300' : ''
-                }`}
-                onClick={() => setCandidateOpen(true)}
-              >
-                候補リスト
-                {candidateSongs.length > 0 && (
-                  <span className="inline-block rounded bg-emerald-700 px-1 text-[10px]">
-                    {candidateSongs.length}
-                  </span>
-                )}
-              </button>
-            ) : undefined
-          }
-        />
-      </section>
+      {!isMobileLandscape ? (
+        <section className="mt-2 shrink-0 space-y-2">
+          {chatInputNode}
+        </section>
+      ) : null}
 
       {candidateOpen && isYoutubeKeywordSearchEnabled() && (
         <div
