@@ -2,6 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   buildMusicaichatFactsForAiPromptBlock,
+  buildMusicaichatStructuredDiscographyFactLines,
+  formatMusic8ReleaseDateForAiFacts,
   shouldRegenerateLibraryWhenMusicaichatSong,
   skipMusic8FactInjectEnv,
 } from '@/lib/music8-musicaichat';
@@ -38,6 +40,30 @@ test('buildMusicaichatFactsForAiPromptBlock: empty facts', () => {
     stable_key: { artist_slug: 'a', song_slug: 'b' },
   });
   assert.equal(block, '');
+});
+
+test('formatMusic8ReleaseDateForAiFacts', () => {
+  assert.equal(formatMusic8ReleaseDateForAiFacts('1975.10'), '1975年10月');
+  assert.equal(formatMusic8ReleaseDateForAiFacts('1975'), '1975年');
+});
+
+test('structured discography lines include releases even when facts lack year', () => {
+  const song = {
+    stable_key: { artist_slug: 'queen', song_slug: 'bohemian-rhapsody' },
+    releases: { original_release_date: '1975-10-31' },
+    classification: ['Art rock', 'Progressive rock'],
+    facts_for_ai: {
+      opening_lines: ['Queen の代表曲の一つです。'],
+      bullets: ['オペラ的な構成が特徴。'],
+    },
+  };
+  const structured = buildMusicaichatStructuredDiscographyFactLines(song);
+  assert.match(structured.join('\n'), /1975年10月/);
+  assert.match(structured.join('\n'), /Art rock/);
+
+  const block = buildMusicaichatFactsForAiPromptBlock(song);
+  assert.match(block, /1975年10月/);
+  assert.doesNotMatch(block, /Music8 に掲載/);
 });
 
 test('Music8 listing boilerplate is stripped from facts block and song extract', () => {

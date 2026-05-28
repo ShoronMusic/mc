@@ -513,6 +513,7 @@ export default function RoomWithoutSync({
         aiSource?: ChatMessage['aiSource'];
         recommendationId?: string | null;
         deferToPanel?: boolean;
+        nextSongRecommendCatalog?: ChatMessage['nextSongRecommendCatalog'];
         displayName?: string;
       }
     ) => {
@@ -536,6 +537,9 @@ export default function RoomWithoutSync({
         ...(options?.aiSource ? { aiSource: options.aiSource } : {}),
         ...(options?.recommendationId ? { recommendationId: options.recommendationId } : {}),
         ...(options?.deferToPanel ? { deferToPanel: true as const } : {}),
+        ...(options?.nextSongRecommendCatalog
+          ? { nextSongRecommendCatalog: options.nextSongRecommendCatalog }
+          : {}),
       };
       setMessages((prev) => [...prev, msg]);
     },
@@ -2158,6 +2162,11 @@ export default function RoomWithoutSync({
                 ? (q) => chatInputRef.current?.searchYoutubeWithQuery(q)
                 : undefined
             }
+            onNextSongRecommendSelect={handleVideoUrlFromChat}
+            myListAddEnabled={!isGuest}
+            onMyListAddNotice={!isGuest ? addSystemMessage : undefined}
+            onPreviewStart={handlePreviewStart}
+            onPreviewStop={handlePreviewStop}
             onSongQuizPick={handleSongQuizPick}
             themePlaylistActiveMission={themePlaylistRoomSubmit}
             themePlaylistMissionRoom={{

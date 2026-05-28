@@ -3,9 +3,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {
   isArtistMasterJsonFileName,
-  loadSlugsFromArtistFailureLog,
   slugFromArtistMasterJsonFileName,
-} from './import-music8-artists-bulk';
+} from '@/lib/music8-artist-import';
+import { loadSlugsFromArtistFailureLog } from './import-music8-artists-bulk';
 
 function run() {
   assert.equal(isArtistMasterJsonFileName('abc.json'), true);

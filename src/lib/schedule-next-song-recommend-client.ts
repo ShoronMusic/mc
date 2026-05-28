@@ -111,6 +111,7 @@ export function scheduleNextSongRecommendAfterCommentary(options: {
           const emit = () => {
             if (!options.allowAfterVideoChange && options.videoIdRef.current !== options.videoId) return;
             const dynamicExtras = options.buildAddAiMessageExtras?.() ?? {};
+            const catalog = pick.catalog;
             options.addAiMessage(formatPickMessage(pick, idx, picks.length), {
               videoId: options.videoId,
               aiSource: 'next_song_recommend',
@@ -118,6 +119,20 @@ export function scheduleNextSongRecommendAfterCommentary(options: {
                 typeof pick.recommendationId === 'string' && pick.recommendationId.trim()
                   ? pick.recommendationId.trim()
                   : null,
+              ...(catalog?.watchUrl && catalog.videoId
+                ? {
+                    nextSongRecommendCatalog: {
+                      inMcDb: Boolean(catalog.inMcDb),
+                      inMusic8: Boolean(catalog.inMusic8),
+                      songId: catalog.songId ?? null,
+                      videoId: catalog.videoId,
+                      watchUrl: catalog.watchUrl,
+                      dbMainArtist: catalog.dbMainArtist ?? null,
+                      dbSongTitle: catalog.dbSongTitle ?? null,
+                      dbDisplayTitle: catalog.dbDisplayTitle ?? null,
+                    },
+                  }
+                : {}),
               ...(options.addAiMessageExtras ?? {}),
               ...dynamicExtras,
             });

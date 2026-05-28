@@ -156,8 +156,35 @@ function loadState(stateAbs: string, chunksDirAbs: string): StateFile {
   }
 }
 
+function ensureParentDirectory(fileAbs: string): void {
+  const dir = path.dirname(fileAbs);
+  if (!dir || dir === '.' || dir === fileAbs) return;
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+  } catch (e) {
+    const err = e as NodeJS.ErrnoException;
+    if (err.code === 'EEXIST') {
+      const st = fs.statSync(dir);
+      if (!st.isDirectory()) {
+        throw new Error(`状態ファイルの親パスがディレクトリではありません: ${dir}`);
+      }
+      return;
+    }
+    // Windows: 親ドライブやプロジェクトルートが無いとき ENOENT — ルートから再試行
+    if (err.code === 'ENOENT') {
+      const root = path.resolve(process.cwd());
+      if (!fs.existsSync(root)) {
+        throw new Error(`作業ディレクトリが存在しません: ${root}`);
+      }
+      fs.mkdirSync(dir, { recursive: true });
+      return;
+    }
+    throw e;
+  }
+}
+
 function saveState(stateAbs: string, s: StateFile): void {
-  fs.mkdirSync(path.dirname(stateAbs), { recursive: true });
+  ensureParentDirectory(stateAbs);
   fs.writeFileSync(stateAbs, `${JSON.stringify(s, null, 2)}\n`, 'utf8');
 }
 

@@ -1,7 +1,9 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Suspense } from 'react';
 import './globals.css';
 import GoogleAnalytics from '@/components/analytics/GoogleAnalytics';
+import PwaDisplayModeAnalytics from '@/components/pwa/PwaDisplayModeAnalytics';
+import PwaInstallHint from '@/components/pwa/PwaInstallHint';
 
 /** OAuth 戻りが Site URL 直下に ?code= で付いたとき、React・同意ゲートより先に /auth/callback へ送る */
 const OAUTH_STRAY_CODE_SCRIPT = `
@@ -40,11 +42,24 @@ export const metadata: Metadata = {
   title: '洋楽AIチャット（β版）',
   description:
     'YouTube同時視聴×チャットで洋楽を楽しむ。AIが選曲の進行と曲解説をサポート。おひとりでも、音楽の質問でも。',
+  manifest: '/manifest.webmanifest',
+  appleWebApp: {
+    capable: true,
+    title: '洋楽AIチャット',
+    statusBarStyle: 'black-translucent',
+  },
   /** public の静的アイコン（PNG）をファビコンに使用 */
   icons: {
     icon: [{ url: '/musicAI_icon.png', type: 'image/png' }],
     apple: '/musicAI_icon.png',
   },
+};
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
+  themeColor: '#222222',
 };
 
 export default function RootLayout({
@@ -65,7 +80,11 @@ export default function RootLayout({
         <Suspense fallback={null}>
           <GoogleAnalytics measurementId={gaMeasurementId} />
         </Suspense>
+        <Suspense fallback={null}>
+          <PwaDisplayModeAnalytics />
+        </Suspense>
         {children}
+        <PwaInstallHint />
       </body>
     </html>
   );

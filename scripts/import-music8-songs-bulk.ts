@@ -3,8 +3,16 @@ import path from 'node:path';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { Storage } from '@google-cloud/storage';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { resolveCanonicalMainArtistName } from '@/lib/music8-canonical-artist-name';
+import {
+  canonicalNameFromMusic8ArtistJson,
+  resolveCanonicalMainArtistName,
+} from '@/lib/music8-canonical-artist-name';
 import { attachMusic8SongDataIfFetched, upsertSongAndVideo } from '@/lib/song-entities';
+import {
+  MUSIC8_MUSICAICHAT_ARTIST_INDEX_URL,
+  resolveMusic8ArtistSongsBaseUrl,
+  resolveMusic8BulkSongsBaseUrl,
+} from '@/lib/music8-data-urls';
 
 type CliOptions = {
   dryRun: boolean;
@@ -28,6 +36,10 @@ type CliOptions = {
   importKeysFile: string | null;
   /** ローカル `data/songs` 等。HTTP の曲 JSON が失敗したとき `{artist}_{slug}.json` をここから読む（絶対パス可） */
   songsLocalDir: string | null;
+  /** ローカル `data/artists/{slug}.json`（HTTP 待ち回避） */
+  artistsLocalDir: string | null;
+  /** song_credits / Spotify 照合をスキップ（一括取り込み向け） */
+  skipSongCredits: boolean;
 };
 
 type ArtistSongsListRow = {
@@ -137,6 +149,25 @@ function parseGcsUrl(url: string): { bucket: string; objectPath: string } | null
   }
 }
 
+const DEFAULT_FETCH_TIMEOUT_MS = 12_000;
+
+async function fetchHttpJsonWithTimeout<T>(url: string, timeoutMs = DEFAULT_FETCH_TIMEOUT_MS): Promise<T | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { cache: 'no-store', signal: controller.signal });
+    if (!res.ok) return null;
+    return (await res.json()) as T;
+  } catch (e) {
+    if (e instanceof Error && e.name === 'AbortError') {
+      console.warn(`[fetch-timeout] ${timeoutMs}ms ${url}`);
+    }
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function fetchJsonWithOptionalGcsAuth<T>(url: string): Promise<T | null> {
   const gcs = parseGcsUrl(url);
   if (gcs) {
@@ -150,13 +181,7 @@ async function fetchJsonWithOptionalGcsAuth<T>(url: string): Promise<T | null> {
       // 認証失敗時は公開 GET へフォールバック
     }
   }
-  try {
-    const res = await fetch(url, { cache: 'no-store' });
-    if (!res.ok) return null;
-    return (await res.json()) as T;
-  } catch {
-    return null;
-  }
+  return fetchHttpJsonWithTimeout<T>(url);
 }
 
 function loadDotEnvLocal(): void {
@@ -237,19 +262,13 @@ function parseArgs(argv: string[]): CliOptions {
     (args.has('overrides-only') && parseTruthyArgValue(args.get('overrides-only') ?? ''));
 
   const artistSongsBase = trimSlash(
-    args.get('artist-songs-base') ??
-      process.env.MUSIC8_ARTIST_SONGS_BASE?.trim() ??
-      'https://xs867261.xsrv.jp/data/data/artists',
+    args.get('artist-songs-base') ?? resolveMusic8ArtistSongsBaseUrl(),
   );
-  const songsBase = trimSlash(
-    args.get('songs-base') ??
-      process.env.MUSIC8_BULK_SONGS_BASE?.trim() ??
-      'https://xs867261.xsrv.jp/data/data/songs',
-  );
+  const songsBase = trimSlash(args.get('songs-base') ?? resolveMusic8BulkSongsBaseUrl());
   const artistIndexUrl =
     args.get('artist-index-url') ??
     process.env.MUSIC8_ARTIST_INDEX_URL?.trim() ??
-    'https://storage.googleapis.com/music8-json-prod/data/musicaichat/v1/index/artist_index.json';
+    MUSIC8_MUSICAICHAT_ARTIST_INDEX_URL;
   const artistSlugs = parseCsv(args.get('artist-slugs') ?? '');
 
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -274,6 +293,10 @@ function parseArgs(argv: string[]): CliOptions {
     onlyVideoOverrideKeys,
     importKeysFile: args.get('import-keys-file')?.trim() || null,
     songsLocalDir: args.get('songs-local-dir')?.trim() || null,
+    artistsLocalDir: args.get('artists-local-dir')?.trim() || null,
+    skipSongCredits:
+      flags.has('skip-song-credits') ||
+      (process.env.MUSIC8_BULK_SKIP_SONG_CREDITS?.trim() === '1'),
   };
 }
 
@@ -286,8 +309,8 @@ Options:
   --artist-slugs=police,queen
   --artist-slugs-file=tmp/music8-artist-slugs.txt
   --artist-index-url=https://.../index/artist_index.json
-  --artist-songs-base=https://xs867261.xsrv.jp/data/data/artists
-  --songs-base=https://xs867261.xsrv.jp/data/data/songs
+  --artist-songs-base=https://storage.googleapis.com/music8-json-prod/data/artists
+  --songs-base=https://storage.googleapis.com/music8-json-prod/data/songs
   --from-artist=police
   --skip-artists=3000
   --limit-artists=100
@@ -301,6 +324,8 @@ Options:
   --overrides-only              同上の短い別名
   --import-keys-file=tmp/music8-on-disk-not-in-db.txt   1行1キー（artist_song）だけ取り込む。diff スクリプトの out-missing と併用可。任意で --video-overrides も併用
   --songs-local-dir=E:\\m8\\public\\data\\songs   HTTP が通らないとき曲 JSON をローカルから読む（import-keys-file 大量投入で推奨）
+  --artists-local-dir=E:\\m8\\public\\data\\artists   アーティスト JSON もローカル優先（127.0.0.1 プロキシ不要）
+  --skip-song-credits   一括取り込み中は song_credits / Spotify 照合をスキップ（高速化・推奨）
   --help
 
 Notes:
@@ -523,6 +548,30 @@ function buildTasksByArtistFromKeysFile(absPath: string): Map<string, { songSlug
   return by;
 }
 
+function pickSongTitleFromMusic8Extras(songJson: SongJson): string | null {
+  const acf = songJson.acf;
+  if (acf && typeof acf === 'object' && !Array.isArray(acf)) {
+    const spotifyName = (acf as { spotify_name?: unknown }).spotify_name;
+    if (typeof spotifyName === 'string' && spotifyName.trim()) {
+      return spotifyName.trim();
+    }
+  }
+  const topSpotify = songJson.spotify_name;
+  if (typeof topSpotify === 'string' && topSpotify.trim()) return topSpotify.trim();
+
+  const content = typeof songJson.content === 'string' ? songJson.content : '';
+  if (content.trim()) {
+    const plain = content
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    const m = plain.match(/[–—\-]\s*(.+)$/);
+    if (m?.[1]?.trim()) return m[1].trim();
+    if (plain) return plain;
+  }
+  return null;
+}
+
 function pickSongTitle(songJson: SongJson): string | null {
   if (typeof songJson.title === 'string' && songJson.title.trim()) return songJson.title.trim();
   const tr = songJson.title;
@@ -530,7 +579,7 @@ function pickSongTitle(songJson: SongJson): string | null {
     const rendered = (tr as { rendered?: unknown }).rendered;
     if (typeof rendered === 'string' && rendered.trim()) return rendered.trim();
   }
-  return null;
+  return pickSongTitleFromMusic8Extras(songJson);
 }
 
 function pickSongTitleFromListRow(listRow: ArtistSongsListRow): string | null {
@@ -657,6 +706,26 @@ async function resolveSongSlugFromArtistPages(
   return null;
 }
 
+function loadArtistJsonFromLocalDisk(artistsLocalDir: string, artistSlug: string): SongJson | null {
+  const trimmed = artistsLocalDir.trim();
+  const base = path.isAbsolute(trimmed) ? trimmed : path.resolve(process.cwd(), trimmed);
+  const slug = artistSlug.trim();
+  const candidates = [slug, decodeURIComponent(slug)];
+  for (const s of candidates) {
+    const filePath = path.join(base, `${s}.json`);
+    if (!fs.existsSync(filePath)) continue;
+    try {
+      const parsed: unknown = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return parsed as SongJson;
+      }
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
 function loadSongJsonFromLocalDisk(songsLocalDir: string, artistSlug: string, songSlugForFile: string): SongJson | null {
   const trimmed = songsLocalDir.trim();
   const base = path.isAbsolute(trimmed) ? trimmed : path.resolve(process.cwd(), trimmed);
@@ -717,6 +786,11 @@ async function importOneArtistSongRow(params: {
     return;
   }
   counters.songsAttempted += 1;
+  if (counters.songsAttempted % 250 === 0) {
+    console.error(
+      `[progress] songsAttempted=${counters.songsAttempted} imported=${counters.songsImported} failures=${counters.failures} artist=${artistSlug}`,
+    );
+  }
 
   const directSongUrl = `${opts.songsBase}/${encodeURIComponent(artistSlug)}_${encodeURIComponent(songSlug)}.json`;
   let songJson = await fetchJsonWithOptionalGcsAuth<SongJson>(directSongUrl);
@@ -812,6 +886,7 @@ async function importOneArtistSongRow(params: {
 
   const songTitle = pickSongTitle(songJson);
   const fallbackSongTitle = pickSongTitleFromListRow(row);
+  console.error(`[import] resolve ${artistSlug}_${effectiveSongSlug} …`);
   const mainArtist = await resolveMainArtistForImport(artistSlug, songJson, getCanonicalMainArtist);
   if (!songTitle && !fallbackSongTitle) {
     counters.failures += 1;
@@ -841,6 +916,10 @@ async function importOneArtistSongRow(params: {
   }
 
   try {
+    if (opts.skipSongCredits) {
+      process.env.MUSIC8_BULK_SKIP_SONG_CREDITS = '1';
+    }
+    console.error(`[import] upsert ${artistSlug}_${effectiveSongSlug} video=${videoId}`);
     const songId = await upsertSongAndVideo({
       supabase: admin,
       videoId,
@@ -993,13 +1072,34 @@ async function main(): Promise<void> {
     );
   }
 
+  const bulkFetchJson = async <T>(url: string): Promise<T | null> => {
+    if (opts.artistsLocalDir?.trim() && url.includes('/artists/') && url.endsWith('.json')) {
+      const m = url.match(/\/artists\/([^/]+)\.json$/i);
+      if (m?.[1]) {
+        const local = loadArtistJsonFromLocalDisk(opts.artistsLocalDir, decodeURIComponent(m[1]));
+        if (local) return local as T;
+      }
+    }
+    return fetchJsonWithOptionalGcsAuth<T>(url);
+  };
+
   const canonicalMainArtistBySlug = new Map<string, string | null>();
   const getCanonicalMainArtist = async (artistSlug: string): Promise<string | null> => {
     if (!canonicalMainArtistBySlug.has(artistSlug)) {
+      if (opts.artistsLocalDir?.trim()) {
+        const local = loadArtistJsonFromLocalDisk(opts.artistsLocalDir, artistSlug);
+        if (local && typeof (local as { name?: string }).name === 'string') {
+          const fromJson = canonicalNameFromMusic8ArtistJson(local);
+          if (fromJson) {
+            canonicalMainArtistBySlug.set(artistSlug, fromJson);
+            return fromJson;
+          }
+        }
+      }
       const resolved = await resolveCanonicalMainArtistName({
         artistSlug,
         admin,
-        fetchJson: fetchJsonWithOptionalGcsAuth,
+        fetchJson: bulkFetchJson,
       });
       canonicalMainArtistBySlug.set(artistSlug, resolved);
     }
@@ -1008,9 +1108,12 @@ async function main(): Promise<void> {
 
   for (const artistSlug of targetArtists) {
     counters.artists += 1;
-    const listUrl = `${opts.artistSongsBase}/${encodeURIComponent(artistSlug)}_songs.json`;
-    const listJson = await fetchJsonWithOptionalGcsAuth<ArtistSongsJson>(listUrl);
-    const rows = Array.isArray(listJson?.songs) ? listJson.songs : [];
+    let rows: ArtistSongsListRow[] = [];
+    if (!keyedOnlyMode) {
+      const listUrl = `${opts.artistSongsBase}/${encodeURIComponent(artistSlug)}_songs.json`;
+      const listJson = await bulkFetchJson<ArtistSongsJson>(listUrl);
+      rows = Array.isArray(listJson?.songs) ? listJson.songs : [];
+    }
 
     if (keyedOnlyMode && byArtistTasks) {
       const tasks = byArtistTasks.get(artistSlug) ?? [];
@@ -1044,6 +1147,9 @@ async function main(): Promise<void> {
           getCanonicalMainArtist,
         });
       }
+      console.error(
+        `[artist-done] ${artistSlug} cumulative: attempted=${counters.songsAttempted} imported=${counters.songsImported} failures=${counters.failures}`,
+      );
       continue;
     }
 

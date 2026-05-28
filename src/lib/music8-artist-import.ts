@@ -86,6 +86,19 @@ export function loadArtistsListFromFile(filePath: string): Music8ArtistListEntry
   return parseArtistsListJson(raw);
 }
 
+/** m8 個別アーティスト JSON: `abc.json` のみ。`abc_songs.json` 等は対象外 */
+export function isArtistMasterJsonFileName(fileName: string): boolean {
+  const base = path.basename(fileName);
+  if (!/^[a-z0-9-]+\.json$/i.test(base)) return false;
+  const slug = base.slice(0, -'.json'.length);
+  return !slug.includes('_');
+}
+
+export function slugFromArtistMasterJsonFileName(fileName: string): string | null {
+  if (!isArtistMasterJsonFileName(fileName)) return null;
+  return path.basename(fileName).slice(0, -'.json'.length).toLowerCase();
+}
+
 export type BuildArtistPatchOptions = {
   /** 管理画面で上書きしたい表示名（未指定時は m8 から合成） */
   displayNameOverride?: string | null;

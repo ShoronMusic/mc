@@ -6,6 +6,7 @@
  */
 
 import { getMainArtist } from '@/lib/format-song-display';
+import { MUSIC8_ARTISTS_BASE } from '@/lib/music8-data-urls';
 import { resolveArtistNameForMusic8Lookup } from '@/lib/music8-main-artist-lookup';
 export interface Music8OccupationItem {
   value?: string;
@@ -63,8 +64,6 @@ function getArtistMember(
   if (m === false || m == null) return undefined;
   return m as false | Music8MemberItem[] | Music8MemberItem;
 }
-
-const MUSIC8_ARTISTS_BASE = 'https://storage.googleapis.com/music8-json-prod/data/artists';
 
 export function getMusic8ArtistJsonUrlCandidates(artistName: string): string[] {
   const slug = artistNameToMusic8Slug(resolveArtistNameForMusic8Lookup(artistName));

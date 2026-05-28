@@ -1,0 +1,3 @@
+{"stage":"extract_song_title","artistSlug":"die-arzte","songSlug":"65766","reason":"song_title_missing","detail":"https://storage.googleapis.com/music8-json-prod/data/songs/die-arzte_65766.json"}
+{"stage":"extract_video_id","artistSlug":"jennifer-lopez","songSlug":"step-into-my-world-2","reason":"video_id_missing","detail":"https://storage.googleapis.com/music8-json-prod/data/songs/jennifer-lopez_step-into-my-world-2.json"}
+{"stage":"extract_video_id","artistSlug":"tyga","songSlug":"slave-2","reason":"video_id_missing","detail":"https://storage.googleapis.com/music8-json-prod/data/songs/tyga_slave-2.json"}

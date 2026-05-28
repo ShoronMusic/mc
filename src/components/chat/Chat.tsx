@@ -40,6 +40,8 @@ import {
   stripUiLabelPrefixFromBody,
 } from '@/lib/chat-message-ui-labels';
 import type { CommentPackSlotSelection } from '@/lib/comment-pack-slots';
+import { formatMcDbMatchDisplayLine } from '@/lib/next-song-recommend-display';
+import { postMyListItemClient } from '@/lib/my-list-client-post';
 import type { ThemePlaylistRoomSubmitBanner } from '@/hooks/useThemePlaylistRoomSubmitMission';
 import ThemePlaylistMissionEntriesModal, {
   type ThemePlaylistMissionEntriesModalRoomProps,
@@ -117,6 +119,15 @@ interface ChatProps {
   styleAdminChatTools?: boolean;
   /** AI 検索用ブロック行の「検索」から発言欄の YouTube 検索モーダルを開く */
   onYoutubeSearchFromAi?: (query: string) => void;
+  /** おすすめ曲の「選曲」（YouTube URL をプレイヤーへ） */
+  onNextSongRecommendSelect?: (watchUrl: string) => void;
+  /** ログイン時のみ true。おすすめに「マイリスト追加」を出す */
+  myListAddEnabled?: boolean;
+  /** マイリスト追加結果をシステムメッセージで通知 */
+  onMyListAddNotice?: (message: string) => void;
+  /** プレビュー開始・終了時に部屋プレイヤー音量をミュート／復元 */
+  onPreviewStart?: (videoId: string) => void;
+  onPreviewStop?: () => void;
   /** 曲解説後三択クイズの選択（同期部屋では Ably で共有） */
   onSongQuizPick?: (quizMessageId: string, videoId: string, pickedIndex: number) => void;
   /** マイページで進行中のお題ミッションがあるとき、ヘッダー2段目に進捗を表示 */
@@ -416,6 +427,82 @@ function extractTrailingAiYoutubeSearchLines(rest: string): { mainRest: string; 
   return { mainRest: lines.join('\n'), tailLines };
 }
 
+type NextSongRecommendPlayActions = {
+  watchUrl: string;
+  videoId: string;
+  libraryMatchLine: string;
+  onSelect: () => void;
+  onPreview: () => void;
+  onAddToMyList?: () => void;
+  myListAddBusy?: boolean;
+};
+
+function parseNextSongRecommendArtistTitle(body: string): { artist: string; title: string } | null {
+  const m = body.match(/♪\s*(.+?)「([^」]+)」/);
+  if (!m?.[1] || !m[2]) return null;
+  return { artist: m[1].trim(), title: m[2].trim() };
+}
+
+function renderNextSongRecommendKeywordSection(
+  keywordQuery: string,
+  play?: NextSongRecommendPlayActions,
+): ReactNode {
+  return (
+    <>
+      <span className="mt-1 block">
+        <span className="mr-1 inline-flex items-center rounded border border-gray-500/70 bg-gray-800/70 px-1.5 py-0.5 text-[10px] font-semibold text-gray-200">
+          キーワード
+        </span>
+        <span className="mr-2 align-middle">{keywordQuery}</span>
+        <a
+          href={`https://www.youtube.com/results?search_query=${encodeURIComponent(keywordQuery)}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center rounded-md border border-slate-400/60 bg-slate-200/85 px-2 py-0.5 text-[10px] font-semibold text-slate-900 shadow-sm transition hover:-translate-y-[1px] hover:bg-slate-100 hover:shadow"
+        >
+          検索
+          <ArrowTopRightOnSquareIcon className="ml-1 h-3 w-3" aria-hidden />
+        </a>
+      </span>
+      {play ? (
+        <span className="mt-1 block">
+          <span className="mr-1 inline-flex items-center rounded border border-violet-600/60 bg-violet-950/50 px-1.5 py-0.5 text-[10px] font-semibold text-violet-200">
+            ライブラリにマッチ
+          </span>
+          <span className="mr-2 align-middle text-[11px] text-gray-100">{play.libraryMatchLine}</span>
+          <button
+            type="button"
+            className="mr-1 inline-flex items-center rounded-md border border-lime-500/70 bg-lime-900/40 px-2 py-0.5 text-[10px] font-semibold text-lime-100 shadow-sm transition hover:bg-lime-900/70"
+            title="ライブラリ登録済みの URL で選曲"
+            onClick={play.onSelect}
+          >
+            選曲
+          </button>
+          <button
+            type="button"
+            className="mr-1 inline-flex items-center rounded-md border border-gray-500/70 bg-gray-800/80 px-2 py-0.5 text-[10px] font-semibold text-gray-100 shadow-sm transition hover:bg-gray-700"
+            title="YouTube プレビュー（部屋の再生音はミュート）"
+            onClick={play.onPreview}
+          >
+            プレビュー
+          </button>
+          {play.onAddToMyList ? (
+            <button
+              type="button"
+              className="inline-flex items-center rounded-md border border-violet-600/60 bg-violet-900/40 px-2 py-0.5 text-[10px] font-semibold text-violet-100 shadow-sm transition hover:bg-violet-900/60 disabled:cursor-not-allowed disabled:opacity-60"
+              title="マイページのマイリストに追加（チャット選曲とは別）"
+              disabled={play.myListAddBusy}
+              onClick={play.onAddToMyList}
+            >
+              {play.myListAddBusy ? '追加中…' : 'マイリスト追加'}
+            </button>
+          ) : null}
+        </span>
+      ) : null}
+    </>
+  );
+}
+
 /** 検索モーダル用のクエリ。特定不可の定型文のときは null */
 function parseAiYoutubeSearchQuery(line: string): string | null {
   const t = line.trim();
@@ -428,7 +515,11 @@ function parseAiYoutubeSearchQuery(line: string): string | null {
 
 function renderAiBodyWithArtistSongHighlight(
   body: string,
-  opts?: { keyPrefix?: string; onYoutubeSearch?: (query: string) => void },
+  opts?: {
+    keyPrefix?: string;
+    onYoutubeSearch?: (query: string) => void;
+    nextSongRecommendPlay?: NextSongRecommendPlayActions;
+  },
 ): ReactNode {
   const pm = body.match(PACK_PREFIX_RE);
   const prefix = pm?.[1] ?? '';
@@ -489,23 +580,7 @@ function renderAiBodyWithArtistSongHighlight(
           <span className={AI_MUSIC8_HIT_LINE_CLASS}>{music8Line}</span>
         ) : null}
         {out.length > 0 ? out : mainRestWithoutKeyword}
-        {keywordQuery ? (
-          <span className="mt-1 block">
-            <span className="mr-1 inline-flex items-center rounded border border-gray-500/70 bg-gray-800/70 px-1.5 py-0.5 text-[10px] font-semibold text-gray-200">
-              キーワード
-            </span>
-            <span className="mr-2 align-middle">{keywordQuery}</span>
-            <a
-              href={`https://www.youtube.com/results?search_query=${encodeURIComponent(keywordQuery)}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center rounded-md border border-slate-400/60 bg-slate-200/85 px-2 py-0.5 text-[10px] font-semibold text-slate-900 shadow-sm transition hover:-translate-y-[1px] hover:bg-slate-100 hover:shadow"
-            >
-              検索
-              <ArrowTopRightOnSquareIcon className="ml-1 h-3 w-3" aria-hidden />
-            </a>
-          </span>
-        ) : null}
+        {keywordQuery ? renderNextSongRecommendKeywordSection(keywordQuery, opts?.nextSongRecommendPlay) : null}
       </>
     );
   }
@@ -540,23 +615,7 @@ function renderAiBodyWithArtistSongHighlight(
           </span>
         );
       })}
-      {keywordQuery ? (
-        <span className="mt-1 block">
-          <span className="mr-1 inline-flex items-center rounded border border-gray-500/70 bg-gray-800/70 px-1.5 py-0.5 text-[10px] font-semibold text-gray-200">
-            キーワード
-          </span>
-          <span className="mr-2 align-middle">{keywordQuery}</span>
-          <a
-            href={`https://www.youtube.com/results?search_query=${encodeURIComponent(keywordQuery)}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center rounded-md border border-slate-400/60 bg-slate-200/85 px-2 py-0.5 text-[10px] font-semibold text-slate-900 shadow-sm transition hover:-translate-y-[1px] hover:bg-slate-100 hover:shadow"
-          >
-            検索
-            <ArrowTopRightOnSquareIcon className="ml-1 h-3 w-3" aria-hidden />
-          </a>
-        </span>
-      ) : null}
+      {keywordQuery ? renderNextSongRecommendKeywordSection(keywordQuery, opts?.nextSongRecommendPlay) : null}
     </>
   );
 }
@@ -582,6 +641,11 @@ export default function Chat({
   myClientId,
   styleAdminChatTools = false,
   onYoutubeSearchFromAi,
+  onNextSongRecommendSelect,
+  myListAddEnabled = false,
+  onMyListAddNotice,
+  onPreviewStart,
+  onPreviewStop,
   onSongQuizPick,
   themePlaylistActiveMission = null,
   themePlaylistMissionRoom,
@@ -594,7 +658,67 @@ export default function Chat({
       ? `/guide/ai?returnTo=${encodeURIComponent(roomPathSegment)}`
       : '/guide/ai';
 
+  const [nextRecPreview, setNextRecPreview] = useState<{
+    videoId: string;
+    artist: string;
+    title: string;
+    watchUrl: string;
+    inMcDb: boolean;
+    inMusic8: boolean;
+    libraryMatchLine: string;
+  } | null>(null);
+  const [myListAddBusyVideoId, setMyListAddBusyVideoId] = useState<string | null>(null);
+
+  const addNextSongRecommendToMyList = useCallback(
+    async (payload: {
+      videoId: string;
+      watchUrl: string;
+      artist?: string | null;
+      title?: string | null;
+    }) => {
+      if (!myListAddEnabled || !onMyListAddNotice) return;
+      if (myListAddBusyVideoId) return;
+      setMyListAddBusyVideoId(payload.videoId);
+      try {
+        const result = await postMyListItemClient({
+          videoId: payload.videoId,
+          url: payload.watchUrl,
+          artist: payload.artist?.trim() || null,
+          title: payload.title?.trim() || null,
+          source: 'manual_url',
+        });
+        if (!result.ok) {
+          onMyListAddNotice(
+            result.status === 401
+              ? 'マイリストに追加するにはログインしてください。'
+              : result.error,
+          );
+          return;
+        }
+        onMyListAddNotice(
+          result.duplicate
+            ? 'すでにマイリストにあります（同一動画は1件まで）。'
+            : 'マイリストに追加しました。マイページの「マイリスト」タブで確認できます。',
+        );
+      } finally {
+        setMyListAddBusyVideoId(null);
+      }
+    },
+    [myListAddEnabled, onMyListAddNotice, myListAddBusyVideoId],
+  );
+
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!nextRecPreview?.videoId) {
+      onPreviewStop?.();
+      return;
+    }
+    onPreviewStart?.(nextRecPreview.videoId);
+    return () => {
+      onPreviewStop?.();
+    };
+  }, [nextRecPreview?.videoId, onPreviewStart, onPreviewStop]);
   const aiCommentaryObserverRef = useRef<IntersectionObserver | null>(null);
   const aiCommentaryNodeRefs = useRef<Map<string, HTMLLIElement>>(new Map());
   const [visibleAiCommentaryIds, setVisibleAiCommentaryIds] = useState<Record<string, true>>({});
@@ -1199,6 +1323,46 @@ export default function Chat({
                       : renderAiBodyWithArtistSongHighlight(bodyTextForDisplay, {
                           keyPrefix: m.id,
                           onYoutubeSearch: onYoutubeSearchFromAi,
+                          nextSongRecommendPlay: (() => {
+                            if (!isNextSongRecommendMessage || !onNextSongRecommendSelect) return undefined;
+                            const catalog = m.nextSongRecommendCatalog;
+                            if (!catalog?.watchUrl || !catalog.videoId || !catalog.inMcDb) {
+                              return undefined;
+                            }
+                            const libraryMatchLine = formatMcDbMatchDisplayLine(catalog);
+                            if (!libraryMatchLine) return undefined;
+                            const parsed = parseNextSongRecommendArtistTitle(bodyTextForDisplay);
+                            const recArtist = parsed?.artist ?? catalog.dbMainArtist ?? '';
+                            const recTitle = parsed?.title ?? catalog.dbSongTitle ?? '';
+                            return {
+                              watchUrl: catalog.watchUrl,
+                              videoId: catalog.videoId,
+                              libraryMatchLine,
+                              onSelect: () => onNextSongRecommendSelect(catalog.watchUrl),
+                              onPreview: () =>
+                                setNextRecPreview({
+                                  videoId: catalog.videoId,
+                                  artist: recArtist,
+                                  title: recTitle,
+                                  watchUrl: catalog.watchUrl,
+                                  inMcDb: true,
+                                  inMusic8: catalog.inMusic8,
+                                  libraryMatchLine,
+                                }),
+                              ...(myListAddEnabled && onMyListAddNotice
+                                ? {
+                                    myListAddBusy: myListAddBusyVideoId === catalog.videoId,
+                                    onAddToMyList: () =>
+                                      void addNextSongRecommendToMyList({
+                                        videoId: catalog.videoId,
+                                        watchUrl: catalog.watchUrl,
+                                        artist: recArtist,
+                                        title: recTitle,
+                                      }),
+                                  }
+                                : {}),
+                            };
+                          })(),
                         })
                   : bodyTextForDisplay;
 
@@ -2040,6 +2204,87 @@ export default function Chat({
         />
       ) : null}
 
+      {nextRecPreview ? (
+        <div
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="next-rec-preview-title"
+          onClick={() => setNextRecPreview(null)}
+        >
+          <div
+            className="flex max-h-[min(90vh,40rem)] w-full max-w-lg flex-col overflow-hidden rounded-lg border border-violet-700/60 bg-gray-950 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-2 border-b border-gray-800 px-4 py-3">
+              <div className="min-w-0">
+                <h2 id="next-rec-preview-title" className="text-sm font-semibold text-white">
+                  おすすめ曲プレビュー
+                </h2>
+                <p className="mt-0.5 truncate text-xs text-gray-400">{nextRecPreview.libraryMatchLine}</p>
+                <p className="mt-1 text-[10px] text-violet-300/90">
+                  部屋で再生中の曲の音はミュートしています
+                </p>
+              </div>
+              <button
+                type="button"
+                className="shrink-0 rounded border border-gray-600 px-2 py-1 text-xs text-gray-200 hover:bg-gray-800"
+                onClick={() => setNextRecPreview(null)}
+              >
+                閉じる
+              </button>
+            </div>
+            <div className="aspect-video w-full shrink-0 bg-black">
+              <iframe
+                title="おすすめ曲プレビュー"
+                src={`https://www.youtube.com/embed/${encodeURIComponent(nextRecPreview.videoId)}?autoplay=1&controls=1&modestbranding=1`}
+                className="h-full w-full"
+                allow="autoplay; encrypted-media"
+                allowFullScreen
+              />
+            </div>
+            <div className="flex flex-wrap gap-2 border-t border-gray-800 p-3">
+              {onNextSongRecommendSelect ? (
+                <button
+                  type="button"
+                  className="h-10 flex-1 rounded border border-lime-500/70 bg-lime-900/40 px-3 text-sm font-semibold text-lime-100 hover:bg-lime-900/70"
+                  onClick={() => {
+                    onNextSongRecommendSelect(nextRecPreview.watchUrl);
+                    setNextRecPreview(null);
+                  }}
+                >
+                  この曲を選曲
+                </button>
+              ) : null}
+              {myListAddEnabled && onMyListAddNotice ? (
+                <button
+                  type="button"
+                  className="inline-flex h-10 items-center justify-center rounded border border-violet-600/60 bg-violet-900/40 px-3 text-sm font-semibold text-violet-100 hover:bg-violet-900/60 disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={myListAddBusyVideoId === nextRecPreview.videoId}
+                  onClick={() =>
+                    void addNextSongRecommendToMyList({
+                      videoId: nextRecPreview.videoId,
+                      watchUrl: nextRecPreview.watchUrl,
+                      artist: nextRecPreview.artist,
+                      title: nextRecPreview.title,
+                    })
+                  }
+                >
+                  {myListAddBusyVideoId === nextRecPreview.videoId ? '追加中…' : 'マイリスト追加'}
+                </button>
+              ) : null}
+              <a
+                href={nextRecPreview.watchUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex h-10 items-center justify-center rounded border border-gray-600 bg-gray-800 px-3 text-sm text-gray-100 hover:bg-gray-700"
+              >
+                YouTube で開く
+              </a>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {aiQuestionExamplesOpen && (
         <div
           className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4"

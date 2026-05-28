@@ -10,9 +10,7 @@ import {
   getMainArtist,
   parseArtistTitle,
 } from '@/lib/format-song-display';
-
-const MUSIC8_SONGS_BASE = 'https://storage.googleapis.com/music8-json-prod/data/songs';
-const MUSIC8_ARTISTS_BASE = 'https://storage.googleapis.com/music8-json-prod/data/artists';
+import { MUSIC8_ARTISTS_BASE, MUSIC8_SONGS_BASE } from '@/lib/music8-data-urls';
 const ARTIST_PAGES_MAX = 6;
 
 export type Music8JsonFetcher = <T = Record<string, unknown>>(url: string) => Promise<T | null>;

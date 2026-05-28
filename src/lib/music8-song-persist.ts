@@ -8,6 +8,7 @@ import {
   resolveSongStyleForOverwriteFromMusic8,
   wordpressPublishDateToPostgresDate,
 } from '@/lib/music8-song-fields';
+import { fingerprintMusic8WpSongJson } from '@/lib/music8-sync-fingerprint';
 
 function asObj(x: unknown): Record<string, unknown> | null {
   if (x != null && typeof x === 'object' && !Array.isArray(x)) return x as Record<string, unknown>;
@@ -72,9 +73,11 @@ export function buildPersistableMusic8SongSnapshot(data: unknown): Record<string
     const display = asObj(obj.display as unknown);
     const youtube = asObj(obj.youtube as unknown);
     const ex = extractMusic8SongFields(data);
+    const importFingerprint = fingerprintMusic8WpSongJson(data);
     return {
       kind: 'musicaichat_v1',
       captured_at: capturedAt,
+      ...(importFingerprint ? { import_fingerprint: importFingerprint } : {}),
       schema_version: typeof obj.schema_version === 'string' ? obj.schema_version : null,
       stable_key: {
         artist_slug: sk.artist_slug.trim(),
@@ -143,9 +146,11 @@ export function buildPersistableMusic8SongSnapshot(data: unknown): Record<string
       ex.structuredStyleFromFacts.trim() || resolveSongStyleForOverwriteFromMusic8(ex) || '';
     const wpPublishedDate = wordpressPublishDateToPostgresDate(asStr(obj.date ?? ''));
 
+    const importFingerprint = fingerprintMusic8WpSongJson(data);
     return {
       kind: 'music8_wp_song',
       captured_at: capturedAt,
+      ...(importFingerprint ? { import_fingerprint: importFingerprint } : {}),
       id: idNum,
       slug: typeof obj.slug === 'string' ? obj.slug : null,
       title: typeof obj.title === 'string' ? obj.title : null,

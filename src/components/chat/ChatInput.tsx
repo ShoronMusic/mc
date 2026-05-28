@@ -19,6 +19,7 @@ import { MAX_MESSAGE_LENGTH } from '@/lib/chat-limits';
 import { MUSICAI_EXTENSION_SET_CHAT_TEXT_EVENT } from '@/lib/musicai-extension-events';
 import { NON_YOUTUBE_URL_SYSTEM_MESSAGE } from '@/lib/chat-non-youtube-url';
 import { extractVideoId, isStandaloneNonYouTubeUrl } from '@/lib/youtube';
+import { postMyListItemClient } from '@/lib/my-list-client-post';
 import type { SystemMessageOptions } from '@/types/chat';
 import { isAiQuestionGuardDisabledClient } from '@/lib/chat-system-copy';
 import {
@@ -328,6 +329,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
   const [libraryArtistInfoError, setLibraryArtistInfoError] = useState<string | null>(null);
   const [libraryLetterModalOpen, setLibraryLetterModalOpen] = useState(false);
   const [libraryCopyState, setLibraryCopyState] = useState<'idle' | 'ok' | 'fail'>('idle');
+  const [libraryMyListAddBusy, setLibraryMyListAddBusy] = useState(false);
   const [searchResults, setSearchResults] = useState<SearchResultRow[]>([]);
   const [previewVideoId, setPreviewVideoId] = useState<string | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -1041,6 +1043,51 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
       setLibraryCopyState('fail');
     }
   }, [selectedLibraryUrl]);
+
+  const addLibrarySelectionToMyList = useCallback(async () => {
+    if (isGuest || !onSystemMessage || !librarySelectedVideoId || !selectedLibraryUrl) return;
+    if (libraryMyListAddBusy) return;
+    setLibraryMyListAddBusy(true);
+    try {
+      const title =
+        (selectedLibraryRow?.song_title ?? selectedLibraryRow?.title ?? '').trim() || null;
+      const artist = selectedLibraryRow?.main_artist?.trim() || null;
+      const result = await postMyListItemClient({
+        videoId: librarySelectedVideoId,
+        url: selectedLibraryUrl,
+        title,
+        artist,
+        source: 'manual_url',
+      });
+      if (!result.ok) {
+        onSystemMessage(
+          result.status === 401
+            ? 'マイリストに追加するにはログインしてください。'
+            : result.error,
+        );
+        return;
+      }
+      onSystemMessage(
+        result.duplicate
+          ? 'すでにマイリストにあります（同一動画は1件まで）。'
+          : 'マイリストに追加しました。マイページの「マイリスト」タブで確認できます。',
+      );
+    } finally {
+      setLibraryMyListAddBusy(false);
+    }
+  }, [
+    isGuest,
+    onSystemMessage,
+    librarySelectedVideoId,
+    selectedLibraryUrl,
+    selectedLibraryRow,
+    libraryMyListAddBusy,
+  ]);
+
+  const libraryDetailActionGridClass =
+    !isGuest && onSystemMessage
+      ? 'mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3'
+      : 'mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2';
 
   useEffect(() => {
     if (!libraryOpen || !librarySelectedSongId) {
@@ -2201,7 +2248,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                           動画候補を選んでください
                         </div>
                       )}
-                      <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      <div className={libraryDetailActionGridClass}>
                         <button
                           type="button"
                           disabled={!onVideoUrl || !selectedLibraryUrl}
@@ -2225,6 +2272,19 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                         >
                           URLをコピー
                         </button>
+                        {!isGuest && onSystemMessage ? (
+                          <button
+                            type="button"
+                            disabled={!selectedLibraryUrl || libraryMyListAddBusy}
+                            className="h-11 rounded border border-violet-600/60 bg-violet-900/40 px-3 text-sm font-semibold text-violet-100 hover:bg-violet-900/60 disabled:cursor-not-allowed disabled:opacity-50"
+                            title="マイページのマイリストに追加（部屋の選曲とは別）"
+                            onClick={() => {
+                              void addLibrarySelectionToMyList();
+                            }}
+                          >
+                            {libraryMyListAddBusy ? '追加中…' : 'マイリスト追加'}
+                          </button>
+                        ) : null}
                       </div>
                       {libraryCopyState !== 'idle' && (
                         <p className="mt-2 text-xs text-gray-300">
@@ -2339,7 +2399,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                         動画候補を選んでください
                       </div>
                     )}
-                    <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <div className={libraryDetailActionGridClass}>
                       <button
                         type="button"
                         disabled={!onVideoUrl || !selectedLibraryUrl}
@@ -2363,6 +2423,19 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                       >
                         URLをコピー
                       </button>
+                      {!isGuest && onSystemMessage ? (
+                        <button
+                          type="button"
+                          disabled={!selectedLibraryUrl || libraryMyListAddBusy}
+                          className="h-11 rounded border border-violet-600/60 bg-violet-900/40 px-3 text-sm font-semibold text-violet-100 hover:bg-violet-900/60 disabled:cursor-not-allowed disabled:opacity-50"
+                          title="マイページのマイリストに追加（部屋の選曲とは別）"
+                          onClick={() => {
+                            void addLibrarySelectionToMyList();
+                          }}
+                        >
+                          {libraryMyListAddBusy ? '追加中…' : 'マイリスト追加'}
+                        </button>
+                      ) : null}
                     </div>
                   </>
                 </div>

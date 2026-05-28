@@ -36,7 +36,8 @@ async function findArtistIdBySlug(
     .maybeSingle();
   if (error?.code === '42703' || error?.code === '42P01') return null;
   if (error) throw error;
-  return (data as { id?: string } | undefined)?.id?.trim() ?? null;
+  if (!data) return null;
+  return (data as { id?: string }).id?.trim() ?? null;
 }
 
 async function findArtistRowBySlug(
@@ -51,6 +52,7 @@ async function findArtistRowBySlug(
     .maybeSingle();
   if (error?.code === '42703' || error?.code === '42P01') return null;
   if (error) throw error;
+  if (!data) return null;
   const id = (data as { id?: string }).id?.trim();
   if (!id) return null;
   const displayName = displayNameFromArtistRow(data as { name?: string; name_base?: string; the_prefix?: string }) ?? '';

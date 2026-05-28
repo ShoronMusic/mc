@@ -322,13 +322,19 @@ async function ensureArtistAndLinkSong(
     }
     const hitId = (hit as { id?: string } | null)?.id?.trim() ?? '';
     if (hitId) {
-      const { error: upErr } = await supabase.from('artists').update(artistPayload).eq('id', hitId);
+      let { error: upErr } = await supabase.from('artists').update(artistPayload).eq('id', hitId);
+      if (upErr?.code === '23505') {
+        const { name: _dropName, ...payloadWithoutName } = artistPayload;
+        const retry = await supabase.from('artists').update(payloadWithoutName).eq('id', hitId);
+        upErr = retry.error;
+      }
       if (upErr?.code === '42P01' || upErr?.code === '42703') return;
       if (upErr) {
         console.error('[song-entities] ensureArtist update by id', upErr.code, upErr.message);
-        return;
+        artistId = hitId;
+      } else {
+        artistId = hitId;
       }
-      artistId = hitId;
     } else {
       const { data, error } = await supabase.from('artists').insert(artistPayload).select('id').single();
       if (error?.code === '42P01' || error?.code === '42703') return;
@@ -386,13 +392,19 @@ async function ensureArtistAndLinkSong(
     }
     const nameHitId = (nameHits?.[0] as { id?: string } | undefined)?.id?.trim() ?? '';
     if (nameHitId) {
-      const { error: upName } = await supabase.from('artists').update(artistPayload).eq('id', nameHitId);
+      let { error: upName } = await supabase.from('artists').update(artistPayload).eq('id', nameHitId);
+      if (upName?.code === '23505') {
+        const { name: _dropName, ...payloadWithoutName } = artistPayload;
+        const retry = await supabase.from('artists').update(payloadWithoutName).eq('id', nameHitId);
+        upName = retry.error;
+      }
       if (upName?.code === '42P01' || upName?.code === '42703') return;
       if (upName) {
         console.error('[song-entities] ensureArtist update by name id', upName.code, upName.message);
-        return;
+        artistId = nameHitId;
+      } else {
+        artistId = nameHitId;
       }
-      artistId = nameHitId;
     } else {
       const { data: insData, error: insErr } = await supabase.from('artists').insert(artistPayload).select('id').single();
       if (insErr?.code === '42P01' || insErr?.code === '42703') return;
@@ -704,10 +716,14 @@ export async function upsertSongAndVideo(params: UpsertSongAndVideoParams): Prom
   } catch (e) {
     console.warn('[song-entities] syncArtistMasterFromMusic8 (upsert)', e);
   }
-  try {
-    await syncSongCreditsFromSongId(supabase, songId, true);
-  } catch (e) {
-    console.warn('[song-entities] syncSongCreditsFromSongId (upsert)', e);
+  if (process.env.MUSIC8_BULK_SKIP_SONG_CREDITS?.trim() === '1') {
+    // 一括取り込み: 全 artists 索引 + Spotify API で1曲目が長時間ブロックするのを避ける
+  } else {
+    try {
+      await syncSongCreditsFromSongId(supabase, songId, true);
+    } catch (e) {
+      console.warn('[song-entities] syncSongCreditsFromSongId (upsert)', e);
+    }
   }
 
   if (registrationArtistId) {
@@ -753,7 +769,9 @@ export async function attachMusic8SongDataIfFetched(
     const curMain = (curRow as { main_artist?: string | null } | null)?.main_artist ?? null;
     await syncArtistMasterFromMusic8(supabase, songId.trim(), curMain, snap);
     await patchSongMainArtistWhenMusic8Canonical(supabase, songId.trim(), curMain, snap);
-    await syncSongCreditsFromSongId(supabase, songId.trim(), true);
+    if (process.env.MUSIC8_BULK_SKIP_SONG_CREDITS?.trim() !== '1') {
+      await syncSongCreditsFromSongId(supabase, songId.trim(), true);
+    }
   } catch (e) {
     console.warn('[song-entities] syncSongLibraryColumnsFromMusic8Extract (attach)', e);
   }

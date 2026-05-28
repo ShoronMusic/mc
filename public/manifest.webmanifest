@@ -1,0 +1,32 @@
+{
+  "name": "洋楽AIチャット（β版）",
+  "short_name": "洋楽AIチャット",
+  "description": "YouTube同時視聴×チャットで洋楽を楽しむ。AIが選曲の進行と曲解説をサポート。",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#222222",
+  "theme_color": "#222222",
+  "lang": "ja",
+  "icons": [
+    {
+      "src": "/musicAI_icon.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/musicAI_icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/musicAI_icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

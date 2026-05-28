@@ -1,0 +1,644 @@
+{
+  "version": 1,
+  "chunksDir": "E:\\mc\\tmp\\music8-sync-chunks",
+  "completedBasenames": [
+    "chunk-00001.txt",
+    "chunk-00002.txt",
+    "chunk-00003.txt",
+    "chunk-00004.txt",
+    "chunk-00005.txt",
+    "chunk-00006.txt",
+    "chunk-00007.txt",
+    "chunk-00008.txt",
+    "chunk-00009.txt",
+    "chunk-00010.txt",
+    "chunk-00011.txt",
+    "chunk-00012.txt",
+    "chunk-00013.txt",
+    "chunk-00014.txt",
+    "chunk-00015.txt",
+    "chunk-00016.txt",
+    "chunk-00017.txt",
+    "chunk-00018.txt",
+    "chunk-00019.txt",
+    "chunk-00020.txt",
+    "chunk-00021.txt",
+    "chunk-00022.txt",
+    "chunk-00023.txt",
+    "chunk-00024.txt",
+    "chunk-00025.txt",
+    "chunk-00026.txt",
+    "chunk-00027.txt",
+    "chunk-00028.txt",
+    "chunk-00029.txt",
+    "chunk-00030.txt",
+    "chunk-00031.txt",
+    "chunk-00032.txt",
+    "chunk-00033.txt",
+    "chunk-00034.txt",
+    "chunk-00035.txt",
+    "chunk-00036.txt",
+    "chunk-00037.txt",
+    "chunk-00038.txt",
+    "chunk-00039.txt",
+    "chunk-00040.txt",
+    "chunk-00041.txt",
+    "chunk-00042.txt",
+    "chunk-00043.txt",
+    "chunk-00044.txt",
+    "chunk-00045.txt",
+    "chunk-00046.txt",
+    "chunk-00047.txt",
+    "chunk-00048.txt",
+    "chunk-00049.txt",
+    "chunk-00050.txt",
+    "chunk-00051.txt",
+    "chunk-00052.txt",
+    "chunk-00053.txt",
+    "chunk-00054.txt",
+    "chunk-00055.txt",
+    "chunk-00056.txt",
+    "chunk-00057.txt",
+    "chunk-00058.txt",
+    "chunk-00059.txt",
+    "chunk-00060.txt",
+    "chunk-00061.txt",
+    "chunk-00062.txt",
+    "chunk-00063.txt",
+    "chunk-00064.txt",
+    "chunk-00065.txt",
+    "chunk-00066.txt",
+    "chunk-00067.txt",
+    "chunk-00068.txt",
+    "chunk-00069.txt",
+    "chunk-00070.txt",
+    "chunk-00071.txt",
+    "chunk-00072.txt",
+    "chunk-00073.txt",
+    "chunk-00074.txt",
+    "chunk-00075.txt",
+    "chunk-00076.txt",
+    "chunk-00077.txt",
+    "chunk-00078.txt",
+    "chunk-00079.txt",
+    "chunk-00080.txt",
+    "chunk-00081.txt",
+    "chunk-00082.txt",
+    "chunk-00083.txt",
+    "chunk-00084.txt",
+    "chunk-00085.txt",
+    "chunk-00086.txt",
+    "chunk-00087.txt",
+    "chunk-00088.txt",
+    "chunk-00089.txt",
+    "chunk-00090.txt",
+    "chunk-00091.txt",
+    "chunk-00092.txt",
+    "chunk-00093.txt",
+    "chunk-00094.txt",
+    "chunk-00095.txt",
+    "chunk-00096.txt",
+    "chunk-00097.txt",
+    "chunk-00098.txt",
+    "chunk-00099.txt",
+    "chunk-00100.txt",
+    "chunk-00101.txt",
+    "chunk-00102.txt",
+    "chunk-00103.txt",
+    "chunk-00104.txt",
+    "chunk-00105.txt",
+    "chunk-00106.txt"
+  ],
+  "runs": [
+    {
+      "chunk": "chunk-00001.txt",
+      "finishedAt": "2026-05-25T00:00:00.000Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00002.txt",
+      "finishedAt": "2026-05-26T23:31:07.548Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00003.txt",
+      "finishedAt": "2026-05-26T23:37:47.722Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00004.txt",
+      "finishedAt": "2026-05-26T23:44:17.501Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00005.txt",
+      "finishedAt": "2026-05-26T23:52:01.981Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00006.txt",
+      "finishedAt": "2026-05-26T23:58:54.119Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00007.txt",
+      "finishedAt": "2026-05-27T00:05:51.175Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00008.txt",
+      "finishedAt": "2026-05-27T00:12:30.496Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00009.txt",
+      "finishedAt": "2026-05-27T00:19:07.932Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00010.txt",
+      "finishedAt": "2026-05-27T00:26:29.442Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00011.txt",
+      "finishedAt": "2026-05-27T00:33:11.496Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00012.txt",
+      "finishedAt": "2026-05-27T00:40:00.273Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00013.txt",
+      "finishedAt": "2026-05-27T00:46:55.288Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00014.txt",
+      "finishedAt": "2026-05-27T00:53:36.105Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00015.txt",
+      "finishedAt": "2026-05-27T01:00:16.593Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00016.txt",
+      "finishedAt": "2026-05-27T01:07:03.948Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00017.txt",
+      "finishedAt": "2026-05-27T01:14:12.576Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00018.txt",
+      "finishedAt": "2026-05-27T01:21:15.855Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00019.txt",
+      "finishedAt": "2026-05-27T01:28:07.504Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00020.txt",
+      "finishedAt": "2026-05-27T01:35:12.430Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00021.txt",
+      "finishedAt": "2026-05-27T01:42:17.538Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00022.txt",
+      "finishedAt": "2026-05-27T01:48:58.712Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00023.txt",
+      "finishedAt": "2026-05-27T01:55:44.817Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00024.txt",
+      "finishedAt": "2026-05-27T02:02:37.679Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00025.txt",
+      "finishedAt": "2026-05-27T02:09:20.737Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00026.txt",
+      "finishedAt": "2026-05-27T02:16:15.030Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00027.txt",
+      "finishedAt": "2026-05-27T02:22:41.826Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00028.txt",
+      "finishedAt": "2026-05-27T02:29:27.980Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00029.txt",
+      "finishedAt": "2026-05-27T02:36:18.645Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00030.txt",
+      "finishedAt": "2026-05-27T02:42:53.957Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00031.txt",
+      "finishedAt": "2026-05-27T02:49:33.311Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00032.txt",
+      "finishedAt": "2026-05-27T02:56:24.941Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00033.txt",
+      "finishedAt": "2026-05-27T03:03:29.584Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00034.txt",
+      "finishedAt": "2026-05-27T03:10:28.098Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00035.txt",
+      "finishedAt": "2026-05-27T03:17:45.253Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00036.txt",
+      "finishedAt": "2026-05-27T03:24:37.568Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00037.txt",
+      "finishedAt": "2026-05-27T03:31:52.008Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00038.txt",
+      "finishedAt": "2026-05-27T03:38:52.099Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00039.txt",
+      "finishedAt": "2026-05-27T03:46:08.643Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00040.txt",
+      "finishedAt": "2026-05-27T03:53:19.234Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00041.txt",
+      "finishedAt": "2026-05-27T04:00:13.149Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00042.txt",
+      "finishedAt": "2026-05-27T04:07:14.317Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00043.txt",
+      "finishedAt": "2026-05-27T04:14:04.501Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00044.txt",
+      "finishedAt": "2026-05-27T04:20:47.221Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00045.txt",
+      "finishedAt": "2026-05-27T04:27:41.310Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00046.txt",
+      "finishedAt": "2026-05-27T04:34:31.064Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00047.txt",
+      "finishedAt": "2026-05-27T04:41:26.906Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00048.txt",
+      "finishedAt": "2026-05-27T04:48:35.797Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00049.txt",
+      "finishedAt": "2026-05-27T04:55:32.415Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00050.txt",
+      "finishedAt": "2026-05-27T05:02:26.454Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00051.txt",
+      "finishedAt": "2026-05-27T05:09:05.342Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00052.txt",
+      "finishedAt": "2026-05-27T05:16:06.493Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00053.txt",
+      "finishedAt": "2026-05-27T05:22:55.557Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00054.txt",
+      "finishedAt": "2026-05-27T05:29:39.569Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00055.txt",
+      "finishedAt": "2026-05-27T05:36:26.419Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00056.txt",
+      "finishedAt": "2026-05-27T05:43:33.382Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00057.txt",
+      "finishedAt": "2026-05-27T05:50:15.675Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00058.txt",
+      "finishedAt": "2026-05-27T05:57:33.188Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00059.txt",
+      "finishedAt": "2026-05-27T06:04:47.063Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00060.txt",
+      "finishedAt": "2026-05-27T06:11:50.866Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00061.txt",
+      "finishedAt": "2026-05-27T06:18:33.874Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00062.txt",
+      "finishedAt": "2026-05-27T06:25:13.421Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00063.txt",
+      "finishedAt": "2026-05-27T06:32:16.874Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00064.txt",
+      "finishedAt": "2026-05-27T06:39:19.176Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00065.txt",
+      "finishedAt": "2026-05-27T06:46:02.315Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00066.txt",
+      "finishedAt": "2026-05-27T06:52:55.616Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00067.txt",
+      "finishedAt": "2026-05-27T06:59:50.064Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00068.txt",
+      "finishedAt": "2026-05-27T07:06:54.603Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00069.txt",
+      "finishedAt": "2026-05-27T07:13:52.820Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00070.txt",
+      "finishedAt": "2026-05-27T07:20:38.902Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00071.txt",
+      "finishedAt": "2026-05-27T07:27:50.011Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00072.txt",
+      "finishedAt": "2026-05-27T07:34:34.179Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00073.txt",
+      "finishedAt": "2026-05-27T07:41:36.990Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00074.txt",
+      "finishedAt": "2026-05-27T07:48:33.591Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00075.txt",
+      "finishedAt": "2026-05-27T07:55:49.505Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00076.txt",
+      "finishedAt": "2026-05-27T08:02:46.061Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00077.txt",
+      "finishedAt": "2026-05-27T08:09:31.338Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00078.txt",
+      "finishedAt": "2026-05-27T08:16:24.320Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00079.txt",
+      "finishedAt": "2026-05-27T08:22:49.627Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00080.txt",
+      "finishedAt": "2026-05-27T08:29:40.835Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00081.txt",
+      "finishedAt": "2026-05-27T08:36:45.206Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00082.txt",
+      "finishedAt": "2026-05-27T08:43:25.803Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00083.txt",
+      "finishedAt": "2026-05-27T08:50:39.097Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00084.txt",
+      "finishedAt": "2026-05-27T08:57:42.122Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00085.txt",
+      "finishedAt": "2026-05-27T09:04:57.575Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00086.txt",
+      "finishedAt": "2026-05-27T09:12:04.462Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00087.txt",
+      "finishedAt": "2026-05-27T09:18:51.303Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00088.txt",
+      "finishedAt": "2026-05-27T09:25:30.928Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00089.txt",
+      "finishedAt": "2026-05-27T09:32:20.535Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00090.txt",
+      "finishedAt": "2026-05-27T09:39:21.998Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00091.txt",
+      "finishedAt": "2026-05-27T09:46:23.930Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00092.txt",
+      "finishedAt": "2026-05-27T09:53:10.260Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00093.txt",
+      "finishedAt": "2026-05-27T10:00:10.167Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00094.txt",
+      "finishedAt": "2026-05-27T10:07:29.409Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00095.txt",
+      "finishedAt": "2026-05-27T10:14:13.197Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00096.txt",
+      "finishedAt": "2026-05-27T10:20:54.576Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00097.txt",
+      "finishedAt": "2026-05-27T10:27:53.492Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00098.txt",
+      "finishedAt": "2026-05-27T10:34:42.950Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00099.txt",
+      "finishedAt": "2026-05-27T10:41:47.199Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00100.txt",
+      "finishedAt": "2026-05-27T10:48:14.811Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00101.txt",
+      "finishedAt": "2026-05-27T10:55:11.907Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00102.txt",
+      "finishedAt": "2026-05-27T11:02:04.738Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00103.txt",
+      "finishedAt": "2026-05-27T11:08:49.228Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00104.txt",
+      "finishedAt": "2026-05-27T11:15:31.732Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00105.txt",
+      "finishedAt": "2026-05-27T11:22:27.898Z",
+      "exitCode": 0
+    },
+    {
+      "chunk": "chunk-00106.txt",
+      "finishedAt": "2026-05-27T11:24:58.384Z",
+      "exitCode": 0
+    }
+  ]
+}

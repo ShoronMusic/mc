@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { music8ArtistJsonUrl } from '@/lib/music8-data-urls';
 
 function buildDefaultArtistJsonUrl(artistName: string): string {
   const slug = artistName
@@ -15,7 +16,7 @@ function buildDefaultArtistJsonUrl(artistName: string): string {
     .replace(/-+/g, '-')
     .replace(/^-+|-+$/g, '')
     .toLowerCase();
-  return `https://xs867261.xsrv.jp/data/data/artists/${slug || 'unknown'}.json`;
+  return music8ArtistJsonUrl(slug || 'unknown');
 }
 
 export function AdminArtistJsonImportPanel({ artistName }: { artistName: string }) {

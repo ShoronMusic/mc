@@ -38,7 +38,8 @@
   - `artist`（string）  
   - `title`（string）  
   - `reason`（string）  
-  - `youtubeSearchQuery`（string）… 公式 MV / オーディオを探しやすい短い英語または日英混在可。
+  - `youtubeSearchQuery`（string）… 公式 MV / オーディオを探しやすい短い英語または日英混在可。  
+  - `catalog`（任意）… `main_artist` + `song_title` で mc `songs` / Music8 GCS を照合。`watchUrl` があるときチャットに **選曲**・**プレビュー**（`next-song-recommend-catalog-resolve.ts`）。
 
 ## 5. サーバー処理概要
 

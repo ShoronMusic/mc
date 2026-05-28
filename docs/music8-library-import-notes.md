@@ -1,6 +1,6 @@
 # Music8 → ライブラリ取り込み（相談メモ）
 
-更新日: 2026-05-01（長時間処理の実行メモ・差分取り込み追記）
+更新日: 2026-05-25（週次同期プラン・既存アーティスト/曲の更新検知）
 
 ## 前提（Music8 側のデータ）
 
@@ -150,7 +150,45 @@ PowerShell 一括用: リポジトリの **`scripts/run-music8-import-overnight.
 
 `npm run ...` でフラグが効かないときは **`npx tsx scripts/import-music8-songs-bulk.ts ...`** を使う（Windows / npm の引数解釈の切り分け用）。
 
-### 差分 → 取り込み（スラッグ突合）
+### 週次同期（新規 + 既存の更新）— 推奨
+
+m8 で `update-all-data.js` → GCS 反映のあと、mc で **差分計画 → dry-run → apply** を一括実行する。
+
+| 検出 | 曲 | アーティスト |
+|------|-----|----------------|
+| **新規** | ディスクに JSON あり・DB に `music8_*` slug なし | `artists.json` / `artists/{slug}.json` あり・DB に slug なし |
+| **更新（必須）** | 同一 slug で **ファイル内容のフィンガープリント** が `music8_song_data.import_fingerprint` と不一致（未保存の旧行は再取り込み対象） | 個別 JSON の **mtime > `music8_synced_at`**（m8 再生成でメタ変更を拾う） |
+
+```powershell
+cd E:\mc
+# 1) 差分計画（既定: 前回成功時刻 or 7日以内に更新されたファイルを重点チェック）
+npx tsx scripts/diff-music8-sync-plan.ts `
+  --songs-dir=E:\m8\public\data\songs `
+  --artists-dir=E:\m8\public\data\artists `
+  --artists-list=E:\m8\public\data\artists.json `
+  --out-dir=tmp/music8-sync-plan-latest
+
+# 2) dry-run（件数・子スクリプトの確認）
+npx tsx scripts/apply-music8-sync-plan.ts --manifest=tmp/music8-sync-plan-latest/manifest.json
+
+# 3) 本番（アーティスト → 曲の順で upsert）
+npx tsx scripts/apply-music8-sync-plan.ts --manifest=tmp/music8-sync-plan-latest/manifest.json --apply
+```
+
+一括ショートカット: **`scripts/run-music8-weekly-sync.ps1`**（`-Apply` で DB 更新）。成功後は `tmp/music8-sync-last-success.json` に時刻を記録し、次回の `--since` 既定に使う。
+
+npm: `npm run diff:music8:sync-plan` / `npm run apply:music8:sync-plan`（引数は `npx tsx` 直叩き推奨）。
+
+**安全策**
+
+- 常に **dry-run → apply** の2段。
+- 曲は `--import-keys-file` のみ（全 index 走査しない）。
+- 取り込み後に `music8_song_data.import_fingerprint` を保存（`buildPersistableMusic8SongSnapshot`）。次週は内容が同じなら stale に入らない。
+- 初回フィンガープリント未保存の曲が多い週は `--full-fingerprint` または一度 apply 後に収束。
+
+実装: `src/lib/music8-sync-fingerprint.ts`・`src/lib/music8-sync-diff.ts`・`scripts/diff-music8-sync-plan.ts`・`scripts/apply-music8-sync-plan.ts`。
+
+### 差分 → 取り込み（スラッグ突合・新規曲のみ）
 
 1. **ディスクと DB の差分**（`music8_artist_slug` と `music8_song_slug` が両方ある行 ↔ ローカル `*.json` ベース名。ライブラリ表示件数とは一致しない場合あり）:
 

@@ -11,9 +11,13 @@ import {
   fetchJsonWithOptionalGcsAuth,
 } from '@/lib/music8-gcs-server';
 import { fetchMusic8SongData } from '@/lib/music8-song-lookup';
-import { filterMusicaichatFactsBoilerplateLines } from '@/lib/music8-song-fields';
+import { MUSIC8_MUSICAICHAT_V1_BASE } from '@/lib/music8-data-urls';
+import {
+  extractMusic8SongFields,
+  filterMusicaichatFactsBoilerplateLines,
+} from '@/lib/music8-song-fields';
 
-const DEFAULT_BASE_URL = 'https://storage.googleapis.com/music8-json-prod/data/musicaichat/v1';
+const DEFAULT_BASE_URL = MUSIC8_MUSICAICHAT_V1_BASE;
 
 const DEFAULT_INDEX_TTL_MS = 60 * 60 * 1000;
 
@@ -206,50 +210,147 @@ function constraintsToLines(constraints: string | string[] | undefined): string[
   return t ? [t] : [];
 }
 
+function asRecord(x: unknown): Record<string, unknown> | null {
+  return x != null && typeof x === 'object' && !Array.isArray(x)
+    ? (x as Record<string, unknown>)
+    : null;
+}
+
+/** extractMusic8SongFields の releaseDate（例 1975.10）を AI 事実行用の日本語表記へ */
+export function formatMusic8ReleaseDateForAiFacts(releaseYearMonth: string): string {
+  const s = (releaseYearMonth ?? '').trim();
+  if (!s) return '';
+  const ym = /^(\d{4})\.(\d{2})$/.exec(s);
+  if (ym) return `${ym[1]}年${Number(ym[2])}月`;
+  const y = /^(\d{4})/.exec(s);
+  if (y) return `${y[1]}年`;
+  return s;
+}
+
+const RECORDING_KIND_LABELS: Record<string, string> = {
+  original: 'オリジナル録音',
+  cover: 'カバー',
+  live: 'ライブ',
+  remaster: 'リマスター',
+  radio_edit: 'ラジオ編集',
+  short: 'ショート版',
+  other: 'その他',
+};
+
+/**
+ * `facts_for_ai` 以外の構造化フィールド（releases / recording / classification）を
+ * Gemini に渡す箇条書き。従来は JSON ヒットしても年号がプロンプトに入らず「不明」と出力されていた。
+ */
+export function buildMusicaichatStructuredDiscographyFactLines(song: MusicaichatSongJson): string[] {
+  const lines: string[] = [];
+  const extracted = extractMusic8SongFields(song);
+  const releaseLabel = formatMusic8ReleaseDateForAiFacts(extracted.releaseDate);
+  if (releaseLabel) {
+    lines.push(`オリジナルリリース時期: ${releaseLabel}`);
+  }
+
+  const releases = asRecord(song.releases);
+  if (releases) {
+    const thisDate = typeof releases.this_release_date === 'string' ? releases.this_release_date.trim() : '';
+    const origDate =
+      typeof releases.original_release_date === 'string' ? releases.original_release_date.trim() : '';
+    if (thisDate && thisDate !== origDate) {
+      const thisLabel = formatMusic8ReleaseDateForAiFacts(
+        extractMusic8SongFields({
+          stable_key: song.stable_key,
+          releases: { original_release_date: thisDate },
+        }).releaseDate,
+      );
+      if (thisLabel) lines.push(`この録音版のリリース時期: ${thisLabel}`);
+    }
+  }
+
+  const rec = asRecord(song.recording);
+  if (rec) {
+    const kind = typeof rec.kind === 'string' ? rec.kind.trim() : '';
+    if (kind) {
+      lines.push(`録音種別: ${RECORDING_KIND_LABELS[kind] ?? kind}`);
+    }
+    const tv = asRecord(rec.this_version);
+    if (tv) {
+      const ry = tv.release_year;
+      if (typeof ry === 'number' && ry >= 1900 && ry <= 2100) {
+        lines.push(`この版の公開年: ${Math.floor(ry)}年`);
+      }
+      const notes = typeof tv.notes === 'string' ? tv.notes.trim() : '';
+      if (notes) lines.push(`録音版メモ: ${notes}`);
+    }
+    const ow = asRecord(rec.original_work);
+    if (ow && typeof ow.artist_name === 'string' && ow.artist_name.trim()) {
+      const oa = ow.artist_name.trim();
+      const oy =
+        typeof ow.release_year === 'number' && ow.release_year >= 1900 && ow.release_year <= 2100
+          ? `（${Math.floor(ow.release_year)}年）`
+          : '';
+      lines.push(`原曲: ${oa}${oy}`);
+    }
+  }
+
+  const cls = song.classification;
+  if (Array.isArray(cls)) {
+    const labels = cls
+      .map((x) => (typeof x === 'string' ? x.trim() : ''))
+      .filter(Boolean);
+    if (labels.length > 0) {
+      lines.push(`分類: ${labels.join('、')}`);
+    }
+  } else if (extracted.genres.length > 0) {
+    lines.push(`分類: ${extracted.genres.join('、')}`);
+  }
+
+  return lines;
+}
+
 /**
  * Gemini 等に渡す「Music8 由来の事実ブロック」テキスト（日本語想定）。
  * 次ステップで comment-pack のメタブロックに挿入する。
  */
 export function buildMusicaichatFactsForAiPromptBlock(song: MusicaichatSongJson): string {
   const facts = song.facts_for_ai;
-  if (!facts) return '';
+  const structured = buildMusicaichatStructuredDiscographyFactLines(song);
+
+  const narrativeLines = filterMusicaichatFactsBoilerplateLines(
+    [
+      ...(facts?.opening_lines ?? [])
+        .map((l) => (typeof l === 'string' ? l.trim() : ''))
+        .filter(Boolean),
+      ...(facts?.bullets ?? [])
+        .map((l) => (typeof l === 'string' ? l.trim() : ''))
+        .filter(Boolean),
+    ],
+  );
+
+  const constraintLines = facts ? constraintsToLines(facts.constraints_for_model) : [];
+  const vt =
+    typeof facts?.video_specific_line_template === 'string'
+      ? facts.video_specific_line_template.trim()
+      : '';
+
+  const hasNarrative = narrativeLines.length > 0 || constraintLines.length > 0 || vt.length > 0;
+  if (structured.length === 0 && !hasNarrative) return '';
 
   const parts: string[] = ['【Music8 参照事実（外部マスタ。本文はこれと矛盾させない。推測で補わない）】'];
 
-  const lines = filterMusicaichatFactsBoilerplateLines(
-    (facts.opening_lines ?? [])
-      .map((l) => (typeof l === 'string' ? l.trim() : ''))
-      .filter(Boolean),
-  );
-  for (const l of lines) {
+  for (const l of structured) {
     parts.push(`・${l}`);
   }
-
-  const bullets = filterMusicaichatFactsBoilerplateLines(
-    (facts.bullets ?? [])
-      .map((l) => (typeof l === 'string' ? l.trim() : ''))
-      .filter(Boolean),
-  );
-  for (const b of bullets) {
-    parts.push(`・${b}`);
+  for (const l of narrativeLines) {
+    parts.push(`・${l}`);
   }
-
-  for (const c of constraintsToLines(facts.constraints_for_model)) {
+  for (const c of constraintLines) {
     parts.push(`・（制約）${c}`);
   }
-
-  const vt =
-    typeof facts.video_specific_line_template === 'string'
-      ? facts.video_specific_line_template.trim()
-      : '';
   if (vt) {
     parts.push(`・（動画固有テンプレ・必要時のみ1文）${vt}`);
   }
 
   const sk = song.stable_key;
-  parts.push(
-    `・stable_key: ${sk.artist_slug}_${sk.song_slug}`,
-  );
+  parts.push(`・stable_key: ${sk.artist_slug}_${sk.song_slug}`);
 
   return parts.join('\n');
 }

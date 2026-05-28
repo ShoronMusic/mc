@@ -1,7 +1,10 @@
 # One flag per line. Lines starting with # are comments.
+# 127.0.0.1 プロキシが無いと fetch が長時間ブロックするため GCS + ローカル推奨。
 
---artist-songs-base=http://127.0.0.1:38100/data/artists
---songs-base=http://127.0.0.1:38100/data/songs
+--artist-songs-base=https://storage.googleapis.com/music8-json-prod/data/artists
+--songs-base=https://storage.googleapis.com/music8-json-prod/data/songs
 --songs-local-dir=E:/m8/public/data/songs
+--artists-local-dir=E:/m8/public/data/artists
+--skip-song-credits
 --sleep-ms=80
---failure-log=tmp/music8-import-overnight.jsonl
+--failure-log=tmp/music8-sync-apply-chunks.jsonl

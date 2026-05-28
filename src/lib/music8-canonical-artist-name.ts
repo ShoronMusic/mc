@@ -12,9 +12,7 @@ import {
   type Music8ArtistJson,
 } from '@/lib/music8-artist-display';
 import { stripLeadingArticleForSort } from '@/lib/admin-library-index';
-
-const MUSIC8_ARTISTS_BASE_FALLBACK =
-  'https://xs867261.xsrv.jp/data/data/artists';
+import { music8ArtistJsonUrl } from '@/lib/music8-data-urls';
 
 /** 先頭 The/A/An を除いた比較用キー（小文字） */
 export function artistNameMatchKey(name: string): string {
@@ -107,8 +105,7 @@ async function fetchArtistJsonBySlug(
     });
 
   const urls = [
-    `https://storage.googleapis.com/music8-json-prod/data/artists/${encodeURIComponent(s)}.json`,
-    `${MUSIC8_ARTISTS_BASE_FALLBACK}/${encodeURIComponent(s)}.json`,
+    music8ArtistJsonUrl(s),
     ...getMusic8ArtistJsonUrlCandidates(s.replace(/-/g, ' ')),
   ];
   const seen = new Set<string>();

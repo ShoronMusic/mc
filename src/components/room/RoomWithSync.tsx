@@ -1618,6 +1618,11 @@ export default function RoomWithSync({
             ...(p.playJoinChime ? { playJoinChime: true as const } : {}),
             ...(p.playLeaveChime ? { playLeaveChime: true as const } : {}),
             ...(p.aiBodyEmphasis ? { aiBodyEmphasis: p.aiBodyEmphasis } : {}),
+            ...(p.deferToPanel ? { deferToPanel: true as const } : {}),
+            ...(p.nextSongRecommendPending ? { nextSongRecommendPending: true as const } : {}),
+            ...(p.nextSongRecommendCatalog
+              ? { nextSongRecommendCatalog: p.nextSongRecommendCatalog }
+              : {}),
             ...(p.systemKind ? { systemKind: p.systemKind } : {}),
             ...(p.songQuiz ? { songQuiz: p.songQuiz } : {}),
           },
@@ -2450,6 +2455,8 @@ export default function RoomWithSync({
         aiBodyEmphasis?: ChatMessage['aiBodyEmphasis'];
         /** おすすめ生成中カード */
         nextSongRecommendPending?: boolean;
+        /** おすすめ曲の MC / Music8 照合（YouTube URL あり） */
+        nextSongRecommendCatalog?: ChatMessage['nextSongRecommendCatalog'];
         /** AI表示名の上書き（未指定時は既存AI名） */
         displayName?: string;
       }
@@ -2485,6 +2492,9 @@ export default function RoomWithSync({
         ...(options?.playLeaveChime ? { playLeaveChime: true as const } : {}),
         ...(options?.aiBodyEmphasis ? { aiBodyEmphasis: options.aiBodyEmphasis } : {}),
         ...(options?.nextSongRecommendPending ? { nextSongRecommendPending: true as const } : {}),
+        ...(options?.nextSongRecommendCatalog
+          ? { nextSongRecommendCatalog: options.nextSongRecommendCatalog }
+          : {}),
       };
       if (!options?.localOnly) {
         safePublish(CHAT_MESSAGE_EVENT, payload);
@@ -2510,6 +2520,9 @@ export default function RoomWithSync({
           ...(payload.playLeaveChime ? { playLeaveChime: true as const } : {}),
           ...(payload.aiBodyEmphasis ? { aiBodyEmphasis: payload.aiBodyEmphasis } : {}),
           ...(payload.nextSongRecommendPending ? { nextSongRecommendPending: true as const } : {}),
+          ...(payload.nextSongRecommendCatalog
+            ? { nextSongRecommendCatalog: payload.nextSongRecommendCatalog }
+            : {}),
         },
       ]);
     },
@@ -5016,7 +5029,12 @@ export default function RoomWithSync({
   const handleVideoUrlFromChat = useCallback(
     (
       url: string,
-      opts?: { themePlaylistThemeId?: string | null; themePlaylistThemeLabel?: string | null },
+      opts?: {
+        themePlaylistThemeId?: string | null;
+        themePlaylistThemeLabel?: string | null;
+        /** 曲解説後の「次に聴くなら」からの選曲。再生中でも選曲予約キューへ入れる */
+        fromNextSongRecommend?: boolean;
+      },
     ) => {
       const id = extractVideoId(url);
       if (!id) return;
@@ -5037,19 +5055,36 @@ export default function RoomWithSync({
       const isMyTurn = turnClientId && turnClientId === myClientId;
 
       if (shouldDeferMultiSongPost()) {
+        const fromRecommend = opts?.fromNextSongRecommend === true;
         const posterLive = lastChangeVideoPublisherRef.current;
-        if (myClientId && posterLive && myClientId === posterLive) {
+        if (
+          !fromRecommend &&
+          myClientId &&
+          posterLive &&
+          myClientId === posterLive
+        ) {
           addSystemMessage(
             'いま再生中の曲を選んだ方は、この曲が終わるまで予約に追加できません。',
           );
           return;
         }
-        if (
+        const alreadyQueued = Boolean(
           myClientId &&
-          songReservationQueueRef.current.some((e) => e.publisherClientId === myClientId)
-        ) {
-          addSystemMessage('この曲の再生中は、予約はおひとりさま1曲までです。');
-          return;
+            songReservationQueueRef.current.some((e) => e.publisherClientId === myClientId),
+        );
+        if (alreadyQueued) {
+          if (!fromRecommend) {
+            addSystemMessage('この曲の再生中は、予約はおひとりさま1曲までです。');
+            return;
+          }
+          const qReplace = songReservationQueueRef.current;
+          const replaceIdx = qReplace.findIndex((e) => e.publisherClientId === myClientId);
+          if (replaceIdx >= 0) qReplace.splice(replaceIdx, 1);
+          syncSongReservationQueueHead();
+          safePublish('cancelQueueSong', {
+            type: 'cancelQueueSong',
+            publisherClientId: myClientId,
+          } as PlaybackMessage);
         }
         pendingThemePlaylistBlurbRef.current = null;
         safePublish('queueSong', {
@@ -5057,6 +5092,13 @@ export default function RoomWithSync({
           videoId: id,
           publisherClientId: myClientId,
         } as PlaybackMessage);
+        if (fromRecommend) {
+          addSystemMessage(
+            alreadyQueued
+              ? 'おすすめの曲で予約を差し替えました。この曲が終わったあとに再生されます。'
+              : 'おすすめの曲を予約しました。この曲が終わったあとに再生されます。',
+          );
+        }
         return;
       }
 
@@ -5093,8 +5135,14 @@ export default function RoomWithSync({
       isOwner,
       addSystemMessage,
       shouldDeferMultiSongPost,
+      syncSongReservationQueueHead,
       isGuest,
     ]
+  );
+
+  const handleNextSongRecommendSelect = useCallback(
+    (watchUrl: string) => handleVideoUrlFromChat(watchUrl, { fromNextSongRecommend: true }),
+    [handleVideoUrlFromChat],
   );
 
   const handleAddCandidateFromSearch = useCallback(
@@ -6729,6 +6777,11 @@ export default function RoomWithSync({
                 ? (q) => chatInputRef.current?.searchYoutubeWithQuery(q)
                 : undefined
             }
+            onNextSongRecommendSelect={handleNextSongRecommendSelect}
+            myListAddEnabled={!isGuest}
+            onMyListAddNotice={!isGuest ? addSystemMessage : undefined}
+            onPreviewStart={handlePreviewStart}
+            onPreviewStop={handlePreviewStop}
             onSongQuizPick={publishSongQuizAnswer}
             themePlaylistActiveMission={themePlaylistRoomSubmit}
             themePlaylistMissionRoom={{

@@ -55,6 +55,17 @@ export interface ChatMessage {
   deferToPanel?: boolean;
   /** おすすめ生成中のプレースホルダーカード */
   nextSongRecommendPending?: boolean;
+  /** おすすめ曲が mc DB / Music8 にあり YouTube URL が取れたとき */
+  nextSongRecommendCatalog?: {
+    inMcDb: boolean;
+    inMusic8: boolean;
+    songId?: string | null;
+    videoId: string;
+    watchUrl: string;
+    dbMainArtist?: string | null;
+    dbSongTitle?: string | null;
+    dbDisplayTitle?: string | null;
+  };
   /** AI 本文の強調（入室直後の選曲案内など。未設定は通常色） */
   aiBodyEmphasis?: 'yellow';
   /** song_tidbits の行ID（comment-pack 由来のみ。モデレーターNG用） */
@@ -113,6 +124,16 @@ export interface ChatMessagePayload {
   recommendationId?: string | null;
   deferToPanel?: boolean;
   nextSongRecommendPending?: boolean;
+  nextSongRecommendCatalog?: {
+    inMcDb: boolean;
+    inMusic8: boolean;
+    songId?: string | null;
+    videoId: string;
+    watchUrl: string;
+    dbMainArtist?: string | null;
+    dbSongTitle?: string | null;
+    dbDisplayTitle?: string | null;
+  };
   /** AI 本文の強調（入室直後の選曲案内など） */
   aiBodyEmphasis?: 'yellow';
   /** song_tidbits の行ID（comment-pack 由来） */

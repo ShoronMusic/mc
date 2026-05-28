@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { MUSIC8_SONGS_BASE } from '@/lib/music8-data-urls';
 
 type Props = {
   songId: string;
@@ -12,7 +13,7 @@ type Props = {
   music8SongsBaseUrl?: string;
 };
 
-const DEFAULT_BASE = 'https://xs867261.xsrv.jp/data/data/songs';
+const DEFAULT_BASE = MUSIC8_SONGS_BASE;
 
 export function AdminSongMusic8JsonImportPanel({
   songId,

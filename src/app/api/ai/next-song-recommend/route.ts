@@ -9,6 +9,7 @@ import { resolveArtistSongForPackAsync } from '@/lib/youtube-artist-song-for-pac
 import { fetchPlaybackDisplayOverride } from '@/lib/video-playback-display-override';
 import { isNextSongRecommendAllowedForUser } from '@/lib/next-song-recommend-feature';
 import { checkNextSongRecommendRateLimit } from '@/lib/next-song-recommend-rate-limit';
+import { enrichNextSongPicksWithCatalog } from '@/lib/next-song-recommend-catalog-resolve';
 import { generateNextSongRecommendPicks } from '@/lib/next-song-recommend-generate';
 import {
   countActiveNextSongRecommendBySeedVideo,
@@ -16,6 +17,7 @@ import {
   getRecentActiveNextSongRecommendations,
   insertNextSongRecommendRows,
   NEXT_SONG_RECOMMEND_MAX_STOCK,
+  normalizeNextSongPickMatchKey,
   parseSeedLabelToArtistTitle,
 } from '@/lib/next-song-recommend-store';
 import { upsertSongAndVideo } from '@/lib/song-entities';
@@ -35,12 +37,6 @@ function isWithinOneYear(iso: string | null | undefined): boolean {
   const t = Date.parse(iso);
   if (!Number.isFinite(t)) return false;
   return Date.now() - t <= 365 * 24 * 60 * 60 * 1000;
-}
-
-function normalizeSongKey(artist: string, title: string): string {
-  const a = artist.toLowerCase().replace(/\s+/g, ' ').trim();
-  const t = title.toLowerCase().replace(/\s+/g, ' ').trim();
-  return `${a}__${t}`;
 }
 
 export async function POST(request: Request): Promise<NextResponse<OkDisabled | OkEnabled>> {
@@ -115,7 +111,7 @@ export async function POST(request: Request): Promise<NextResponse<OkDisabled | 
     const existingCount = await countActiveNextSongRecommendBySeedVideo(reader, videoId);
     const existingBySeed = await getActiveNextSongRecommendBySeedVideo(reader, videoId, 9);
     if (existingCount >= NEXT_SONG_RECOMMEND_MAX_STOCK) {
-      const dbPicks = existingBySeed
+      const dbPicksRaw = existingBySeed
         .sort((a, b) => a.order_index - b.order_index)
         .map((r) => ({
           recommendationId: r.id,
@@ -125,7 +121,8 @@ export async function POST(request: Request): Promise<NextResponse<OkDisabled | 
           reason: r.reason,
           youtubeSearchQuery: r.youtube_search_query,
         }));
-      if (dbPicks.length > 0) {
+      if (dbPicksRaw.length > 0) {
+        const dbPicks = await enrichNextSongPicksWithCatalog(reader, dbPicksRaw);
         return NextResponse.json({ enabled: true, picks: dbPicks }, { status: 200 });
       }
     }
@@ -147,7 +144,7 @@ export async function POST(request: Request): Promise<NextResponse<OkDisabled | 
       const artist = a.trim();
       const title = t.trim();
       if (!artist || !title) return;
-      const k = normalizeSongKey(artist, title);
+      const k = normalizeNextSongPickMatchKey(artist, title);
       if (excludeKeySet.has(k)) return;
       excludeKeySet.add(k);
       excludeSongLabels.push(`${artist} - ${title}`);
@@ -189,7 +186,7 @@ export async function POST(request: Request): Promise<NextResponse<OkDisabled | 
       return NextResponse.json({ enabled: false, reason: 'generate_failed' }, { status: 200 });
     }
     const generatedDeduped = generated.filter(
-      (p) => !excludeKeySet.has(normalizeSongKey(p.artist, p.title)),
+      (p) => !excludeKeySet.has(normalizeNextSongPickMatchKey(p.artist, p.title)),
     );
     if (generatedDeduped.length === 0) {
       return NextResponse.json({ enabled: false, reason: 'all_filtered_as_duplicate' }, { status: 200 });
@@ -213,19 +210,21 @@ export async function POST(request: Request): Promise<NextResponse<OkDisabled | 
             picks: toSave,
           })
         : [];
-    const picks: import('@/lib/next-song-recommend-generate').NextSongPick[] =
+    const picksRaw: import('@/lib/next-song-recommend-generate').NextSongPick[] =
       insertedRows.length > 0
         ? insertedRows
             .sort((a, b) => a.order_index - b.order_index)
             .map((r) => ({
               recommendationId: r.id,
-              source: 'new',
+              source: 'new' as const,
               artist: r.recommended_artist,
               title: r.recommended_title,
               reason: r.reason,
               youtubeSearchQuery: r.youtube_search_query,
             }))
         : generatedCapped.map((p) => ({ ...p, source: 'new' as const }));
+
+    const picks = await enrichNextSongPicksWithCatalog(reader, picksRaw);
 
     if (isNextSongRecommendDebugLogEnabled()) {
       console.log(
@@ -251,6 +250,7 @@ export async function POST(request: Request): Promise<NextResponse<OkDisabled | 
             title: p.title,
             reason: p.reason,
             youtubeSearchQuery: p.youtubeSearchQuery,
+            catalog: p.catalog ?? null,
             whyTags: p.whyTags ?? [],
             eraFit: p.eraFit ?? 'unknown',
             popularityFit: p.popularityFit ?? 'unknown',

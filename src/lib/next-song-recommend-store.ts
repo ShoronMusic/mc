@@ -3,6 +3,13 @@ import type { NextSongPick } from '@/lib/next-song-recommend-generate';
 
 export const NEXT_SONG_RECOMMEND_MAX_STOCK = 9;
 
+/** おすすめ曲の artist + title 重複判定用（大小・空白正規化） */
+export function normalizeNextSongPickMatchKey(artist: string, title: string): string {
+  const a = artist.toLowerCase().replace(/\s+/g, ' ').trim();
+  const t = title.toLowerCase().replace(/\s+/g, ' ').trim();
+  return `${a}__${t}`;
+}
+
 export interface NextSongRecommendRow {
   id: string;
   seed_song_id: string | null;

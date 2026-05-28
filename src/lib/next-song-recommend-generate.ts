@@ -13,6 +13,17 @@ import { resolveGenerationModelId } from '@/lib/gemini-model-routing';
 
 const USAGE_CTX = 'next_song_recommend';
 
+export type NextSongPickCatalog = {
+  inMcDb: boolean;
+  inMusic8: boolean;
+  songId?: string | null;
+  videoId?: string | null;
+  watchUrl?: string | null;
+  dbMainArtist?: string | null;
+  dbSongTitle?: string | null;
+  dbDisplayTitle?: string | null;
+};
+
 export type NextSongPick = {
   recommendationId?: string;
   source?: 'new' | 'db';
@@ -20,6 +31,8 @@ export type NextSongPick = {
   title: string;
   reason: string;
   youtubeSearchQuery: string;
+  /** mc DB / Music8 に曲があり YouTube URL が取れたときのみ */
+  catalog?: NextSongPickCatalog;
   /** モデル自己申告の根拠タグ（例: era_80s, clean_guitar, new_wave） */
   whyTags?: string[];
   /** 年代一致の自己評価（前後5年内を優先） */

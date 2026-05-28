@@ -21,14 +21,15 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createAdminClient } from '@/lib/supabase/admin';
 import {
+  isArtistMasterJsonFileName,
   loadArtistsListFromFile,
+  slugFromArtistMasterJsonFileName,
   upsertArtistFromMusic8Json,
 } from '@/lib/music8-artist-import';
 import { getMusic8ArtistJsonUrlCandidates } from '@/lib/music8-artist-display';
+import { MUSIC8_ARTISTS_BASE } from '@/lib/music8-data-urls';
 
-const GCS_ARTISTS_BASE =
-  process.env.MUSIC8_ARTISTS_GCS_BASE?.trim() ||
-  'https://storage.googleapis.com/music8-json-prod/data/artists';
+const GCS_ARTISTS_BASE = process.env.MUSIC8_ARTISTS_GCS_BASE?.trim() || MUSIC8_ARTISTS_BASE;
 
 type ArtistFailureRow = {
   at: string;
@@ -103,19 +104,6 @@ export function loadSlugsFromArtistFailureLog(filePath: string): string[] {
     }
   }
   return slugs;
-}
-
-/** m8 個別アーティスト JSON: `abc.json` のみ。`abc_songs.json` 等は対象外 */
-export function isArtistMasterJsonFileName(fileName: string): boolean {
-  const base = path.basename(fileName);
-  if (!/^[a-z0-9-]+\.json$/i.test(base)) return false;
-  const slug = base.slice(0, -'.json'.length);
-  return !slug.includes('_');
-}
-
-export function slugFromArtistMasterJsonFileName(fileName: string): string | null {
-  if (!isArtistMasterJsonFileName(fileName)) return null;
-  return path.basename(fileName).slice(0, -'.json'.length).toLowerCase();
 }
 
 function loadDotEnvLocal(): void {

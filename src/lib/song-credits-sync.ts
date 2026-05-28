@@ -29,6 +29,7 @@ export async function loadArtistLookupIndex(
 ): Promise<ArtistLookupIndex> {
   if (cachedIndex) return cachedIndex;
 
+  console.error('[song-credits-sync] loading artist lookup index (paginated)…');
   const rows: ArtistLookupRow[] = [];
   const PAGE = 1000;
   for (let offset = 0; ; offset += PAGE) {

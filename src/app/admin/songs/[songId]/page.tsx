@@ -4,6 +4,7 @@ import { AdminSongMasterDeletePanel } from '@/components/admin/AdminSongMasterDe
 import { AdminSongMusic8RefreshPanel } from '@/components/admin/AdminSongMusic8RefreshPanel';
 import { AdminSongMusic8JsonImportPanel } from '@/components/admin/AdminSongMusic8JsonImportPanel';
 import { AdminSongBasicInfoEditPanel } from '@/components/admin/AdminSongBasicInfoEditPanel';
+import { music8SongJsonUrl, resolveMusic8SongsBaseUrl } from '@/lib/music8-data-urls';
 
 interface SongDetailPageProps {
   params: { songId: string };
@@ -450,7 +451,7 @@ export default async function SongDetailPage({ params }: SongDetailPageProps) {
             <p className="mt-2 text-[11px] text-gray-500">
               Music8 JSON URL:{' '}
               <a
-                href={`https://xs867261.xsrv.jp/data/data/songs/${song.music8_artist_slug}_${song.music8_song_slug}.json`}
+                href={music8SongJsonUrl(song.music8_artist_slug, song.music8_song_slug)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-sky-400 hover:underline"
@@ -466,6 +467,7 @@ export default async function SongDetailPage({ params }: SongDetailPageProps) {
           songId={song.id}
           music8ArtistSlug={song.music8_artist_slug ?? null}
           music8SongSlug={song.music8_song_slug ?? null}
+          music8SongsBaseUrl={resolveMusic8SongsBaseUrl()}
         />
         <AdminSongBasicInfoEditPanel
           songId={song.id}
