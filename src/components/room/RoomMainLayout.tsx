@@ -10,6 +10,7 @@
 
 import { useCallback, useEffect } from 'react';
 import { useIsLgViewport } from '@/hooks/useLgViewport';
+import { useIsMobileLandscapeViewport } from '@/hooks/useMobileLandscapeViewport';
 import ResizableSection from '@/components/room/ResizableSection';
 
 interface RoomMainLayoutProps {
@@ -32,6 +33,7 @@ export default function RoomMainLayout({
   onPlaybackHistoryModalClose,
 }: RoomMainLayoutProps) {
   const isLg = useIsLgViewport();
+  const isMobileLandscape = useIsMobileLandscapeViewport();
 
   const closeHistoryModal = useCallback(() => {
     onPlaybackHistoryModalClose?.();
@@ -56,6 +58,15 @@ export default function RoomMainLayout({
             rightBottom={rightBottom}
             splitOnLeft={desktopSwapColumns}
           />
+        </div>
+      ) : isMobileLandscape ? (
+        <div className="grid min-h-0 flex-1 grid-cols-2 gap-1 overflow-hidden">
+          <div className="flex min-h-0 flex-col overflow-hidden border-r border-gray-800 pr-1">
+            {left}
+          </div>
+          <div className="flex min-h-0 flex-col overflow-hidden pl-1">
+            {rightTop}
+          </div>
         </div>
       ) : (
         <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-hidden">
