@@ -33,6 +33,7 @@ import {
 import { SongSelectionHowtoModal } from '@/components/chat/SongSelectionHowtoModal';
 import { isYoutubeKeywordSearchEnabled } from '@/lib/youtube-keyword-search-ui';
 import { useIsLgViewport } from '@/hooks/useLgViewport';
+import { useIsMobileLandscapeViewport } from '@/hooks/useMobileLandscapeViewport';
 import {
   expandMainArtistNamesForLibraryFilter,
   songMainArtistIncludesArtist,
@@ -145,7 +146,10 @@ function resolveLibraryMobileFocus(input: {
   return 'idle';
 }
 
-function libraryMobileArtistListSectionExtra(focus: LibraryMobileFocus): string {
+function libraryMobileArtistListSectionExtra(focus: LibraryMobileFocus, isMobileLandscape: boolean): string {
+  if (isMobileLandscape) {
+    return 'max-lg:flex-1 max-lg:min-h-0 max-lg:max-h-none';
+  }
   switch (focus) {
     case 'artists':
       return 'max-lg:flex-1 max-lg:min-h-0 max-lg:max-h-none';
@@ -158,11 +162,15 @@ function libraryMobileArtistListSectionExtra(focus: LibraryMobileFocus): string 
   }
 }
 
-function libraryMobileArtistDetailSectionExtra(focus: LibraryMobileFocus): string {
+function libraryMobileArtistDetailSectionExtra(focus: LibraryMobileFocus, isMobileLandscape: boolean): string {
+  if (isMobileLandscape) return 'max-lg:hidden';
   return focus === 'idle' ? 'max-lg:max-h-[18vh] max-lg:shrink-0' : 'max-lg:hidden';
 }
 
-function libraryMobileSongListSectionExtra(focus: LibraryMobileFocus): string {
+function libraryMobileSongListSectionExtra(focus: LibraryMobileFocus, isMobileLandscape: boolean): string {
+  if (isMobileLandscape) {
+    return 'max-lg:flex-1 max-lg:min-h-0 max-lg:max-h-none';
+  }
   switch (focus) {
     case 'artists':
     case 'idle':
@@ -409,6 +417,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
   const [libraryVideoLoading, setLibraryVideoLoading] = useState(false);
   const [libraryVideoError, setLibraryVideoError] = useState<string | null>(null);
   const isLg = useIsLgViewport();
+  const isMobileLandscape = useIsMobileLandscapeViewport();
   const [libraryArtistInfo, setLibraryArtistInfo] = useState<LibraryArtistInfo | null>(null);
   const [libraryArtistInfoLoading, setLibraryArtistInfoLoading] = useState(false);
   const [libraryArtistInfoError, setLibraryArtistInfoError] = useState<string | null>(null);
@@ -1829,13 +1838,15 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
               </div>
             </div>
             <div
-              className={`grid min-h-0 flex-1 grid-cols-1 gap-3 px-2 pb-2 pt-1 max-lg:flex max-lg:flex-col max-lg:gap-2 max-lg:bg-gray-950/80 lg:gap-0 lg:p-0 lg:bg-transparent lg:grid-cols-12 lg:pb-0 ${
-                !isLg && libraryMobileFocus === 'split' ? 'max-lg:min-h-0' : ''
+              className={`grid min-h-0 flex-1 grid-cols-1 gap-3 px-2 pb-2 pt-1 max-lg:gap-2 max-lg:bg-gray-950/80 lg:gap-0 lg:p-0 lg:bg-transparent lg:grid-cols-12 lg:pb-0 ${
+                isMobileLandscape
+                  ? 'max-lg:grid-cols-[minmax(0,0.37fr)_minmax(0,0.63fr)]'
+                  : 'max-lg:flex max-lg:flex-col'
               }`}
             >
               <div
                 className={`flex min-h-0 flex-col border-b border-lime-900/60 max-lg:border-0 lg:col-span-3 lg:flex-row lg:border-b-0 lg:border-r lg:border-r-lime-900/60 ${
-                  !isLg && libraryMobileFocus === 'split' ? 'max-lg:hidden' : ''
+                  !isMobileLandscape && !isLg && libraryMobileFocus === 'split' ? 'max-lg:hidden' : ''
                 }`}
               >
               <aside
@@ -1877,7 +1888,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
               </aside>
               {/* アーティスト一覧（索引と密着・選択後も表示） */}
               <section
-                className={`flex min-h-0 w-full min-w-0 flex-col border-b border-lime-900/60 lg:w-[11rem] lg:shrink-0 lg:border-b-0 xl:w-[12.5rem] ${LIBRARY_MOBILE_PANEL.artistList.section} ${libraryMobileArtistListSectionExtra(libraryMobileFocus)}`}
+                className={`flex min-h-0 w-full min-w-0 flex-col border-b border-lime-900/60 lg:w-[11rem] lg:shrink-0 lg:border-b-0 xl:w-[12.5rem] ${LIBRARY_MOBILE_PANEL.artistList.section} ${libraryMobileArtistListSectionExtra(libraryMobileFocus, isMobileLandscape)}`}
               >
                 <div className="shrink-0 border-b border-lime-900/60 px-2 py-2 max-lg:border-lime-700/35 max-lg:bg-lime-950/40 lg:hidden">
                   <button
@@ -2060,7 +2071,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
               </div>
               {/* 3列目: 選択アーティスト詳細 */}
               <section
-                className={`flex min-h-0 flex-col border-b border-lime-900/60 lg:col-span-2 lg:border-b-0 lg:border-r lg:border-r-lime-900/60 ${LIBRARY_MOBILE_PANEL.artistDetail.section} ${libraryMobileArtistDetailSectionExtra(libraryMobileFocus)}`}
+                className={`flex min-h-0 flex-col border-b border-lime-900/60 lg:col-span-2 lg:border-b-0 lg:border-r lg:border-r-lime-900/60 ${LIBRARY_MOBILE_PANEL.artistDetail.section} ${libraryMobileArtistDetailSectionExtra(libraryMobileFocus, isMobileLandscape)}`}
               >
                 <div
                   className={`shrink-0 border-b border-lime-900/60 px-3 py-2 ${LIBRARY_MOBILE_PANEL.artistDetail.header}`}
@@ -2147,7 +2158,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
               </section>
               {/* 4列目: 曲一覧 */}
               <section
-                className={`flex min-h-0 flex-col border-b border-lime-900/60 lg:col-span-3 lg:border-b-0 lg:border-r lg:border-r-lime-900/60 ${LIBRARY_MOBILE_PANEL.songList.section} ${libraryMobileSongListSectionExtra(libraryMobileFocus)}`}
+                className={`flex min-h-0 flex-col border-b border-lime-900/60 lg:col-span-3 lg:border-b-0 lg:border-r lg:border-r-lime-900/60 ${LIBRARY_MOBILE_PANEL.songList.section} ${libraryMobileSongListSectionExtra(libraryMobileFocus, isMobileLandscape)}`}
               >
                 <div
                   className={`flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-lime-900/60 px-3 py-2 ${LIBRARY_MOBILE_PANEL.songList.header}`}
@@ -2432,7 +2443,9 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
             {!isLg && selectedLibraryRow ? (
               <section
                 className={`flex min-h-0 flex-col border-t-2 border-amber-600/50 bg-amber-950/40 lg:hidden ${
-                  libraryMobileFocus === 'split'
+                  isMobileLandscape
+                    ? 'max-lg:mt-1 max-lg:max-h-[44vh] max-lg:overflow-hidden'
+                    : libraryMobileFocus === 'split'
                     ? 'max-lg:flex-1 max-lg:min-h-0 max-lg:basis-1/2 max-lg:border-t max-lg:shadow-none'
                     : 'max-lg:hidden'
                 }`}
