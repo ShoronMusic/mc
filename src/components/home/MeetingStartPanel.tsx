@@ -6,6 +6,7 @@ import { createClient, isSupabaseConfigured } from '@/lib/supabase/client';
 import { GUEST_STORAGE_KEY } from '@/components/auth/JoinChoice';
 
 const DEFAULT_ROOM_COUNT = 90;
+const MAX_LIVE_GATHERINGS_PER_USER = 2;
 const DEFAULT_ROOM_IDS = Array.from({ length: DEFAULT_ROOM_COUNT }, (_, i) =>
   String(i + 1).padStart(2, '0'),
 );
@@ -14,6 +15,7 @@ type OrganizerRoom = {
   roomId: string;
   title: string;
   isLive: boolean;
+  lastStartedAt?: string | null;
 };
 
 type LiveStatusResponse = {
@@ -68,7 +70,7 @@ export function MeetingStartPanel() {
       const loggedIn = !!user;
       if (user) {
         const defaultTitle = defaultGatheringTitleFromUser(user);
-        setNewTitle(defaultTitle);
+        setNewTitle('');
         setJoinTitle(defaultTitle);
       }
       setVisible(loggedIn);
@@ -113,6 +115,19 @@ export function MeetingStartPanel() {
   const selectedRoom = myRooms.find((r) => r.roomId === joinRoomId);
   const createRoomOptions = DEFAULT_ROOM_IDS.filter((id) => !liveRoomIds.includes(id));
   const liveOrganizingCount = myRooms.filter((r) => r.isLive).length;
+  const isSingleOrganizerRoom = myRooms.length === 1;
+  const soleOrganizerRoom = isSingleOrganizerRoom ? myRooms[0] : null;
+
+  const liveElapsedDaysLabel = useCallback((startedAt?: string | null): string | null => {
+    if (!startedAt) return null;
+    const started = new Date(startedAt);
+    const ms = started.getTime();
+    if (!Number.isFinite(ms)) return null;
+    const diff = Date.now() - ms;
+    if (diff < 0) return '開催1日目';
+    const days = Math.floor(diff / (24 * 60 * 60 * 1000)) + 1;
+    return `開催${days}日目`;
+  }, []);
 
   const run = useCallback(
     async (action: 'start' | 'end' | 'rename', payload: { roomId?: string; title?: string; autoAssign?: boolean }) => {
@@ -211,15 +226,28 @@ export function MeetingStartPanel() {
           <div className="mb-3 space-y-1 text-center">
             <p className="text-sm font-semibold text-slate-100">主催者メニュー</p>
             <p className="text-[11px] leading-relaxed text-slate-400">
-              操作する部屋を下のカードから選びます。
-              <span className="text-emerald-300/90"> 緑「主催中」</span>
-              はいま会が開いている部屋、
-              <span className="text-slate-500"> 灰「終了済」</span>
-              は過去に主催した部屋（再開・終了用）です。
+              {isSingleOrganizerRoom ? (
+                <>
+                  この部屋を管理できます（名前変更・入室・終了）。
+                  {soleOrganizerRoom?.isLive ? (
+                    <span className="text-emerald-300/90"> 開催中</span>
+                  ) : (
+                    <span className="text-slate-500"> 終了済み</span>
+                  )}
+                </>
+              ) : (
+                <>
+                  操作する部屋を下のカードから選びます。
+                  <span className="text-emerald-300/90"> 緑「主催中」</span>
+                  はいま会が開いている部屋、
+                  <span className="text-slate-500"> 灰「終了済」</span>
+                  は過去に主催した部屋（再開・終了用）です。
+                </>
+              )}
             </p>
             {liveOrganizingCount > 0 && (
               <p className="rounded-md border border-emerald-800/50 bg-emerald-950/40 px-2 py-1.5 text-[11px] font-medium text-emerald-200/95">
-                いま主催中の会：{liveOrganizingCount} 部屋（同時は最大2まで）
+                主催中: {liveOrganizingCount} / {MAX_LIVE_GATHERINGS_PER_USER} 部屋
               </p>
             )}
             <p className="text-[10px] leading-relaxed text-slate-500">
@@ -237,81 +265,156 @@ export function MeetingStartPanel() {
               を参照してください。
             </p>
           </div>
-          <p className="mb-2 text-xs font-medium text-slate-400">主催する部屋を選択</p>
-          <ul className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-2" role="list">
-            {myRooms.map((r) => {
-              const selected = joinRoomId === r.roomId;
-              return (
-                <li key={r.roomId}>
-                  <button
-                    type="button"
+          {isSingleOrganizerRoom && soleOrganizerRoom ? (
+            <div
+              className={`rounded-lg border bg-slate-800/70 p-3 sm:p-4 ${
+                soleOrganizerRoom.isLive
+                  ? 'border-sky-500/55 ring-2 ring-sky-500/45'
+                  : 'border-slate-600'
+              } ${soleOrganizerRoom.isLive ? 'border-l-4 border-l-emerald-500' : ''}`}
+            >
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <span className="font-mono text-sm font-semibold text-white">
+                  部屋 {soleOrganizerRoom.roomId}
+                </span>
+                {soleOrganizerRoom.isLive ? (
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="shrink-0 rounded-full bg-emerald-600/35 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-200">
+                      主催中
+                    </span>
+                    {liveElapsedDaysLabel(soleOrganizerRoom.lastStartedAt) ? (
+                      <span className="text-[10px] font-medium text-emerald-200/90">
+                        {liveElapsedDaysLabel(soleOrganizerRoom.lastStartedAt)}
+                      </span>
+                    ) : null}
+                  </span>
+                ) : (
+                  <span className="shrink-0 rounded-full bg-slate-700 px-2 py-0.5 text-[10px] text-slate-400">
+                    終了済
+                  </span>
+                )}
+              </div>
+              <label className="flex min-w-0 flex-col gap-1 text-xs text-slate-400">
+                部屋の名前
+                <input
+                  type="text"
+                  value={joinTitle}
+                  onChange={(e) => setJoinTitle(e.target.value)}
+                  maxLength={120}
+                  className="w-full rounded-md border border-slate-600 bg-slate-900 px-2.5 py-2 text-sm text-white"
+                  disabled={busy}
+                  placeholder="例: 土曜洋楽会"
+                />
+              </label>
+              <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => void enterRoom()}
+                  disabled={busy}
+                  className="block w-full rounded-md border border-sky-500/50 bg-sky-900/25 px-4 py-2.5 text-center text-sm font-medium text-sky-100 hover:bg-sky-900/40"
+                >
+                  この部屋へ入る
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void run('end', { roomId: joinRoomId })}
+                  disabled={busy}
+                  className="rounded-md border border-slate-500 bg-slate-800 px-4 py-2.5 text-sm text-slate-200 hover:bg-slate-700 disabled:opacity-50"
+                >
+                  開催を終了
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <p className="mb-2 text-xs font-medium text-slate-400">主催する部屋を選択</p>
+              <ul className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-2" role="list">
+                {myRooms.map((r) => {
+                  const selected = joinRoomId === r.roomId;
+                  return (
+                    <li key={r.roomId}>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        aria-pressed={selected}
+                        onClick={() => {
+                          setJoinRoomId(r.roomId);
+                          if (r.title?.trim()) setJoinTitle(r.title.trim());
+                        }}
+                        className={`flex w-full flex-col gap-1 rounded-lg border px-3 py-2.5 text-left transition ${
+                          selected
+                            ? 'border-sky-500 bg-sky-950/50 ring-2 ring-sky-500/60'
+                            : 'border-slate-600 bg-slate-800/80 hover:border-slate-500'
+                        } ${r.isLive ? 'border-l-4 border-l-emerald-500' : ''}`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-mono text-sm font-medium text-white">部屋 {r.roomId}</span>
+                          {r.isLive ? (
+                            <span className="inline-flex items-center gap-1.5">
+                              <span className="shrink-0 rounded-full bg-emerald-600/35 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-200">
+                                主催中
+                              </span>
+                              {liveElapsedDaysLabel(r.lastStartedAt) ? (
+                                <span className="text-[10px] font-medium text-emerald-200/90">
+                                  {liveElapsedDaysLabel(r.lastStartedAt)}
+                                </span>
+                              ) : null}
+                            </span>
+                          ) : (
+                            <span className="shrink-0 rounded-full bg-slate-700 px-2 py-0.5 text-[10px] text-slate-400">
+                              終了済
+                            </span>
+                          )}
+                        </div>
+                        <span className="line-clamp-2 text-xs text-slate-300">{r.title}</span>
+                        {selected && (
+                          <span className="text-[10px] font-medium text-sky-300">
+                            選択中 · 下のボタンで入室・終了
+                          </span>
+                        )}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+              <div className="grid grid-cols-1 gap-2.5">
+                <label className="flex min-w-0 flex-col gap-1 text-xs text-slate-400">
+                  部屋の名前
+                  <input
+                    type="text"
+                    value={joinTitle}
+                    onChange={(e) => setJoinTitle(e.target.value)}
+                    maxLength={120}
+                    className="w-full rounded-md border border-slate-600 bg-slate-800 px-2.5 py-2 text-sm text-white"
                     disabled={busy}
-                    aria-pressed={selected}
-                    onClick={() => {
-                      setJoinRoomId(r.roomId);
-                      if (r.title?.trim()) setJoinTitle(r.title.trim());
-                    }}
-                    className={`flex w-full flex-col gap-1 rounded-lg border px-3 py-2.5 text-left transition ${
-                      selected
-                        ? 'border-sky-500 bg-sky-950/50 ring-2 ring-sky-500/60'
-                        : 'border-slate-600 bg-slate-800/80 hover:border-slate-500'
-                    } ${r.isLive ? 'border-l-4 border-l-emerald-500' : ''}`}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="font-mono text-sm font-medium text-white">部屋 {r.roomId}</span>
-                      {r.isLive ? (
-                        <span className="shrink-0 rounded-full bg-emerald-600/35 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-200">
-                          主催中
-                        </span>
-                      ) : (
-                        <span className="shrink-0 rounded-full bg-slate-700 px-2 py-0.5 text-[10px] text-slate-400">
-                          終了済
-                        </span>
-                      )}
-                    </div>
-                    <span className="line-clamp-2 text-xs text-slate-300">{r.title}</span>
-                    {selected && (
-                      <span className="text-[10px] font-medium text-sky-300">選択中 · 下のボタンで入室・終了</span>
-                    )}
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-          <div className="grid grid-cols-1 gap-2.5">
-            <label className="flex min-w-0 flex-col gap-1 text-xs text-slate-400">
-              部屋の名前
-              <input
-                type="text"
-                value={joinTitle}
-                onChange={(e) => setJoinTitle(e.target.value)}
-                maxLength={120}
-                className="w-full rounded-md border border-slate-600 bg-slate-800 px-2.5 py-2 text-sm text-white"
-                disabled={busy}
-                placeholder="例: 土曜洋楽会"
-              />
-            </label>
-          </div>
-          <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
-            <button
-              type="button"
-              onClick={() => void enterRoom()}
-              disabled={busy}
-              className="block w-full rounded-md border border-sky-500/50 bg-sky-900/20 px-4 py-2 text-center text-sm font-medium text-sky-200 hover:bg-sky-900/35"
-            >
-              この部屋へ入る
-            </button>
-            <button
-              type="button"
-              onClick={() => void run('end', { roomId: joinRoomId })}
-              disabled={busy}
-              className="rounded-md border border-slate-500 bg-slate-800 px-4 py-2 text-sm text-slate-200 hover:bg-slate-700 disabled:opacity-50"
-            >
-              この部屋の開催を終了
-            </button>
-          </div>
-          {selectedRoom?.title && (
-            <p className="mt-2 text-center text-[11px] text-slate-400">選択中の部屋の前回の名前: {selectedRoom.title}</p>
+                    placeholder="例: 土曜洋楽会"
+                  />
+                </label>
+              </div>
+              <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => void enterRoom()}
+                  disabled={busy}
+                  className="block w-full rounded-md border border-sky-500/50 bg-sky-900/20 px-4 py-2 text-center text-sm font-medium text-sky-200 hover:bg-sky-900/35"
+                >
+                  この部屋へ入る
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void run('end', { roomId: joinRoomId })}
+                  disabled={busy}
+                  className="rounded-md border border-slate-500 bg-slate-800 px-4 py-2 text-sm text-slate-200 hover:bg-slate-700 disabled:opacity-50"
+                >
+                  この部屋の開催を終了
+                </button>
+              </div>
+              {selectedRoom?.title && selectedRoom.title.trim() !== joinTitle.trim() ? (
+                <p className="mt-2 text-center text-[11px] text-slate-400">
+                  保存済みの名前: {selectedRoom.title}
+                </p>
+              ) : null}
+            </>
           )}
         </div>
       ) : null}
@@ -340,13 +443,13 @@ export function MeetingStartPanel() {
               autoComplete="off"
               className="w-full rounded-md border border-emerald-700/70 bg-slate-800 px-2.5 py-2 text-sm text-white"
               disabled={busy || createRoomOptions.length === 0}
-              placeholder="あなたの表示名の部屋（初期値・編集可）"
+              placeholder="例: 土曜洋楽会"
             />
           </label>
           <button
             type="submit"
             disabled={busy || createRoomOptions.length === 0}
-            className="mt-1 w-full rounded-md bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-600 disabled:opacity-50"
+            className="mt-1 w-full rounded-md border border-emerald-700/70 bg-slate-800 px-4 py-2 text-sm font-medium text-emerald-200 hover:bg-slate-700 disabled:opacity-50"
           >
             部屋を新規作成
           </button>
