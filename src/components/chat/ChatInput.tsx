@@ -2607,12 +2607,10 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
               </section>
               )}
             </div>
-            {!isLg && selectedLibraryRow ? (
+            {!isLg && !isMobileLandscape && selectedLibraryRow ? (
               <section
                 className={`flex min-h-0 flex-col border-t-2 border-amber-600/50 bg-amber-950/40 lg:hidden ${
-                  isMobileLandscape
-                    ? 'max-lg:hidden'
-                    : libraryMobileFocus === 'split'
+                  libraryMobileFocus === 'split'
                     ? 'max-lg:flex-1 max-lg:min-h-0 max-lg:basis-1/2 max-lg:border-t max-lg:shadow-none'
                     : 'max-lg:hidden'
                 }`}
