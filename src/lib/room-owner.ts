@@ -98,6 +98,10 @@ export function buildAuthRoomClientId(authUserId: string): string {
   return `mc-u-${authUserId.trim()}`;
 }
 
+export function isAuthBasedRoomClientId(clientId: string): boolean {
+  return clientId.startsWith('mc-u-');
+}
+
 /**
  * 部屋用 clientId。
  * - ログイン: `mc-u-{authUserId}`（PC・スマホで同じ。後から入った接続が先を置き換える）

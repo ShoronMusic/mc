@@ -360,6 +360,8 @@ interface ChatInputProps {
    * 送信ボタンの上に「お題曲送信」が出現し、そのボタン経由でのみ themeId を付与する。
    */
   themePlaylistRoomSubmit?: { themeId: string; themeLabel: string } | null;
+  /** 別端末が同一アカウントで操作中のため、この端末では送信・選曲不可 */
+  roomInteractionLocked?: boolean;
 }
 
 const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput(
@@ -376,6 +378,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
     onOpenTerms,
     onOpenSiteFeedback,
     themePlaylistRoomSubmit = null,
+    roomInteractionLocked = false,
   },
   ref
 ) {
@@ -594,6 +597,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
   }, []);
 
   const handleSubmit = () => {
+    if (roomInteractionLocked) return;
     const trimmed = value.trim();
     if (!trimmed) return;
 
@@ -1136,9 +1140,10 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
     libraryLetterModalOpen;
 
   const openLibraryModal = useCallback(() => {
+    if (roomInteractionLocked) return;
     resetLibraryExpanded();
     setLibraryOpen(true);
-  }, [resetLibraryExpanded]);
+  }, [resetLibraryExpanded, roomInteractionLocked]);
 
   const handleLibrarySearch = useCallback(() => {
     setLibrarySelectedArtistName(null);
@@ -2840,27 +2845,40 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
       )}
 
       <div className="rounded-lg border border-gray-700 bg-gray-900/50 p-2">
+        {roomInteractionLocked ? (
+          <p className="mb-2 rounded border border-amber-700/50 bg-amber-950/40 px-2 py-1.5 text-[11px] leading-snug text-amber-100">
+            別の端末で操作中のため、この端末では送信できません。上部の「この端末で操作する」から切り替えてください。
+          </p>
+        ) : null}
         <div className="flex w-full flex-row flex-wrap items-stretch gap-2">
           <div className="w-full min-w-0 sm:flex-1 sm:basis-[min(100%,12rem)]">
             <input
               ref={inputRef}
               type="text"
               placeholder={
-                isYoutubeKeywordSearchEnabled()
-                  ? '会話・URL・アーティスト・曲名のどれでも入力…'
-                  : '会話・YouTubeのURL・AIへの質問は、@質問内容…を入力して送信ボタン'
+                roomInteractionLocked
+                  ? '別の端末で操作中…'
+                  : isYoutubeKeywordSearchEnabled()
+                    ? '会話・URL・アーティスト・曲名のどれでも入力…'
+                    : '会話・YouTubeのURL・AIへの質問は、@質問内容…を入力して送信ボタン'
               }
               value={value}
               onChange={(e) => setValue(e.target.value)}
               onKeyDown={(e) => {
+                if (roomInteractionLocked) return;
                 if (e.key !== 'Enter' || e.shiftKey) return;
                 if (e.nativeEvent.isComposing) return;
                 e.preventDefault();
                 handleSubmit();
               }}
               maxLength={MAX_MESSAGE_LENGTH}
-              className="box-border h-[3.75rem] w-full min-w-0 rounded border border-gray-300 bg-gray-100 px-3 py-2 text-sm text-gray-900 placeholder-gray-500 outline-none focus:border-blue-500"
+              disabled={roomInteractionLocked}
+              readOnly={roomInteractionLocked}
+              className={`box-border h-[3.75rem] w-full min-w-0 rounded border border-gray-300 bg-gray-100 px-3 py-2 text-sm text-gray-900 placeholder-gray-500 outline-none focus:border-blue-500 ${
+                roomInteractionLocked ? 'cursor-not-allowed opacity-60' : ''
+              }`}
               aria-label="チャット入力"
+              aria-disabled={roomInteractionLocked}
             />
           </div>
           {themePlaylistRoomSubmit && onVideoUrl ? (
@@ -2870,7 +2888,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                 onClick={openThemePlaylistConfirm}
                 title={`お題「${themePlaylistRoomSubmit.themeLabel}」として記録し、曲解説のあとにお題講評が付きます（確認のあと送信）`}
                 className="box-border flex min-h-0 flex-1 items-center justify-center rounded border border-amber-500/80 bg-amber-900/50 px-2 text-[11px] font-semibold leading-tight text-amber-50 hover:bg-amber-800/60 disabled:opacity-50"
-                disabled={!value.trim() || !extractVideoId(value.trim())}
+                disabled={roomInteractionLocked || !value.trim() || !extractVideoId(value.trim())}
                 aria-haspopup="dialog"
                 aria-expanded={themePlaylistConfirmOpen}
               >
@@ -2881,7 +2899,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                 onClick={handleSubmit}
                 title="YouTubeのURLならプレイヤーに反映（お題には紐づけません）。それ以外はチャットに表示"
                 className="box-border flex min-h-0 flex-1 items-center justify-center rounded bg-blue-600 px-3 text-xs font-medium text-white hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50"
-                disabled={!value.trim()}
+                disabled={roomInteractionLocked || !value.trim()}
               >
                 送信
               </button>
@@ -2892,7 +2910,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
               onClick={handleSubmit}
               title="YouTubeのURLならプレイヤーに反映。それ以外はチャットに表示"
               className="box-border hidden h-[3.75rem] shrink-0 items-center justify-center rounded bg-blue-600 px-4 text-sm font-medium text-white hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50 sm:flex"
-              disabled={!value.trim()}
+              disabled={roomInteractionLocked || !value.trim()}
             >
               送信
             </button>
@@ -2903,7 +2921,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
               onClick={handleSubmit}
               title="YouTubeのURLならプレイヤーに反映。それ以外はチャットに表示"
               className="box-border flex h-11 min-w-0 flex-1 basis-1/2 items-center justify-center rounded bg-blue-600 px-3 text-sm font-medium text-white hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50"
-              disabled={!value.trim()}
+              disabled={roomInteractionLocked || !value.trim()}
             >
               送信
             </button>

@@ -164,7 +164,8 @@ import {
 import { useIsLgViewport } from '@/hooks/useLgViewport';
 import { useRoomChatLogPersistence } from '@/hooks/useRoomChatLogPersistence';
 import { useRoomAccessLogReport } from '@/hooks/useRoomAccessLogReport';
-import { usePreventRoomPullToRefresh } from '@/hooks/usePreventRoomPullToRefresh';
+import { useRoomSessionTakeoverState } from '@/hooks/useRoomSessionTakeoverState';
+import { RoomSessionTakeoverNotice } from '@/components/room/RoomSessionTakeoverNotice';
 import { dedupeParticipantsByAuthUserId } from '@/lib/room-participant-dedupe';
 import { useSupabaseAuthUserId } from '@/hooks/useSupabaseAuthUserId';
 import { isAiQuestionGuardKickExemptUserId } from '@/lib/ai-question-guard-exempt-user-ids';
@@ -934,6 +935,27 @@ export default function RoomWithSync({
     });
   }, [presenceData]);
 
+  const presenceAuthRows = useMemo(
+    () =>
+      presenceData.map((p) => {
+        const d = p.data as PresenceMemberData | undefined;
+        const aid =
+          typeof d?.authUserId === 'string' && /^[0-9a-f-]{36}$/i.test(d.authUserId.trim())
+            ? d.authUserId.trim()
+            : undefined;
+        return { clientId: p.clientId, ...(aid ? { authUserId: aid } : {}) };
+      }),
+    [presenceData],
+  );
+
+  const sessionTakeoverState = useRoomSessionTakeoverState({
+    myClientId,
+    authUserId,
+    isGuest,
+    presenceRows: presenceAuthRows,
+  });
+  const roomInteractionLocked = sessionTakeoverState === 'supplanted';
+
   const participants = useMemo(() => {
     void joinOrderEpoch;
     const sortKeyForPresence = (p: (typeof presenceData)[number]) => {
@@ -971,6 +993,9 @@ export default function RoomWithSync({
             typeof d?.status === 'string' && d.status.trim() ? d.status.trim() : undefined,
           yellowCards: yellowCardByClientId[p.clientId] ?? 0,
           isAway: false,
+          ...(p.clientId === myClientId && sessionTakeoverState === 'active'
+            ? { selfSessionActive: true }
+            : {}),
           ...(aid ? { authUserId: aid, publicProfileVisible: visible } : {}),
         };
       });
@@ -1013,6 +1038,7 @@ export default function RoomWithSync({
     ownerAiCharacterJoinEnabled,
     ownerAiCharacterName,
     myClientId,
+    sessionTakeoverState,
   ]);
   const participantsRef = useRef(participants);
   participantsRef.current = participants;
@@ -6134,6 +6160,7 @@ export default function RoomWithSync({
       onClearLocalAiQuestionGuard={
         chatStyleAdminTools ? clearLocalAiQuestionGuardState : undefined
       }
+      roomInteractionLocked={roomInteractionLocked}
       trailingSlot={
         isYoutubeKeywordSearchEnabled() ? (
           <button
@@ -6366,6 +6393,15 @@ export default function RoomWithSync({
           </div>
         )}
       </header>
+
+      {sessionTakeoverState === 'active' || sessionTakeoverState === 'supplanted' ? (
+        <RoomSessionTakeoverNotice
+          state={sessionTakeoverState}
+          onTakeOverThisDevice={() => {
+            window.location.reload();
+          }}
+        />
+      ) : null}
 
       <section className="mb-1 shrink-0">
         <UserBar

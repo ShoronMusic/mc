@@ -33,6 +33,8 @@ export interface ParticipantItem {
   publicProfileVisible?: boolean;
   /** false のとき選曲順に含まれない（視聴専用） */
   participatesInSelection?: boolean;
+  /** ログイン同一アカウント: この端末が操作端末 */
+  selfSessionActive?: boolean;
 }
 
 interface UserBarProps {
@@ -86,9 +88,11 @@ function participantDisplayName(
   const hasGuestMarker =
     /（\s*ゲスト\s*）|\(\s*guest\s*\)|\bguest\b|ゲスト/i.test(p.displayName);
   const guestSuffix = isGuest && !hasGuestMarker ? '（ゲスト）' : '';
-  return p.clientId === myClientId
-    ? `${p.displayName}${guestSuffix} (自分)`
-    : p.displayName;
+  if (p.clientId === myClientId) {
+    const selfLabel = p.selfSessionActive ? ' (自分・操作中)' : ' (自分)';
+    return `${p.displayName}${guestSuffix}${selfLabel}`;
+  }
+  return p.displayName;
 }
 
 function ParticipantProfileIconButton({
