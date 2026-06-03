@@ -209,6 +209,7 @@ mc 本番はブラウザ直 fetch ではなく API 経由のため、**管理画
 | ファイル | 内容 |
 |----------|------|
 | `docs/firestore-json-migration-notes.md` | GCS 方針・rsync・Vercel SA・非公開バケット |
+| `docs/00-music8-weekly-mc-sync.md` | **週次**: m8 JSON → mc DB（PowerShell 手順） |
 | `docs/music8-library-import-notes.md` | 曲ライブラリ取り込み・`E:/m8/public/data` |
 | `docs/music8-musicaichat-json-spec.md` | musicaichat v1 ツリー |
 | `docs/music8-artist-import-handoff.md` | アーティスト bulk・env |

@@ -1,0 +1,39 @@
+﻿**********************
+Windows PowerShell トランスクリプト開始
+開始時刻: 20260602085240
+ユーザー名: G15-5535\maeha
+RunAs ユーザー: G15-5535\maeha
+構成名: 
+コンピューター: G15-5535 (Microsoft Windows NT 10.0.26200.0)
+ホスト アプリケーション: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe
+プロセス ID: 25588
+PSVersion: 5.1.26100.8457
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.26100.8457
+BuildVersion: 10.0.26100.8457
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+[1/3] diff plan
+[log] step -> E:\mc\tmp\music8-sync-logs\2026-06-02T08-51-47\01-diff-plan.log
+{
+  "outDir": "E:\\mc\\tmp\\music8-sync-plan-2026-06-02T08-52-40",
+  "newSongs": 2500,
+  "staleSongs": 7,
+  "songsToApply": 2507,
+  "newArtists": 15,
+  "staleArtists": 6322,
+  "artistsToApply": 6337,
+  "manifest": "E:\\mc\\tmp\\music8-sync-plan-2026-06-02T08-52-40\\manifest.json"
+}
+[2/3] apply dry-run
+[log] step -> E:\mc\tmp\music8-sync-logs\2026-06-02T08-51-47\02-apply-dry-run.log
+PS>終了エラー(node.exe): "ユーザー設定変数 "ErrorActionPreference" または共通パラメーターが Stop に設定されているため、実行中のコマンドが停止しました。[apply-music8-sync-plan] dry-run 縺ｮ縺溘ａ DB 譖ｴ譁ｰ縺ｯ縺励∪縺帙ｓ縲よ悽逡ｪ縺ｯ --apply 繧剃ｻ倥￠縺ｦ蜀榊ｮ溯｡後＠縺ｦ縺上□縺輔＞縲・[apply] artists (6337 slugs)窶ｦ"
+>> 終了エラー(): "パイプラインが停止されています。"
+>> 終了エラー(): "パイプラインが停止されています。"
+**********************
+Windows PowerShell トランスクリプト終了
+終了時刻: 20260602095220
+**********************

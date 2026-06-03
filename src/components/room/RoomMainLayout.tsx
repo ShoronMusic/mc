@@ -6,11 +6,11 @@
  * - PC: ResizableSection（左チャット / 右は上下リサイズ）。
  *
  * モバイル/PC で同一 {rightTop} を同時マウントしない（YouTube 二重化防止）— useIsLgViewport で排他レンダー。
+ * モバイル縦横は CSS のみでレイアウト切替（向き変更でプレイヤーを再マウントしない）。
  */
 
 import { useCallback, useEffect } from 'react';
 import { useIsLgViewport } from '@/hooks/useLgViewport';
-import { useIsMobileLandscapeViewport } from '@/hooks/useMobileLandscapeViewport';
 import ResizableSection from '@/components/room/ResizableSection';
 
 interface RoomMainLayoutProps {
@@ -33,7 +33,6 @@ export default function RoomMainLayout({
   onPlaybackHistoryModalClose,
 }: RoomMainLayoutProps) {
   const isLg = useIsLgViewport();
-  const isMobileLandscape = useIsMobileLandscapeViewport();
 
   const closeHistoryModal = useCallback(() => {
     onPlaybackHistoryModalClose?.();
@@ -49,11 +48,7 @@ export default function RoomMainLayout({
   }, [playbackHistoryModalOpen, closeHistoryModal]);
 
   return (
-    <div
-      className={`flex w-full flex-col ${
-        isMobileLandscape ? 'shrink-0 overflow-visible' : 'min-h-0 flex-1 overflow-hidden'
-      }`}
-    >
+    <div className="flex min-h-0 w-full flex-1 flex-col">
       {isLg ? (
         <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
           <ResizableSection
@@ -63,28 +58,11 @@ export default function RoomMainLayout({
             splitOnLeft={desktopSwapColumns}
           />
         </div>
-      ) : isMobileLandscape ? (
-        <div className="w-full shrink-0 py-1">
-          <div className="grid w-full grid-cols-2 items-start gap-1">
-            <div className="min-w-0 border-r border-gray-800 pr-1">
-              {left}
-            </div>
-            <div className="sticky top-0 min-w-0 self-start pl-1">
-              {rightTop}
-            </div>
-          </div>
-        </div>
       ) : (
-        <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-hidden">
-          {/**
-           * 旧 grid-rows-2 は 1fr 1fr で上下が同じ高さになり、プレイヤー（aspect-video）の下に
-           * 大きな空きができる。上段を auto、チャットを minmax(0,1fr) で残り領域いっぱいにする。
-           */}
-          <div className="grid min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)] gap-1">
-            <div className="shrink-0">{rightTop}</div>
-            <div className="flex min-h-0 flex-col overflow-hidden border-t border-gray-800 pt-1">
-              {left}
-            </div>
+        <div className="mc-room-mobile-shell">
+          <div className="mc-room-mobile-grid">
+            <div className="mc-room-mobile-player">{rightTop}</div>
+            <div className="mc-room-mobile-chat">{left}</div>
           </div>
 
           {playbackHistoryModalOpen && (

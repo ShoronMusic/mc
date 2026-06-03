@@ -162,7 +162,6 @@ import {
   UserCircleIcon,
 } from '@heroicons/react/24/outline';
 import { useIsLgViewport } from '@/hooks/useLgViewport';
-import { useIsMobileLandscapeViewport } from '@/hooks/useMobileLandscapeViewport';
 import { useRoomChatLogPersistence } from '@/hooks/useRoomChatLogPersistence';
 import { useRoomAccessLogReport } from '@/hooks/useRoomAccessLogReport';
 import { usePreventRoomPullToRefresh } from '@/hooks/usePreventRoomPullToRefresh';
@@ -494,7 +493,6 @@ export default function RoomWithSync({
   }, [isGuest]);
   const [chatSummary, setChatSummary] = useState<RoomSessionChatSummaryDisplay | null>(null);
   const isLg = useIsLgViewport();
-  const isMobileLandscape = useIsMobileLandscapeViewport();
   const [userTextColor, setUserTextColor] = useState(() => {
     if (typeof window === 'undefined') return DEFAULT_CHAT_TEXT_COLOR;
     try {
@@ -6145,13 +6143,7 @@ export default function RoomWithSync({
   );
 
   return (
-    <main
-      className={`flex flex-col bg-gray-950 p-3 ${
-        isMobileLandscape
-          ? 'h-screen overflow-x-hidden overflow-y-scroll mc-landscape-room-scroll mc-scrollbar-stable'
-          : 'h-screen overflow-hidden'
-      }`}
-    >
+    <main className="mc-room-viewport mc-scrollbar-stable flex flex-col bg-gray-950 p-3">
       <header className="relative mb-2 flex shrink-0 flex-row items-center justify-between gap-2 border-b border-gray-800 pb-2 sm:gap-3">
         <div className="flex min-w-0 flex-1 items-center gap-2">
           <Image

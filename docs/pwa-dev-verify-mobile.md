@@ -83,9 +83,9 @@ Next の **コンパイルエラー**（ソース破損・構文エラー）で 
 
 スマホ/PWA で部屋を見ているとき、チャットの縦スクロールが親に伝わると **プルリフレッシュ** や **バウンス** で全体がリロードし、YouTube 再生が止まることがある。
 
-**対策（実装済み）**: 部屋マウント時に `usePreventRoomPullToRefresh` が `html` に `mc-prevent-pull-refresh` を付与。チャット一覧は `mc-room-scroll-pane` でオーバースクロールを閉じる。コード: `src/hooks/usePreventRoomPullToRefresh.ts`・`globals.css`。
+**対策（実装済み）**: 部屋マウント時に `usePreventRoomPullToRefresh` が `html` にクラスを付与。**ホーム画面**は `mc-prevent-pull-refresh`（document 固定）、**スマホブラウザのタブ**は `mc-prevent-pull-refresh-lite`（overscroll のみ・ヘッダーがアドレスバーに隠れない）。チャット一覧は `mc-room-scroll-pane`。
 
-**確認**: 本番 or プレビューをホーム画面から開き、部屋でチャットを上端まで引っ張ったあと離してもリロードしないこと。
+**確認**: ホーム画面から開き、部屋でチャットを上端まで引っ張ってもリロードしないこと。**ブラウザのタブ**から開き、部屋ヘッダーがアドレスバーに隠れず、必要ならページを上方向にスクロールできること。
 
 ---
 

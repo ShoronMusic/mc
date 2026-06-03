@@ -14,8 +14,15 @@ body {
 }
 
 /**
- * 部屋（スマホ/PWA）: 誤った縦スクロールでプルリフレッシュ・全体リロードされ再生が切れるのを抑止。
- * `usePreventRoomPullToRefresh` が html に付与する。
+ * 部屋・スマホブラウザ（タブ）: document は固定しない。overscroll だけ抑える。
+ */
+html.mc-prevent-pull-refresh-lite,
+html.mc-prevent-pull-refresh-lite body {
+  overscroll-behavior-y: none;
+}
+
+/**
+ * 部屋・ホーム画面（standalone）: プルリフレッシュで全体リロードされないよう document を固定。
  */
 html.mc-prevent-pull-refresh,
 html.mc-prevent-pull-refresh body {
@@ -51,6 +58,104 @@ html.mc-prevent-pull-refresh body {
   overscroll-behavior-y: contain;
   -webkit-overflow-scrolling: touch;
   touch-action: pan-y;
+}
+
+/**
+ * 部屋 main（スマホ）: 横向きのみ縦スクロール。JS 分岐だと向き変更で子が再マウントし得るため CSS のみ。
+ */
+.mc-room-viewport {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  /* ブラウザ: アドレスバー表示時の可視高（svh）＋必要ならページ縦スクロール */
+  min-height: 100vh;
+  min-height: 100svh;
+}
+
+html.mc-prevent-pull-refresh .mc-room-viewport {
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+}
+
+@media (max-width: 1023px) and (orientation: landscape) and (hover: none) and (pointer: coarse) {
+  .mc-room-viewport {
+    overflow-x: hidden;
+    overflow-y: scroll;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+  }
+}
+
+/**
+ * スマホ部屋レイアウト: 縦=上プレイヤー/下チャット、横=左チャット/右プレイヤー。
+ * 同一 DOM を維持し、向き変更で YouTube プレイヤーを再生成しない。
+ */
+.mc-room-mobile-shell {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1 1 0%;
+  overflow: hidden;
+}
+
+.mc-room-mobile-grid {
+  display: grid;
+  min-height: 0;
+  flex: 1 1 0%;
+  grid-template-columns: 1fr;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 0.25rem;
+}
+
+.mc-room-mobile-player {
+  min-width: 0;
+}
+
+.mc-room-mobile-chat {
+  display: flex;
+  min-height: 0;
+  min-width: 0;
+  flex-direction: column;
+  overflow: hidden;
+  border-top: 1px solid rgb(31 41 55);
+  padding-top: 0.25rem;
+}
+
+@media (max-width: 1023px) and (orientation: landscape) and (hover: none) and (pointer: coarse) {
+  .mc-room-mobile-shell {
+    flex: 0 0 auto;
+    overflow: visible;
+    padding-top: 0.25rem;
+    padding-bottom: 0.25rem;
+  }
+
+  .mc-room-mobile-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-rows: auto;
+    flex: none;
+  }
+
+  .mc-room-mobile-chat {
+    grid-column: 1;
+    grid-row: 1;
+    border-top: none;
+    padding-top: 0;
+    border-right: 1px solid rgb(31 41 55);
+    padding-right: 0.25rem;
+  }
+
+  .mc-room-mobile-player {
+    grid-column: 2;
+    grid-row: 1;
+    position: sticky;
+    top: 0;
+    align-self: start;
+    padding-left: 0.25rem;
+  }
 }
 
 /* 選曲者「再生中」インジケーター：波形 */

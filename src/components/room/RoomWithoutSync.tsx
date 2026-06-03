@@ -63,7 +63,6 @@ import { scheduleNextSongRecommendAfterCommentary } from '@/lib/schedule-next-so
 import { scheduleThemePlaylistRoomBlurbAfterPack } from '@/lib/schedule-theme-playlist-room-blurb';
 import type { ChatMessage, SystemMessageOptions } from '@/types/chat';
 import { useIsLgViewport } from '@/hooks/useLgViewport';
-import { useIsMobileLandscapeViewport } from '@/hooks/useMobileLandscapeViewport';
 import { useRoomChatLogPersistence } from '@/hooks/useRoomChatLogPersistence';
 import { useRoomAccessLogReport } from '@/hooks/useRoomAccessLogReport';
 import { usePreventRoomPullToRefresh } from '@/hooks/usePreventRoomPullToRefresh';
@@ -269,7 +268,6 @@ export default function RoomWithoutSync({
 
   const [chatSummary, setChatSummary] = useState<RoomSessionChatSummaryDisplay | null>(null);
   const isLg = useIsLgViewport();
-  const isMobileLandscape = useIsMobileLandscapeViewport();
   const [userTextColor, setUserTextColor] = useState(DEFAULT_CHAT_TEXT_COLOR);
   const lastActivityAtRef = useRef(Date.now());
   const lastTidbitAtRef = useRef(0);
@@ -1975,13 +1973,7 @@ export default function RoomWithoutSync({
   );
 
   return (
-    <main
-      className={`flex flex-col bg-gray-950 p-3 ${
-        isMobileLandscape
-          ? 'h-screen overflow-x-hidden overflow-y-scroll mc-landscape-room-scroll mc-scrollbar-stable'
-          : 'h-screen overflow-hidden'
-      }`}
-    >
+    <main className="mc-room-viewport mc-scrollbar-stable flex flex-col bg-gray-950 p-3">
       <div className="mb-2 shrink-0 rounded border border-amber-700 bg-amber-900/50 px-3 py-2 text-sm leading-snug text-amber-200">
         .env.local に <strong>NEXT_PUBLIC_ABLY_API_KEY</strong> を設定すると、複数ブラウザ・タブが「同じ部屋の別々の参加者」として扱われ、参加者一覧・同期再生・チャット共有が利用できます。未設定の場合は各ウィンドウが独立して動作します。
       </div>

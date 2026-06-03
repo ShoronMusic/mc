@@ -152,7 +152,9 @@ PowerShell 一括用: リポジトリの **`scripts/run-music8-import-overnight.
 
 ### 週次同期（新規 + 既存の更新）— 推奨
 
-m8 で `update-all-data.js` → GCS 反映のあと、mc で **差分計画 → dry-run → apply** を一括実行する。
+**毎週の PowerShell 手順（コピペ用）**: [`00-music8-weekly-mc-sync.md`](./00-music8-weekly-mc-sync.md)
+
+m8 で `update-all-data.js` → GCS 反映のあと、mc で **差分計画 → apply** を一括実行する（毎週は **dry-run 省略** `-SkipDryRun` 推奨。詳細は上記）。
 
 | 検出 | 曲 | アーティスト |
 |------|-----|----------------|
@@ -175,13 +177,13 @@ npx tsx scripts/apply-music8-sync-plan.ts --manifest=tmp/music8-sync-plan-latest
 npx tsx scripts/apply-music8-sync-plan.ts --manifest=tmp/music8-sync-plan-latest/manifest.json --apply
 ```
 
-一括ショートカット: **`scripts/run-music8-weekly-sync.ps1`**（`-Apply` で DB 更新）。成功後は `tmp/music8-sync-last-success.json` に時刻を記録し、次回の `--since` 既定に使う。
+一括ショートカット: **`scripts/run-music8-weekly-sync.ps1 -Apply -SkipDryRun`**。成功後は `tmp/music8-sync-last-success.json` に時刻を記録し、次回の `--since` 既定に使う。
 
 npm: `npm run diff:music8:sync-plan` / `npm run apply:music8:sync-plan`（引数は `npx tsx` 直叩き推奨）。
 
 **安全策**
 
-- 常に **dry-run → apply** の2段。
+- 初回・件数不明時は **dry-run → apply** の2段。毎週ルーティンは [`00-music8-weekly-mc-sync.md`](./00-music8-weekly-mc-sync.md) のとおり **`-SkipDryRun`** でよい。
 - 曲は `--import-keys-file` のみ（全 index 走査しない）。
 - 取り込み後に `music8_song_data.import_fingerprint` を保存（`buildPersistableMusic8SongSnapshot`）。次週は内容が同じなら stale に入らない。
 - 初回フィンガープリント未保存の曲が多い週は `--full-fingerprint` または一度 apply 後に収束。

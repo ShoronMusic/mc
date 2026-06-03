@@ -1,0 +1,33 @@
+{
+  "generatedAt": "2026-06-01T23:44:49.884Z",
+  "sinceIso": "2026-05-25T23:44:35.728Z",
+  "songsDir": "E:\\m8\\public\\data\\songs",
+  "artistsDir": "E:\\m8\\public\\data\\artists",
+  "artistsList": "E:\\m8\\public\\data\\artists.json",
+  "counts": {
+    "newSongs": 2500,
+    "staleSongs": 5,
+    "songsToApply": 2505,
+    "newArtists": 15,
+    "staleArtists": 6725,
+    "artistsToApply": 6740
+  },
+  "stats": {
+    "songFilesOnDisk": 21130,
+    "songKeysInDb": 20676,
+    "artistFilesOnDisk": 6753,
+    "artistSlugsInDb": 6796,
+    "songFingerprintReads": 94,
+    "artistFingerprintReads": 6725,
+    "sinceMs": 1779752675728
+  },
+  "files": {
+    "songKeysNew": "E:\\mc\\tmp\\music8-sync-plan-latest\\song-keys-new.txt",
+    "songKeysStale": "E:\\mc\\tmp\\music8-sync-plan-latest\\song-keys-stale.txt",
+    "songKeysApply": "E:\\mc\\tmp\\music8-sync-plan-latest\\song-keys-apply.txt",
+    "artistSlugsNew": "E:\\mc\\tmp\\music8-sync-plan-latest\\artist-slugs-new.txt",
+    "artistSlugsStale": "E:\\mc\\tmp\\music8-sync-plan-latest\\artist-slugs-stale.txt",
+    "artistSlugsApply": "E:\\mc\\tmp\\music8-sync-plan-latest\\artist-slugs-apply.txt",
+    "manifest": "E:\\mc\\tmp\\music8-sync-plan-latest\\manifest.json"
+  }
+}
