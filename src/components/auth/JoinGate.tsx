@@ -1,16 +1,25 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { JoinChoice, GUEST_STORAGE_KEY, GUEST_NAME_STORAGE_KEY, GUEST_ROOM_KEY } from './JoinChoice';
 import { FROM_START_KEY } from './FromStartMarker';
 import { AblyProviderWrapper } from '@/components/providers/AblyProviderWrapper';
 import { getRoomClientId, isKickedForRoom, isKickedSitewide } from '@/lib/room-owner';
+import { fetchRoomAuthSessionCheck } from '@/lib/room-auth-session-check-client';
+import { regenerateRoomSessionInstanceId } from '@/lib/room-session-instance';
+import { RoomSessionTakeoverJoinModal } from '@/components/room/RoomSessionTakeoverJoinModal';
 import { readTermsAccepted } from '@/lib/terms-consent';
 import { runRoomEntryGateCheck } from '@/lib/join-gate-room-check-client';
 
-type GateStatus = 'loading' | 'choice' | 'room' | 'kicked' | 'closed';
+type GateStatus = 'loading' | 'choice' | 'room' | 'kicked' | 'closed' | 'session_takeover_confirm';
+
+type PendingEnter = {
+  displayName: string;
+  isGuest: boolean;
+  authUserId: string | null;
+};
 
 function getDisplayNameFromUser(user: { user_metadata?: { display_name?: string; name?: string }; email?: string }): string {
   const meta = user?.user_metadata;
@@ -41,6 +50,7 @@ export function JoinGate({ roomId }: JoinGateProps) {
   const [roomDisplayTitle, setRoomDisplayTitle] = useState<string>('');
   const [joinVerifying, setJoinVerifying] = useState(false);
   const [authUserId, setAuthUserId] = useState<string | null>(null);
+  const [pendingEnter, setPendingEnter] = useState<PendingEnter | null>(null);
 
   const clientId = useMemo(
     () =>
@@ -53,6 +63,34 @@ export function JoinGate({ roomId }: JoinGateProps) {
       sessionStorage.removeItem(FROM_START_KEY);
     } catch {}
   };
+
+  const commitEnterRoom = useCallback((enter: PendingEnter) => {
+    setDisplayName(enter.displayName);
+    setIsGuest(enter.isGuest);
+    setAuthUserId(enter.isGuest ? null : enter.authUserId);
+    setPendingEnter(null);
+    clearFromStart();
+    setStatus('room');
+  }, []);
+
+  const tryEnterRoom = useCallback(
+    async (enter: PendingEnter) => {
+      if (!enter.isGuest && enter.authUserId) {
+        const check = await fetchRoomAuthSessionCheck(roomId);
+        if (!check.ok) {
+          window.alert(check.error);
+          return;
+        }
+        if (check.configured && check.sameAccountInRoom) {
+          setPendingEnter(enter);
+          setStatus('session_takeover_confirm');
+          return;
+        }
+      }
+      commitEnterRoom(enter);
+    },
+    [roomId, commitEnterRoom],
+  );
 
   useEffect(() => {
     if (!readTermsAccepted()) {
@@ -124,15 +162,18 @@ export function JoinGate({ roomId }: JoinGateProps) {
           setAuthUserId(user.id);
           setDisplayName(getDisplayNameFromUser(user));
           setIsGuest(false);
-          clearFromStart();
-          setStatus('room');
+          void tryEnterRoom({
+            displayName: getDisplayNameFromUser(user),
+            isGuest: false,
+            authUserId: user.id,
+          });
           return;
         }
         setAuthUserId(null);
         if (!tryEnterAsGuestFromStorage()) setStatus('choice');
       });
     });
-  }, [roomId, clientId, consentOk]);
+  }, [roomId, clientId, consentOk, tryEnterRoom]);
 
   const handleJoin = async (name: string, mode: 'guest' | 'registered') => {
     setJoinVerifying(true);
@@ -147,23 +188,23 @@ export function JoinGate({ roomId }: JoinGateProps) {
       }
       setLiveTitle(gate.liveTitle);
       setRoomDisplayTitle(gate.roomDisplayTitle);
-      setDisplayName(name);
-      setIsGuest(mode === 'guest');
+      let nextAuthUserId: string | null = null;
       if (mode === 'guest') {
-        setAuthUserId(null);
+        nextAuthUserId = null;
       } else {
         const supabase = createClient();
         if (supabase) {
-          const { data: { user } } = await supabase.auth.getUser();
-          setAuthUserId(user?.id ?? null);
-        } else {
-          setAuthUserId(null);
+          const {
+            data: { user },
+          } = await supabase.auth.getUser();
+          nextAuthUserId = user?.id ?? null;
         }
       }
-      try {
-        sessionStorage.removeItem(FROM_START_KEY);
-      } catch {}
-      setStatus('room');
+      await tryEnterRoom({
+        displayName: name,
+        isGuest: mode === 'guest',
+        authUserId: nextAuthUserId,
+      });
     } finally {
       setJoinVerifying(false);
     }
@@ -173,6 +214,24 @@ export function JoinGate({ roomId }: JoinGateProps) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gray-950">
         <p className="text-gray-400">読み込み中…</p>
+      </div>
+    );
+  }
+
+  if (status === 'session_takeover_confirm') {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gray-950">
+        <RoomSessionTakeoverJoinModal
+          roomId={roomId}
+          onConfirm={() => {
+            regenerateRoomSessionInstanceId(roomId);
+            if (pendingEnter) commitEnterRoom(pendingEnter);
+          }}
+          onCancel={() => {
+            setPendingEnter(null);
+            router.push('/');
+          }}
+        />
       </div>
     );
   }

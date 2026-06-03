@@ -8,10 +8,11 @@ import {
   type RoomSessionTakeoverState,
 } from '@/lib/room-session-takeover';
 
-const SUPPLANTED_DEBOUNCE_MS = 1200;
+const SUPPLANTED_DEBOUNCE_MS = 800;
 
 export function useRoomSessionTakeoverState(input: {
   myClientId: string;
+  mySessionInstanceId: string;
   authUserId: string | null;
   isGuest: boolean;
   presenceRows: PresenceAuthRow[];
@@ -26,12 +27,20 @@ export function useRoomSessionTakeoverState(input: {
     () =>
       detectRoomSessionTakeoverState({
         myClientId: input.myClientId,
+        mySessionInstanceId: input.mySessionInstanceId,
         authUserId: input.authUserId,
         isGuest: input.isGuest,
         presenceRows: input.presenceRows,
         connectionState,
       }),
-    [input.myClientId, input.authUserId, input.isGuest, input.presenceRows, connectionState],
+    [
+      input.myClientId,
+      input.mySessionInstanceId,
+      input.authUserId,
+      input.isGuest,
+      input.presenceRows,
+      connectionState,
+    ],
   );
 
   const [debounced, setDebounced] = useState<RoomSessionTakeoverState>(raw);

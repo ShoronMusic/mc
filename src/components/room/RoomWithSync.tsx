@@ -166,7 +166,8 @@ import { useRoomChatLogPersistence } from '@/hooks/useRoomChatLogPersistence';
 import { useRoomAccessLogReport } from '@/hooks/useRoomAccessLogReport';
 import { usePreventRoomPullToRefresh } from '@/hooks/usePreventRoomPullToRefresh';
 import { useRoomSessionTakeoverState } from '@/hooks/useRoomSessionTakeoverState';
-import { RoomSessionTakeoverNotice } from '@/components/room/RoomSessionTakeoverNotice';
+import { RoomSessionSupplantedOverlay } from '@/components/room/RoomSessionSupplantedOverlay';
+import { getOrCreateRoomSessionInstanceId, regenerateRoomSessionInstanceId } from '@/lib/room-session-instance';
 import { dedupeParticipantsByAuthUserId } from '@/lib/room-participant-dedupe';
 import { useSupabaseAuthUserId } from '@/hooks/useSupabaseAuthUserId';
 import { isAiQuestionGuardKickExemptUserId } from '@/lib/ai-question-guard-exempt-user-ids';
@@ -323,6 +324,8 @@ interface PresenceMemberData {
    * updateStatus で名前・色が変わっても変えない（Ably の timestamp は更新のたびに進むため並びが崩れるのを防ぐ）。
    */
   joinedAtMs?: number;
+  /** 同一 auth clientId のうち、操作中のブラウザタブを識別 */
+  sessionInstanceId?: string;
 }
 
 interface CandidateSong {
@@ -649,6 +652,10 @@ export default function RoomWithSync({
   });
   usePreventRoomPullToRefresh();
   const authUserId = useSupabaseAuthUserId(isGuest);
+  const mySessionInstanceId = useMemo(
+    () => (roomId ? getOrCreateRoomSessionInstanceId(roomId) : ''),
+    [roomId],
+  );
   /** マイページ設定: このクライアントが曲解説 API を呼ぶか・最古入室者のクイズ API を呼ぶか */
   const userRoomAiCommentaryEnabledRef = useRef(true);
   const userRoomAiSongQuizEnabledRef = useRef(true);
@@ -885,6 +892,7 @@ export default function RoomWithSync({
       status: userStatus || undefined,
       jpAiUnlockEnabled,
       joinedAtMs: roomPresenceJoinedAtMsRef.current ?? undefined,
+      ...(mySessionInstanceId ? { sessionInstanceId: mySessionInstanceId } : {}),
     }),
     [
       effectiveDisplayName,
@@ -894,6 +902,7 @@ export default function RoomWithSync({
       userTextColor,
       userStatus,
       jpAiUnlockEnabled,
+      mySessionInstanceId,
     ],
   );
   const { updateStatus } = usePresence(channelName, presencePayload);
@@ -944,13 +953,22 @@ export default function RoomWithSync({
           typeof d?.authUserId === 'string' && /^[0-9a-f-]{36}$/i.test(d.authUserId.trim())
             ? d.authUserId.trim()
             : undefined;
-        return { clientId: p.clientId, ...(aid ? { authUserId: aid } : {}) };
+        const sid =
+          typeof d?.sessionInstanceId === 'string' && d.sessionInstanceId.trim()
+            ? d.sessionInstanceId.trim()
+            : undefined;
+        return {
+          clientId: p.clientId,
+          ...(aid ? { authUserId: aid } : {}),
+          ...(sid ? { sessionInstanceId: sid } : {}),
+        };
       }),
     [presenceData],
   );
 
   const sessionTakeoverState = useRoomSessionTakeoverState({
     myClientId,
+    mySessionInstanceId,
     authUserId,
     isGuest,
     presenceRows: presenceAuthRows,
@@ -6395,12 +6413,13 @@ export default function RoomWithSync({
         )}
       </header>
 
-      {sessionTakeoverState === 'active' || sessionTakeoverState === 'supplanted' ? (
-        <RoomSessionTakeoverNotice
-          state={sessionTakeoverState}
+      {sessionTakeoverState === 'supplanted' && onLeave ? (
+        <RoomSessionSupplantedOverlay
           onTakeOverThisDevice={() => {
+            if (roomId) regenerateRoomSessionInstanceId(roomId);
             window.location.reload();
           }}
+          onLeave={onLeave}
         />
       ) : null}
 
