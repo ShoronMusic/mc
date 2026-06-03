@@ -1,41 +1,65 @@
 /** 同一 auth clientId のうち、どのブラウザタブが「操作中」かを presence で区別する */
 
-const PREFIX = 'mc:room_session_inst:';
+const PREFIX = 'mc:room_session_claim:';
 
-export function getRoomSessionInstanceStorageKey(roomId: string): string {
+export type RoomSessionClaim = {
+  instanceId: string;
+  claimedAtMs: number;
+};
+
+export function getRoomSessionClaimStorageKey(roomId: string): string {
   return `${PREFIX}${roomId}`;
 }
 
-export function getOrCreateRoomSessionInstanceId(roomId: string): string {
-  if (typeof window === 'undefined' || !roomId) return '';
-  const key = getRoomSessionInstanceStorageKey(roomId);
+function newInstanceId(): string {
+  return typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `si-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+}
+
+function readClaim(roomId: string): RoomSessionClaim | null {
+  if (typeof window === 'undefined' || !roomId) return null;
   try {
-    let id = sessionStorage.getItem(key);
-    if (!id || !id.trim()) {
-      id =
-        typeof crypto !== 'undefined' && crypto.randomUUID
-          ? crypto.randomUUID()
-          : `si-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
-      sessionStorage.setItem(key, id);
-    }
-    return id;
+    const raw = sessionStorage.getItem(getRoomSessionClaimStorageKey(roomId));
+    if (!raw) return null;
+    const o = JSON.parse(raw) as { instanceId?: string; claimedAtMs?: number };
+    const instanceId = typeof o.instanceId === 'string' ? o.instanceId.trim() : '';
+    const claimedAtMs = typeof o.claimedAtMs === 'number' && Number.isFinite(o.claimedAtMs) ? o.claimedAtMs : 0;
+    if (!instanceId) return null;
+    return { instanceId, claimedAtMs };
   } catch {
-    return `si-${Date.now()}`;
+    return null;
   }
 }
 
-/** この端末で操作権を取り直す直前に呼ぶ（presence の sessionInstanceId を更新する） */
-export function regenerateRoomSessionInstanceId(roomId: string): string {
-  if (typeof window === 'undefined' || !roomId) return '';
-  const key = getRoomSessionInstanceStorageKey(roomId);
-  const id =
-    typeof crypto !== 'undefined' && crypto.randomUUID
-      ? crypto.randomUUID()
-      : `si-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+function writeClaim(roomId: string, claim: RoomSessionClaim): RoomSessionClaim {
   try {
-    sessionStorage.setItem(key, id);
+    sessionStorage.setItem(getRoomSessionClaimStorageKey(roomId), JSON.stringify(claim));
   } catch {
     /* ignore */
   }
-  return id;
+  return claim;
+}
+
+export function getOrCreateRoomSessionClaim(roomId: string): RoomSessionClaim {
+  const existing = readClaim(roomId);
+  if (existing) return existing;
+  return writeClaim(roomId, { instanceId: newInstanceId(), claimedAtMs: Date.now() });
+}
+
+/** この端末で操作権を取り直す（新しい instanceId + より新しい claimedAtMs） */
+export function regenerateRoomSessionClaim(roomId: string): RoomSessionClaim {
+  const prev = readClaim(roomId);
+  const claimedAtMs = Math.max(Date.now(), (prev?.claimedAtMs ?? 0) + 1);
+  return writeClaim(roomId, { instanceId: newInstanceId(), claimedAtMs });
+}
+
+/** @deprecated use getOrCreateRoomSessionClaim */
+export function getOrCreateRoomSessionInstanceId(roomId: string): string {
+  return getOrCreateRoomSessionClaim(roomId).instanceId;
+}
+
+/** @deprecated use regenerateRoomSessionClaim */
+export function regenerateRoomSessionInstanceId(roomId: string): string {
+  return regenerateRoomSessionClaim(roomId).instanceId;
 }

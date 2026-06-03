@@ -2,17 +2,18 @@
 
 import { useConnectionStateListener } from 'ably/react';
 import { useEffect, useMemo, useState } from 'react';
+import type { RoomSessionClaim } from '@/lib/room-session-instance';
 import {
   detectRoomSessionTakeoverState,
   type PresenceAuthRow,
   type RoomSessionTakeoverState,
 } from '@/lib/room-session-takeover';
 
-const SUPPLANTED_DEBOUNCE_MS = 800;
+const SUPPLANTED_DEBOUNCE_MS = 600;
 
 export function useRoomSessionTakeoverState(input: {
   myClientId: string;
-  mySessionInstanceId: string;
+  mySessionClaim: RoomSessionClaim;
   authUserId: string | null;
   isGuest: boolean;
   presenceRows: PresenceAuthRow[];
@@ -27,7 +28,7 @@ export function useRoomSessionTakeoverState(input: {
     () =>
       detectRoomSessionTakeoverState({
         myClientId: input.myClientId,
-        mySessionInstanceId: input.mySessionInstanceId,
+        mySessionClaim: input.mySessionClaim,
         authUserId: input.authUserId,
         isGuest: input.isGuest,
         presenceRows: input.presenceRows,
@@ -35,7 +36,7 @@ export function useRoomSessionTakeoverState(input: {
       }),
     [
       input.myClientId,
-      input.mySessionInstanceId,
+      input.mySessionClaim,
       input.authUserId,
       input.isGuest,
       input.presenceRows,

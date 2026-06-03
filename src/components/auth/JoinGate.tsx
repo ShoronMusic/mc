@@ -8,7 +8,7 @@ import { FROM_START_KEY } from './FromStartMarker';
 import { AblyProviderWrapper } from '@/components/providers/AblyProviderWrapper';
 import { getRoomClientId, isKickedForRoom, isKickedSitewide } from '@/lib/room-owner';
 import { fetchRoomAuthSessionCheck } from '@/lib/room-auth-session-check-client';
-import { regenerateRoomSessionInstanceId } from '@/lib/room-session-instance';
+import { regenerateRoomSessionClaim } from '@/lib/room-session-instance';
 import { RoomSessionTakeoverJoinModal } from '@/components/room/RoomSessionTakeoverJoinModal';
 import { readTermsAccepted } from '@/lib/terms-consent';
 import { runRoomEntryGateCheck } from '@/lib/join-gate-room-check-client';
@@ -224,7 +224,7 @@ export function JoinGate({ roomId }: JoinGateProps) {
         <RoomSessionTakeoverJoinModal
           roomId={roomId}
           onConfirm={() => {
-            regenerateRoomSessionInstanceId(roomId);
+            regenerateRoomSessionClaim(roomId);
             if (pendingEnter) commitEnterRoom(pendingEnter);
           }}
           onCancel={() => {

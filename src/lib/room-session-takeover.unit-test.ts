@@ -1,50 +1,69 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { detectRoomSessionTakeoverState } from './room-session-takeover';
+import {
+  detectRoomSessionTakeoverState,
+  shouldPublishRoomSessionPresence,
+} from './room-session-takeover';
 
 const uid = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
 const myCid = `mc-u-${uid}`;
-const instA = '11111111-1111-1111-1111-111111111111';
-const instB = '22222222-2222-2222-2222-222222222222';
 
-test('detectRoomSessionTakeoverState: active when sessionInstanceId matches', () => {
+test('detectRoomSessionTakeoverState: active when claim matches', () => {
   assert.equal(
     detectRoomSessionTakeoverState({
       myClientId: myCid,
-      mySessionInstanceId: instA,
+      mySessionClaim: { instanceId: 'a', claimedAtMs: 100 },
       authUserId: uid,
       isGuest: false,
       connectionState: 'connected',
-      presenceRows: [{ clientId: myCid, authUserId: uid, sessionInstanceId: instA }],
+      presenceRows: [
+        { clientId: myCid, authUserId: uid, sessionInstanceId: 'a', sessionClaimedAtMs: 100 },
+      ],
     }),
     'active',
   );
 });
 
-test('detectRoomSessionTakeoverState: supplanted when same clientId but other sessionInstanceId', () => {
+test('detectRoomSessionTakeoverState: supplanted when remote claim is newer', () => {
   assert.equal(
     detectRoomSessionTakeoverState({
       myClientId: myCid,
-      mySessionInstanceId: instA,
+      mySessionClaim: { instanceId: 'a', claimedAtMs: 100 },
       authUserId: uid,
       isGuest: false,
       connectionState: 'connected',
-      presenceRows: [{ clientId: myCid, authUserId: uid, sessionInstanceId: instB }],
+      presenceRows: [
+        { clientId: myCid, authUserId: uid, sessionInstanceId: 'b', sessionClaimedAtMs: 200 },
+      ],
     }),
     'supplanted',
   );
 });
 
-test('detectRoomSessionTakeoverState: guest', () => {
+test('shouldPublishRoomSessionPresence: false when remote claim is newer', () => {
   assert.equal(
-    detectRoomSessionTakeoverState({
-      myClientId: 'random',
-      mySessionInstanceId: instA,
-      authUserId: uid,
-      isGuest: true,
-      connectionState: 'connected',
-      presenceRows: [],
+    shouldPublishRoomSessionPresence({
+      isGuest: false,
+      myClientId: myCid,
+      mySessionClaim: { instanceId: 'a', claimedAtMs: 100 },
+      presenceRows: [
+        { clientId: myCid, sessionInstanceId: 'b', sessionClaimedAtMs: 200 },
+      ],
     }),
-    'guest',
+    false,
+  );
+});
+
+test('shouldPublishRoomSessionPresence: true when local claim is newer (takeover)', () => {
+  assert.equal(
+    shouldPublishRoomSessionPresence({
+      isGuest: false,
+      myClientId: myCid,
+      mySessionClaim: { instanceId: 'b', claimedAtMs: 300 },
+      presenceRows: [
+        { clientId: myCid, sessionInstanceId: 'a', sessionClaimedAtMs: 100 },
+      ],
+    }),
+    true,
   );
 });

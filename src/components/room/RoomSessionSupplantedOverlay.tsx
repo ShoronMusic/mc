@@ -24,6 +24,9 @@ export function RoomSessionSupplantedOverlay({
         <p className="mt-2 text-sm leading-relaxed text-gray-300">
           同じアカウントが、ほかの端末（スマホ・PC など）でこの部屋を操作しています。この画面では送信・選曲はできません。
         </p>
+        <p className="mt-2 text-xs text-gray-400">
+          「この端末で操作する」を押すと、数秒以内に切り替わります（再読み込みは不要です）。
+        </p>
         <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
           <button
             type="button"
