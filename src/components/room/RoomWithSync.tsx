@@ -164,6 +164,7 @@ import {
 import { useIsLgViewport } from '@/hooks/useLgViewport';
 import { useRoomChatLogPersistence } from '@/hooks/useRoomChatLogPersistence';
 import { useRoomAccessLogReport } from '@/hooks/useRoomAccessLogReport';
+import { usePreventRoomPullToRefresh } from '@/hooks/usePreventRoomPullToRefresh';
 import { useRoomSessionTakeoverState } from '@/hooks/useRoomSessionTakeoverState';
 import { RoomSessionTakeoverNotice } from '@/components/room/RoomSessionTakeoverNotice';
 import { dedupeParticipantsByAuthUserId } from '@/lib/room-participant-dedupe';
