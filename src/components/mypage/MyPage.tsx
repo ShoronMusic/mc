@@ -4,7 +4,8 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { getOrCreateRoomClientId } from '@/lib/room-owner';
+import { getRoomClientId } from '@/lib/room-owner';
+import { useSupabaseAuthUserId } from '@/hooks/useSupabaseAuthUserId';
 import type { User } from '@supabase/supabase-js';
 import {
   CHAT_TEXT_COLOR_PALETTE,
@@ -653,9 +654,10 @@ export default function MyPage({
     return '';
   }, [routeParams?.roomId]);
   const effectiveRoomId = (roomId && roomId.trim()) || roomIdFromRoute;
+  const authUserIdForClient = useSupabaseAuthUserId(isGuest);
   const effectiveClientId =
     (myClientId && myClientId.trim()) ||
-    (effectiveRoomId ? getOrCreateRoomClientId(effectiveRoomId) : '');
+    (effectiveRoomId ? getRoomClientId(effectiveRoomId, authUserIdForClient) : '');
 
   const [isLiveOrganizer, setIsLiveOrganizer] = useState(false);
   const [ownerAiCharacterNameInput, setOwnerAiCharacterNameInput] = useState(ownerAiCharacterName);

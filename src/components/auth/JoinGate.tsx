@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import { JoinChoice, GUEST_STORAGE_KEY, GUEST_NAME_STORAGE_KEY, GUEST_ROOM_KEY } from './JoinChoice';
 import { FROM_START_KEY } from './FromStartMarker';
 import { AblyProviderWrapper } from '@/components/providers/AblyProviderWrapper';
-import { getOrCreateRoomClientId, isKickedForRoom, isKickedSitewide } from '@/lib/room-owner';
+import { getRoomClientId, isKickedForRoom, isKickedSitewide } from '@/lib/room-owner';
 import { readTermsAccepted } from '@/lib/terms-consent';
 import { runRoomEntryGateCheck } from '@/lib/join-gate-room-check-client';
 
@@ -40,10 +40,12 @@ export function JoinGate({ roomId }: JoinGateProps) {
   const [liveTitle, setLiveTitle] = useState<string>('');
   const [roomDisplayTitle, setRoomDisplayTitle] = useState<string>('');
   const [joinVerifying, setJoinVerifying] = useState(false);
+  const [authUserId, setAuthUserId] = useState<string | null>(null);
 
   const clientId = useMemo(
-    () => (typeof window !== 'undefined' ? getOrCreateRoomClientId(roomId) : ''),
-    [roomId]
+    () =>
+      typeof window !== 'undefined' ? getRoomClientId(roomId, isGuest ? null : authUserId) : '',
+    [roomId, authUserId, isGuest],
   );
 
   const clearFromStart = () => {
@@ -119,12 +121,14 @@ export function JoinGate({ roomId }: JoinGateProps) {
           } catch {
             /* ignore */
           }
+          setAuthUserId(user.id);
           setDisplayName(getDisplayNameFromUser(user));
           setIsGuest(false);
           clearFromStart();
           setStatus('room');
           return;
         }
+        setAuthUserId(null);
         if (!tryEnterAsGuestFromStorage()) setStatus('choice');
       });
     });
@@ -145,6 +149,17 @@ export function JoinGate({ roomId }: JoinGateProps) {
       setRoomDisplayTitle(gate.roomDisplayTitle);
       setDisplayName(name);
       setIsGuest(mode === 'guest');
+      if (mode === 'guest') {
+        setAuthUserId(null);
+      } else {
+        const supabase = createClient();
+        if (supabase) {
+          const { data: { user } } = await supabase.auth.getUser();
+          setAuthUserId(user?.id ?? null);
+        } else {
+          setAuthUserId(null);
+        }
+      }
       try {
         sessionStorage.removeItem(FROM_START_KEY);
       } catch {}

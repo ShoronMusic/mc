@@ -93,7 +93,25 @@ export function getRoomClientIdStorageKey(roomId: string): string {
   return `${ABLY_CID_PREFIX}${roomId}`;
 }
 
-/** この部屋用の clientId を取得または生成（sessionStorage） */
+/** ログイン済み: Supabase user id から安定した Ably clientId（端末間で同一＝同時接続は1つ） */
+export function buildAuthRoomClientId(authUserId: string): string {
+  return `mc-u-${authUserId.trim()}`;
+}
+
+/**
+ * 部屋用 clientId。
+ * - ログイン: `mc-u-{authUserId}`（PC・スマホで同じ。後から入った接続が先を置き換える）
+ * - ゲスト: 端末ごとの sessionStorage UUID
+ */
+export function getRoomClientId(roomId: string, authUserId?: string | null): string {
+  const aid = typeof authUserId === 'string' ? authUserId.trim() : '';
+  if (aid && /^[0-9a-f-]{36}$/i.test(aid)) {
+    return buildAuthRoomClientId(aid);
+  }
+  return getOrCreateRoomClientId(roomId);
+}
+
+/** この部屋用の clientId を取得または生成（sessionStorage・ゲスト用） */
 export function getOrCreateRoomClientId(roomId: string): string {
   if (typeof window === 'undefined') return '';
   const key = getRoomClientIdStorageKey(roomId);

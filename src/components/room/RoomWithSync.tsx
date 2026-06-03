@@ -165,6 +165,7 @@ import { useIsLgViewport } from '@/hooks/useLgViewport';
 import { useRoomChatLogPersistence } from '@/hooks/useRoomChatLogPersistence';
 import { useRoomAccessLogReport } from '@/hooks/useRoomAccessLogReport';
 import { usePreventRoomPullToRefresh } from '@/hooks/usePreventRoomPullToRefresh';
+import { dedupeParticipantsByAuthUserId } from '@/lib/room-participant-dedupe';
 import { useSupabaseAuthUserId } from '@/hooks/useSupabaseAuthUserId';
 import { isAiQuestionGuardKickExemptUserId } from '@/lib/ai-question-guard-exempt-user-ids';
 import { lineFromJoinGreetingApi } from '@/lib/join-greeting-logic';
@@ -973,9 +974,14 @@ export default function RoomWithSync({
           ...(aid ? { authUserId: aid, publicProfileVisible: visible } : {}),
         };
       });
-    const latestHumanTimestamp = presentRows
-      .filter((row) => row.clientId !== AI_CHARACTER_CLIENT_ID)
-      .reduce((max, row) => (row.timestamp > max ? row.timestamp : max), 0);
+    const humanRows = dedupeParticipantsByAuthUserId(
+      presentRows.filter((row) => row.clientId !== AI_CHARACTER_CLIENT_ID),
+      myClientId,
+    );
+    const latestHumanTimestamp = humanRows.reduce(
+      (max, row) => (row.timestamp > max ? row.timestamp : max),
+      0,
+    );
     const aiJoinedAt =
       latestHumanTimestamp > 0
         ? latestHumanTimestamp + 1
@@ -996,11 +1002,18 @@ export default function RoomWithSync({
         ]
       : [];
 
-    return [...presentRows, ...aiRow].sort((a, b) => {
+    return [...humanRows, ...aiRow].sort((a, b) => {
       if (a.timestamp !== b.timestamp) return a.timestamp - b.timestamp;
       return a.clientId.localeCompare(b.clientId);
     });
-  }, [presenceData, yellowCardByClientId, joinOrderEpoch, ownerAiCharacterJoinEnabled, ownerAiCharacterName]);
+  }, [
+    presenceData,
+    yellowCardByClientId,
+    joinOrderEpoch,
+    ownerAiCharacterJoinEnabled,
+    ownerAiCharacterName,
+    myClientId,
+  ]);
   const participantsRef = useRef(participants);
   participantsRef.current = participants;
   /** 選曲に参加する人のみ・入室順（左から1,2,3...の番号に対応。一時退席枠を含む） */
