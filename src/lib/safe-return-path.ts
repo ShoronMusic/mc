@@ -10,6 +10,7 @@ const BLOCKED_FIRST_SEGMENTS = new Set([
   'terms',
   'privacy',
   'consent',
+  'share',
   '_next',
   'favicon.ico',
 ]);

@@ -6,20 +6,32 @@
 
 import { useEffect, useState } from 'react';
 import {
+  formatArtistDisplayName,
   formatMusic8ArtistDisplayLines,
   type Music8ArtistJson,
 } from '@/lib/music8-artist-display';
+import { findLibraryMainArtistInIndex } from '@/lib/library-artist-index-match';
 import { ReferencedMusicDataDisclaimer } from '@/components/room/ReferencedMusicDataDisclaimer';
 
 interface MainArtistTabPanelProps {
   artistName: string;
   songTitle: string | null;
+  /** 索引にいるとき「ライブラリ」から部屋の選曲ライブラリを開く */
+  onOpenLibraryForArtist?: (
+    mainArtist: string,
+    options?: { music8Artist?: Music8ArtistJson | null },
+  ) => void;
 }
 
-export default function MainArtistTabPanel({ artistName, songTitle }: MainArtistTabPanelProps) {
+export default function MainArtistTabPanel({
+  artistName,
+  songTitle,
+  onOpenLibraryForArtist,
+}: MainArtistTabPanelProps) {
   const [data, setData] = useState<Music8ArtistJson | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [libraryMainArtist, setLibraryMainArtist] = useState<string | null>(null);
 
   useEffect(() => {
     if (!artistName?.trim()) {
@@ -50,6 +62,42 @@ export default function MainArtistTabPanel({ artistName, songTitle }: MainArtist
       })
       .finally(() => setLoading(false));
   }, [artistName]);
+
+  useEffect(() => {
+    if (!data || !onOpenLibraryForArtist) {
+      setLibraryMainArtist(null);
+      return;
+    }
+    const lines = formatMusic8ArtistDisplayLines(data);
+    const englishDisplay = formatArtistDisplayName(
+      data.name,
+      typeof data.thePrefix === 'string' ? data.thePrefix : undefined,
+    );
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/library/artists');
+        const json = (await res.json().catch(() => null)) as {
+          items?: { main_artist: string }[];
+        } | null;
+        if (!res.ok || cancelled) {
+          if (!cancelled) setLibraryMainArtist(null);
+          return;
+        }
+        const items = Array.isArray(json?.items) ? json!.items! : [];
+        const found = findLibraryMainArtistInIndex(
+          [artistName, englishDisplay, lines.nameDisplay],
+          items,
+        );
+        if (!cancelled) setLibraryMainArtist(found);
+      } catch {
+        if (!cancelled) setLibraryMainArtist(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [artistName, data, onOpenLibraryForArtist]);
 
   if (!artistName?.trim()) {
     return (
@@ -106,9 +154,21 @@ export default function MainArtistTabPanel({ artistName, songTitle }: MainArtist
         )}
         <div className="min-w-0 flex-1 space-y-2 text-gray-300">
           {lines.nameDisplay && (
-            <p className="font-medium text-gray-200">
-              {lines.nameDisplay}
-              {lines.origin ? ` (${lines.origin})` : ''}
+            <p className="flex flex-wrap items-center gap-2 font-medium text-gray-200">
+              <span>
+                {lines.nameDisplay}
+                {lines.origin ? ` (${lines.origin})` : ''}
+              </span>
+              {libraryMainArtist && onOpenLibraryForArtist && (
+                <button
+                  type="button"
+                  onClick={() => onOpenLibraryForArtist(libraryMainArtist, { music8Artist: data })}
+                  className="shrink-0 rounded border border-lime-500/60 bg-lime-900/25 px-2 py-0.5 text-xs font-medium text-lime-100 hover:bg-lime-900/40"
+                  title="ライブラリでこのアーティストの曲一覧を開く"
+                >
+                  ライブラリ
+                </button>
+              )}
             </p>
           )}
           {lines.occupationDisplay && (

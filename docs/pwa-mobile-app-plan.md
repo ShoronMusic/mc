@@ -17,7 +17,7 @@
 | **リアルタイム** | Ably |
 | **動画** | YouTube IFrame Player API |
 | **スマホ UI** | `RoomMainLayout`・`UserBar`・ライブラリ 3 段 UI 等 |
-| **スマホ選曲** | YouTube 共有 → コピー → 貼り付け（`/guide/first-song-mobile`） |
+| **スマホ選曲** | YouTube **共有 → PWA 受け取り**（`pwa-phase2-youtube-share-receive.md`）／未対応時はコピペ（`/guide/first-song-mobile`） |
 | **PC 連携** | Chrome 拡張 |
 | **PWA** | Phase 1 着手（manifest・導線 UI。SW は未） |
 | **ストア** | なし |
@@ -113,7 +113,7 @@ Phase 3   ストア版（任意）
 |----|------|
 | T1 | SW: `next-pwa` / Serwist / 自前 |
 | T2 | ストア: Capacitor vs TWA |
-| T3 | 共有受け口: `/share?url=` vs カスタムスキーム |
+| T3 | 共有受け口: **`GET /share`（採用）** vs カスタムスキーム（Phase 3） |
 | D2 | PC 拡張との parity（共有 vs ライブラリ選曲） |
 
 全文・リスク表は Phase 2 以降に必要なら本書へ追記。方針変更時は **索引の進捗表も更新**。
@@ -135,6 +135,7 @@ Phase 3   ストア版（任意）
 |------|------|
 | `00-pwa-mobile-app.md` | 索引・進捗 |
 | `pwa-dev-verify-mobile.md` | 実機確認 |
+| `pwa-phase2-youtube-share-receive.md` | YouTube 共有 → PWA |
 | `chrome-extension-musicaichat.md` | PC |
 | `my-list-spec.md` | マイリスト・スマホ入口 |
 | `monetization-options.md` | 決済 |

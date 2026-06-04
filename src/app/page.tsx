@@ -9,6 +9,7 @@ import { AdminLoginHint } from '@/components/auth/AdminLoginHint';
 import { MeetingStartPanel } from '@/components/home/MeetingStartPanel';
 import { StartPageSiteIntro } from '@/components/home/StartPageSiteIntro';
 import { SessionReplacedNotice } from '@/components/home/SessionReplacedNotice';
+import { SharePendingNotice } from '@/components/home/SharePendingNotice';
 
 export default function StartPage() {
   return (
@@ -25,6 +26,7 @@ export default function StartPage() {
       </Suspense>
     <div className="flex min-h-screen flex-col items-center justify-center bg-gray-950 p-4 pt-16">
       <SessionReplacedNotice />
+      <SharePendingNotice />
       <div className="w-full max-w-lg rounded-xl border border-gray-700 bg-gray-900 p-8 shadow-lg">
         <StartPageSiteIntro />
         <p className="mb-6 text-center text-sm text-gray-400">

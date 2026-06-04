@@ -65,6 +65,7 @@ import type { ChatMessage, SystemMessageOptions } from '@/types/chat';
 import { useIsLgViewport } from '@/hooks/useLgViewport';
 import { useRoomChatLogPersistence } from '@/hooks/useRoomChatLogPersistence';
 import { useRoomAccessLogReport } from '@/hooks/useRoomAccessLogReport';
+import { rememberLastActiveRoom } from '@/lib/share-target-pending';
 import { usePreventRoomPullToRefresh } from '@/hooks/usePreventRoomPullToRefresh';
 import { createClient } from '@/lib/supabase/client';
 import {
@@ -147,6 +148,9 @@ export default function RoomWithoutSync({
     isGuest,
     displayName: displayNameProp.trim() || 'ゲスト',
   });
+  useEffect(() => {
+    if (roomId) rememberLastActiveRoom(roomId);
+  }, [roomId]);
   usePreventRoomPullToRefresh();
   useEffect(() => {
     rememberRoomForGuideReturn(roomId);
@@ -2287,6 +2291,9 @@ export default function RoomWithoutSync({
             favoritedVideoIds={favoritedVideoIds}
             onFavoriteClick={handleFavoriteClick}
             onOpenHistoryModal={() => setPlaybackHistoryModalOpen(true)}
+            onOpenLibraryForArtist={(mainArtist, options) =>
+              chatInputRef.current?.openLibraryForArtist(mainArtist, options)
+            }
           />
         }
         playbackHistoryModalOpen={playbackHistoryModalOpen}

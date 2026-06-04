@@ -78,6 +78,7 @@ Next の **コンパイルエラー**（ソース破損・構文エラー）で 
 | 6 | 参加者 | チップの横スクロール |
 | 7 | PWA | ホーム画面から起動し、1〜6 が standalone でも同様 |
 | 8 | 部屋スクロール | チャットを上下に素早くフリックしても **ページ全体が再読み込みされず**、再生が続く |
+| 9 | YouTube 共有（Android PWA） | YouTube → 共有 → 洋楽AIチャット → **直近の部屋**で発言欄に `watch?v=` が入る（送信は手動） |
 
 ### 3.1 スクロールでページが再読み込みされる（プルリフレッシュ）
 
@@ -99,8 +100,8 @@ Next の **コンパイルエラー**（ソース破損・構文エラー）で 
 部屋・モーダル・入力
   → npm run dev:lan → スマホで LAN IP
 
-ログイン・PWA インストール
-  → git push → Vercel プレビュー URL をスマホで開く
+ログイン・PWA インストール・YouTube 共有
+  → git push → Vercel プレビュー URL をスマホで開く（共有受け口は HTTPS 必須）
 ```
 
 ---
@@ -108,6 +109,7 @@ Next の **コンパイルエラー**（ソース破損・構文エラー）で 
 ## 5. 関連
 
 - 方針・Phase: `docs/pwa-mobile-app-plan.md`
+- YouTube 共有受け口: `docs/pwa-phase2-youtube-share-receive.md`
 - ローカルポート: `docs/ローカル並行開発.md`（3002）
 - スマホ選曲ガイド: `/guide/first-song-mobile`
 

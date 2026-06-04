@@ -15,6 +15,7 @@ import {
 import { getArtistAndSong, getMainArtist, repairQuotedSongArtistPackInversion } from '@/lib/format-song-display';
 import { resolveFamousPvArtistSongPack } from '@/lib/youtube-famous-pv-override';
 import { SONG_STYLE_OPTIONS } from '@/lib/song-styles';
+import type { Music8ArtistJson } from '@/lib/music8-artist-display';
 import MainArtistTabPanel from './MainArtistTabPanel';
 import SongDataTabPanel from './SongDataTabPanel';
 import EraDistributionModal from './EraDistributionModal';
@@ -284,6 +285,11 @@ interface RoomPlaybackHistoryProps {
   }) => void;
   /** 「視聴履歴」タブ押下で部屋側の拡大モーダルを開く */
   onOpenHistoryModal?: () => void;
+  /** メインアーティストタブの「ライブラリ」から選曲ライブラリを開く */
+  onOpenLibraryForArtist?: (
+    mainArtist: string,
+    options?: { music8Artist?: Music8ArtistJson | null },
+  ) => void;
 }
 
 const GUEST_DISPLAY_SUFFIX = ' (G)';
@@ -310,6 +316,7 @@ export default function RoomPlaybackHistory({
   onGuestFavoriteClick,
   onRegenerateAiAfterPlaybackTitleSave,
   onOpenHistoryModal,
+  onOpenLibraryForArtist,
 }: RoomPlaybackHistoryProps) {
   const [items, setItems] = useState<RoomPlaybackHistoryRow[]>([]);
   const [hasMoreHistory, setHasMoreHistory] = useState(false);
@@ -849,6 +856,7 @@ export default function RoomPlaybackHistory({
           <MainArtistTabPanel
             artistName={playbackTabsResolve.tabArtist}
             songTitle={playbackTabsResolve.tabSong}
+            onOpenLibraryForArtist={onOpenLibraryForArtist}
           />
         ) : activeTab === 'songdata' && playbackTabsResolve?.tabArtist ? (
           <SongDataTabPanel

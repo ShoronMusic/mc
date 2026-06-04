@@ -9,6 +9,16 @@
   "background_color": "#222222",
   "theme_color": "#222222",
   "lang": "ja",
+  "share_target": {
+    "action": "/share",
+    "method": "GET",
+    "enctype": "application/x-www-form-urlencoded",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url"
+    }
+  },
   "icons": [
     {
       "src": "/musicAI_icon.png",

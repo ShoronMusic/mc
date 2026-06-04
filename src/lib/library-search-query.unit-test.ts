@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { findLibraryMainArtistInIndex } from '@/lib/library-artist-index-match';
 import {
   expandLibrarySearchQueryVariants,
   expandMainArtistNamesForLibraryFilter,
@@ -29,6 +30,15 @@ function run() {
   assert.equal(songMainArtistIncludesArtist('Bruno Mars', 'Bruno Mars'), true);
   assert.equal(songMainArtistIncludesArtist('Bruno Mars', 'Mars'), false);
   assert.equal(songMainArtistIncludesArtist('Die With A Smile', 'Die'), false);
+
+  const index = [
+    { main_artist: 'Oasis' },
+    { main_artist: 'The Beatles' },
+    { main_artist: 'Lady Gaga, Bruno Mars' },
+  ];
+  assert.equal(findLibraryMainArtistInIndex(['Oasis'], index), 'Oasis');
+  assert.equal(findLibraryMainArtistInIndex(['Beatles'], index), 'The Beatles');
+  assert.equal(findLibraryMainArtistInIndex(['Bruno Mars'], index), 'Lady Gaga, Bruno Mars');
 
   console.log('library-search-query.unit-test: ok');
 }

@@ -1,8 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requireStyleAdminApi } from '@/lib/admin-access';
-import { fetchAllSongRowsForArtistAggregation } from '@/lib/library-artist-count-rows';
-import { indexLetterForArtist, stripLeadingArticleForSort, compareDisplayTitleCaseInsensitive } from '@/lib/admin-library-index';
-import { songRowLooksJapaneseDomesticForAdminLibrary } from '@/lib/admin-library-jp-exclude';
+import { buildLibraryArtistIndex } from '@/lib/build-library-artist-index';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,46 +19,15 @@ export async function GET() {
   if (!gate.ok) return gate.response;
   const { supabase } = gate;
 
-  let rows: {
-    main_artist: string | null;
-    song_title: string | null;
-    display_title: string | null;
-  }[];
   try {
-    rows = await fetchAllSongRowsForArtistAggregation(supabase);
+    const { items, letters } = await buildLibraryArtistIndex(supabase);
+    return NextResponse.json({ items, letters });
   } catch (e) {
     console.error('[admin/library/artists]', e);
-    const msg = e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : '曲一覧の取得に失敗しました。';
+    const msg =
+      e && typeof e === 'object' && 'message' in e
+        ? String((e as { message: unknown }).message)
+        : '曲一覧の取得に失敗しました。';
     return NextResponse.json({ error: msg }, { status: 500 });
   }
-  const counts = new Map<string, number>();
-  for (const r of rows) {
-    if (songRowLooksJapaneseDomesticForAdminLibrary(r)) continue;
-    const a = (r.main_artist ?? '').trim();
-    const key = a || '(表示なし)';
-    counts.set(key, (counts.get(key) ?? 0) + 1);
-  }
-
-  const items: AdminLibraryArtistItem[] = Array.from(counts.entries())
-    .filter(([, count]) => count > 0)
-    .map(([main_artist, count]) => ({
-      main_artist,
-      count,
-      indexLetter: indexLetterForArtist(main_artist === '(表示なし)' ? '' : main_artist),
-    }));
-
-  items.sort((x, y) =>
-    compareDisplayTitleCaseInsensitive(
-      stripLeadingArticleForSort(x.main_artist),
-      stripLeadingArticleForSort(y.main_artist),
-    ),
-  );
-
-  const letters = Array.from(new Set(items.map((i) => i.indexLetter))).sort((a, b) => {
-    if (a === '#') return 1;
-    if (b === '#') return -1;
-    return a.localeCompare(b, 'en');
-  });
-
-  return NextResponse.json({ items, letters });
 }

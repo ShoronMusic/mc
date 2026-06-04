@@ -17,6 +17,7 @@ import {
 } from 'react';
 import { MAX_MESSAGE_LENGTH } from '@/lib/chat-limits';
 import { MUSICAI_EXTENSION_SET_CHAT_TEXT_EVENT } from '@/lib/musicai-extension-events';
+import { consumePendingShareChatText } from '@/lib/share-target-pending';
 import { NON_YOUTUBE_URL_SYSTEM_MESSAGE } from '@/lib/chat-non-youtube-url';
 import { extractVideoId, isStandaloneNonYouTubeUrl } from '@/lib/youtube';
 import { postMyListItemClient } from '@/lib/my-list-client-post';
@@ -31,6 +32,8 @@ import {
   QuestionMarkCircleIcon,
 } from '@heroicons/react/24/outline';
 import { SongSelectionHowtoModal } from '@/components/chat/SongSelectionHowtoModal';
+import { LibraryArtistDetailMusic8Body } from '@/components/chat/LibraryArtistDetailMusic8Body';
+import type { Music8ArtistJson } from '@/lib/music8-artist-display';
 import { isYoutubeKeywordSearchEnabled } from '@/lib/youtube-keyword-search-ui';
 import { useIsLgViewport } from '@/hooks/useLgViewport';
 import { useIsMobileLandscapeViewport } from '@/hooks/useMobileLandscapeViewport';
@@ -330,6 +333,11 @@ export interface ChatInputHandle {
    * （AI メッセージの「シングル：」行などから呼ぶ）
    */
   searchYoutubeWithQuery: (query: string) => void;
+  /** ライブラリモーダルを開き、索引の `main_artist` を選択した状態にする */
+  openLibraryForArtist: (
+    mainArtist: string,
+    options?: { music8Artist?: Music8ArtistJson | null },
+  ) => void;
 }
 
 interface ChatInputProps {
@@ -424,6 +432,10 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
   const [libraryArtistInfo, setLibraryArtistInfo] = useState<LibraryArtistInfo | null>(null);
   const [libraryArtistInfoLoading, setLibraryArtistInfoLoading] = useState(false);
   const [libraryArtistInfoError, setLibraryArtistInfoError] = useState<string | null>(null);
+  /** メインアーティストタブから開いたときの Music8 詳細（DB `artists` が無い場合） */
+  const [libraryDetailMusic8Artist, setLibraryDetailMusic8Artist] = useState<Music8ArtistJson | null>(
+    null,
+  );
   const [libraryLetterModalOpen, setLibraryLetterModalOpen] = useState(false);
   const [libraryCopyState, setLibraryCopyState] = useState<'idle' | 'ok' | 'fail'>('idle');
   const [libraryMyListAddBusy, setLibraryMyListAddBusy] = useState(false);
@@ -563,25 +575,6 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
     [onVideoUrl, onSystemMessage, isGuest],
   );
 
-  useImperativeHandle(
-    ref,
-    () => ({
-      insertText(text: string) {
-        setValue((v) => v + text);
-        inputRef.current?.focus();
-      },
-      searchYoutubeWithQuery(query: string) {
-        if (!isYoutubeKeywordSearchEnabled()) return;
-        const q = query.trim().slice(0, MAX_MESSAGE_LENGTH);
-        if (!q) return;
-        setValue(q);
-        requestAnimationFrame(() => inputRef.current?.focus());
-        void runYoutubeKeywordSearch(q);
-      },
-    }),
-    [runYoutubeKeywordSearch],
-  );
-
   useEffect(() => {
     const onExtensionSetText = (e: Event) => {
       if (!(e instanceof CustomEvent)) return;
@@ -594,6 +587,14 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
     window.addEventListener(MUSICAI_EXTENSION_SET_CHAT_TEXT_EVENT, onExtensionSetText);
     return () =>
       window.removeEventListener(MUSICAI_EXTENSION_SET_CHAT_TEXT_EVENT, onExtensionSetText);
+  }, []);
+
+  useEffect(() => {
+    const pending = consumePendingShareChatText();
+    if (!pending) return;
+    const text = pending.slice(0, MAX_MESSAGE_LENGTH);
+    setValue(text);
+    requestAnimationFrame(() => inputRef.current?.focus());
   }, []);
 
   const handleSubmit = () => {
@@ -737,7 +738,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
   }, [libraryArtistsReady]);
 
   const selectLibraryArtistIndex = useCallback(
-    async (letter: string | null) => {
+    (letter: string | null) => {
       setLibraryArtistLetter(letter);
       setLibraryArtistIndexActive(true);
       setLibrarySelectedArtistName(null);
@@ -747,11 +748,12 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
       setLibrarySongVideos([]);
       setLibrarySelectedVideoId(null);
       setLibraryVideoError(null);
-      const ok = await loadLibraryArtists();
-      if (!ok) {
-        setLibraryArtistIndexActive(false);
-        setLibraryArtistLetter(null);
-      }
+      void loadLibraryArtists().then((ok) => {
+        if (!ok) {
+          setLibraryArtistIndexActive(false);
+          setLibraryArtistLetter(null);
+        }
+      });
     },
     [loadLibraryArtists],
   );
@@ -874,6 +876,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
         setLibraryArtistInfo(null);
         return;
       }
+      setLibraryDetailMusic8Artist(null);
       setLibraryArtistInfo({
         id: typeof a.id === 'string' ? a.id : '',
         name: typeof a.name === 'string' ? a.name : name,
@@ -1127,6 +1130,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
     setLibrarySongSource('idle');
     setLibrarySongListSort('release_new');
     setLibraryJaMainArtistMatches([]);
+    setLibraryDetailMusic8Artist(null);
     if (librarySongListScrollRef.current) librarySongListScrollRef.current.scrollTop = 0;
   }, []);
 
@@ -1143,7 +1147,63 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
     if (roomInteractionLocked) return;
     resetLibraryExpanded();
     setLibraryOpen(true);
-  }, [resetLibraryExpanded, roomInteractionLocked]);
+    void loadLibraryArtists();
+  }, [resetLibraryExpanded, roomInteractionLocked, loadLibraryArtists]);
+
+  useEffect(() => {
+    if (!libraryOpen || libraryArtistsReady || libraryArtistsLoading) return;
+    void loadLibraryArtists();
+  }, [libraryOpen, libraryArtistsReady, libraryArtistsLoading, loadLibraryArtists]);
+
+  const openLibraryModalForArtist = useCallback(
+    async (mainArtist: string, options?: { music8Artist?: Music8ArtistJson | null }) => {
+      if (roomInteractionLocked) return;
+      const name = mainArtist.trim();
+      if (!name) return;
+      setLibraryLetterModalOpen(false);
+      setLibraryCopyState('idle');
+      setLibraryArtistIndexActive(true);
+      setLibraryArtistLetter(libraryModalArtistIndexKey(name));
+      setLibrarySelectedArtistName(name);
+      setLibrarySelectedSongId(null);
+      setLibrarySongVideos([]);
+      setLibrarySelectedVideoId(null);
+      setLibraryVideoError(null);
+      setLibraryQuery('');
+      setLibraryJaMainArtistMatches([]);
+      setLibraryDetailMusic8Artist(options?.music8Artist ?? null);
+      setLibrarySongSource('browse');
+      setLibraryOpen(true);
+      if (librarySongListScrollRef.current) librarySongListScrollRef.current.scrollTop = 0;
+      void loadLibraryArtistInfo(name);
+      await loadLibraryArtists();
+      if (roomInteractionLocked) return;
+      void loadLibrarySongsForArtist(name);
+    },
+    [roomInteractionLocked, loadLibraryArtists, loadLibrarySongsForArtist, loadLibraryArtistInfo],
+  );
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      insertText(text: string) {
+        setValue((v) => v + text);
+        inputRef.current?.focus();
+      },
+      searchYoutubeWithQuery(query: string) {
+        if (!isYoutubeKeywordSearchEnabled()) return;
+        const q = query.trim().slice(0, MAX_MESSAGE_LENGTH);
+        if (!q) return;
+        setValue(q);
+        requestAnimationFrame(() => inputRef.current?.focus());
+        void runYoutubeKeywordSearch(q);
+      },
+      openLibraryForArtist(mainArtist: string, options?: { music8Artist?: Music8ArtistJson | null }) {
+        void openLibraryModalForArtist(mainArtist, options);
+      },
+    }),
+    [runYoutubeKeywordSearch, openLibraryModalForArtist],
+  );
 
   const handleLibrarySearch = useCallback(() => {
     setLibrarySelectedArtistName(null);
@@ -2203,6 +2263,8 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                         </p>
                       ) : null}
                     </div>
+                  ) : libraryDetailMusic8Artist ? (
+                    <LibraryArtistDetailMusic8Body artist={libraryDetailMusic8Artist} />
                   ) : (
                     <p className="text-gray-500">このアーティストの詳細はまだ登録されていません。</p>
                   )}
