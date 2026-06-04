@@ -31,6 +31,11 @@ import {
 import { SONG_STYLE_OPTIONS } from '@/lib/song-styles';
 import type { SongStyle } from '@/lib/gemini';
 import { gateRoomPlaybackHistoryRead } from '@/lib/room-playback-history-access';
+import {
+  parseRoomPlaybackHistoryLimit,
+  parseRoomPlaybackHistoryOffset,
+  ROOM_PLAYBACK_HISTORY_PAGE_SIZE,
+} from '@/lib/room-playback-history-pagination';
 
 export const dynamic = 'force-dynamic';
 
@@ -93,7 +98,8 @@ function safeClientIdPlaybackQuery(raw: string | null): string | null {
 /**
  * GET: 部屋の視聴履歴一覧（played_at 降順）
  * Query: roomId, clientId（ゲストまたは参加記録同期前のフォールバック用・Ably presence 照合）,
- *        since（任意・ISO8601）— 指定時は played_at >= since の行のみ
+ *        since（任意・ISO8601）— 指定時は played_at >= since の行のみ,
+ *        limit（任意・既定 100・最大 100）, offset（任意・既定 0）
  *
  * 閲覧は「当該部屋の未終了参加履歴があるログインユーザー」または「Ably で在室確認できた clientId」のみ。
  */
@@ -112,8 +118,20 @@ export async function GET(request: Request) {
   const clientId = safeClientIdPlaybackQuery(searchParams.get('clientId'));
   const gate = await gateRoomPlaybackHistoryRead(supabase, roomId, clientId);
   if (!gate.allowed) {
-    return NextResponse.json({ error: gate.reason, items: [] as RoomPlaybackHistoryRow[] }, { status: 403 });
+    return NextResponse.json(
+      {
+        error: gate.reason,
+        items: [] as RoomPlaybackHistoryRow[],
+        hasMore: false,
+        limit: ROOM_PLAYBACK_HISTORY_PAGE_SIZE,
+        offset: 0,
+      },
+      { status: 403 },
+    );
   }
+
+  const limit = parseRoomPlaybackHistoryLimit(searchParams.get('limit'));
+  const offset = parseRoomPlaybackHistoryOffset(searchParams.get('offset'));
 
   const sinceRaw = searchParams.get('since')?.trim() ?? '';
   let sinceIso: string | null = null;
@@ -131,7 +149,11 @@ export async function GET(request: Request) {
   if (sinceIso) {
     historyQuery = historyQuery.gte('played_at', sinceIso);
   }
-  const { data, error } = await historyQuery.order('played_at', { ascending: false });
+  const fetchCount = limit + 1;
+  const { data, error } = await historyQuery
+    .order('played_at', { ascending: false })
+    .order('id', { ascending: false })
+    .range(offset, offset + fetchCount - 1);
 
   if (error) {
     if (error.code === '42P01') {
@@ -144,7 +166,9 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const rows = data ?? [];
+  const fetched = data ?? [];
+  const hasMore = fetched.length > limit;
+  const rows = hasMore ? fetched.slice(0, limit) : fetched;
   let items: RoomPlaybackHistoryRow[] = rows.map((row) => ({
     ...row,
     selection_round:
@@ -175,7 +199,7 @@ export async function GET(request: Request) {
     }
   }
 
-  const res = NextResponse.json({ items });
+  const res = NextResponse.json({ items, hasMore, limit, offset });
   res.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate');
   return res;
 }

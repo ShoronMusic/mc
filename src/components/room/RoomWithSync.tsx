@@ -7092,6 +7092,7 @@ export default function RoomWithSync({
             favoritedVideoIds={favoritedVideoIds}
             onFavoriteClick={handleFavoriteClick}
             onRegenerateAiAfterPlaybackTitleSave={regenerateAiSongIntroAfterPlaybackTitleSave}
+            onOpenHistoryModal={() => setPlaybackHistoryModalOpen(true)}
           />
         }
         playbackHistoryModalOpen={playbackHistoryModalOpen}

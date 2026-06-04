@@ -8,8 +8,8 @@
 
 | 項目 | 内容 |
 |------|------|
-| **UI** | プレイヤー下のパネル先頭タブ「**視聴履歴**」。テーブル列: 参加者名・時間（必要に応じ **R＝選曲ラウンド** 併記）・年代・スタイル・アーティスト–タイトル・YouTube リンク・お気に入り（♡）。 |
-| **取得** | `GET /api/room-playback-history?roomId=…&clientId=…`（任意 `since`）。閲覧は **当該部屋の参加条件** または **Ably 在室に相当する clientId** でゲート（`src/lib/room-playback-history-access.ts`）。 |
+| **UI** | プレイヤー下のパネル先頭タブ「**視聴履歴**」（タブクリックで **拡大モーダル**、モバイルはヘッダー時計ボタンも同様）。テーブル列: 参加者名・時間（必要に応じ **R＝選曲ラウンド** 併記）・年代・スタイル・アーティスト–タイトル・YouTube リンク・お気に入り（♡）。 |
+| **取得** | `GET /api/room-playback-history?roomId=…&clientId=…`（任意 `since`・`limit`/`offset`、既定 **直近100件**、`hasMore` で追加ページ可否）。UI は **100件単位の「さらに読み込む」**。閲覧は **当該部屋の参加条件** または **Ably 在室に相当する clientId** でゲート（`src/lib/room-playback-history-access.ts`）。 |
 | **記録** | 再生開始から約 **10 秒後**に投稿者クライアントが `POST /api/room-playback-history`（`roomId`, `videoId`, `displayName`, `isGuest`, `selectionRound`）。同一人同一曲 2 分以内は重複挿入しない等のルールあり。邦楽スキップ等は API 実装参照。 |
 | **更新** | スタイル: `PATCH`（`id`, `videoId`, `style`）。アーティスト–タイトル: `PATCH`（STYLE_ADMIN 相当ユーザーが編集可 `/api/style-admin-check`）。 |
 | **補助データ** | 行ごとの **年代** は `song_era` を `video_id` で JOIN した結果を GET 側で付与。 |

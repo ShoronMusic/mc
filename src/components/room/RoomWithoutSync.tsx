@@ -2286,6 +2286,7 @@ export default function RoomWithoutSync({
             isGuest={isGuest}
             favoritedVideoIds={favoritedVideoIds}
             onFavoriteClick={handleFavoriteClick}
+            onOpenHistoryModal={() => setPlaybackHistoryModalOpen(true)}
           />
         }
         playbackHistoryModalOpen={playbackHistoryModalOpen}

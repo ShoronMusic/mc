@@ -2,7 +2,8 @@
 
 /**
  * 部屋中央エリア:
- * - モバイル: YouTube は常時表示。視聴履歴はモーダル（開閉は親が UserBar 経由で制御）。
+ * - モバイル: YouTube は常時表示。視聴履歴はモーダル（ヘッダー時計ボタン／視聴履歴タブ）。
+ * - PC: 通常は右下パネル。モーダル表示中はパネルにプレースホルダー（視聴履歴タブ・ヘッダー時計で拡大）。
  * - PC: ResizableSection（左チャット / 右は上下リサイズ）。
  *
  * モバイル/PC で同一 {rightTop} を同時マウントしない（YouTube 二重化防止）— useIsLgViewport で排他レンダー。
@@ -33,6 +34,8 @@ export default function RoomMainLayout({
   onPlaybackHistoryModalClose,
 }: RoomMainLayoutProps) {
   const isLg = useIsLgViewport();
+  const showHistoryInline = isLg && !playbackHistoryModalOpen;
+  const showHistoryModal = playbackHistoryModalOpen;
 
   const closeHistoryModal = useCallback(() => {
     onPlaybackHistoryModalClose?.();
@@ -47,6 +50,53 @@ export default function RoomMainLayout({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [playbackHistoryModalOpen, closeHistoryModal]);
 
+  const historyModal = showHistoryModal ? (
+    <div
+      className="fixed inset-0 z-[60] flex flex-col justify-end bg-black/65 sm:items-center sm:justify-center sm:p-4"
+      onClick={(e) => e.target === e.currentTarget && closeHistoryModal()}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="room-playback-history-modal-title"
+    >
+      <div
+        className="flex max-h-[min(92dvh,calc(100vh-1rem))] w-full min-h-0 flex-col rounded-t-2xl border border-gray-600 border-b-0 bg-gray-900 shadow-xl sm:max-h-[min(88vh,900px)] sm:max-w-4xl sm:rounded-2xl sm:border-b lg:max-w-5xl"
+        style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-gray-700 px-3 py-2.5">
+          <h2 id="room-playback-history-modal-title" className="truncate text-sm font-medium text-gray-200">
+            視聴履歴
+          </h2>
+          <button
+            type="button"
+            onClick={closeHistoryModal}
+            className="shrink-0 rounded border border-gray-600 bg-gray-800 px-3 py-1.5 text-sm text-gray-200 hover:bg-gray-700"
+          >
+            閉じる
+          </button>
+        </div>
+        <div className="min-h-0 flex-1 overflow-hidden px-2 pb-2 pt-1 sm:px-3">
+          <div className="flex h-full min-h-[50dvh] flex-col overflow-hidden sm:min-h-[min(60vh,520px)] lg:min-h-[min(70vh,640px)]">
+            {rightBottom}
+          </div>
+        </div>
+      </div>
+    </div>
+  ) : null;
+
+  const historyInlinePlaceholder = (
+    <div className="flex h-full min-h-[3rem] flex-col items-center justify-center gap-2 rounded-lg border border-gray-700 bg-gray-900/50 px-2 text-center text-xs text-gray-500">
+      <p>視聴履歴を拡大表示中</p>
+      <button
+        type="button"
+        onClick={closeHistoryModal}
+        className="rounded border border-gray-600 bg-gray-800 px-2 py-1 text-gray-300 hover:bg-gray-700"
+      >
+        閉じる
+      </button>
+    </div>
+  );
+
   return (
     <div className="flex min-h-0 w-full flex-1 flex-col">
       {isLg ? (
@@ -54,7 +104,7 @@ export default function RoomMainLayout({
           <ResizableSection
             left={left}
             rightTop={rightTop}
-            rightBottom={rightBottom}
+            rightBottom={showHistoryInline ? rightBottom : historyInlinePlaceholder}
             splitOnLeft={desktopSwapColumns}
           />
         </div>
@@ -64,42 +114,9 @@ export default function RoomMainLayout({
             <div className="mc-room-mobile-player">{rightTop}</div>
             <div className="mc-room-mobile-chat">{left}</div>
           </div>
-
-          {playbackHistoryModalOpen && (
-            <div
-              className="fixed inset-0 z-[60] flex flex-col justify-end bg-black/65 sm:items-center sm:justify-center sm:p-4"
-              onClick={(e) => e.target === e.currentTarget && closeHistoryModal()}
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="room-playback-history-modal-title"
-            >
-              <div
-                className="flex max-h-[min(92dvh,calc(100vh-1rem))] w-full min-h-0 flex-col rounded-t-2xl border border-gray-600 border-b-0 bg-gray-900 shadow-xl sm:max-h-[min(88vh,900px)] sm:rounded-2xl sm:border-b sm:pb-[env(safe-area-inset-bottom)]"
-                style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div className="flex shrink-0 items-center justify-between gap-2 border-b border-gray-700 px-3 py-2.5">
-                  <h2 id="room-playback-history-modal-title" className="truncate text-sm font-medium text-gray-200">
-                    視聴履歴
-                  </h2>
-                  <button
-                    type="button"
-                    onClick={closeHistoryModal}
-                    className="shrink-0 rounded border border-gray-600 bg-gray-800 px-3 py-1.5 text-sm text-gray-200 hover:bg-gray-700"
-                  >
-                    閉じる
-                  </button>
-                </div>
-                <div className="min-h-0 flex-1 overflow-hidden px-2 pb-2 pt-1 sm:px-3">
-                  <div className="flex h-full min-h-[50dvh] flex-col overflow-hidden sm:min-h-[min(60vh,520px)]">
-                    {rightBottom}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       )}
+      {historyModal}
     </div>
   );
 }

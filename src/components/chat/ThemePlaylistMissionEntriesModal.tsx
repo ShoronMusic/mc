@@ -6,6 +6,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { RoomPlaybackHistoryRow } from '@/app/api/room-playback-history/route';
+import { appendRoomPlaybackHistoryPagination } from '@/lib/room-playback-history-pagination';
 import { getArtistAndSong, repairQuotedSongArtistPackInversion } from '@/lib/format-song-display';
 
 const COL_NO = 'No';
@@ -252,6 +253,7 @@ export default function ThemePlaylistMissionEntriesModal({ open, onClose, themeI
         if (roomId) {
           const qs = new URLSearchParams({ roomId });
           if (roomClientId) qs.set('clientId', roomClientId);
+          appendRoomPlaybackHistoryPagination(qs, { offset: 0 });
           const histRes = await fetch(`/api/room-playback-history?${qs.toString()}`, { credentials: 'include' });
           const histJson = (await histRes.json().catch(() => null)) as { items?: RoomPlaybackHistoryRow[] } | null;
           const raw = Array.isArray(histJson?.items) ? histJson!.items! : [];

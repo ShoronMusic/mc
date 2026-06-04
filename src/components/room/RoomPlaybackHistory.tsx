@@ -8,6 +8,10 @@
 import { CalendarDaysIcon, ChartBarIcon, ClockIcon } from '@heroicons/react/24/outline';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { RoomPlaybackHistoryRow } from '@/app/api/room-playback-history/route';
+import {
+  appendRoomPlaybackHistoryPagination,
+  ROOM_PLAYBACK_HISTORY_PAGE_SIZE,
+} from '@/lib/room-playback-history-pagination';
 import { getArtistAndSong, getMainArtist, repairQuotedSongArtistPackInversion } from '@/lib/format-song-display';
 import { resolveFamousPvArtistSongPack } from '@/lib/youtube-famous-pv-override';
 import { SONG_STYLE_OPTIONS } from '@/lib/song-styles';
@@ -278,6 +282,8 @@ interface RoomPlaybackHistoryProps {
     title: string;
     artist_name: string | null | undefined;
   }) => void;
+  /** 「視聴履歴」タブ押下で部屋側の拡大モーダルを開く */
+  onOpenHistoryModal?: () => void;
 }
 
 const GUEST_DISPLAY_SUFFIX = ' (G)';
@@ -303,11 +309,14 @@ export default function RoomPlaybackHistory({
   onFavoriteClick,
   onGuestFavoriteClick,
   onRegenerateAiAfterPlaybackTitleSave,
+  onOpenHistoryModal,
 }: RoomPlaybackHistoryProps) {
   const [items, setItems] = useState<RoomPlaybackHistoryRow[]>([]);
+  const [hasMoreHistory, setHasMoreHistory] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>('played_at');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [loading, setLoading] = useState(false);
+  const [loadingMoreHistory, setLoadingMoreHistory] = useState(false);
   const [guestMessage, setGuestMessage] = useState(false);
   const [styleEditRow, setStyleEditRow] = useState<RoomPlaybackHistoryRow | null>(null);
   const [styleEditValue, setStyleEditValue] = useState('');
@@ -475,43 +484,88 @@ export default function RoomPlaybackHistory({
     [isGuest, favoritedVideoIds, onFavoriteClick, onGuestFavoriteClick]
   );
 
-  const fetchItems = useCallback(async () => {
-    if (!roomId) {
-      setItems([]);
-      return;
-    }
-    setLoading(true);
-    try {
-      const qs = new URLSearchParams({ roomId });
-      const cid = typeof roomClientId === 'string' ? roomClientId.trim() : '';
-      if (cid) qs.set('clientId', cid);
-      const url = `/api/room-playback-history?${qs.toString()}`;
+  const normalizeHistoryRows = useCallback(
+    (raw: RoomPlaybackHistoryRow[]) =>
+      raw.map((r) => ({
+        ...r,
+        selection_round: r.selection_round ?? null,
+        era: r.era ?? null,
+      })),
+    [],
+  );
 
-      const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-      let data: unknown = {};
-      for (let attempt = 0; attempt < 4; attempt++) {
-        if (attempt > 0) await sleep(450);
-        const res = await fetch(url, { credentials: 'include' });
-        data = await res.json().catch(() => ({}));
-        if (res.status !== 403) break;
+  const fetchHistoryPage = useCallback(
+    async (offset: number, append: boolean) => {
+      if (!roomId) {
+        setItems([]);
+        setHasMoreHistory(false);
+        return;
       }
+      if (append) {
+        setLoadingMoreHistory(true);
+      } else {
+        setLoading(true);
+      }
+      try {
+        const qs = new URLSearchParams({ roomId });
+        const cid = typeof roomClientId === 'string' ? roomClientId.trim() : '';
+        if (cid) qs.set('clientId', cid);
+        appendRoomPlaybackHistoryPagination(qs, { offset });
+        const url = `/api/room-playback-history?${qs.toString()}`;
 
-      const raw = Array.isArray((data as { items?: unknown })?.items)
-        ? (data as { items: RoomPlaybackHistoryRow[] }).items
-        : [];
-      setItems(
-        raw.map((r: RoomPlaybackHistoryRow) => ({
-          ...r,
-          selection_round: r.selection_round ?? null,
-          era: r.era ?? null,
-        })),
-      );
-    } catch {
-      setItems([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [roomId, roomClientId]);
+        const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+        let data: unknown = {};
+        for (let attempt = 0; attempt < 4; attempt++) {
+          if (attempt > 0) await sleep(450);
+          const res = await fetch(url, { credentials: 'include' });
+          data = await res.json().catch(() => ({}));
+          if (res.status !== 403) break;
+        }
+
+        const payload = data as {
+          items?: RoomPlaybackHistoryRow[];
+          hasMore?: boolean;
+        };
+        const raw = Array.isArray(payload?.items) ? payload.items : [];
+        const next = normalizeHistoryRows(raw);
+        setHasMoreHistory(payload?.hasMore === true);
+        if (append) {
+          setItems((prev) => {
+            const seen = new Set(prev.map((r) => r.id));
+            const merged = [...prev];
+            for (const row of next) {
+              if (!seen.has(row.id)) {
+                seen.add(row.id);
+                merged.push(row);
+              }
+            }
+            return merged;
+          });
+        } else {
+          setItems(next);
+        }
+      } catch {
+        if (!append) {
+          setItems([]);
+          setHasMoreHistory(false);
+        }
+      } finally {
+        if (append) {
+          setLoadingMoreHistory(false);
+        } else {
+          setLoading(false);
+        }
+      }
+    },
+    [roomId, roomClientId, normalizeHistoryRows],
+  );
+
+  const fetchItems = useCallback(() => fetchHistoryPage(0, false), [fetchHistoryPage]);
+
+  const loadMoreHistory = useCallback(() => {
+    if (loadingMoreHistory || !hasMoreHistory) return;
+    void fetchHistoryPage(items.length, true);
+  }, [loadingMoreHistory, hasMoreHistory, fetchHistoryPage, items.length]);
 
   useEffect(() => {
     fetchItems();
@@ -726,8 +780,13 @@ export default function RoomPlaybackHistory({
         <div className="flex min-w-0 flex-1 items-center gap-1">
           <button
             type="button"
-            onClick={() => setActiveTab('history')}
+            onClick={() => {
+              setActiveTab('history');
+              onOpenHistoryModal?.();
+            }}
             className={`inline-flex items-center gap-1 rounded px-2 py-1 text-sm transition ${activeTab === 'history' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:bg-gray-700/50 hover:text-gray-200'}`}
+            title={onOpenHistoryModal ? '視聴履歴（クリックで拡大表示）' : undefined}
+            aria-label={onOpenHistoryModal ? '視聴履歴を拡大表示' : '視聴履歴'}
           >
             <ClockIcon className="h-4 w-4 shrink-0" aria-hidden />
             視聴履歴
@@ -1113,6 +1172,20 @@ export default function RoomPlaybackHistory({
             )}
           </tbody>
         </table>
+        )}
+        {activeTab === 'history' && hasMoreHistory && (
+          <div className="border-t border-gray-700/80 px-2 py-2">
+            <button
+              type="button"
+              onClick={loadMoreHistory}
+              disabled={loadingMoreHistory}
+              className="w-full rounded border border-gray-600 bg-gray-800/80 px-2 py-1.5 text-xs text-gray-200 hover:bg-gray-700 disabled:opacity-50"
+            >
+              {loadingMoreHistory
+                ? '読み込み中...'
+                : `さらに${ROOM_PLAYBACK_HISTORY_PAGE_SIZE}件を読み込む`}
+            </button>
+          </div>
         )}
       </div>
       {guestMessage && (
