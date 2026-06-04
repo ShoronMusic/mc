@@ -968,8 +968,9 @@ export default function RoomWithSync({
 
   useEffect(() => {
     if (sessionTakeoverState !== 'supplanted' || isGuest || !onLeave) return;
+    const rid = roomId?.trim();
     try {
-      sessionStorage.setItem(ROOM_SESSION_REPLACED_STORAGE_KEY, roomId);
+      if (rid) sessionStorage.setItem(ROOM_SESSION_REPLACED_STORAGE_KEY, rid);
     } catch {
       /* ignore */
     }
@@ -1443,7 +1444,8 @@ export default function RoomWithSync({
           : 0;
       if (remoteMs > local.claimedAtMs) {
         try {
-          sessionStorage.setItem(ROOM_SESSION_REPLACED_STORAGE_KEY, roomId);
+          const rid = roomId?.trim();
+          if (rid) sessionStorage.setItem(ROOM_SESSION_REPLACED_STORAGE_KEY, rid);
         } catch {
           /* ignore */
         }
