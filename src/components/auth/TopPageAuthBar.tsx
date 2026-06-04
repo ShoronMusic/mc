@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { createClient, isSupabaseConfigured } from '@/lib/supabase/client';
 import { GUEST_STORAGE_KEY, GUEST_NAME_STORAGE_KEY, GUEST_ROOM_KEY } from './JoinChoice';
+import { clearKnownAuthUserId } from '@/lib/share-target-pending';
 
 function getDisplayName(user: { user_metadata?: { display_name?: string; name?: string }; email?: string }): string {
   const meta = user?.user_metadata;
@@ -53,12 +54,14 @@ export function TopPageAuthBar() {
         sessionStorage.removeItem(GUEST_NAME_STORAGE_KEY);
         sessionStorage.removeItem(GUEST_ROOM_KEY);
       } catch {}
+      clearKnownAuthUserId();
       window.location.reload();
       return;
     }
     const supabase = createClient();
     if (!supabase) return;
     await supabase.auth.signOut();
+    clearKnownAuthUserId();
     setDisplayName(null);
     window.location.reload();
   };

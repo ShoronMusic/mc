@@ -9,6 +9,12 @@ import { AblyProviderWrapper } from '@/components/providers/AblyProviderWrapper'
 import { getRoomClientId, isKickedForRoom, isKickedSitewide } from '@/lib/room-owner';
 import { fetchRoomAuthSessionCheck } from '@/lib/room-auth-session-check-client';
 import { regenerateRoomSessionClaim } from '@/lib/room-session-instance';
+import {
+  getKnownAuthUserId,
+  hasPendingShareChatText,
+  rememberKnownAuthUserId,
+} from '@/lib/share-target-pending';
+import { resolveSupabaseUserClient } from '@/lib/supabase/resolve-user-client';
 import { RoomSessionTakeoverJoinModal } from '@/components/room/RoomSessionTakeoverJoinModal';
 import { readTermsAccepted } from '@/lib/terms-consent';
 import { runRoomEntryGateCheck } from '@/lib/join-gate-room-check-client';
@@ -70,6 +76,7 @@ export function JoinGate({ roomId }: JoinGateProps) {
     (enter: PendingEnter) => {
       if (!enter.isGuest && enter.authUserId) {
         regenerateRoomSessionClaim(roomId);
+        rememberKnownAuthUserId(enter.authUserId);
       }
       setDisplayName(enter.displayName);
       setIsGuest(enter.isGuest);
@@ -154,7 +161,7 @@ export function JoinGate({ roomId }: JoinGateProps) {
       return true;
     };
 
-    void checkRoomLive().then((isLive) => {
+    void checkRoomLive().then(async (isLive) => {
       if (!isLive) return;
 
       if (!supabase) {
@@ -162,30 +169,35 @@ export function JoinGate({ roomId }: JoinGateProps) {
         return;
       }
 
-      void supabase.auth.getUser().then(({ data: { user } }) => {
-        if (user) {
-          if (autoEnterAttemptedRef.current) return;
-          autoEnterAttemptedRef.current = true;
-          try {
-            sessionStorage.removeItem(GUEST_STORAGE_KEY);
-            sessionStorage.removeItem(GUEST_NAME_STORAGE_KEY);
-            sessionStorage.removeItem(GUEST_ROOM_KEY);
-          } catch {
-            /* ignore */
-          }
-          setAuthUserId(user.id);
-          setDisplayName(getDisplayNameFromUser(user));
-          setIsGuest(false);
-          void tryEnterRoom({
-            displayName: getDisplayNameFromUser(user),
-            isGuest: false,
-            authUserId: user.id,
-          });
-          return;
-        }
-        setAuthUserId(null);
-        if (!tryEnterAsGuestFromStorage()) setStatus('choice');
+      const fromShare = hasPendingShareChatText();
+      const user = await resolveSupabaseUserClient({
+        maxWaitMs: fromShare || getKnownAuthUserId() ? 5000 : 2500,
       });
+
+      if (user) {
+        if (autoEnterAttemptedRef.current) return;
+        autoEnterAttemptedRef.current = true;
+        rememberKnownAuthUserId(user.id);
+        try {
+          sessionStorage.removeItem(GUEST_STORAGE_KEY);
+          sessionStorage.removeItem(GUEST_NAME_STORAGE_KEY);
+          sessionStorage.removeItem(GUEST_ROOM_KEY);
+        } catch {
+          /* ignore */
+        }
+        setAuthUserId(user.id);
+        setDisplayName(getDisplayNameFromUser(user));
+        setIsGuest(false);
+        void tryEnterRoom({
+          displayName: getDisplayNameFromUser(user),
+          isGuest: false,
+          authUserId: user.id,
+        });
+        return;
+      }
+
+      setAuthUserId(null);
+      if (!tryEnterAsGuestFromStorage()) setStatus('choice');
     });
   }, [roomId, clientId, consentOk, tryEnterRoom]);
 
