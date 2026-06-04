@@ -72,6 +72,17 @@ html.mc-prevent-pull-refresh body {
   min-height: 100svh;
 }
 
+/* PC: 視聴履歴をパネル内スクロールに収め、ページ全体が縦に伸びないようにする */
+@media (min-width: 1024px) {
+  .mc-room-viewport {
+    height: 100vh;
+    height: 100dvh;
+    max-height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+  }
+}
+
 html.mc-prevent-pull-refresh .mc-room-viewport {
   height: 100vh;
   height: 100dvh;

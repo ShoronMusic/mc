@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { JoinChoice, GUEST_STORAGE_KEY, GUEST_NAME_STORAGE_KEY, GUEST_ROOM_KEY } from './JoinChoice';
 import { FROM_START_KEY } from './FromStartMarker';
@@ -51,6 +51,8 @@ export function JoinGate({ roomId }: JoinGateProps) {
   const [joinVerifying, setJoinVerifying] = useState(false);
   const [authUserId, setAuthUserId] = useState<string | null>(null);
   const [pendingEnter, setPendingEnter] = useState<PendingEnter | null>(null);
+  const autoEnterAttemptedRef = useRef(false);
+  const skipSessionGateRef = useRef(false);
 
   const clientId = useMemo(
     () =>
@@ -82,6 +84,10 @@ export function JoinGate({ roomId }: JoinGateProps) {
   const tryEnterRoom = useCallback(
     async (enter: PendingEnter) => {
       if (!enter.isGuest && enter.authUserId) {
+        if (skipSessionGateRef.current) {
+          commitEnterRoom(enter);
+          return;
+        }
         const check = await fetchRoomAuthSessionCheck(roomId);
         if (!check.ok) {
           window.alert(check.error);
@@ -158,6 +164,8 @@ export function JoinGate({ roomId }: JoinGateProps) {
 
       void supabase.auth.getUser().then(({ data: { user } }) => {
         if (user) {
+          if (autoEnterAttemptedRef.current) return;
+          autoEnterAttemptedRef.current = true;
           try {
             sessionStorage.removeItem(GUEST_STORAGE_KEY);
             sessionStorage.removeItem(GUEST_NAME_STORAGE_KEY);
@@ -230,6 +238,7 @@ export function JoinGate({ roomId }: JoinGateProps) {
         <RoomSessionTakeoverJoinModal
           roomId={roomId}
           onConfirm={() => {
+            skipSessionGateRef.current = true;
             if (pendingEnter) commitEnterRoom(pendingEnter);
           }}
           onCancel={() => {

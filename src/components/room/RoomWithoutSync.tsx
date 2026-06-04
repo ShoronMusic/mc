@@ -2162,6 +2162,7 @@ export default function RoomWithoutSync({
         </div>
       )}
 
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       <RoomMainLayout
         left={
           <Chat
@@ -2290,6 +2291,7 @@ export default function RoomWithoutSync({
         playbackHistoryModalOpen={playbackHistoryModalOpen}
         onPlaybackHistoryModalClose={() => setPlaybackHistoryModalOpen(false)}
       />
+      </div>
 
       <section className="mt-2 shrink-0 space-y-2">
         {chatInputNode}

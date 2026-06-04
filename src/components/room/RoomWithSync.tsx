@@ -667,6 +667,7 @@ export default function RoomWithSync({
   );
   const sessionClaimRef = useRef(sessionClaim);
   sessionClaimRef.current = sessionClaim;
+  const sessionForcedLeaveRef = useRef(false);
   useEffect(() => {
     if (roomId) setSessionClaim(getOrCreateRoomSessionClaim(roomId));
   }, [roomId]);
@@ -967,7 +968,16 @@ export default function RoomWithSync({
   const roomInteractionLocked = sessionTakeoverState === 'supplanted';
 
   useEffect(() => {
-    if (sessionTakeoverState !== 'supplanted' || isGuest || !onLeave) return;
+    if (sessionTakeoverState !== 'supplanted' || isGuest || !onLeave || sessionForcedLeaveRef.current) {
+      return;
+    }
+    const myPresence = presenceAuthRows.find((p) => p.clientId === myClientId);
+    const remoteMs =
+      typeof myPresence?.sessionClaimedAtMs === 'number' && Number.isFinite(myPresence.sessionClaimedAtMs)
+        ? myPresence.sessionClaimedAtMs
+        : 0;
+    if (sessionClaim.claimedAtMs > remoteMs) return;
+    sessionForcedLeaveRef.current = true;
     const rid = roomId?.trim();
     try {
       if (rid) sessionStorage.setItem(ROOM_SESSION_REPLACED_STORAGE_KEY, rid);
@@ -975,7 +985,7 @@ export default function RoomWithSync({
       /* ignore */
     }
     onLeave();
-  }, [sessionTakeoverState, isGuest, onLeave, roomId]);
+  }, [sessionTakeoverState, isGuest, onLeave, roomId, presenceAuthRows, myClientId, sessionClaim.claimedAtMs]);
 
   useEffect(() => {
     if (
@@ -1443,6 +1453,8 @@ export default function RoomWithSync({
           ? d.sessionClaimedAtMs
           : 0;
       if (remoteMs > local.claimedAtMs) {
+        if (sessionForcedLeaveRef.current) return;
+        sessionForcedLeaveRef.current = true;
         try {
           const rid = roomId?.trim();
           if (rid) sessionStorage.setItem(ROOM_SESSION_REPLACED_STORAGE_KEY, rid);
@@ -6936,6 +6948,7 @@ export default function RoomWithSync({
         </div>
       )}
 
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       <RoomMainLayout
         desktopSwapColumns
         left={
@@ -7084,6 +7097,7 @@ export default function RoomWithSync({
         playbackHistoryModalOpen={playbackHistoryModalOpen}
         onPlaybackHistoryModalClose={() => setPlaybackHistoryModalOpen(false)}
       />
+      </div>
 
       <section className="mt-2 shrink-0 space-y-2">
         {chatInputNode}

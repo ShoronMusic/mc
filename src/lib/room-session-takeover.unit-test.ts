@@ -54,6 +54,22 @@ test('shouldPublishRoomSessionPresence: false when remote claim is newer', () =>
   );
 });
 
+test('detectRoomSessionTakeoverState: connecting (not supplanted) when local claim is newer', () => {
+  assert.equal(
+    detectRoomSessionTakeoverState({
+      myClientId: myCid,
+      mySessionClaim: { instanceId: 'b', claimedAtMs: 300 },
+      authUserId: uid,
+      isGuest: false,
+      connectionState: 'connected',
+      presenceRows: [
+        { clientId: myCid, authUserId: uid, sessionInstanceId: 'a', sessionClaimedAtMs: 200 },
+      ],
+    }),
+    'connecting',
+  );
+});
+
 test('shouldPublishRoomSessionPresence: true when local claim is newer (takeover)', () => {
   assert.equal(
     shouldPublishRoomSessionPresence({

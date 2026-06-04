@@ -47,6 +47,12 @@ export function detectRoomSessionTakeoverState(input: {
     remoteInstanceId === localInstanceId &&
     remoteClaimMs === localClaimMs;
 
+  /** ローカル claim が新しければ奪取側 — supplanted にはしない */
+  if (localClaimMs > remoteClaimMs) {
+    if (connectionLive && holdsSession) return 'active';
+    return 'connecting';
+  }
+
   if (connectionLive && holdsSession) return 'active';
 
   if (myPresence && remoteClaimMs > localClaimMs) return 'supplanted';
