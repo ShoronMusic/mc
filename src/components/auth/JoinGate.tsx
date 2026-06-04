@@ -64,14 +64,20 @@ export function JoinGate({ roomId }: JoinGateProps) {
     } catch {}
   };
 
-  const commitEnterRoom = useCallback((enter: PendingEnter) => {
-    setDisplayName(enter.displayName);
-    setIsGuest(enter.isGuest);
-    setAuthUserId(enter.isGuest ? null : enter.authUserId);
-    setPendingEnter(null);
-    clearFromStart();
-    setStatus('room');
-  }, []);
+  const commitEnterRoom = useCallback(
+    (enter: PendingEnter) => {
+      if (!enter.isGuest && enter.authUserId) {
+        regenerateRoomSessionClaim(roomId);
+      }
+      setDisplayName(enter.displayName);
+      setIsGuest(enter.isGuest);
+      setAuthUserId(enter.isGuest ? null : enter.authUserId);
+      setPendingEnter(null);
+      clearFromStart();
+      setStatus('room');
+    },
+    [roomId],
+  );
 
   const tryEnterRoom = useCallback(
     async (enter: PendingEnter) => {
@@ -224,7 +230,6 @@ export function JoinGate({ roomId }: JoinGateProps) {
         <RoomSessionTakeoverJoinModal
           roomId={roomId}
           onConfirm={() => {
-            regenerateRoomSessionClaim(roomId);
             if (pendingEnter) commitEnterRoom(pendingEnter);
           }}
           onCancel={() => {

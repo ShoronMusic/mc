@@ -29,7 +29,7 @@ export function RoomSessionTakeoverJoinModal({
         </p>
         <p className="mt-2 text-sm leading-relaxed text-gray-300">
           <strong className="font-medium text-gray-100">この端末で参加</strong>
-          すると、先に入っていた端末は操作できなくなります。どちらか一方だけが操作できます。
+          すると、先に入っていた端末は自動的に退室します。同時に操作できるのはどちらか一方だけです。
         </p>
         <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
           <button

@@ -92,16 +92,31 @@ export function AblyProviderWrapper({
       void postParticipation('join');
     });
 
-    const onBeforeUnload = () => {
+    const onLeaveParticipation = () => {
       void postParticipation('leave', true);
     };
-    window.addEventListener('beforeunload', onBeforeUnload);
+    window.addEventListener('beforeunload', onLeaveParticipation);
+    window.addEventListener('pagehide', onLeaveParticipation);
     return () => {
       mounted = false;
-      window.removeEventListener('beforeunload', onBeforeUnload);
+      window.removeEventListener('beforeunload', onLeaveParticipation);
+      window.removeEventListener('pagehide', onLeaveParticipation);
       void postParticipation('leave', true);
     };
   }, [isGuest, postParticipation]);
+
+  useEffect(() => {
+    if (!client) return;
+    const onPageHide = () => {
+      try {
+        client.close();
+      } catch {
+        /* ignore */
+      }
+    };
+    window.addEventListener('pagehide', onPageHide);
+    return () => window.removeEventListener('pagehide', onPageHide);
+  }, [client]);
 
   const handleLeave = useCallback(() => {
     void postParticipation('leave', true);

@@ -1,6 +1,7 @@
 import Ably from 'ably';
 import { NextResponse } from 'next/server';
 import { allPresenceMembers } from '@/lib/ably-channel-presence';
+import { hasLiveAuthClientInPresence } from '@/lib/room-auth-session-presence';
 import { buildAuthRoomClientId } from '@/lib/room-owner';
 import { createClient } from '@/lib/supabase/server';
 
@@ -52,7 +53,7 @@ export async function GET(request: Request) {
     const rest = new Ably.Rest({ key });
     const channel = rest.channels.get(`room:${roomId}`);
     const members = await allPresenceMembers(channel);
-    const sameAccountInRoom = members.some((m) => m.clientId === authClientId);
+    const sameAccountInRoom = hasLiveAuthClientInPresence(members, authClientId);
     return NextResponse.json(
       { ok: true, configured: true, sameAccountInRoom, authClientId },
       { headers: { 'Cache-Control': 'no-store' } },

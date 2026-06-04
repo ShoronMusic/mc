@@ -166,13 +166,16 @@ import { useRoomChatLogPersistence } from '@/hooks/useRoomChatLogPersistence';
 import { useRoomAccessLogReport } from '@/hooks/useRoomAccessLogReport';
 import { usePreventRoomPullToRefresh } from '@/hooks/usePreventRoomPullToRefresh';
 import { useRoomSessionTakeoverState } from '@/hooks/useRoomSessionTakeoverState';
-import { RoomSessionSupplantedOverlay } from '@/components/room/RoomSessionSupplantedOverlay';
 import {
   getOrCreateRoomSessionClaim,
-  regenerateRoomSessionClaim,
   type RoomSessionClaim,
 } from '@/lib/room-session-instance';
 import { shouldPublishRoomSessionPresence } from '@/lib/room-session-takeover';
+import {
+  ROOM_SESSION_CLAIM_EVENT,
+  ROOM_SESSION_REPLACED_STORAGE_KEY,
+  type RoomSessionClaimEventPayload,
+} from '@/lib/room-session-events';
 import { dedupeParticipantsByAuthUserId } from '@/lib/room-participant-dedupe';
 import { useSupabaseAuthUserId } from '@/hooks/useSupabaseAuthUserId';
 import { isAiQuestionGuardKickExemptUserId } from '@/lib/ai-question-guard-exempt-user-ids';
@@ -662,6 +665,8 @@ export default function RoomWithSync({
   const [sessionClaim, setSessionClaim] = useState<RoomSessionClaim>(() =>
     roomId ? getOrCreateRoomSessionClaim(roomId) : { instanceId: '', claimedAtMs: 0 },
   );
+  const sessionClaimRef = useRef(sessionClaim);
+  sessionClaimRef.current = sessionClaim;
   useEffect(() => {
     if (roomId) setSessionClaim(getOrCreateRoomSessionClaim(roomId));
   }, [roomId]);
@@ -960,6 +965,16 @@ export default function RoomWithSync({
     presenceRows: presenceAuthRows,
   });
   const roomInteractionLocked = sessionTakeoverState === 'supplanted';
+
+  useEffect(() => {
+    if (sessionTakeoverState !== 'supplanted' || isGuest || !onLeave) return;
+    try {
+      sessionStorage.setItem(ROOM_SESSION_REPLACED_STORAGE_KEY, roomId);
+    } catch {
+      /* ignore */
+    }
+    onLeave();
+  }, [sessionTakeoverState, isGuest, onLeave, roomId]);
 
   useEffect(() => {
     if (
@@ -1417,6 +1432,25 @@ export default function RoomWithSync({
   );
 
   const { publish } = useChannel(channelName, (message) => {
+    if (message.name === ROOM_SESSION_CLAIM_EVENT) {
+      const d = message.data as RoomSessionClaimEventPayload;
+      const uid = authUserId?.trim() ?? '';
+      if (!uid || d?.authUserId !== uid) return;
+      const local = sessionClaimRef.current;
+      const remoteMs =
+        typeof d.sessionClaimedAtMs === 'number' && Number.isFinite(d.sessionClaimedAtMs)
+          ? d.sessionClaimedAtMs
+          : 0;
+      if (remoteMs > local.claimedAtMs) {
+        try {
+          sessionStorage.setItem(ROOM_SESSION_REPLACED_STORAGE_KEY, roomId);
+        } catch {
+          /* ignore */
+        }
+        onLeave?.();
+      }
+      return;
+    }
     if (message.name === OWNER_STATE_EVENT) {
       const d = message.data as OwnerStatePayload;
       if (d && typeof d.ownerClientId === 'string') {
@@ -2133,6 +2167,29 @@ export default function RoomWithSync({
   );
 
   publishRef.current = safePublish;
+
+  const lastPublishedSessionClaimRef = useRef('');
+  useEffect(() => {
+    if (isGuest || !authUserId?.trim()) return;
+    if (
+      !shouldPublishRoomSessionPresence({
+        isGuest,
+        myClientId,
+        mySessionClaim: sessionClaim,
+        presenceRows: presenceAuthRows,
+      })
+    ) {
+      return;
+    }
+    const key = `${sessionClaim.instanceId}:${sessionClaim.claimedAtMs}`;
+    if (lastPublishedSessionClaimRef.current === key) return;
+    lastPublishedSessionClaimRef.current = key;
+    publishRef.current?.(ROOM_SESSION_CLAIM_EVENT, {
+      authUserId: authUserId.trim(),
+      sessionInstanceId: sessionClaim.instanceId,
+      sessionClaimedAtMs: sessionClaim.claimedAtMs,
+    } satisfies RoomSessionClaimEventPayload);
+  }, [isGuest, authUserId, myClientId, sessionClaim, presenceAuthRows]);
 
   useEffect(() => {
     if (!myClientId) return;
@@ -6441,15 +6498,6 @@ export default function RoomWithSync({
           </div>
         )}
       </header>
-
-      {sessionTakeoverState === 'supplanted' && onLeave ? (
-        <RoomSessionSupplantedOverlay
-          onTakeOverThisDevice={() => {
-            if (roomId) setSessionClaim(regenerateRoomSessionClaim(roomId));
-          }}
-          onLeave={onLeave}
-        />
-      ) : null}
 
       <section className="mb-1 shrink-0">
         <UserBar
