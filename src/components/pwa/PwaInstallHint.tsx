@@ -6,6 +6,7 @@ import {
   isAndroidDevice,
   isIosDevice,
   isMobileUserAgent,
+  isPwaInstallForceShowFromUrl,
   isPwaInstallHintDismissed,
   isStandaloneDisplayMode,
 } from '@/lib/pwa-client';
@@ -26,7 +27,7 @@ export default function PwaInstallHint() {
   useEffect(() => {
     if (!isMobileUserAgent()) return;
     if (isStandaloneDisplayMode()) return;
-    if (isPwaInstallHintDismissed()) return;
+    if (isPwaInstallHintDismissed() && !isPwaInstallForceShowFromUrl()) return;
     setVisible(true);
   }, []);
 

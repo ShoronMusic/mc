@@ -10,6 +10,7 @@ import { MeetingStartPanel } from '@/components/home/MeetingStartPanel';
 import { StartPageSiteIntro } from '@/components/home/StartPageSiteIntro';
 import { SessionReplacedNotice } from '@/components/home/SessionReplacedNotice';
 import { SharePendingNotice } from '@/components/home/SharePendingNotice';
+import { PwaInstallHelpLink } from '@/components/pwa/PwaInstallHelpLink';
 
 export default function StartPage() {
   return (
@@ -48,6 +49,7 @@ export default function StartPage() {
             利用規約
           </Link>
         </p>
+        <PwaInstallHelpLink />
         <p className="mt-3 text-center text-[11px] text-gray-600">スマホ・PC どちらからでもご利用いただけます</p>
       </div>
     </div>

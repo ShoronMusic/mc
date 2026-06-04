@@ -50,6 +50,24 @@ export function dismissPwaInstallHint(): void {
   }
 }
 
+/** 以前「閉じる」を押したあとでも、URL で案内を出し直す */
+export function isPwaInstallForceShowFromUrl(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return new URLSearchParams(window.location.search).get('pwa_install') === '1';
+  } catch {
+    return false;
+  }
+}
+
+export function clearPwaInstallHintDismiss(): void {
+  try {
+    localStorage.removeItem(DISMISS_STORAGE_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
 export function getDisplayModeForAnalytics(): string {
   if (typeof window === 'undefined') return 'unknown';
   if (isStandaloneDisplayMode()) return 'standalone';
