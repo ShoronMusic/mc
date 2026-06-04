@@ -4,9 +4,10 @@ import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
   getLastActiveRoomSegment,
+  markShareRoomEnterPending,
   setPendingShareChatText,
 } from '@/lib/share-target-pending';
-import { warmSupabaseSessionClient } from '@/lib/supabase/resolve-user-client';
+import { resolveSupabaseUserClient } from '@/lib/supabase/resolve-user-client';
 import { resolveYouTubeWatchUrlFromSharePayload } from '@/lib/youtube-canonical-watch-url';
 
 function ShareTargetRedirect() {
@@ -32,11 +33,12 @@ function ShareTargetRedirect() {
       }
 
       setPendingShareChatText(watchUrl);
-      await warmSupabaseSessionClient();
+      await resolveSupabaseUserClient({ maxWaitMs: 6000 });
 
       const room = getLastActiveRoomSegment();
       if (cancelled) return;
       if (room) {
+        markShareRoomEnterPending();
         window.location.replace(`/${room}`);
         return;
       }

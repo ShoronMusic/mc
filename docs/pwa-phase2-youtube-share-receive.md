@@ -21,8 +21,8 @@
 | 受け口 URL | `GET /share`（manifest `share_target.action`） |
 | パラメータ | `url` / `text` / `title`（OS が渡すものをすべて解析） |
 | URL 正規化 | `canonicalYouTubeWatchUrl`（拡張 `content-youtube.js` と同等） |
-| 部屋への遷移 | `sessionStorage` の直近参加部屋 `mc:last_active_room` があれば `/{roomId}`、なければ `/?share_pending=1` |
-| 発言欄反映 | `sessionStorage` `mc:share_pending_chat_text` → 部屋マウント時に `ChatInput` が消費 |
+| 共有データの保存 | **`localStorage`**（Android 共有冷起動で sessionStorage が消えるため） |
+| 部屋への遷移 | 直近部屋があれば `/share` から **部屋へ直接**。トップに来た場合も **自動で部屋へ** |
 | 自動送信 | **しない**（拡張・手動貼り付けと同じ） |
 
 ### 見送り（今回）
@@ -81,9 +81,9 @@
 
 | 原因 | 対処 |
 |------|------|
-| 共有で PWA が冷起動し、セッション読み込み前に JoinGate が判定した | **修正済み**: 共有保留中は最大 5 秒待ってから入室判定 |
-| **iOS** で共有が Safari タブで開き、PWA と cookie が別 | **ホーム画面のアイコン**から入り直す。未対応時はコピペ |
-| 実際にログアウト済み | 通常どおりログイン |
+| 共有冷起動で **sessionStorage が空**（直近部屋・URL が消える） | **修正済み**: localStorage に保存。トップ経由でも直近部屋へ自動遷移 |
+| セッション cookie の読み込みが遅い | **修正済み**: 共有時は最大 8 秒待ってから JoinGate 判定 |
+| **iOS** で共有が Safari タブで開く | ホーム画面アイコンから利用。コピペ fallback |
 
 実装: `resolveSupabaseUserClient`・`/share` から `window.location.replace` で部屋へ・`mc:join_gate_known_auth_user_id`。
 

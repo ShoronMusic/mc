@@ -10,6 +10,7 @@ import { getRoomClientId, isKickedForRoom, isKickedSitewide } from '@/lib/room-o
 import { fetchRoomAuthSessionCheck } from '@/lib/room-auth-session-check-client';
 import { regenerateRoomSessionClaim } from '@/lib/room-session-instance';
 import {
+  consumeShareRoomEnterPending,
   getKnownAuthUserId,
   hasPendingShareChatText,
   rememberKnownAuthUserId,
@@ -169,9 +170,9 @@ export function JoinGate({ roomId }: JoinGateProps) {
         return;
       }
 
-      const fromShare = hasPendingShareChatText();
+      const fromShare = hasPendingShareChatText() || consumeShareRoomEnterPending();
       const user = await resolveSupabaseUserClient({
-        maxWaitMs: fromShare || getKnownAuthUserId() ? 5000 : 2500,
+        maxWaitMs: fromShare || getKnownAuthUserId() ? 8000 : 2500,
       });
 
       if (user) {
