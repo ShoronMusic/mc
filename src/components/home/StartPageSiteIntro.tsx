@@ -2,7 +2,7 @@
 
 import Image from 'next/image';
 import { useEffect, useState } from 'react';
-import { GUEST_STORAGE_KEY } from '@/components/auth/JoinChoice';
+import { hasGuestRoomPersistence } from '@/lib/guest-room-persistence';
 import { ConsentPageLiveChats } from '@/components/home/ConsentPageLiveChats';
 import { createClient, isSupabaseConfigured } from '@/lib/supabase/client';
 
@@ -29,7 +29,7 @@ export function StartPageSiteIntro({ forceShow = false, liveChatsAfterHero = fal
       return;
     }
     if (typeof window === 'undefined') return;
-    if (sessionStorage.getItem(GUEST_STORAGE_KEY)) {
+    if (hasGuestRoomPersistence()) {
       setShow(false);
       return;
     }

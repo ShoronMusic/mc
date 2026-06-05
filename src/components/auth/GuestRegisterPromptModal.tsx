@@ -6,11 +6,9 @@ import { createClient, isSupabaseConfigured } from '@/lib/supabase/client';
 import { setOAuthReturnPathCookie } from '@/lib/oauth-return-path';
 import { getBrowserAppOrigin } from '@/lib/app-origin';
 import { SimpleAuthForm } from './SimpleAuthForm';
+import { clearGuestRoomPersistence } from '@/lib/guest-room-persistence';
 import {
   GoogleBrandIcon,
-  GUEST_STORAGE_KEY,
-  GUEST_NAME_STORAGE_KEY,
-  GUEST_ROOM_KEY,
 } from './JoinChoice';
 
 export interface GuestRegisterPromptModalProps {
@@ -21,13 +19,7 @@ export interface GuestRegisterPromptModalProps {
 }
 
 function clearGuestSessionStorage(): void {
-  try {
-    sessionStorage.removeItem(GUEST_STORAGE_KEY);
-    sessionStorage.removeItem(GUEST_NAME_STORAGE_KEY);
-    sessionStorage.removeItem(GUEST_ROOM_KEY);
-  } catch {
-    /* ignore */
-  }
+  clearGuestRoomPersistence();
 }
 
 /**

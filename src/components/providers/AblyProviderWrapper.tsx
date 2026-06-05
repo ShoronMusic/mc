@@ -4,7 +4,8 @@ import { AblyProvider as AblyProviderBase, ChannelProvider } from 'ably/react';
 import Ably from 'ably';
 import { useRouter } from 'next/navigation';
 import { useMemo, useCallback, useEffect } from 'react';
-import { GUEST_STORAGE_KEY, GUEST_NAME_STORAGE_KEY, GUEST_ROOM_KEY } from '@/components/auth/JoinChoice';
+import { clearGuestRoomPersistence } from '@/lib/guest-room-persistence';
+import { clearLastRoomEnter } from '@/lib/room-enter-resume';
 import RoomWithSync from '@/components/room/RoomWithSync';
 import RoomWithoutSync from '@/components/room/RoomWithoutSync';
 import { createClient } from '@/lib/supabase/client';
@@ -125,9 +126,8 @@ export function AblyProviderWrapper({
         getLastExitStorageKey(roomId),
         JSON.stringify({ timestamp: Date.now(), displayName })
       );
-      sessionStorage.removeItem(GUEST_STORAGE_KEY);
-      sessionStorage.removeItem(GUEST_NAME_STORAGE_KEY);
-      sessionStorage.removeItem(GUEST_ROOM_KEY);
+      clearGuestRoomPersistence();
+      clearLastRoomEnter(roomId);
     } catch {}
     router.push('/');
   }, [router, roomId, displayName, postParticipation]);

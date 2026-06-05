@@ -3,12 +3,17 @@
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { JoinChoice, GUEST_STORAGE_KEY, GUEST_NAME_STORAGE_KEY, GUEST_ROOM_KEY } from './JoinChoice';
+import { JoinChoice } from './JoinChoice';
 import { FROM_START_KEY } from './FromStartMarker';
 import { AblyProviderWrapper } from '@/components/providers/AblyProviderWrapper';
 import { getRoomClientId, isKickedForRoom, isKickedSitewide } from '@/lib/room-owner';
 import { fetchRoomAuthSessionCheck } from '@/lib/room-auth-session-check-client';
 import { regenerateRoomSessionClaim } from '@/lib/room-session-instance';
+import {
+  clearGuestRoomPersistence,
+  rememberGuestRoom,
+  readGuestRoomForRoom,
+} from '@/lib/guest-room-persistence';
 import {
   consumeShareRoomEnterPending,
   getKnownAuthUserId,
@@ -93,6 +98,11 @@ export function JoinGate({ roomId }: JoinGateProps) {
         isGuest: enter.isGuest,
         authUserId: enter.isGuest ? null : enter.authUserId,
       });
+      if (enter.isGuest) {
+        rememberGuestRoom(roomId, enter.displayName);
+      } else {
+        clearGuestRoomPersistence();
+      }
       setStatus('room');
     },
     [roomId],
@@ -156,11 +166,9 @@ export function JoinGate({ roomId }: JoinGateProps) {
 
     const tryEnterAsGuestFromStorage = (): boolean => {
       if (typeof window === 'undefined' || fromStart) return false;
-      if (!sessionStorage.getItem(GUEST_STORAGE_KEY)) return false;
-      const savedRoom = sessionStorage.getItem(GUEST_ROOM_KEY);
-      if (savedRoom !== roomId) return false;
-      const savedName = sessionStorage.getItem(GUEST_NAME_STORAGE_KEY);
-      setDisplayName(savedName && savedName.trim() ? savedName.trim() : 'ゲスト');
+      const guest = readGuestRoomForRoom(roomId);
+      if (!guest) return false;
+      setDisplayName(guest.displayName);
       setIsGuest(true);
       setStatus('room');
       return true;
@@ -175,15 +183,16 @@ export function JoinGate({ roomId }: JoinGateProps) {
       }
 
       const fromShare = hasPendingShareChatText() || isShareRoomEnterPending();
-      const lastEnter = getLastRoomEnterForRoom(roomId);
-      if (fromShare) {
-        setLoadingHint('共有から部屋に戻っています…');
+      const lastEnter = fromStart ? null : getLastRoomEnterForRoom(roomId);
+      const shouldResumeEnter = !fromStart && (fromShare || Boolean(lastEnter));
+      if (shouldResumeEnter) {
+        setLoadingHint(fromShare ? '共有から部屋に戻っています…' : '部屋に戻っています…');
         skipSessionGateRef.current = true;
       }
 
       const user = await resolveSupabaseUserClient({
-        maxWaitMs: fromShare || getKnownAuthUserId() ? 12000 : 2500,
-        tryRefreshSession: fromShare,
+        maxWaitMs: shouldResumeEnter || getKnownAuthUserId() ? 12000 : 2500,
+        tryRefreshSession: shouldResumeEnter || Boolean(getKnownAuthUserId()),
       });
 
       if (user) {
@@ -194,10 +203,10 @@ export function JoinGate({ roomId }: JoinGateProps) {
         }
       }
 
-      if (fromShare && lastEnter?.isGuest && lastEnter.roomId === roomId) {
+      if (lastEnter?.isGuest) {
         if (autoEnterAttemptedRef.current) return;
         autoEnterAttemptedRef.current = true;
-        consumeShareRoomEnterPending();
+        if (fromShare) consumeShareRoomEnterPending();
         commitEnterRoom({
           displayName: lastEnter.displayName,
           isGuest: true,
@@ -207,12 +216,11 @@ export function JoinGate({ roomId }: JoinGateProps) {
       }
 
       if (
-        fromShare &&
         !user &&
         lastEnter &&
         !lastEnter.isGuest &&
         lastEnter.authUserId &&
-        getKnownAuthUserId() === lastEnter.authUserId
+        (!getKnownAuthUserId() || getKnownAuthUserId() === lastEnter.authUserId)
       ) {
         if (autoEnterAttemptedRef.current) return;
         const cid = getRoomClientId(roomId, lastEnter.authUserId);
@@ -221,7 +229,7 @@ export function JoinGate({ roomId }: JoinGateProps) {
           return;
         }
         autoEnterAttemptedRef.current = true;
-        consumeShareRoomEnterPending();
+        if (fromShare) consumeShareRoomEnterPending();
         void tryEnterRoom({
           displayName: lastEnter.displayName,
           isGuest: false,
@@ -234,13 +242,7 @@ export function JoinGate({ roomId }: JoinGateProps) {
         if (autoEnterAttemptedRef.current) return;
         autoEnterAttemptedRef.current = true;
         rememberKnownAuthUserId(user.id);
-        try {
-          sessionStorage.removeItem(GUEST_STORAGE_KEY);
-          sessionStorage.removeItem(GUEST_NAME_STORAGE_KEY);
-          sessionStorage.removeItem(GUEST_ROOM_KEY);
-        } catch {
-          /* ignore */
-        }
+        clearGuestRoomPersistence();
         setAuthUserId(user.id);
         setDisplayName(getDisplayNameFromUser(user));
         setIsGuest(false);

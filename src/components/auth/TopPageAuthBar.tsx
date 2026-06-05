@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { createClient, isSupabaseConfigured } from '@/lib/supabase/client';
-import { GUEST_STORAGE_KEY, GUEST_NAME_STORAGE_KEY, GUEST_ROOM_KEY } from './JoinChoice';
+import { clearGuestRoomPersistence, hasGuestRoomPersistence, readGuestDisplayNameHint } from '@/lib/guest-room-persistence';
 import { clearKnownAuthUserId } from '@/lib/share-target-pending';
 
 function getDisplayName(user: { user_metadata?: { display_name?: string; name?: string }; email?: string }): string {
@@ -27,9 +27,9 @@ export function TopPageAuthBar() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const hasGuest = !!sessionStorage.getItem(GUEST_STORAGE_KEY);
+    const hasGuest = hasGuestRoomPersistence();
     if (hasGuest) {
-      const name = sessionStorage.getItem(GUEST_NAME_STORAGE_KEY)?.trim() || 'ゲスト';
+      const name = readGuestDisplayNameHint() || 'ゲスト';
       setDisplayName(name);
       setIsGuest(true);
       setLoading(false);
@@ -49,11 +49,7 @@ export function TopPageAuthBar() {
 
   const handleLogout = async () => {
     if (isGuest) {
-      try {
-        sessionStorage.removeItem(GUEST_STORAGE_KEY);
-        sessionStorage.removeItem(GUEST_NAME_STORAGE_KEY);
-        sessionStorage.removeItem(GUEST_ROOM_KEY);
-      } catch {}
+      clearGuestRoomPersistence();
       clearKnownAuthUserId();
       window.location.reload();
       return;

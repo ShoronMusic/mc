@@ -25,6 +25,8 @@
 | 部屋への遷移 | 直近部屋があれば `/share` から **部屋へ直接**。トップに来た場合も **自動で部屋へ** |
 | セッション cookie の更新 | **middleware** で `getUser()`（PWA 冷起動・共有復帰） |
 | 共有からの JoinGate | **端末選択 API をスキップ**・`refreshSession`・直前入室スナップショットで自動入室 |
+| PWA 他アプリ復帰 | 上記と同じ **入室スナップショット**（`mc:last_room_enter_v1`）で JoinChoice を省略 |
+| ゲスト参加情報 | **localStorage**（`guest-room-persistence.ts`） |
 
 ### 見送り（今回）
 

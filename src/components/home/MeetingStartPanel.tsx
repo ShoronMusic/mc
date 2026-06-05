@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { createClient, isSupabaseConfigured } from '@/lib/supabase/client';
-import { GUEST_STORAGE_KEY } from '@/components/auth/JoinChoice';
+import { hasGuestRoomPersistence } from '@/lib/guest-room-persistence';
 
 const DEFAULT_ROOM_COUNT = 90;
 const MAX_LIVE_GATHERINGS_PER_USER = 2;
@@ -57,7 +57,7 @@ export function MeetingStartPanel() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    if (sessionStorage.getItem(GUEST_STORAGE_KEY)) {
+    if (hasGuestRoomPersistence()) {
       setVisible(false);
       return;
     }

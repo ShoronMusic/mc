@@ -8,7 +8,7 @@ import { setOAuthReturnPathCookie } from '@/lib/oauth-return-path';
 import { TRIAL_ROOM_IDS, pickTrialRoomId } from '@/lib/trial-rooms';
 import { assignDefaultGuestDisplayName } from '@/lib/guest-display-name';
 import { FROM_START_KEY } from './FromStartMarker';
-import { GUEST_NAME_STORAGE_KEY, GUEST_ROOM_KEY, GUEST_STORAGE_KEY } from './JoinChoice';
+import { rememberGuestRoom } from '@/lib/guest-room-persistence';
 import { SimpleAuthForm } from './SimpleAuthForm';
 
 function GoogleBrandIcon({ className }: { className?: string }) {
@@ -136,10 +136,8 @@ export function TopPageLoginEntry({
         });
       const selected = candidates[0]?.roomId || pickTrialRoomId();
       const guestName = assignDefaultGuestDisplayName();
+      rememberGuestRoom(selected, guestName);
       try {
-        sessionStorage.setItem(GUEST_STORAGE_KEY, '1');
-        sessionStorage.setItem(GUEST_NAME_STORAGE_KEY, guestName);
-        sessionStorage.setItem(GUEST_ROOM_KEY, selected);
         sessionStorage.removeItem(FROM_START_KEY);
       } catch {}
       window.location.href = `/${encodeURIComponent(selected)}`;
@@ -148,10 +146,8 @@ export function TopPageLoginEntry({
       // 通信に失敗した場合だけランダムにフォールバック
       const fallback = pickTrialRoomId();
       const guestName = assignDefaultGuestDisplayName();
+      rememberGuestRoom(fallback, guestName);
       try {
-        sessionStorage.setItem(GUEST_STORAGE_KEY, '1');
-        sessionStorage.setItem(GUEST_NAME_STORAGE_KEY, guestName);
-        sessionStorage.setItem(GUEST_ROOM_KEY, fallback);
         sessionStorage.removeItem(FROM_START_KEY);
       } catch {}
       window.location.href = `/${encodeURIComponent(fallback)}`;

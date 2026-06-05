@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { createClient, isSupabaseConfigured } from '@/lib/supabase/client';
 import { assignDefaultGuestDisplayName } from '@/lib/guest-display-name';
+import { rememberGuestRoom, readGuestDisplayNameHint } from '@/lib/guest-room-persistence';
 import { setOAuthReturnPathCookie } from '@/lib/oauth-return-path';
 import { getBrowserAppOrigin } from '@/lib/app-origin';
 import { SimpleAuthForm } from './SimpleAuthForm';
@@ -37,12 +38,7 @@ export function GoogleBrandIcon({ className }: { className?: string }) {
 }
 
 function getInitialGuestHandle(): string {
-  if (typeof window === 'undefined') return '';
-  try {
-    return sessionStorage.getItem(GUEST_NAME_STORAGE_KEY)?.trim() ?? '';
-  } catch {
-    return '';
-  }
+  return readGuestDisplayNameHint();
 }
 
 export interface JoinChoiceProps {
@@ -68,13 +64,7 @@ export function JoinChoice({ onJoin, roomId, joinVerifying = false }: JoinChoice
     setGuestSubmitting(true);
     try {
       const name = guestHandle.trim() || assignDefaultGuestDisplayName();
-      if (typeof window !== 'undefined') {
-        try {
-          sessionStorage.setItem(GUEST_STORAGE_KEY, '1');
-          sessionStorage.setItem(GUEST_NAME_STORAGE_KEY, name);
-          sessionStorage.setItem(GUEST_ROOM_KEY, roomId);
-        } catch {}
-      }
+      rememberGuestRoom(roomId, name);
       await onJoin(name, 'guest');
     } finally {
       setGuestSubmitting(false);

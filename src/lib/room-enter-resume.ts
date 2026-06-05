@@ -1,4 +1,4 @@
-/** YouTube 共有などで JoinGate を再度通るとき、直前の入室状態を復元する */
+/** PWA 冷起動・他アプリ復帰で JoinGate を再度通るとき、直前の入室状態を復元する */
 
 const LAST_ROOM_ENTER_KEY = 'mc:last_room_enter_v1';
 const MAX_AGE_MS = 4 * 60 * 60 * 1000;
@@ -59,4 +59,20 @@ export function getLastRoomEnterForRoom(roomId: string): LastRoomEnterSnapshot |
   const snap = readRaw();
   if (!snap || snap.roomId !== roomId.trim()) return null;
   return snap;
+}
+
+export function clearLastRoomEnter(roomId?: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    if (!roomId?.trim()) {
+      localStorage.removeItem(LAST_ROOM_ENTER_KEY);
+      return;
+    }
+    const snap = readRaw();
+    if (snap?.roomId === roomId.trim()) {
+      localStorage.removeItem(LAST_ROOM_ENTER_KEY);
+    }
+  } catch {
+    /* ignore */
+  }
 }
