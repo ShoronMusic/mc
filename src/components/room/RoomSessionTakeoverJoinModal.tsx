@@ -21,11 +21,14 @@ export function RoomSessionTakeoverJoinModal({
     >
       <div className="w-full max-w-md rounded-xl border border-amber-600/70 bg-gray-900 p-5 shadow-2xl">
         <h2 id="room-session-join-title" className="text-base font-semibold text-amber-50">
-          同じアカウントが既に参加中です
+          同じアカウントが別の端末で参加中です
         </h2>
         <p className="mt-2 text-sm leading-relaxed text-gray-300">
           部屋 <span className="font-mono text-amber-100">{roomId}</span>{' '}
-          には、同じアカウントが別の端末で入っています。
+          には、同じアカウントが<strong className="font-medium text-gray-100">別の端末</strong>で入っています。
+        </p>
+        <p className="mt-2 text-sm leading-relaxed text-gray-300">
+          スマホ1台だけの場合は、ホーム画面の洋楽AIチャットが<strong className="font-medium text-gray-100">二重登録</strong>されていないか確認してください（共有先に2つ出るときなど）。
         </p>
         <p className="mt-2 text-sm leading-relaxed text-gray-300">
           <strong className="font-medium text-gray-100">この端末で参加</strong>

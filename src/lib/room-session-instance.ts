@@ -17,14 +17,15 @@ function newInstanceId(): string {
     : `si-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 }
 
-function readClaim(roomId: string): RoomSessionClaim | null {
-  if (typeof window === 'undefined' || !roomId) return null;
+function readClaimRaw(key: string): RoomSessionClaim | null {
+  if (typeof window === 'undefined') return null;
   try {
-    const raw = sessionStorage.getItem(getRoomSessionClaimStorageKey(roomId));
+    const raw = localStorage.getItem(key) ?? sessionStorage.getItem(key);
     if (!raw) return null;
     const o = JSON.parse(raw) as { instanceId?: string; claimedAtMs?: number };
     const instanceId = typeof o.instanceId === 'string' ? o.instanceId.trim() : '';
-    const claimedAtMs = typeof o.claimedAtMs === 'number' && Number.isFinite(o.claimedAtMs) ? o.claimedAtMs : 0;
+    const claimedAtMs =
+      typeof o.claimedAtMs === 'number' && Number.isFinite(o.claimedAtMs) ? o.claimedAtMs : 0;
     if (!instanceId) return null;
     return { instanceId, claimedAtMs };
   } catch {
@@ -32,13 +33,25 @@ function readClaim(roomId: string): RoomSessionClaim | null {
   }
 }
 
-function writeClaim(roomId: string, claim: RoomSessionClaim): RoomSessionClaim {
+function writeClaimRaw(key: string, claim: RoomSessionClaim): RoomSessionClaim {
+  if (typeof window === 'undefined') return claim;
   try {
-    sessionStorage.setItem(getRoomSessionClaimStorageKey(roomId), JSON.stringify(claim));
+    const raw = JSON.stringify(claim);
+    localStorage.setItem(key, raw);
+    sessionStorage.setItem(key, raw);
   } catch {
     /* ignore */
   }
   return claim;
+}
+
+function readClaim(roomId: string): RoomSessionClaim | null {
+  if (!roomId) return null;
+  return readClaimRaw(getRoomSessionClaimStorageKey(roomId));
+}
+
+function writeClaim(roomId: string, claim: RoomSessionClaim): RoomSessionClaim {
+  return writeClaimRaw(getRoomSessionClaimStorageKey(roomId), claim);
 }
 
 export function getOrCreateRoomSessionClaim(roomId: string): RoomSessionClaim {

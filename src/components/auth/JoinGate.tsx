@@ -21,7 +21,7 @@ import {
   isShareRoomEnterPending,
   rememberKnownAuthUserId,
 } from '@/lib/share-target-pending';
-import { getLastRoomEnterForRoom, rememberLastRoomEnter } from '@/lib/room-enter-resume';
+import { getLastRoomEnterForRoom, isRecentRoomEnter, rememberLastRoomEnter } from '@/lib/room-enter-resume';
 import { resolveSupabaseUserClient } from '@/lib/supabase/resolve-user-client';
 import { RoomSessionTakeoverJoinModal } from '@/components/room/RoomSessionTakeoverJoinModal';
 import { readTermsAccepted } from '@/lib/terms-consent';
@@ -111,7 +111,10 @@ export function JoinGate({ roomId }: JoinGateProps) {
   const tryEnterRoom = useCallback(
     async (enter: PendingEnter) => {
       if (!enter.isGuest && enter.authUserId) {
-        if (skipSessionGateRef.current) {
+        const lastEnter = getLastRoomEnterForRoom(roomId);
+        const resumeSameDevice =
+          skipSessionGateRef.current || isRecentRoomEnter(lastEnter);
+        if (resumeSameDevice) {
           commitEnterRoom(enter);
           return;
         }
@@ -184,7 +187,8 @@ export function JoinGate({ roomId }: JoinGateProps) {
 
       const fromShare = hasPendingShareChatText() || isShareRoomEnterPending();
       const lastEnter = fromStart ? null : getLastRoomEnterForRoom(roomId);
-      const shouldResumeEnter = !fromStart && (fromShare || Boolean(lastEnter));
+      const recentResume = isRecentRoomEnter(lastEnter);
+      const shouldResumeEnter = !fromStart && (fromShare || recentResume);
       if (shouldResumeEnter) {
         setLoadingHint(fromShare ? '共有から部屋に戻っています…' : '部屋に戻っています…');
         skipSessionGateRef.current = true;

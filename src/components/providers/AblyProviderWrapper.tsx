@@ -38,6 +38,11 @@ export interface AblyProviderWrapperProps {
   clientId?: string;
 }
 
+export type LeaveRoomOptions = {
+  /** false のとき PWA 復帰用スナップショットを残す（端末奪取でトップへ追いやられた場合） */
+  clearResumeSnapshot?: boolean;
+};
+
 export function AblyProviderWrapper({
   displayName = DEFAULT_DISPLAY_NAME,
   roomId,
@@ -97,40 +102,30 @@ export function AblyProviderWrapper({
       void postParticipation('leave', true);
     };
     window.addEventListener('beforeunload', onLeaveParticipation);
-    window.addEventListener('pagehide', onLeaveParticipation);
     return () => {
       mounted = false;
       window.removeEventListener('beforeunload', onLeaveParticipation);
-      window.removeEventListener('pagehide', onLeaveParticipation);
       void postParticipation('leave', true);
     };
   }, [isGuest, postParticipation]);
 
-  useEffect(() => {
-    if (!client) return;
-    const onPageHide = () => {
+  const handleLeave = useCallback(
+    (options?: LeaveRoomOptions) => {
+      void postParticipation('leave', true);
       try {
-        client.close();
-      } catch {
-        /* ignore */
-      }
-    };
-    window.addEventListener('pagehide', onPageHide);
-    return () => window.removeEventListener('pagehide', onPageHide);
-  }, [client]);
-
-  const handleLeave = useCallback(() => {
-    void postParticipation('leave', true);
-    try {
-      sessionStorage.setItem(
-        getLastExitStorageKey(roomId),
-        JSON.stringify({ timestamp: Date.now(), displayName })
-      );
-      clearGuestRoomPersistence();
-      clearLastRoomEnter(roomId);
-    } catch {}
-    router.push('/');
-  }, [router, roomId, displayName, postParticipation]);
+        sessionStorage.setItem(
+          getLastExitStorageKey(roomId),
+          JSON.stringify({ timestamp: Date.now(), displayName }),
+        );
+        if (options?.clearResumeSnapshot !== false) {
+          clearGuestRoomPersistence();
+          clearLastRoomEnter(roomId);
+        }
+      } catch {}
+      router.push('/');
+    },
+    [router, roomId, displayName, postParticipation],
+  );
 
   if (!client) {
     return (

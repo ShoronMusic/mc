@@ -365,7 +365,7 @@ interface RoomWithSyncProps {
   roomTitle?: string;
   roomDisplayTitle?: string;
   isGuest?: boolean;
-  onLeave?: () => void;
+  onLeave?: (options?: { clearResumeSnapshot?: boolean }) => void;
   clientId?: string;
 }
 
@@ -996,7 +996,7 @@ export default function RoomWithSync({
     } catch {
       /* ignore */
     }
-    onLeave();
+    onLeave({ clearResumeSnapshot: false });
   }, [sessionTakeoverState, isGuest, onLeave, roomId, presenceAuthRows, myClientId, sessionClaim.claimedAtMs]);
 
   useEffect(() => {

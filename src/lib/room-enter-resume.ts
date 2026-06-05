@@ -2,6 +2,8 @@
 
 const LAST_ROOM_ENTER_KEY = 'mc:last_room_enter_v1';
 const MAX_AGE_MS = 4 * 60 * 60 * 1000;
+/** この時間以内なら「同じ端末の復帰」とみなし、端末選択モーダルを出さない */
+export const ROOM_ENTER_RESUME_SKIP_GATE_MS = 30 * 60 * 1000;
 
 export type LastRoomEnterSnapshot = {
   roomId: string;
@@ -59,6 +61,14 @@ export function getLastRoomEnterForRoom(roomId: string): LastRoomEnterSnapshot |
   const snap = readRaw();
   if (!snap || snap.roomId !== roomId.trim()) return null;
   return snap;
+}
+
+export function isRecentRoomEnter(
+  snap: LastRoomEnterSnapshot | null | undefined,
+  maxAgeMs: number = ROOM_ENTER_RESUME_SKIP_GATE_MS,
+): boolean {
+  if (!snap) return false;
+  return Date.now() - snap.atMs <= maxAgeMs;
 }
 
 export function clearLastRoomEnter(roomId?: string): void {
