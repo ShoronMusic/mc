@@ -23,7 +23,8 @@
 | URL 正規化 | `canonicalYouTubeWatchUrl`（拡張 `content-youtube.js` と同等） |
 | 共有データの保存 | **`localStorage`**（Android 共有冷起動で sessionStorage が消えるため） |
 | 部屋への遷移 | 直近部屋があれば `/share` から **部屋へ直接**。トップに来た場合も **自動で部屋へ** |
-| 自動送信 | **しない**（拡張・手動貼り付けと同じ） |
+| セッション cookie の更新 | **middleware** で `getUser()`（PWA 冷起動・共有復帰） |
+| 共有からの JoinGate | **端末選択 API をスキップ**・`refreshSession`・直前入室スナップショットで自動入室 |
 
 ### 見送り（今回）
 
@@ -62,7 +63,10 @@
 | `public/manifest.webmanifest` | `share_target` 定義 |
 | `src/app/share/page.tsx` | 共有パラメータ解析・保存・リダイレクト |
 | `src/lib/youtube-canonical-watch-url.ts` | URL 正規化・共有ペイロードからの抽出 |
-| `src/lib/share-target-pending.ts` | sessionStorage・直近部屋 ID |
+| `src/lib/share-target-pending.ts` | localStorage・直近部屋 ID・共有フラグ |
+| `src/lib/room-enter-resume.ts` | 直前入室スナップショット（共有復帰用） |
+| `src/lib/supabase/middleware.ts` | セッション cookie 更新 |
+| `src/components/auth/JoinGate.tsx` | 共有時の自動入室・端末選択スキップ |
 | `src/components/chat/ChatInput.tsx` | 保留 URL の消費 |
 | `src/components/room/RoomWithSync.tsx` / `RoomWithoutSync.tsx` | 入室時に直近部屋を記録 |
 | `src/components/home/SharePendingNotice.tsx` | トップの案内バナー |

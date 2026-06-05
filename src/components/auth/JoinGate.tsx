@@ -13,8 +13,10 @@ import {
   consumeShareRoomEnterPending,
   getKnownAuthUserId,
   hasPendingShareChatText,
+  isShareRoomEnterPending,
   rememberKnownAuthUserId,
 } from '@/lib/share-target-pending';
+import { getLastRoomEnterForRoom, rememberLastRoomEnter } from '@/lib/room-enter-resume';
 import { resolveSupabaseUserClient } from '@/lib/supabase/resolve-user-client';
 import { RoomSessionTakeoverJoinModal } from '@/components/room/RoomSessionTakeoverJoinModal';
 import { readTermsAccepted } from '@/lib/terms-consent';
@@ -56,6 +58,7 @@ export function JoinGate({ roomId }: JoinGateProps) {
   const [liveTitle, setLiveTitle] = useState<string>('');
   const [roomDisplayTitle, setRoomDisplayTitle] = useState<string>('');
   const [joinVerifying, setJoinVerifying] = useState(false);
+  const [loadingHint, setLoadingHint] = useState('読み込み中…');
   const [authUserId, setAuthUserId] = useState<string | null>(null);
   const [pendingEnter, setPendingEnter] = useState<PendingEnter | null>(null);
   const autoEnterAttemptedRef = useRef(false);
@@ -84,6 +87,12 @@ export function JoinGate({ roomId }: JoinGateProps) {
       setAuthUserId(enter.isGuest ? null : enter.authUserId);
       setPendingEnter(null);
       clearFromStart();
+      rememberLastRoomEnter({
+        roomId,
+        displayName: enter.displayName,
+        isGuest: enter.isGuest,
+        authUserId: enter.isGuest ? null : enter.authUserId,
+      });
       setStatus('room');
     },
     [roomId],
@@ -128,11 +137,6 @@ export function JoinGate({ roomId }: JoinGateProps) {
   useEffect(() => {
     if (consentOk !== true) return;
 
-    if (clientId && (isKickedForRoom(roomId, clientId) || isKickedSitewide())) {
-      setStatus('kicked');
-      return;
-    }
-
     const checkRoomLive = async (): Promise<boolean> => {
       const gate = await runRoomEntryGateCheck(roomId);
       if (!gate.ok) {
@@ -170,10 +174,61 @@ export function JoinGate({ roomId }: JoinGateProps) {
         return;
       }
 
-      const fromShare = hasPendingShareChatText() || consumeShareRoomEnterPending();
+      const fromShare = hasPendingShareChatText() || isShareRoomEnterPending();
+      const lastEnter = getLastRoomEnterForRoom(roomId);
+      if (fromShare) {
+        setLoadingHint('共有から部屋に戻っています…');
+        skipSessionGateRef.current = true;
+      }
+
       const user = await resolveSupabaseUserClient({
-        maxWaitMs: fromShare || getKnownAuthUserId() ? 8000 : 2500,
+        maxWaitMs: fromShare || getKnownAuthUserId() ? 12000 : 2500,
+        tryRefreshSession: fromShare,
       });
+
+      if (user) {
+        const cid = getRoomClientId(roomId, user.id);
+        if (isKickedForRoom(roomId, cid) || isKickedSitewide()) {
+          setStatus('kicked');
+          return;
+        }
+      }
+
+      if (fromShare && lastEnter?.isGuest && lastEnter.roomId === roomId) {
+        if (autoEnterAttemptedRef.current) return;
+        autoEnterAttemptedRef.current = true;
+        consumeShareRoomEnterPending();
+        commitEnterRoom({
+          displayName: lastEnter.displayName,
+          isGuest: true,
+          authUserId: null,
+        });
+        return;
+      }
+
+      if (
+        fromShare &&
+        !user &&
+        lastEnter &&
+        !lastEnter.isGuest &&
+        lastEnter.authUserId &&
+        getKnownAuthUserId() === lastEnter.authUserId
+      ) {
+        if (autoEnterAttemptedRef.current) return;
+        const cid = getRoomClientId(roomId, lastEnter.authUserId);
+        if (isKickedForRoom(roomId, cid) || isKickedSitewide()) {
+          setStatus('kicked');
+          return;
+        }
+        autoEnterAttemptedRef.current = true;
+        consumeShareRoomEnterPending();
+        void tryEnterRoom({
+          displayName: lastEnter.displayName,
+          isGuest: false,
+          authUserId: lastEnter.authUserId,
+        });
+        return;
+      }
 
       if (user) {
         if (autoEnterAttemptedRef.current) return;
@@ -189,6 +244,7 @@ export function JoinGate({ roomId }: JoinGateProps) {
         setAuthUserId(user.id);
         setDisplayName(getDisplayNameFromUser(user));
         setIsGuest(false);
+        if (fromShare) consumeShareRoomEnterPending();
         void tryEnterRoom({
           displayName: getDisplayNameFromUser(user),
           isGuest: false,
@@ -198,9 +254,10 @@ export function JoinGate({ roomId }: JoinGateProps) {
       }
 
       setAuthUserId(null);
+      if (fromShare) consumeShareRoomEnterPending();
       if (!tryEnterAsGuestFromStorage()) setStatus('choice');
     });
-  }, [roomId, clientId, consentOk, tryEnterRoom]);
+  }, [roomId, consentOk, tryEnterRoom, commitEnterRoom]);
 
   const handleJoin = async (name: string, mode: 'guest' | 'registered') => {
     setJoinVerifying(true);
@@ -240,7 +297,7 @@ export function JoinGate({ roomId }: JoinGateProps) {
   if (consentOk !== true || status === 'loading') {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gray-950">
-        <p className="text-gray-400">読み込み中…</p>
+        <p className="text-gray-400">{loadingHint}</p>
       </div>
     );
   }

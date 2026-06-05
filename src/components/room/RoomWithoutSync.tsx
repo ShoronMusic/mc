@@ -66,6 +66,8 @@ import { useIsLgViewport } from '@/hooks/useLgViewport';
 import { useRoomChatLogPersistence } from '@/hooks/useRoomChatLogPersistence';
 import { useRoomAccessLogReport } from '@/hooks/useRoomAccessLogReport';
 import { rememberLastActiveRoom } from '@/lib/share-target-pending';
+import { rememberLastRoomEnter } from '@/lib/room-enter-resume';
+import { useSupabaseAuthUserId } from '@/hooks/useSupabaseAuthUserId';
 import { usePreventRoomPullToRefresh } from '@/hooks/usePreventRoomPullToRefresh';
 import { createClient } from '@/lib/supabase/client';
 import {
@@ -148,9 +150,17 @@ export default function RoomWithoutSync({
     isGuest,
     displayName: displayNameProp.trim() || 'ゲスト',
   });
+  const authUserId = useSupabaseAuthUserId(isGuest);
   useEffect(() => {
-    if (roomId) rememberLastActiveRoom(roomId);
-  }, [roomId]);
+    if (!roomId) return;
+    rememberLastActiveRoom(roomId);
+    rememberLastRoomEnter({
+      roomId,
+      displayName: displayNameProp.trim() || 'ゲスト',
+      isGuest,
+      authUserId: isGuest ? null : authUserId,
+    });
+  }, [roomId, displayNameProp, isGuest, authUserId]);
   usePreventRoomPullToRefresh();
   useEffect(() => {
     rememberRoomForGuideReturn(roomId);

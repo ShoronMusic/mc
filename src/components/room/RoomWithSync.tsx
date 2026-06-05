@@ -178,6 +178,7 @@ import {
 } from '@/lib/room-session-events';
 import { dedupeParticipantsByAuthUserId } from '@/lib/room-participant-dedupe';
 import { rememberLastActiveRoom } from '@/lib/share-target-pending';
+import { rememberLastRoomEnter } from '@/lib/room-enter-resume';
 import { useSupabaseAuthUserId } from '@/hooks/useSupabaseAuthUserId';
 import { isAiQuestionGuardKickExemptUserId } from '@/lib/ai-question-guard-exempt-user-ids';
 import { lineFromJoinGreetingApi } from '@/lib/join-greeting-logic';
@@ -661,11 +662,18 @@ export default function RoomWithSync({
     isGuest,
     displayName: effectiveDisplayName.trim() || 'ゲスト',
   });
-  useEffect(() => {
-    if (roomId) rememberLastActiveRoom(roomId);
-  }, [roomId]);
   usePreventRoomPullToRefresh();
   const authUserId = useSupabaseAuthUserId(isGuest);
+  useEffect(() => {
+    if (!roomId) return;
+    rememberLastActiveRoom(roomId);
+    rememberLastRoomEnter({
+      roomId,
+      displayName: effectiveDisplayName.trim() || 'ゲスト',
+      isGuest,
+      authUserId: isGuest ? null : authUserId,
+    });
+  }, [roomId, effectiveDisplayName, isGuest, authUserId]);
   const [sessionClaim, setSessionClaim] = useState<RoomSessionClaim>(() =>
     roomId ? getOrCreateRoomSessionClaim(roomId) : { instanceId: '', claimedAtMs: 0 },
   );

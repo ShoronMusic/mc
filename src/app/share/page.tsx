@@ -7,7 +7,7 @@ import {
   markShareRoomEnterPending,
   setPendingShareChatText,
 } from '@/lib/share-target-pending';
-import { resolveSupabaseUserClient } from '@/lib/supabase/resolve-user-client';
+import { warmSupabaseSessionClient } from '@/lib/supabase/resolve-user-client';
 import { resolveYouTubeWatchUrlFromSharePayload } from '@/lib/youtube-canonical-watch-url';
 
 function ShareTargetRedirect() {
@@ -33,7 +33,7 @@ function ShareTargetRedirect() {
       }
 
       setPendingShareChatText(watchUrl);
-      await resolveSupabaseUserClient({ maxWaitMs: 6000 });
+      await warmSupabaseSessionClient();
 
       const room = getLastActiveRoomSegment();
       if (cancelled) return;
