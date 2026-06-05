@@ -8,7 +8,7 @@ import { FROM_START_KEY } from './FromStartMarker';
 import { AblyProviderWrapper } from '@/components/providers/AblyProviderWrapper';
 import { getRoomClientId, isKickedForRoom, isKickedSitewide } from '@/lib/room-owner';
 import { fetchRoomAuthSessionCheck } from '@/lib/room-auth-session-check-client';
-import { regenerateRoomSessionClaim } from '@/lib/room-session-instance';
+import { regenerateRoomSessionClaim, getOrCreateRoomSessionClaim } from '@/lib/room-session-instance';
 import {
   clearGuestRoomPersistence,
   rememberGuestRoom,
@@ -82,9 +82,13 @@ export function JoinGate({ roomId }: JoinGateProps) {
   };
 
   const commitEnterRoom = useCallback(
-    (enter: PendingEnter) => {
+    (enter: PendingEnter, options?: { bumpSessionClaim?: boolean }) => {
       if (!enter.isGuest && enter.authUserId) {
-        regenerateRoomSessionClaim(roomId);
+        if (options?.bumpSessionClaim) {
+          regenerateRoomSessionClaim(roomId);
+        } else {
+          getOrCreateRoomSessionClaim(roomId);
+        }
         rememberKnownAuthUserId(enter.authUserId);
       }
       setDisplayName(enter.displayName);
@@ -315,7 +319,7 @@ export function JoinGate({ roomId }: JoinGateProps) {
           roomId={roomId}
           onConfirm={() => {
             skipSessionGateRef.current = true;
-            if (pendingEnter) commitEnterRoom(pendingEnter);
+            if (pendingEnter) commitEnterRoom(pendingEnter, { bumpSessionClaim: true });
           }}
           onCancel={() => {
             setPendingEnter(null);

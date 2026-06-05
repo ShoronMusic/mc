@@ -7,6 +7,7 @@ import {
   markShareRoomEnterPending,
   setPendingShareChatText,
 } from '@/lib/share-target-pending';
+import { tryDeliverShareToOpenRoom } from '@/lib/share-target-delivery';
 import { warmSupabaseSessionClient } from '@/lib/supabase/resolve-user-client';
 import { resolveYouTubeWatchUrlFromSharePayload } from '@/lib/youtube-canonical-watch-url';
 
@@ -37,6 +38,20 @@ function ShareTargetRedirect() {
 
       const room = getLastActiveRoomSegment();
       if (cancelled) return;
+
+      const delivered = await tryDeliverShareToOpenRoom({ watchUrl, roomId: room });
+      if (cancelled) return;
+
+      if (delivered && room) {
+        setMessage('部屋の発言欄に送りました…');
+        if (window.history.length > 1) {
+          window.history.back();
+        } else {
+          window.location.replace(`/${room}`);
+        }
+        return;
+      }
+
       if (room) {
         markShareRoomEnterPending();
         window.location.replace(`/${room}`);

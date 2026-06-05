@@ -17,6 +17,7 @@ import {
 } from 'react';
 import { MAX_MESSAGE_LENGTH } from '@/lib/chat-limits';
 import { MUSICAI_EXTENSION_SET_CHAT_TEXT_EVENT } from '@/lib/musicai-extension-events';
+import { SHARE_SET_CHAT_TEXT_EVENT } from '@/lib/share-target-delivery';
 import { consumePendingShareChatText } from '@/lib/share-target-pending';
 import { NON_YOUTUBE_URL_SYSTEM_MESSAGE } from '@/lib/chat-non-youtube-url';
 import { extractVideoId, isStandaloneNonYouTubeUrl } from '@/lib/youtube';
@@ -585,8 +586,11 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
       requestAnimationFrame(() => inputRef.current?.focus());
     };
     window.addEventListener(MUSICAI_EXTENSION_SET_CHAT_TEXT_EVENT, onExtensionSetText);
-    return () =>
+    window.addEventListener(SHARE_SET_CHAT_TEXT_EVENT, onExtensionSetText);
+    return () => {
       window.removeEventListener(MUSICAI_EXTENSION_SET_CHAT_TEXT_EVENT, onExtensionSetText);
+      window.removeEventListener(SHARE_SET_CHAT_TEXT_EVENT, onExtensionSetText);
+    };
   }, []);
 
   useEffect(() => {

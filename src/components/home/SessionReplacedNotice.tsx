@@ -25,9 +25,9 @@ export function SessionReplacedNotice() {
       className="mx-auto mb-4 w-full max-w-lg rounded-lg border border-amber-600/60 bg-amber-950/40 px-4 py-3 text-sm text-amber-100"
       role="status"
     >
-      同じアカウントが別の端末で部屋{' '}
+      共有などで同じ部屋がもう一度開かれたため、部屋{' '}
       <span className="font-mono text-amber-50">{roomId}</span>{' '}
-      に参加したため、この端末は退室しました。
+      から一旦退室しました。下の一覧から同じ部屋を選べば、そのまま再入室できます（ログインは継続しています）。
     </div>
   );
 }

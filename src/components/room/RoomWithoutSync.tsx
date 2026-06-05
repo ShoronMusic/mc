@@ -67,6 +67,7 @@ import { useRoomChatLogPersistence } from '@/hooks/useRoomChatLogPersistence';
 import { useRoomAccessLogReport } from '@/hooks/useRoomAccessLogReport';
 import { rememberLastActiveRoom } from '@/lib/share-target-pending';
 import { rememberLastRoomEnter } from '@/lib/room-enter-resume';
+import { listenShareTargetDelivery, SHARE_SET_CHAT_TEXT_EVENT } from '@/lib/share-target-delivery';
 import { useSupabaseAuthUserId } from '@/hooks/useSupabaseAuthUserId';
 import { usePreventRoomPullToRefresh } from '@/hooks/usePreventRoomPullToRefresh';
 import { createClient } from '@/lib/supabase/client';
@@ -161,6 +162,17 @@ export default function RoomWithoutSync({
       authUserId: isGuest ? null : authUserId,
     });
   }, [roomId, displayNameProp, isGuest, authUserId]);
+  useEffect(() => {
+    const rid = roomId?.trim();
+    if (!rid) return;
+    return listenShareTargetDelivery(({ watchUrl, roomId: targetRoom }) => {
+      if (targetRoom && targetRoom !== rid) return false;
+      window.dispatchEvent(
+        new CustomEvent(SHARE_SET_CHAT_TEXT_EVENT, { detail: { text: watchUrl } }),
+      );
+      return true;
+    });
+  }, [roomId]);
   usePreventRoomPullToRefresh();
   useEffect(() => {
     rememberRoomForGuideReturn(roomId);

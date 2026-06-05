@@ -179,6 +179,7 @@ import {
 import { dedupeParticipantsByAuthUserId } from '@/lib/room-participant-dedupe';
 import { rememberLastActiveRoom } from '@/lib/share-target-pending';
 import { rememberLastRoomEnter } from '@/lib/room-enter-resume';
+import { listenShareTargetDelivery, SHARE_SET_CHAT_TEXT_EVENT } from '@/lib/share-target-delivery';
 import { useSupabaseAuthUserId } from '@/hooks/useSupabaseAuthUserId';
 import { isAiQuestionGuardKickExemptUserId } from '@/lib/ai-question-guard-exempt-user-ids';
 import { lineFromJoinGreetingApi } from '@/lib/join-greeting-logic';
@@ -674,6 +675,18 @@ export default function RoomWithSync({
       authUserId: isGuest ? null : authUserId,
     });
   }, [roomId, effectiveDisplayName, isGuest, authUserId]);
+
+  useEffect(() => {
+    const rid = roomId?.trim();
+    if (!rid) return;
+    return listenShareTargetDelivery(({ watchUrl, roomId: targetRoom }) => {
+      if (targetRoom && targetRoom !== rid) return false;
+      window.dispatchEvent(
+        new CustomEvent(SHARE_SET_CHAT_TEXT_EVENT, { detail: { text: watchUrl } }),
+      );
+      return true;
+    });
+  }, [roomId]);
   const [sessionClaim, setSessionClaim] = useState<RoomSessionClaim>(() =>
     roomId ? getOrCreateRoomSessionClaim(roomId) : { instanceId: '', claimedAtMs: 0 },
   );
