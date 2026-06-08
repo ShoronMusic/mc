@@ -83,6 +83,7 @@ npm run verify:utf8:fix  # 破損ファイルを git HEAD から復元（未コ�
 
 ## 品質改善の流れ
 
+- **指示者↔コーディング AI の協業診断**（5 軸指標・継続的な姿勢指摘）: `docs/ai-collaboration-diagnostics.md`
 - AI コメントの誤りパターンは `docs/feedback-and-ai-improvement-todo.md` と `docs/ai-chat-improvement-plan.md` を参照。
 - 荒らし対策・モデレーションの今後の課題は `docs/abuse-moderation-future-tasks.md` を参照。
 - ポリシー（正規表現）を変えたら **`src/lib/ai-output-policy.unit-test.ts` にケースを追加**し、`npm run validate` を通すこと。
