@@ -48,6 +48,7 @@ import type { ThemePlaylistRoomSubmitBanner } from '@/hooks/useThemePlaylistRoom
 import ThemePlaylistMissionEntriesModal, {
   type ThemePlaylistMissionEntriesModalRoomProps,
 } from '@/components/chat/ThemePlaylistMissionEntriesModal';
+import AiCharacterTtsReplayButton from '@/components/chat/AiCharacterTtsReplayButton';
 
 /** 詳細フィードバック用モーダルの状態 */
 type FeedbackModalState =
@@ -1486,10 +1487,24 @@ export default function Chat({
                       <span className="ml-1 inline text-[11px] text-gray-500 sm:hidden">
                         {formatTime(m.createdAt)}
                       </span>
+                      {isCharacterChatMessage ? (
+                        <span className="ml-1.5 inline-flex align-middle sm:hidden">
+                          <AiCharacterTtsReplayButton
+                            displayBody={m.body}
+                            characterTtsArtistJa={m.characterTtsArtistJa}
+                          />
+                        </span>
+                      ) : null}
                     </div>
-                    <span className="hidden shrink-0 text-xs text-gray-500 sm:inline">
-                      {formatTime(m.createdAt)}
-                    </span>
+                    <div className="hidden shrink-0 items-center gap-1.5 sm:flex">
+                      {isCharacterChatMessage ? (
+                        <AiCharacterTtsReplayButton
+                          displayBody={m.body}
+                          characterTtsArtistJa={m.characterTtsArtistJa}
+                        />
+                      ) : null}
+                      <span className="text-xs text-gray-500">{formatTime(m.createdAt)}</span>
+                    </div>
                   </div>
                 ) : (
                   <>

@@ -84,6 +84,8 @@ export interface ChatMessage {
   aiGuardMeta?: AiQuestionGuardMeta;
   /** systemKind が song_quiz のときの三択データ */
   songQuiz?: SongQuizPayload;
+  /** character_chat 選曲リード用: Music8 の日本語アーティスト名（TTS のみ・表示には使わない） */
+  characterTtsArtistJa?: string | null;
 }
 
 /** Ably で送るチャットイベントのペイロード */
@@ -146,4 +148,6 @@ export interface ChatMessagePayload {
   playLeaveChime?: boolean;
   systemKind?: 'ai_question_guard' | 'song_quiz';
   songQuiz?: SongQuizPayload;
+  /** character_chat 選曲リード用: Music8 の日本語アーティスト名（TTS のみ） */
+  characterTtsArtistJa?: string | null;
 }

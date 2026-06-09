@@ -248,6 +248,18 @@ export function formatMemberNames(member?: false | Music8MemberItem[] | Music8Me
     .filter(Boolean);
 }
 
+/** Music8 `artistjpname`（メインアーティスト欄の日本語名）。TTS 用にひらがな・カタカナ・漢字を含むときだけ返す */
+export function getMusic8ArtistJapaneseName(artist: Music8ArtistJson): string | null {
+  const raw = artist as Record<string, unknown>;
+  const acf =
+    raw.acf && typeof raw.acf === 'object' && !Array.isArray(raw.acf)
+      ? (raw.acf as Record<string, unknown>)
+      : {};
+  const ja = String(acf.artistjpname ?? artist.artistjpname ?? '').trim();
+  if (!ja || !/[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF]/.test(ja)) return null;
+  return ja;
+}
+
 /**
  * description から日本語部分のみ取得（\r\n\r\n の後を想定）
  */
@@ -310,7 +322,7 @@ export function formatMusic8ArtistDisplayLines(artist: Music8ArtistJson): {
       ? memberNames.map((n) => n).join(', ')
       : '';
 
-  const nameOnly = (source.artistjpname ?? '').trim() || nameDisplay;
+  const nameOnly = getMusic8ArtistJapaneseName(source) || nameDisplay;
   let line1 = nameOnly;
   if (occupation) line1 += ` (${occupation})`;
   if (memberDisplay) line1 += ` / ${memberDisplay}`;

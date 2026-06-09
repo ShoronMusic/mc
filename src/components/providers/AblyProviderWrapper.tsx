@@ -59,6 +59,18 @@ export function AblyProviderWrapper({
     if (clientIdProp && clientIdProp.trim()) opts.clientId = clientIdProp.trim();
     return new Ably.Realtime(opts);
   }, [key, clientIdProp]);
+
+  useEffect(() => {
+    if (!client) return;
+    return () => {
+      try {
+        client.close();
+      } catch {
+        /* 退室直後の detach 競合は無視 */
+      }
+    };
+  }, [client]);
+
   const channelName = getChannelName(roomId);
 
   const postParticipation = useCallback(

@@ -2,7 +2,13 @@
 
 import Image from 'next/image';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useChannel, usePresence, usePresenceListener } from 'ably/react';
+import {
+  useChannel,
+  useChannelStateListener,
+  usePresence,
+  usePresenceListener,
+} from 'ably/react';
+import type { RealtimeChannel } from 'ably';
 import Chat from '@/components/chat/Chat';
 import ChatInput, { type ChatInputHandle } from '@/components/chat/ChatInput';
 import YouTubePlayer, {
@@ -77,6 +83,14 @@ import {
   postAiCharacterPickUtteranceToLog,
   pushAiCharacterPickUtteranceLine,
 } from '@/lib/ai-character-song-pick-client';
+import {
+  isAiCharacterTtsEnabledClient,
+  shouldPlayIncomingCharacterTtsClient,
+} from '@/lib/ai-character-tts-config';
+import { scheduleAiCharacterTtsPlayback } from '@/lib/ai-character-tts-client';
+import { fetchMusic8ArtistJapaneseNameForTts } from '@/lib/music8-artist-ja-for-tts-client';
+import { parseArtistTitleFromDisplayTitle } from '@/lib/spotify-search-track';
+import { useAiCharacterTtsErrorNotice } from '@/hooks/useAiCharacterTtsErrorNotice';
 import {
   type PlaybackMessage,
   type PlaybackHistoryUpdatedPayload,
@@ -1023,7 +1037,10 @@ export default function RoomWithSync({
     ) {
       return;
     }
-    updateStatus(presencePayload);
+    void updateStatus(presencePayload).catch((err) => {
+      // eslint-disable-next-line no-console
+      console.warn('[Ably] presence update failed (ignored):', err);
+    });
   }, [isGuest, myClientId, sessionClaim, presenceAuthRows, updateStatus, presencePayload]);
 
   useEffect(() => {
@@ -1467,7 +1484,7 @@ export default function RoomWithSync({
     [myClientId, onLeave, roomId, authUserId],
   );
 
-  const { publish } = useChannel(channelName, (message) => {
+  const { publish, channel } = useChannel(channelName, (message) => {
     if (message.name === ROOM_SESSION_CLAIM_EVENT) {
       const d = message.data as RoomSessionClaimEventPayload;
       const uid = authUserId?.trim() ?? '';
@@ -1787,9 +1804,25 @@ export default function RoomWithSync({
               : {}),
             ...(p.systemKind ? { systemKind: p.systemKind } : {}),
             ...(p.songQuiz ? { songQuiz: p.songQuiz } : {}),
+            ...(p.characterTtsArtistJa
+              ? { characterTtsArtistJa: p.characterTtsArtistJa }
+              : {}),
           },
         ];
       });
+      if (
+        shouldPlayIncomingCharacterTtsClient() &&
+        data.messageType === 'ai' &&
+        data.aiSource === 'character_chat'
+      ) {
+        scheduleAiCharacterTtsPlayback(
+          data.body,
+          data.id,
+          data.characterTtsArtistJa
+            ? { leadArtistJa: data.characterTtsArtistJa }
+            : undefined,
+        );
+      }
       return;
     }
     const data = message.data as PlaybackMessage;
@@ -2172,17 +2205,38 @@ export default function RoomWithSync({
       }, 300);
     }
   });
+  const [channelAttached, setChannelAttached] = useState(() => channel.state === 'attached');
+  useEffect(() => {
+    setChannelAttached(channel.state === 'attached');
+  }, [channel]);
+  useChannelStateListener(channelName, (stateChange) => {
+    setChannelAttached(stateChange.current === 'attached');
+  });
+
   const safePublish = useCallback(
     (name: string, data: unknown) => {
+      const ch = channel as RealtimeChannel;
+      if (ch.state !== 'attached') return;
       try {
-        publish(name, data);
+        const result = publish(name, data) as unknown;
+        if (
+          result &&
+          typeof result === 'object' &&
+          'catch' in result &&
+          typeof (result as Promise<unknown>).catch === 'function'
+        ) {
+          void (result as Promise<unknown>).catch((err) => {
+            // eslint-disable-next-line no-console
+            console.warn('[Ably] publish failed (ignored):', err);
+          });
+        }
       } catch (err) {
         // Ably の接続が閉じているタイミングで publish すると例外が投げられてページが落ちるため防ぐ
         // eslint-disable-next-line no-console
         console.warn('[Ably] publish failed (ignored):', err);
       }
     },
-    [publish]
+    [publish, channel]
   );
 
   const publishSongQuizAnswer = useCallback(
@@ -2209,6 +2263,7 @@ export default function RoomWithSync({
 
   const lastPublishedSessionClaimRef = useRef('');
   useEffect(() => {
+    if (!channelAttached) return;
     if (isGuest || !authUserId?.trim()) return;
     if (
       !shouldPublishRoomSessionPresence({
@@ -2228,9 +2283,10 @@ export default function RoomWithSync({
       sessionInstanceId: sessionClaim.instanceId,
       sessionClaimedAtMs: sessionClaim.claimedAtMs,
     } satisfies RoomSessionClaimEventPayload);
-  }, [isGuest, authUserId, myClientId, sessionClaim, presenceAuthRows]);
+  }, [isGuest, authUserId, myClientId, sessionClaim, presenceAuthRows, channelAttached]);
 
   useEffect(() => {
+    if (!channelAttached) return;
     if (!myClientId) return;
     if (videoId != null) return;
     const otherPresent = participants.some((p) => p.clientId !== myClientId);
@@ -2243,17 +2299,18 @@ export default function RoomWithSync({
       publishRef.current?.(REQUEST_PLAYBACK_SYNC_EVENT, {});
     }, 650);
     return () => window.clearTimeout(timer);
-  }, [myClientId, participants, videoId]);
+  }, [myClientId, participants, videoId, channelAttached]);
 
   // 遅れて入室した参加者にも現在の曲紹介スロットを共有する
   useEffect(() => {
+    if (!channelAttached) return;
     if (!canUseOwnerControls) return;
     const sentAt = Date.now();
     publishRef.current?.(OWNER_COMMENT_PACK_MODE_EVENT, {
       slots: commentPackSlots,
       sentAt,
     } as OwnerCommentPackModePayload);
-  }, [canUseOwnerControls, commentPackSlots, participants.length]);
+  }, [canUseOwnerControls, commentPackSlots, participants.length, channelAttached]);
 
   // イベントの取りこぼし対策（オーナーが定期的に再配信）
   useEffect(() => {
@@ -2270,27 +2327,30 @@ export default function RoomWithSync({
 
   // 遅れて入室した参加者にも現在の邦楽解禁状態を共有する
   useEffect(() => {
+    if (!channelAttached) return;
     if (!canUseOwnerControls) return;
     publishRef.current?.(OWNER_JP_AI_UNLOCK_EVENT, {
       enabled: jpAiUnlockEnabled,
     } as OwnerJpAiUnlockPayload);
-  }, [canUseOwnerControls, jpAiUnlockEnabled, participants.length]);
+  }, [canUseOwnerControls, jpAiUnlockEnabled, participants.length, channelAttached]);
 
   // 遅れて入室した参加者にも現在の曲クイズON/OFFを共有する
   useEffect(() => {
+    if (!channelAttached) return;
     if (!canUseOwnerControls) return;
     publishRef.current?.(OWNER_SONG_QUIZ_EVENT, {
       enabled: ownerSongQuizEnabled,
     } as OwnerSongQuizPayload);
-  }, [canUseOwnerControls, ownerSongQuizEnabled, participants.length]);
+  }, [canUseOwnerControls, ownerSongQuizEnabled, participants.length, channelAttached]);
 
   // 遅れて入室した参加者にも現在のAIキャラクター参加ON/OFFを共有する
   useEffect(() => {
+    if (!channelAttached) return;
     if (!canUseOwnerControls) return;
     publishRef.current?.(OWNER_AI_CHARACTER_JOIN_EVENT, {
       enabled: ownerAiCharacterJoinEnabled,
     } as OwnerAiCharacterJoinPayload);
-  }, [canUseOwnerControls, ownerAiCharacterJoinEnabled, participants.length]);
+  }, [canUseOwnerControls, ownerAiCharacterJoinEnabled, participants.length, channelAttached]);
 
   useEffect(() => {
     if (ownerAiCharacterJoinEnabled && ownerAiCharacterJoinedAtMsRef.current == null) {
@@ -2302,19 +2362,21 @@ export default function RoomWithSync({
 
   // 遅れて入室した参加者にも現在のAIキャラクター名を共有する
   useEffect(() => {
+    if (!channelAttached) return;
     if (!canUseOwnerControls) return;
     publishRef.current?.(OWNER_AI_CHARACTER_NAME_EVENT, {
       name: ownerAiCharacterName,
     } as OwnerAiCharacterNamePayload);
-  }, [canUseOwnerControls, ownerAiCharacterName, participants.length]);
+  }, [canUseOwnerControls, ownerAiCharacterName, participants.length, channelAttached]);
 
   // 遅れて入室した参加者にも現在のおすすめ曲ON/OFFを共有する
   useEffect(() => {
+    if (!channelAttached) return;
     if (!canUseOwnerControls) return;
     publishRef.current?.(OWNER_NEXT_SONG_RECOMMEND_EVENT, {
       enabled: ownerNextSongRecommendEnabled,
     } as OwnerNextSongRecommendPayload);
-  }, [canUseOwnerControls, ownerNextSongRecommendEnabled, participants.length]);
+  }, [canUseOwnerControls, ownerNextSongRecommendEnabled, participants.length, channelAttached]);
 
   // 取りこぼし対策（オーナーが定期的に再配信）
   useEffect(() => {
@@ -2644,6 +2706,12 @@ export default function RoomWithSync({
         nextSongRecommendCatalog?: ChatMessage['nextSongRecommendCatalog'];
         /** AI表示名の上書き（未指定時は既存AI名） */
         displayName?: string;
+        /** エージェントAI（character_chat）の Irodori-TTS 読み上げ。未指定時は TTS 有効なら ON */
+        playCharacterTts?: boolean;
+        /** true で読み上げを明示的にスキップ */
+        skipCharacterTts?: boolean;
+        /** Music8 の日本語アーティスト名（選曲リード TTS 用・表示には使わない） */
+        characterTtsArtistJa?: string | null;
       }
     ) => {
       if (aiFreeSpeechStopped && !options?.allowWhenAiStopped) return;
@@ -2680,10 +2748,16 @@ export default function RoomWithSync({
         ...(options?.nextSongRecommendCatalog
           ? { nextSongRecommendCatalog: options.nextSongRecommendCatalog }
           : {}),
+        ...(options?.characterTtsArtistJa?.trim()
+          ? { characterTtsArtistJa: options.characterTtsArtistJa.trim() }
+          : {}),
       };
       if (!options?.localOnly) {
         safePublish(CHAT_MESSAGE_EVENT, payload);
       }
+      const ttsOptions = payload.characterTtsArtistJa
+        ? { leadArtistJa: payload.characterTtsArtistJa }
+        : undefined;
       setMessages((prev) => [
         ...prev,
         {
@@ -2708,8 +2782,19 @@ export default function RoomWithSync({
           ...(payload.nextSongRecommendCatalog
             ? { nextSongRecommendCatalog: payload.nextSongRecommendCatalog }
             : {}),
+          ...(payload.characterTtsArtistJa
+            ? { characterTtsArtistJa: payload.characterTtsArtistJa }
+            : {}),
         },
       ]);
+      if (
+        options?.aiSource === 'character_chat' &&
+        !options?.skipCharacterTts &&
+        isAiCharacterTtsEnabledClient() &&
+        options?.playCharacterTts !== false
+      ) {
+        scheduleAiCharacterTtsPlayback(body, id, ttsOptions);
+      }
     },
     [safePublish, aiFreeSpeechStopped]
   );
@@ -2858,6 +2943,7 @@ export default function RoomWithSync({
   }, [bumpSongQuizRevealIfAllAnswered]);
 
   useEffect(() => {
+    if (!channelAttached) return;
     if (!roomId || ownerStatePublishRef.current) return;
     const pub = publishRef.current;
     if (!pub) return;
@@ -2913,6 +2999,7 @@ export default function RoomWithSync({
       }, 500);
     }
   }, [
+    channelAttached,
     roomId,
     participants,
     presentParticipants,
@@ -2947,6 +3034,8 @@ export default function RoomWithSync({
       return [...prev, msg];
     });
   }, []);
+
+  useAiCharacterTtsErrorNotice(addSystemMessage);
 
   const handleToggleJoinLock = useCallback(async () => {
     if (joinLockSaving) return;
@@ -3244,19 +3333,21 @@ export default function RoomWithSync({
       if (cancelled) return;
       const localGuide = { allowWhenAiStopped: true, localOnly: true } as const;
       addAiMessage(greeting, localGuide);
-      if (!isWelcomeBack) addAiMessage(AI_FIRST_VOICE, localGuide);
-      addAiMessage(TURN_ORDER_VOICE, localGuide);
-      if (participatingOrder.length > 0) {
-        const present = presentClientIdsRef.current;
-        const first =
-          participatingOrder.find(
-            (p) => present.has(p.clientId) && p.participatesInSelection !== false,
-          ) ?? participatingOrder[0];
-        setCurrentTurnClientId(first.clientId);
-        publishRef.current?.(TURN_STATE_EVENT, buildTurnStatePayload(first.clientId));
-        addAiMessage(`${first.displayName}さん、曲を貼ってください`, localGuide);
-      } else {
-        addAiMessage(JOIN_PASTE_YOUTUBE_URL_HINT, { ...localGuide, aiBodyEmphasis: 'yellow' });
+      if (!isWelcomeBack) {
+        addAiMessage(AI_FIRST_VOICE, localGuide);
+        addAiMessage(TURN_ORDER_VOICE, localGuide);
+        if (participatingOrder.length > 0) {
+          const present = presentClientIdsRef.current;
+          const first =
+            participatingOrder.find(
+              (p) => present.has(p.clientId) && p.participatesInSelection !== false,
+            ) ?? participatingOrder[0];
+          setCurrentTurnClientId(first.clientId);
+          publishRef.current?.(TURN_STATE_EVENT, buildTurnStatePayload(first.clientId));
+          addAiMessage(`${first.displayName}さん、曲を貼ってください`, localGuide);
+        } else {
+          addAiMessage(JOIN_PASTE_YOUTUBE_URL_HINT, { ...localGuide, aiBodyEmphasis: 'yellow' });
+        }
       }
       touchActivity();
     })();
@@ -3432,6 +3523,7 @@ export default function RoomWithSync({
       const picked = aiCharacterPickReasonByVideoIdRef.current.get(v);
       if (!picked) return;
       const timer = setTimeout(() => {
+        void (async () => {
         if (videoIdRef.current !== v) return;
         if (aiCharacterPickReasonPostedVideoIdsRef.current.has(v)) return;
         aiCharacterPickReasonPostedVideoIdsRef.current.add(v);
@@ -3439,11 +3531,20 @@ export default function RoomWithSync({
         const lead = picked.artistTitle
           ? `${picked.artistTitle}をどうぞ！`
           : 'この曲をどうぞ！';
+        let characterTtsArtistJa: string | undefined;
+        if (picked.artistTitle) {
+          const parsed = parseArtistTitleFromDisplayTitle(picked.artistTitle);
+          if (parsed?.artist) {
+            const ja = await fetchMusic8ArtistJapaneseNameForTts(parsed.artist);
+            if (ja) characterTtsArtistJa = ja;
+          }
+        }
         addAiMessage(`${lead}${reasonBody}`, {
           allowWhenAiStopped: true,
           aiSource: 'character_chat',
           displayName: ownerAiCharacterNameRef.current,
           videoId: v,
+          ...(characterTtsArtistJa ? { characterTtsArtistJa } : {}),
         });
         const label = picked.artistTitle ?? '';
         if (/feat\.|ft\./i.test(label)) {
@@ -3489,6 +3590,7 @@ export default function RoomWithSync({
           });
         }
         touchActivity();
+        })();
       }, Math.max(300, Math.min(delayMs, 900)));
       freeCommentTimeoutsRef.current.push(timer);
     },
@@ -4993,6 +5095,7 @@ export default function RoomWithSync({
                 allowWhenAiStopped: true,
                 aiSource: 'character_chat',
                 displayName: ownerAiCharacterNameRef.current,
+                skipCharacterTts: true,
               });
               const logId = characterPickLogIdByVideoIdRef.current.get(pickedVid);
               if (logId) {
@@ -5127,6 +5230,7 @@ export default function RoomWithSync({
           allowWhenAiStopped: true,
           aiSource: 'character_chat',
           displayName: ownerAiCharacterNameRef.current,
+          playCharacterTts: true,
         });
       })
       .catch(() => {});
@@ -5574,6 +5678,7 @@ export default function RoomWithSync({
                 allowWhenAiStopped: true,
                 aiSource: 'character_chat',
                 displayName: ownerAiCharacterNameRef.current,
+                playCharacterTts: true,
               });
               touchActivity();
               return;
@@ -5619,6 +5724,7 @@ export default function RoomWithSync({
               allowWhenAiStopped: true,
               aiSource: 'character_chat',
               displayName: ownerAiCharacterNameRef.current,
+              playCharacterTts: true,
             });
           })
           .catch(() => {});
@@ -5729,6 +5835,7 @@ export default function RoomWithSync({
                   allowWhenAiStopped: true,
                   aiSource: 'character_chat',
                   displayName: ownerAiCharacterNameRef.current,
+                  skipCharacterTts: true,
                 });
               }
               touchActivity();
@@ -5897,6 +6004,7 @@ export default function RoomWithSync({
                     allowWhenAiStopped: true,
                     aiSource: 'character_chat',
                     displayName: ownerAiCharacterNameRef.current,
+                    skipCharacterTts: true,
                   });
                   const logIdM = characterPickLogIdByVideoIdRef.current.get(pickedVid);
                   if (logIdM) {

@@ -213,6 +213,10 @@ export async function generateChatReply(
       songContext +=
         '・（@ 質問）会話でユーザーが別の曲・別アーティストについて話しているときは、【現在流れている曲】よりその会話の話題を優先してかまいません。\n';
     }
+    if (forceReply && personaInstructionRaw.length > 0) {
+      songContext +=
+        '・【現在流れている曲】の行は文脈理解用です。参加者の選曲への褒め・感想では、アーティスト名・曲名を本文に書かず「この曲」「〇〇さんの選曲」＋音楽的な褒めだけにしてください。\n';
+    }
   }
 
   const atMentionBlock = forceReply

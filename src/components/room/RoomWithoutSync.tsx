@@ -59,6 +59,9 @@ import {
   postAiCharacterPickUtteranceToLog,
   pushAiCharacterPickUtteranceLine,
 } from '@/lib/ai-character-song-pick-client';
+import { scheduleAiCharacterTtsPlayback } from '@/lib/ai-character-tts-client';
+import { isAiCharacterTtsEnabledClient } from '@/lib/ai-character-tts-config';
+import { useAiCharacterTtsErrorNotice } from '@/hooks/useAiCharacterTtsErrorNotice';
 import { scheduleNextSongRecommendAfterCommentary } from '@/lib/schedule-next-song-recommend-client';
 import { scheduleThemePlaylistRoomBlurbAfterPack } from '@/lib/schedule-theme-playlist-room-blurb';
 import type { ChatMessage, SystemMessageOptions } from '@/types/chat';
@@ -543,6 +546,9 @@ export default function RoomWithoutSync({
         deferToPanel?: boolean;
         nextSongRecommendCatalog?: ChatMessage['nextSongRecommendCatalog'];
         displayName?: string;
+        /** エージェントAI（character_chat）の Irodori-TTS 読み上げ。未指定時は TTS 有効なら ON */
+        playCharacterTts?: boolean;
+        skipCharacterTts?: boolean;
       }
     ) => {
       const jpS = jpDomesticSilenceVideoIdRef.current;
@@ -570,6 +576,14 @@ export default function RoomWithoutSync({
           : {}),
       };
       setMessages((prev) => [...prev, msg]);
+      if (
+        options?.aiSource === 'character_chat' &&
+        !options?.skipCharacterTts &&
+        isAiCharacterTtsEnabledClient() &&
+        options?.playCharacterTts !== false
+      ) {
+        scheduleAiCharacterTtsPlayback(body, msg.id);
+      }
     },
     []
   );
@@ -676,6 +690,8 @@ export default function RoomWithoutSync({
       return [...prev, msg];
     });
   }, []);
+
+  useAiCharacterTtsErrorNotice(addSystemMessage);
 
   const rememberAiCharacterPickReason = useCallback(
     (pickedVideoId: string, artistTitleText: unknown, reasonText: unknown) => {
@@ -1647,7 +1663,11 @@ export default function RoomWithoutSync({
             }
             if (data?.text) {
               const body = data.text.startsWith('【AIキャラ】') ? data.text : `【AIキャラ】 ${data.text}`;
-              addAiMessage(body, { aiSource: 'character_chat', displayName: AI_CHARACTER_DEFAULT_NAME });
+              addAiMessage(body, {
+                aiSource: 'character_chat',
+                displayName: AI_CHARACTER_DEFAULT_NAME,
+                playCharacterTts: true,
+              });
               touchActivity();
               return;
             }
