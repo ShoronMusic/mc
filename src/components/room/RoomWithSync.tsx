@@ -15,6 +15,7 @@ import YouTubePlayer, {
 } from '@/components/player/YouTubePlayer';
 import { GuestRegisterPromptModal } from '@/components/auth/GuestRegisterPromptModal';
 import { PolicyDocsModal, type PolicyDocsTab } from '@/components/legal/PolicyDocsModal';
+import { GuideEnjoyModal } from '@/components/guide/GuideEnjoyModal';
 import MyPage from '@/components/mypage/MyPage';
 import RoomMainLayout from '@/components/room/RoomMainLayout';
 import RoomPlaybackHistory from '@/components/room/RoomPlaybackHistory';
@@ -170,6 +171,7 @@ import {
   HeartIcon,
   LockClosedIcon,
   LockOpenIcon,
+  SparklesIcon,
   UserCircleIcon,
 } from '@heroicons/react/24/outline';
 import { useIsLgViewport } from '@/hooks/useLgViewport';
@@ -428,6 +430,7 @@ export default function RoomWithSync({
   const headerRoomId = roomId || '--';
   const headerRoomSub = (roomDisplayTitleCurrent || roomTitle || '').trim();
   const [termsModalOpen, setTermsModalOpen] = useState(false);
+  const [enjoyGuideModalOpen, setEnjoyGuideModalOpen] = useState(false);
   const [siteFeedbackOpen, setSiteFeedbackOpen] = useState(false);
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
   const [feedbackExitAction, setFeedbackExitAction] = useState<'none' | 'leave' | 'logout'>('none');
@@ -6471,6 +6474,19 @@ export default function RoomWithSync({
         </div>
         {onLeave && (
           <div className="flex shrink-0 flex-nowrap items-center justify-end gap-1.5 sm:gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setMobileHeaderMenuOpen(false);
+                setEnjoyGuideModalOpen(true);
+              }}
+              className="inline-flex h-10 w-10 items-center justify-center gap-0 rounded border border-violet-700 bg-violet-900/35 px-0 py-0 text-violet-100 hover:bg-violet-800/55 sm:w-auto sm:gap-1 sm:px-2.5 sm:py-1.5"
+              title="洋楽AIチャットの楽しみ方"
+              aria-label="楽しみ方"
+            >
+              <SparklesIcon className="h-4 w-4 shrink-0" aria-hidden />
+              <span className="hidden sm:inline">楽しみ方</span>
+            </button>
             {!isGuest && (
               <>
                 <button
@@ -6513,6 +6529,17 @@ export default function RoomWithSync({
                         }}
                       >
                         <span>ログアウト</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="flex w-full items-center justify-between rounded px-3 py-2 text-left text-sm text-violet-200 hover:bg-violet-900/30"
+                        onClick={() => {
+                          setMobileHeaderMenuOpen(false);
+                          setEnjoyGuideModalOpen(true);
+                        }}
+                      >
+                        <span>楽しみ方</span>
+                        <SparklesIcon className="h-4 w-4" aria-hidden />
                       </button>
                       <button
                         type="button"
@@ -6995,6 +7022,12 @@ export default function RoomWithSync({
           </div>
         </div>
       )}
+
+      <GuideEnjoyModal
+        open={enjoyGuideModalOpen}
+        onClose={() => setEnjoyGuideModalOpen(false)}
+        returnToSegment={roomId?.trim() || null}
+      />
 
       <PolicyDocsModal
         open={termsModalOpen}
