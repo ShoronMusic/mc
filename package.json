@@ -67,6 +67,8 @@
     "test:music8-sync-fingerprint": "tsx src/lib/music8-sync-fingerprint.unit-test.ts",
     "normalize:songs:main-artist": "tsx scripts/normalize-songs-main-artist-from-music8.ts",
     "backfill:song-credits": "tsx scripts/backfill-song-credits-from-metadata.ts",
+    "backfill:original-release-from-m8-songs": "tsx scripts/backfill-original-release-date-from-music8-songs-json.ts",
+    "backfill:songs-multi-artist-from-m8": "tsx scripts/backfill-songs-multi-artist-from-music8.ts",
     "test:song-credits": "tsx src/lib/song-credits-resolve.unit-test.ts",
     "test:spotify-track-match": "tsx src/lib/spotify-track-match.unit-test.ts",
     "import:music8:artists": "tsx scripts/import-music8-artists-bulk.ts --dry-run --slug=strokes",

@@ -40,3 +40,9 @@ export function music8SongJsonUrl(artistSlug: string, songSlug: string): string 
 export function music8ArtistJsonUrl(slug: string): string {
   return `${MUSIC8_ARTISTS_BASE}/${slug}.json`;
 }
+
+/** アーティスト曲一覧 `{slug}_songs.json`（ytvideoid / 正しい song slug 解決用） */
+export function music8ArtistSongsListJsonUrl(artistSlug: string): string {
+  const slug = artistSlug.trim();
+  return `${resolveMusic8ArtistSongsBaseUrl()}/${encodeURIComponent(slug)}_songs.json`;
+}

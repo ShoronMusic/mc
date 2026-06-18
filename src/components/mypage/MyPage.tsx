@@ -32,9 +32,22 @@ import { USER_SONG_HISTORY_UPDATED_EVENT } from '@/lib/user-song-history-events'
 import { suggestMyListArtistTitleFromYoutubeStyle } from '@/lib/my-list-youtube-title-suggest';
 import { MUSICAI_EXTENSION_SET_CHAT_TEXT_EVENT } from '@/lib/musicai-extension-events';
 import MainArtistTabPanel from '@/components/room/MainArtistTabPanel';
+import { MyPageModalFrame, MyPageThreeColumnBody } from '@/components/mypage/MyPageModalFrame';
+import {
+  MyPageMusicPreviewPanel,
+  type MyPageMusicPreviewSelection,
+} from '@/components/mypage/MyPageMusicPreviewPanel';
+import { UserRoomAiFeaturesSqlHint } from '@/components/mypage/UserRoomAiFeaturesSqlHint';
 import ThemePlaylistMissionPanel from '@/components/mypage/ThemePlaylistMissionPanel';
+import { isUserRoomAiFeaturesSetupMessage } from '@/lib/user-room-ai-features';
 import { SONG_STYLE_OPTIONS } from '@/lib/song-styles';
 import { SONG_ERA_OPTIONS } from '@/lib/song-era-options';
+import {
+  isSubstantiveUserTasteAutoProfile,
+  looksTruncatedUserTasteAutoProfile,
+  userTasteAutoProfileForUse,
+} from '@/lib/user-ai-taste-auto-profile';
+import { mergeManualAndAutoTasteForPrompt } from '@/lib/user-ai-taste-context';
 import { USER_AI_TASTE_SUMMARY_MAX_CHARS } from '@/lib/user-ai-taste-summary';
 import {
   USER_PUBLIC_PROFILE_ARTIST_EACH_MAX,
@@ -744,6 +757,7 @@ export default function MyPage({
   const [songHistoryLoading, setSongHistoryLoading] = useState(false);
   const [songHistoryPage, setSongHistoryPage] = useState(1);
   const [historyTab, setHistoryTab] = useState<'songs' | 'favorites' | 'participation' | 'mylist'>('songs');
+  const [musicPreview, setMusicPreview] = useState<MyPageMusicPreviewSelection | null>(null);
   const [favorites, setFavorites] = useState<FavoriteRow[]>([]);
   const [favoritesLoading, setFavoritesLoading] = useState(false);
   const [favoritesPage, setFavoritesPage] = useState(1);
@@ -799,6 +813,21 @@ export default function MyPage({
 
   const supabase = createClient();
   const router = useRouter();
+
+  const aiTastePromptPreview = useMemo(() => {
+    const auto = userTasteAutoProfileForUse(aiTasteAutoProfileText);
+    const merged = mergeManualAndAutoTasteForPrompt(aiTasteSummary, auto);
+    if (merged) return merged;
+
+    const lines: string[] = [];
+    const tagline = publicTagline.trim();
+    if (tagline) lines.push(`・${tagline}`);
+    const artists = publicArtistSlots.map((a) => a.trim()).filter(Boolean);
+    if (artists.length) lines.push(`・好きなアーティスト: ${artists.join('、')}`);
+    const listening = publicListening.trim();
+    if (listening) lines.push(`・${listening}`);
+    return lines.length ? lines.join('\n') : null;
+  }, [aiTasteSummary, aiTasteAutoProfileText, publicTagline, publicArtistSlots, publicListening]);
 
   useEffect(() => {
     setGuestNameValue(guestDisplayName);
@@ -1076,7 +1105,15 @@ export default function MyPage({
       }
       if (data?.skipped && data.reason === 'insufficient_signals') {
         setAiTasteMessage(
-          '集計できるチャット・選曲・お気に入り・マイリストがまだ少ないようです。しばらく利用してから再度お試しください。',
+          '集計できるチャット・選曲・お気に入り・マイリスト・プロフィールがまだ少ないようです。しばらく利用してから再度お試しください。',
+        );
+        return;
+      }
+      if (data?.skipped && data.reason === 'weak_generation') {
+        setAiTasteMessage(
+          typeof data.message === 'string'
+            ? data.message
+            : '要約の内容が薄すぎるため保存しませんでした。履歴を増やしてから再度お試しください。',
         );
         return;
       }
@@ -1392,7 +1429,9 @@ export default function MyPage({
       artist?: string | null;
       note?: string | null;
       source: 'manual_url' | 'song_history' | 'favorites' | 'extension' | 'import';
-    }): Promise<{ ok: true; duplicate: boolean } | { ok: false }> => {
+    }): Promise<
+      { ok: true; duplicate: boolean } | { ok: false; error: string }
+    > => {
       setMyListMessage(null);
       const res = await fetch('/api/my-list', {
         method: 'POST',
@@ -1402,14 +1441,15 @@ export default function MyPage({
       });
       const data = (await res.json().catch(() => ({}))) as { duplicate?: boolean; error?: string };
       if (!res.ok) {
-        setMyListMessage(typeof data?.error === 'string' ? data.error : '追加に失敗しました。');
-        return { ok: false };
+        const errMsg = typeof data?.error === 'string' ? data.error : '追加に失敗しました。';
+        setMyListMessage(errMsg);
+        return { ok: false as const, error: errMsg };
       }
       setMyListMessage(
         data.duplicate ? 'すでにマイリストにあります（同一動画は1件まで）。' : 'マイリストに追加しました。',
       );
       await loadMyList();
-      return { ok: true, duplicate: Boolean(data.duplicate) };
+      return { ok: true as const, duplicate: Boolean(data.duplicate) };
     },
     [loadMyList],
   );
@@ -1663,6 +1703,10 @@ export default function MyPage({
     setMyListArtistProfileOpen(true);
   }, []);
 
+  const openMusicPreview = useCallback((item: MyPageMusicPreviewSelection) => {
+    setMusicPreview(item);
+  }, []);
+
   const pickSongFromMyList = useCallback((url: string) => {
     const text = url.trim();
     if (!text) return;
@@ -1671,16 +1715,64 @@ export default function MyPage({
         detail: { text },
       }),
     );
-    setMainTab('music');
-    setHistoryTab('songs');
-    setMyListMessage('選曲欄にセットしました。送信すると再生予約されます。');
-  }, []);
+    onClose();
+  }, [onClose]);
+
+  const addToMyListWithAlert = useCallback(
+    async (payload: {
+      url?: string;
+      videoId?: string;
+      title?: string | null;
+      artist?: string | null;
+      note?: string | null;
+      source: 'manual_url' | 'song_history' | 'favorites' | 'extension' | 'import';
+    }) => {
+      const result = await postMyListItem(payload);
+      if (result.ok) {
+        window.alert(
+          result.duplicate
+            ? 'すでにマイリストにあります（同一動画は1件まで）。'
+            : 'マイリストに追加しました。',
+        );
+      } else {
+        window.alert(result.error);
+      }
+      return result;
+    },
+    [postMyListItem],
+  );
+
+  const addToMyListFromPreview = useCallback(
+    async (
+      payload: {
+        videoId: string;
+        url: string;
+        title: string | null;
+        artist: string | null;
+      },
+      source: 'song_history' | 'favorites',
+    ) => {
+      if (myListAddBusy) return;
+      setMyListAddBusy(true);
+      try {
+        await addToMyListWithAlert({ ...payload, source });
+      } finally {
+        setMyListAddBusy(false);
+      }
+    },
+    [addToMyListWithAlert, myListAddBusy],
+  );
 
   useEffect(() => {
     if (historyTab === 'songs') setSongHistoryPage(1);
     if (historyTab === 'favorites') setFavoritesPage(1);
     if (historyTab === 'participation') setParticipationPage(1);
+    setMusicPreview(null);
   }, [historyTab]);
+
+  useEffect(() => {
+    setMusicPreview(null);
+  }, [mainTab, myListTab]);
 
   const removeFavorite = async (videoId: string) => {
     await fetch(`/api/favorites?videoId=${encodeURIComponent(videoId)}`, { method: 'DELETE' });
@@ -1828,27 +1920,23 @@ export default function MyPage({
 
   if (loading) {
     return (
-      <div className="rounded-lg border border-gray-700 bg-gray-900 p-6">
+      <MyPageModalFrame title="マイページ" onClose={onClose}>
         <p className="text-gray-400">読み込み中…</p>
-      </div>
+      </MyPageModalFrame>
     );
   }
 
   if (isGuest) {
     return (
-      <div className="rounded-lg border border-gray-700 bg-gray-900 p-6 text-left">
-        <div className="mb-4 flex items-center justify-between border-b border-gray-700 pb-3">
-          <h2 className="text-lg font-semibold text-white">マイページ（ゲスト）</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded border border-gray-600 bg-gray-800 px-3 py-1.5 text-sm text-gray-300 hover:bg-gray-700"
-          >
-            閉じる
-          </button>
-        </div>
-        <p className="mb-4 text-sm text-gray-500">表示名・テキスト色・選曲参加の設定ができます。</p>
-        <div className="mb-4 rounded border border-blue-700/40 bg-blue-900/20 p-3">
+      <MyPageModalFrame
+        title="マイページ（ゲスト）"
+        subtitle="表示名・テキスト色・選曲参加の設定ができます。"
+        onClose={onClose}
+      >
+        <MyPageThreeColumnBody
+          col1={
+            <>
+        <div className="rounded border border-blue-700/40 bg-blue-900/20 p-3">
           <h3 className="mb-1 text-sm font-medium text-blue-200">無料登録で使える機能</h3>
           <p className="text-xs text-gray-300">
             お気に入り保存・貼った曲履歴の永続化・設定の引き継ぎが使えます。ゲストのままでも参加できますが、
@@ -1866,7 +1954,7 @@ export default function MyPage({
         </div>
 
         {showOrganizerRoomEditor ? (
-          <div className="mb-4 rounded border border-amber-700/50 bg-amber-900/20 p-3">
+          <div className="rounded border border-amber-700/50 bg-amber-900/20 p-3">
             <h3 className="mb-2 flex items-center gap-1.5 text-sm font-medium text-amber-200">
               <span aria-hidden>👑</span>
               部屋管理（主催者・オーナー）
@@ -1879,7 +1967,6 @@ export default function MyPage({
           </div>
         ) : null}
 
-        <div className="space-y-4">
           <div className="rounded border border-gray-700 bg-gray-800/50 p-3">
             <label className="block text-xs text-gray-500">表示名</label>
             <div className="mt-1 flex flex-wrap items-center gap-2">
@@ -1901,7 +1988,9 @@ export default function MyPage({
               </button>
             </div>
           </div>
-
+            </>
+          }
+          col2={
           <div className="rounded border border-gray-700 bg-gray-800/50 p-3">
             <label className="block text-xs text-gray-500">選曲に参加する</label>
             <p className="mt-1 text-sm text-gray-400">オフにすると視聴専用になります（順番はスキップされます）。</p>
@@ -1922,7 +2011,9 @@ export default function MyPage({
               </button>
             </div>
           </div>
-
+          }
+          col3={
+            <>
           <div className="rounded border border-gray-700 bg-gray-800/50 p-3">
             <label className="block text-xs text-gray-500">参加者の入室・退室の効果音</label>
             <p className="mt-1 text-sm text-gray-400">
@@ -1979,23 +2070,18 @@ export default function MyPage({
               </div>
             )}
           </div>
-        </div>
-      </div>
+            </>
+          }
+        />
+      </MyPageModalFrame>
     );
   }
 
   if (error || !user) {
     return (
-      <div className="rounded-lg border border-gray-700 bg-gray-900 p-6">
+      <MyPageModalFrame title="マイページ" onClose={onClose}>
         <p className="text-red-400">{error ?? 'ログイン情報を取得できませんでした。'}</p>
-        <button
-          type="button"
-          onClick={onClose}
-          className="mt-4 rounded border border-gray-600 bg-gray-800 px-4 py-2 text-sm text-gray-200 hover:bg-gray-700"
-        >
-          閉じる
-        </button>
-      </div>
+      </MyPageModalFrame>
     );
   }
 
@@ -2003,22 +2089,12 @@ export default function MyPage({
   const currentEmail = user.email ?? '';
 
   return (
-    <div className="rounded-lg border border-gray-700 bg-gray-900 p-6 text-left">
-      <div className="mb-4 flex items-center justify-between border-b border-gray-700 pb-3">
-        <h2 className="text-lg font-semibold text-white">マイページ</h2>
-        <button
-          type="button"
-          onClick={onClose}
-          className="rounded border border-gray-600 bg-gray-800 px-3 py-1.5 text-sm text-gray-300 hover:bg-gray-700"
-        >
-          閉じる
-        </button>
-      </div>
-      <p className="mb-4 text-sm text-gray-500">登録情報の確認と変更ができます。</p>
-      <p className="mb-3 text-xs text-gray-500">
-        オーナー向けの部屋運用・ユーザー向けの登録情報・曲の履歴・マイリスト・お題プレイリストをタブで切り替えます。
-      </p>
-      <div className="mb-4 flex flex-wrap gap-2">
+    <MyPageModalFrame
+      title="マイページ"
+      subtitle="登録情報の確認と変更。オーナー向け・ユーザー向け・曲履歴・マイリスト・お題プレイリストをタブで切り替えます。"
+      onClose={onClose}
+    >
+      <div className="mb-3 flex shrink-0 flex-wrap gap-2">
         {showOwnerTab ? (
           <button
             type="button"
@@ -2070,328 +2146,340 @@ export default function MyPage({
         </button>
       </div>
 
-      {saveError && (
-        <div className="mb-4 rounded border border-red-800 bg-red-900/30 px-3 py-2 text-sm text-red-300">
+      {saveError ? (
+        <div className="mb-3 shrink-0 rounded border border-red-800 bg-red-900/30 px-3 py-2 text-sm text-red-300">
           {saveError}
         </div>
-      )}
+      ) : null}
 
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       {mainTab === 'owner' && showRoomManagementPanel && (
-        <div className="mb-4 space-y-4">
-          <div className="rounded border border-amber-700/50 bg-amber-900/20 p-3">
-            <h3 className="flex items-center gap-1.5 text-sm font-medium text-amber-200">
-              <span aria-hidden>👑</span>
-              部屋管理（主催者・オーナー）
-            </h3>
-          </div>
-
-          {showOrganizerRoomEditor ? (
-            <div className="rounded border border-amber-700/50 bg-amber-900/20 p-3">
-              <LobbyMessageOwnerBlock
-                roomId={effectiveRoomId}
-                clientId={effectiveClientId}
-                onSaved={onRoomProfileSaved}
-              />
-            </div>
-          ) : null}
-
-          {isChatOwner && onSongLimit5MinToggle && (
-            <div className="rounded border border-amber-700/50 bg-amber-900/20 p-3">
-              <h4 className="mb-2 flex items-center gap-1.5 text-sm font-medium text-amber-200">
-                <span aria-hidden>👑</span>
-                一曲5分制限
-              </h4>
-              <p className="mb-2 text-xs text-gray-400">ONのとき、5分経過で次の人に選曲を促します。OFFなら長いPVも最後まで視聴できます。</p>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={songLimit5MinEnabled ? undefined : onSongLimit5MinToggle}
-                  className={`rounded px-3 py-1.5 text-sm ${songLimit5MinEnabled ? 'bg-amber-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-                >
-                  ON
-                </button>
-                <button
-                  type="button"
-                  onClick={!songLimit5MinEnabled ? undefined : onSongLimit5MinToggle}
-                  className={`rounded px-3 py-1.5 text-sm ${!songLimit5MinEnabled ? 'bg-gray-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-                >
-                  OFF
-                </button>
+        <MyPageThreeColumnBody
+          col1={
+            <>
+              <div className="rounded border border-amber-700/50 bg-amber-900/20 p-3">
+                <h3 className="flex items-center gap-1.5 text-sm font-medium text-amber-200">
+                  <span aria-hidden>👑</span>
+                  部屋管理（主催者・オーナー）
+                </h3>
               </div>
-            </div>
-          )}
 
-          {onAiFreeSpeechStopToggle && (
-            <div className="rounded border border-amber-700/50 bg-amber-900/20 p-3">
-              <p className="mb-2 text-xs text-gray-400">
-                沈黙時の AI による雑談発言の ON/OFF です。停止中は再び押すと再開できます。
-              </p>
-              <button
-                type="button"
-                onClick={onAiFreeSpeechStopToggle}
-                className={`rounded border px-2 py-1.5 text-xs ${
-                  aiFreeSpeechStopped
-                    ? 'border-amber-600 bg-amber-900/40 text-amber-200'
-                    : 'border-gray-600 bg-gray-800 text-gray-300 hover:bg-gray-700'
-                }`}
-                title={aiFreeSpeechStopped ? 'AI自由発言を再開' : 'AI自由発言を停止'}
-              >
-                AI自由発言{aiFreeSpeechStopped ? '停止中' : '停止'}
-              </button>
-            </div>
-          )}
+              {onAiFreeSpeechStopToggle ? (
+                <div className="rounded border border-amber-700/50 bg-amber-900/20 p-3">
+                  <p className="mb-2 text-xs text-gray-400">
+                    沈黙時の AI による雑談発言の ON/OFF です。停止中は再び押すと再開できます。
+                  </p>
+                  <button
+                    type="button"
+                    onClick={onAiFreeSpeechStopToggle}
+                    className={`rounded border px-2 py-1.5 text-xs ${
+                      aiFreeSpeechStopped
+                        ? 'border-amber-600 bg-amber-900/40 text-amber-200'
+                        : 'border-gray-600 bg-gray-800 text-gray-300 hover:bg-gray-700'
+                    }`}
+                    title={aiFreeSpeechStopped ? 'AI自由発言を再開' : 'AI自由発言を停止'}
+                  >
+                    AI自由発言{aiFreeSpeechStopped ? '停止中' : '停止'}
+                  </button>
+                </div>
+              ) : null}
 
-          {onOwnerSongQuizToggle && (
-            <div className="rounded border border-amber-700/50 bg-amber-900/20 p-3">
-              <h4 className="mb-2 text-xs font-medium text-gray-300">曲クイズ（オーナー設定）</h4>
-              <p className="mb-2 text-xs text-gray-400">
-                部屋全体の曲クイズON/OFFです。オーナーがOFFの場合、ユーザー側がONでもクイズは出ません。
-              </p>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={ownerSongQuizEnabled ? undefined : onOwnerSongQuizToggle}
-                  className={`rounded px-3 py-1.5 text-sm ${ownerSongQuizEnabled ? 'bg-amber-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-                >
-                  ON
-                </button>
-                <button
-                  type="button"
-                  onClick={!ownerSongQuizEnabled ? undefined : onOwnerSongQuizToggle}
-                  className={`rounded px-3 py-1.5 text-sm ${!ownerSongQuizEnabled ? 'bg-gray-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-                >
-                  OFF
-                </button>
-              </div>
-            </div>
-          )}
-
-          {onOwnerNextSongRecommendToggle && (
-            <div className="rounded border border-amber-700/50 bg-amber-900/20 p-3">
-              <h4 className="mb-2 text-xs font-medium text-gray-300">おすすめ曲（オーナー設定）</h4>
-              <p className="mb-2 text-xs text-gray-400">
-                部屋全体のおすすめ曲ON/OFFです。オーナーがOFFの場合、ユーザー側がONでもおすすめは出ません。
-              </p>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={
-                    ownerNextSongRecommendEnabled ? undefined : onOwnerNextSongRecommendToggle
-                  }
-                  className={`rounded px-3 py-1.5 text-sm ${ownerNextSongRecommendEnabled ? 'bg-amber-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-                >
-                  ON
-                </button>
-                <button
-                  type="button"
-                  onClick={
-                    !ownerNextSongRecommendEnabled ? undefined : onOwnerNextSongRecommendToggle
-                  }
-                  className={`rounded px-3 py-1.5 text-sm ${!ownerNextSongRecommendEnabled ? 'bg-gray-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-                >
-                  OFF
-                </button>
-              </div>
-            </div>
-          )}
-
-          {onOwnerAiCharacterJoinToggle && (
-            <div className="rounded border border-amber-700/50 bg-amber-900/20 p-3">
-              <h4 className="mb-2 text-xs font-medium text-gray-300">AIキャラクター参加（オーナー設定）</h4>
-              <p className="mb-2 text-xs text-gray-400">
-                部屋全体の AI キャラクター参加 ON/OFF の準備設定です。既存の進行・解説AI（@応答/曲解説/曲クイズ/おすすめ曲）には影響しません。
-              </p>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={ownerAiCharacterJoinEnabled ? undefined : onOwnerAiCharacterJoinToggle}
-                  className={`rounded px-3 py-1.5 text-sm ${ownerAiCharacterJoinEnabled ? 'bg-amber-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-                >
-                  ON
-                </button>
-                <button
-                  type="button"
-                  onClick={!ownerAiCharacterJoinEnabled ? undefined : onOwnerAiCharacterJoinToggle}
-                  className={`rounded px-3 py-1.5 text-sm ${!ownerAiCharacterJoinEnabled ? 'bg-gray-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-                >
-                  OFF
-                </button>
-              </div>
-              {onOwnerAiCharacterNameChange && (
-                <div className="mt-3 space-y-2">
-                  <label className="block text-xs text-gray-300">AIキャラクター名</label>
+              {onOwnerAiCharacterJoinToggle ? (
+                <div className="rounded border border-amber-700/50 bg-amber-900/20 p-3">
+                  <h4 className="mb-2 text-xs font-medium text-gray-300">AIキャラクター参加（オーナー設定）</h4>
+                  <p className="mb-2 text-xs text-gray-400">
+                    部屋全体の AI キャラクター参加 ON/OFF の準備設定です。既存の進行・解説AI（@応答/曲解説/曲クイズ/おすすめ曲）には影響しません。
+                  </p>
                   <div className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      value={ownerAiCharacterNameInput}
-                      onChange={(e) => setOwnerAiCharacterNameInput(e.target.value)}
-                      maxLength={24}
-                      placeholder="エージェント1号"
-                      className="min-w-0 flex-1 rounded border border-gray-600 bg-gray-800 px-2.5 py-1.5 text-sm text-gray-100 placeholder:text-gray-500 focus:border-amber-500 focus:outline-none"
-                    />
                     <button
                       type="button"
-                      onClick={() => onOwnerAiCharacterNameChange(ownerAiCharacterNameInput)}
-                      className="rounded bg-amber-700 px-3 py-1.5 text-sm text-white hover:bg-amber-600"
+                      onClick={ownerAiCharacterJoinEnabled ? undefined : onOwnerAiCharacterJoinToggle}
+                      className={`rounded px-3 py-1.5 text-sm ${ownerAiCharacterJoinEnabled ? 'bg-amber-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
                     >
-                      反映
+                      ON
+                    </button>
+                    <button
+                      type="button"
+                      onClick={!ownerAiCharacterJoinEnabled ? undefined : onOwnerAiCharacterJoinToggle}
+                      className={`rounded px-3 py-1.5 text-sm ${!ownerAiCharacterJoinEnabled ? 'bg-gray-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                    >
+                      OFF
                     </button>
                   </div>
-                  <p className="text-[11px] text-gray-500">
-                    空欄で反映するとデフォルト名「エージェント1号」に戻ります。
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
-
-          {onCommentPackSlotsChange && (
-            <div className="rounded border border-amber-700/50 bg-amber-900/20 p-3">
-              <h4 className="mb-2 text-xs font-medium text-gray-300">曲紹介コメント</h4>
-              <p className="mb-2 text-xs text-gray-400">
-                選曲後に出す AI 解説の種類です。すべてオフにすると解説は出ません。好きな組み合わせ（例: 1 と 4
-                だけ）が選べます。
-              </p>
-              <div className="mb-3 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => onCommentPackSlotsChange(COMMENT_PACK_SLOTS_NONE)}
-                  className="rounded bg-gray-700 px-2.5 py-1 text-xs text-gray-200 hover:bg-gray-600"
-                >
-                  まとめてオフ
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onCommentPackSlotsChange(DEFAULT_COMMENT_PACK_SLOTS)}
-                  className="rounded bg-gray-700 px-2.5 py-1 text-xs text-gray-200 hover:bg-gray-600"
-                >
-                  基本のみ（従来デフォルト）
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onCommentPackSlotsChange(COMMENT_PACK_SLOTS_FULL)}
-                  className="rounded bg-gray-700 px-2.5 py-1 text-xs text-gray-200 hover:bg-gray-600"
-                >
-                  5 本すべて
-                </button>
-              </div>
-              <ul className="space-y-2 text-xs text-gray-200">
-                {(
-                  [
-                    { i: 0 as const, label: '1. 曲の基本情報・概要' },
-                    { i: 1 as const, label: '2. ヒット・受賞・話題（チャート等）' },
-                    { i: 2 as const, label: '3. 歌詞のテーマ・メッセージ' },
-                    { i: 3 as const, label: '4. サウンドの特徴' },
-                    { i: 4 as const, label: '5. アーティスト情報（当時の概要・活動フェーズ）' },
-                  ] as const
-                ).map(({ i, label }) => (
-                  <li key={i} className="flex items-start gap-2">
-                    <input
-                      id={`comment-pack-slot-${i}`}
-                      type="checkbox"
-                      checked={commentPackSlots[i]}
-                      onChange={() => onCommentPackSlotsChange(toggleCommentPackSlot(commentPackSlots, i))}
-                      className="mt-0.5 h-4 w-4 shrink-0 rounded border-gray-500 bg-gray-800 text-amber-600 focus:ring-amber-500"
-                    />
-                    <label htmlFor={`comment-pack-slot-${i}`} className="cursor-pointer select-none leading-snug">
-                      {label}
-                    </label>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {onJpAiUnlockToggle && (
-            <div className="rounded border border-amber-700/50 bg-amber-900/20 p-3">
-              <h4 className="mb-2 text-xs font-medium text-gray-300">邦楽AI解説</h4>
-              <p className="mb-2 text-xs text-gray-400">
-                デフォルトは洋楽推奨（邦楽AI解説なし）です。必要なときだけ邦楽のAI解説を解禁できます。
-              </p>
-              <button
-                type="button"
-                onClick={onJpAiUnlockToggle}
-                className={`rounded border px-2 py-1.5 text-xs ${
-                  jpAiUnlockEnabled
-                    ? 'border-emerald-600 bg-emerald-900/40 text-emerald-200'
-                    : 'border-gray-600 bg-gray-800 text-gray-300 hover:bg-gray-700'
-                }`}
-                title={jpAiUnlockEnabled ? '邦楽AI解説を無効化' : '邦楽AI解説を解禁'}
-              >
-                邦楽AI解説 {jpAiUnlockEnabled ? '解禁中' : '無効（デフォルト）'}
-              </button>
-            </div>
-          )}
-
-          {onTransferOwner && (
-            <div className="rounded border border-amber-700/50 bg-amber-900/20 p-3">
-              <h4 className="mb-2 text-xs font-medium text-gray-300">チャットオーナーを譲る・参加者の退出・選曲モード</h4>
-              <p className="mb-2 text-xs text-gray-400">
-                現在在室している参加者のみ対象です。譲渡するとその人がオーナーになります。視聴専用にした相手はマイページからいつでも選曲参加に戻せます。オーナーも再度切り替えできます。
-              </p>
-              {chatOwnerTransferParticipants.length === 0 ? (
-                <p className="text-xs text-gray-500">ほかに在室している参加者がいません。</p>
-              ) : (
-                <ul className="space-y-2">
-                  {chatOwnerTransferParticipants.map((p) => (
-                    <li key={p.clientId} className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="min-w-0 text-sm text-gray-200">{p.displayName}</span>
-                      <span className="flex shrink-0 flex-wrap justify-end gap-1">
+                  {onOwnerAiCharacterNameChange ? (
+                    <div className="mt-3 space-y-2">
+                      <label className="block text-xs text-gray-300">AIキャラクター名</label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={ownerAiCharacterNameInput}
+                          onChange={(e) => setOwnerAiCharacterNameInput(e.target.value)}
+                          maxLength={24}
+                          placeholder="エージェント1号"
+                          className="min-w-0 flex-1 rounded border border-gray-600 bg-gray-800 px-2.5 py-1.5 text-sm text-gray-100 placeholder:text-gray-500 focus:border-amber-500 focus:outline-none"
+                        />
                         <button
                           type="button"
-                          onClick={() => onTransferOwner(p.clientId)}
-                          className="rounded border border-amber-600 bg-amber-800/30 px-2 py-1 text-xs text-amber-200 hover:bg-amber-800/50"
+                          onClick={() => onOwnerAiCharacterNameChange(ownerAiCharacterNameInput)}
+                          className="rounded bg-amber-700 px-3 py-1.5 text-sm text-white hover:bg-amber-600"
                         >
-                          オーナーを譲る
+                          反映
                         </button>
-                        {onOwnerSetParticipantSelection ? (
-                          p.participatesInSelection === false ? (
+                      </div>
+                      <p className="text-[11px] text-gray-500">
+                        空欄で反映するとデフォルト名「エージェント1号」に戻ります。
+                      </p>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+            </>
+          }
+          col2={
+            <>
+              {onCommentPackSlotsChange ? (
+                <div className="rounded border border-amber-700/50 bg-amber-900/20 p-3">
+                  <h4 className="mb-2 text-xs font-medium text-gray-300">曲紹介コメント</h4>
+                  <p className="mb-2 text-xs text-gray-400">
+                    選曲後に出す AI 解説の種類です。すべてオフにすると解説は出ません。好きな組み合わせ（例: 1 と 4
+                    だけ）が選べます。
+                  </p>
+                  <div className="mb-3 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => onCommentPackSlotsChange(COMMENT_PACK_SLOTS_NONE)}
+                      className="rounded bg-gray-700 px-2.5 py-1 text-xs text-gray-200 hover:bg-gray-600"
+                    >
+                      まとめてオフ
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onCommentPackSlotsChange(DEFAULT_COMMENT_PACK_SLOTS)}
+                      className="rounded bg-gray-700 px-2.5 py-1 text-xs text-gray-200 hover:bg-gray-600"
+                    >
+                      基本のみ（従来デフォルト）
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onCommentPackSlotsChange(COMMENT_PACK_SLOTS_FULL)}
+                      className="rounded bg-gray-700 px-2.5 py-1 text-xs text-gray-200 hover:bg-gray-600"
+                    >
+                      5 本すべて
+                    </button>
+                  </div>
+                  <ul className="space-y-2 text-xs text-gray-200">
+                    {(
+                      [
+                        { i: 0 as const, label: '1. 曲の基本情報・概要' },
+                        { i: 1 as const, label: '2. ヒット・受賞・話題（チャート等）' },
+                        { i: 2 as const, label: '3. 歌詞のテーマ・メッセージ' },
+                        { i: 3 as const, label: '4. サウンドの特徴' },
+                        { i: 4 as const, label: '5. アーティスト情報（当時の概要・活動フェーズ）' },
+                      ] as const
+                    ).map(({ i, label }) => (
+                      <li key={i} className="flex items-start gap-2">
+                        <input
+                          id={`comment-pack-slot-${i}`}
+                          type="checkbox"
+                          checked={commentPackSlots[i]}
+                          onChange={() => onCommentPackSlotsChange(toggleCommentPackSlot(commentPackSlots, i))}
+                          className="mt-0.5 h-4 w-4 shrink-0 rounded border-gray-500 bg-gray-800 text-amber-600 focus:ring-amber-500"
+                        />
+                        <label htmlFor={`comment-pack-slot-${i}`} className="cursor-pointer select-none leading-snug">
+                          {label}
+                        </label>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+
+              {onOwnerSongQuizToggle ? (
+                <div className="rounded border border-amber-700/50 bg-amber-900/20 p-3">
+                  <h4 className="mb-2 text-xs font-medium text-gray-300">曲クイズ（オーナー設定）</h4>
+                  <p className="mb-2 text-xs text-gray-400">
+                    部屋全体の曲クイズON/OFFです。オーナーがOFFの場合、ユーザー側がONでもクイズは出ません。
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={ownerSongQuizEnabled ? undefined : onOwnerSongQuizToggle}
+                      className={`rounded px-3 py-1.5 text-sm ${ownerSongQuizEnabled ? 'bg-amber-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                    >
+                      ON
+                    </button>
+                    <button
+                      type="button"
+                      onClick={!ownerSongQuizEnabled ? undefined : onOwnerSongQuizToggle}
+                      className={`rounded px-3 py-1.5 text-sm ${!ownerSongQuizEnabled ? 'bg-gray-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                    >
+                      OFF
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+
+              {onOwnerNextSongRecommendToggle ? (
+                <div className="rounded border border-amber-700/50 bg-amber-900/20 p-3">
+                  <h4 className="mb-2 text-xs font-medium text-gray-300">おすすめ曲（オーナー設定）</h4>
+                  <p className="mb-2 text-xs text-gray-400">
+                    部屋全体のおすすめ曲ON/OFFです。オーナーがOFFの場合、ユーザー側がONでもおすすめは出ません。
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={
+                        ownerNextSongRecommendEnabled ? undefined : onOwnerNextSongRecommendToggle
+                      }
+                      className={`rounded px-3 py-1.5 text-sm ${ownerNextSongRecommendEnabled ? 'bg-amber-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                    >
+                      ON
+                    </button>
+                    <button
+                      type="button"
+                      onClick={
+                        !ownerNextSongRecommendEnabled ? undefined : onOwnerNextSongRecommendToggle
+                      }
+                      className={`rounded px-3 py-1.5 text-sm ${!ownerNextSongRecommendEnabled ? 'bg-gray-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                    >
+                      OFF
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+
+              {onJpAiUnlockToggle ? (
+                <div className="rounded border border-amber-700/50 bg-amber-900/20 p-3">
+                  <h4 className="mb-2 text-xs font-medium text-gray-300">邦楽AI解説</h4>
+                  <p className="mb-2 text-xs text-gray-400">
+                    デフォルトは洋楽推奨（邦楽AI解説なし）です。必要なときだけ邦楽のAI解説を解禁できます。
+                  </p>
+                  <button
+                    type="button"
+                    onClick={onJpAiUnlockToggle}
+                    className={`rounded border px-2 py-1.5 text-xs ${
+                      jpAiUnlockEnabled
+                        ? 'border-emerald-600 bg-emerald-900/40 text-emerald-200'
+                        : 'border-gray-600 bg-gray-800 text-gray-300 hover:bg-gray-700'
+                    }`}
+                    title={jpAiUnlockEnabled ? '邦楽AI解説を無効化' : '邦楽AI解説を解禁'}
+                  >
+                    邦楽AI解説 {jpAiUnlockEnabled ? '解禁中' : '無効（デフォルト）'}
+                  </button>
+                </div>
+              ) : null}
+            </>
+          }
+          col3={
+            <>
+              {showOrganizerRoomEditor ? (
+                <div className="rounded border border-amber-700/50 bg-amber-900/20 p-3">
+                  <LobbyMessageOwnerBlock
+                    roomId={effectiveRoomId}
+                    clientId={effectiveClientId}
+                    onSaved={onRoomProfileSaved}
+                  />
+                </div>
+              ) : null}
+
+              {isChatOwner && onSongLimit5MinToggle ? (
+                <div className="rounded border border-amber-700/50 bg-amber-900/20 p-3">
+                  <h4 className="mb-2 flex items-center gap-1.5 text-sm font-medium text-amber-200">
+                    <span aria-hidden>👑</span>
+                    一曲5分制限
+                  </h4>
+                  <p className="mb-2 text-xs text-gray-400">ONのとき、5分経過で次の人に選曲を促します。OFFなら長いPVも最後まで視聴できます。</p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={songLimit5MinEnabled ? undefined : onSongLimit5MinToggle}
+                      className={`rounded px-3 py-1.5 text-sm ${songLimit5MinEnabled ? 'bg-amber-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                    >
+                      ON
+                    </button>
+                    <button
+                      type="button"
+                      onClick={!songLimit5MinEnabled ? undefined : onSongLimit5MinToggle}
+                      className={`rounded px-3 py-1.5 text-sm ${!songLimit5MinEnabled ? 'bg-gray-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                    >
+                      OFF
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+
+              {onTransferOwner ? (
+                <div className="rounded border border-amber-700/50 bg-amber-900/20 p-3">
+                  <h4 className="mb-2 text-xs font-medium text-gray-300">チャットオーナーを譲る・参加者の退出・選曲モード</h4>
+                  <p className="mb-2 text-xs text-gray-400">
+                    現在在室している参加者のみ対象です。譲渡するとその人がオーナーになります。視聴専用にした相手はマイページからいつでも選曲参加に戻せます。オーナーも再度切り替えできます。
+                  </p>
+                  {chatOwnerTransferParticipants.length === 0 ? (
+                    <p className="text-xs text-gray-500">ほかに在室している参加者がいません。</p>
+                  ) : (
+                    <ul className="space-y-2">
+                      {chatOwnerTransferParticipants.map((p) => (
+                        <li key={p.clientId} className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="min-w-0 text-sm text-gray-200">{p.displayName}</span>
+                          <span className="flex shrink-0 flex-wrap justify-end gap-1">
                             <button
                               type="button"
-                              onClick={() =>
-                                onOwnerSetParticipantSelection(p.clientId, p.displayName, true)
-                              }
-                              className="rounded border border-sky-600 bg-sky-900/30 px-2 py-1 text-xs text-sky-200 hover:bg-sky-800/45"
-                              title={`${p.displayName}さんを選曲参加に戻す`}
+                              onClick={() => onTransferOwner(p.clientId)}
+                              className="rounded border border-amber-600 bg-amber-800/30 px-2 py-1 text-xs text-amber-200 hover:bg-amber-800/50"
                             >
-                              選曲参加に戻す
+                              オーナーを譲る
                             </button>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                onOwnerSetParticipantSelection(p.clientId, p.displayName, false)
-                              }
-                              className="rounded border border-gray-600 bg-gray-800/80 px-2 py-1 text-xs text-gray-200 hover:bg-gray-700"
-                              title={`${p.displayName}さんを視聴専用にする`}
-                            >
-                              視聴専用にする
-                            </button>
-                          )
-                        ) : null}
-                        {onForceExit && (
-                          <button
-                            type="button"
-                            onClick={() => onForceExit(p.clientId, p.displayName)}
-                            className="rounded border border-red-700 bg-red-900/30 px-2 py-1 text-xs text-red-300 hover:bg-red-800/50"
-                            title={`${p.displayName}さんを強制退出`}
-                          >
-                            強制退出
-                          </button>
-                        )}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          )}
-        </div>
+                            {onOwnerSetParticipantSelection ? (
+                              p.participatesInSelection === false ? (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    onOwnerSetParticipantSelection(p.clientId, p.displayName, true)
+                                  }
+                                  className="rounded border border-sky-600 bg-sky-900/30 px-2 py-1 text-xs text-sky-200 hover:bg-sky-800/45"
+                                  title={`${p.displayName}さんを選曲参加に戻す`}
+                                >
+                                  選曲参加に戻す
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    onOwnerSetParticipantSelection(p.clientId, p.displayName, false)
+                                  }
+                                  className="rounded border border-gray-600 bg-gray-800/80 px-2 py-1 text-xs text-gray-200 hover:bg-gray-700"
+                                  title={`${p.displayName}さんを視聴専用にする`}
+                                >
+                                  視聴専用にする
+                                </button>
+                              )
+                            ) : null}
+                            {onForceExit ? (
+                              <button
+                                type="button"
+                                onClick={() => onForceExit(p.clientId, p.displayName)}
+                                className="rounded border border-red-700 bg-red-900/30 px-2 py-1 text-xs text-red-300 hover:bg-red-800/50"
+                                title={`${p.displayName}さんを強制退出`}
+                              >
+                                強制退出
+                              </button>
+                            ) : null}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              ) : null}
+            </>
+          }
+        />
       )}
 
-      <div className="space-y-4">
-        {mainTab === 'user' ? (
-          <>
+      {mainTab === 'user' ? (
+        <MyPageThreeColumnBody
+          col1={
+            <>
         {/* 表示名 */}
         <div className="rounded border border-gray-700 bg-gray-800/50 p-3">
           <label className="block text-xs text-gray-500">表示名</label>
@@ -2603,7 +2691,10 @@ export default function MyPage({
             ) : null}
           </div>
         ) : null}
-
+            </>
+          }
+          col2={
+            <>
         {/* 部屋の AI 曲解説・曲クイズ（登録ユーザーのみ） */}
         {!isGuest ? (
           <div className="rounded border border-gray-700 bg-gray-800/50 p-3">
@@ -2728,13 +2819,18 @@ export default function MyPage({
               </>
             )}
             {roomAiFeaturesMessage ? (
-              <p
-                className={`mt-2 text-xs ${
-                  roomAiFeaturesMessage.startsWith('保存しました') ? 'text-emerald-400' : 'text-amber-300'
-                }`}
-              >
-                {roomAiFeaturesMessage}
-              </p>
+              <div className="mt-2">
+                <p
+                  className={`text-xs ${
+                    roomAiFeaturesMessage.startsWith('保存しました') ? 'text-emerald-400' : 'text-amber-300'
+                  }`}
+                >
+                  {roomAiFeaturesMessage}
+                </p>
+                {isUserRoomAiFeaturesSetupMessage(roomAiFeaturesMessage) ? (
+                  <UserRoomAiFeaturesSqlHint />
+                ) : null}
+              </div>
             ) : null}
           </div>
         ) : null}
@@ -2744,26 +2840,70 @@ export default function MyPage({
         <div className="rounded border border-gray-700 bg-gray-800/50 p-3">
           <label className="block text-xs text-gray-500">AI向けの趣向メモ（任意）</label>
           <p className="mt-1 text-xs text-gray-400">
-            好きなジャンル・よく聴くアーティスト・年代の傾向など、短く書いておくと、部屋で「@」から AI
-            に話しかけたときの返答の参考にされます。他の参加者には表示されません。空にして保存すると消えます。
-            下のボタンで、チャット（保存されている発言）・選曲履歴・お気に入り・マイリストから自動要約を作れます（手動メモに追加で載ります）。
+            部屋で「@」から AI に話しかけたときの参考になります（通常の雑談には載りません）。他の参加者には表示されません。
+            自動要約は<strong className="font-normal text-gray-300">選曲履歴・お気に入り・マイリスト・チャット（DB保存分）・公開プロフィール</strong>
+            をまとめて Gemini が短文化します（選曲履歴だけではありません）。保存済みの自動要約が無い／薄いときは、左の公開プロフィールをプレビューに仮表示します。
           </p>
           {aiTasteLoading ? (
             <p className="mt-2 text-sm text-gray-500">読み込み中…</p>
           ) : (
             <>
+              <label className="mt-3 block text-xs font-medium text-sky-300/90">
+                「@」時に AI が読む趣向（手動＋自動要約）
+              </label>
+              <p className="mt-0.5 text-[11px] text-gray-500">
+                読み取り専用のプレビューです。「利用履歴から自動要約を更新」で DB に保存されると「@」応答でも使われます。
+                {aiTasteAutoUpdatedAt ? (
+                  <>
+                    {' '}
+                    自動要約の最終更新:{' '}
+                    {new Date(aiTasteAutoUpdatedAt).toLocaleString('ja-JP', {
+                      dateStyle: 'short',
+                      timeStyle: 'short',
+                    })}
+                  </>
+                ) : null}
+              </p>
+              <textarea
+                readOnly
+                value={
+                  aiTastePromptPreview ??
+                  '（まだありません。下で手動メモを書いて保存するか、「利用履歴から自動要約を更新」を実行してください）'
+                }
+                rows={6}
+                className="mc-scrollbar-stable mt-1.5 w-full cursor-default resize-none rounded border border-sky-800/60 bg-gray-900/70 px-3 py-2 text-sm text-gray-200"
+                aria-label="AIが参照する趣向メモのプレビュー"
+              />
+              {aiTasteAutoProfileText.trim() &&
+              looksTruncatedUserTasteAutoProfile(aiTasteAutoProfileText) ? (
+                <p className="mt-1.5 text-xs text-amber-300">
+                  保存済みの自動要約が途中で切れているため表示していません。「利用履歴から自動要約を更新」を再度お試しください。
+                </p>
+              ) : aiTasteAutoProfileText.trim() &&
+                !isSubstantiveUserTasteAutoProfile(aiTasteAutoProfileText) ? (
+                <p className="mt-1.5 text-xs text-amber-300">
+                  保存済みの自動要約が導入文だけのため表示していません。「利用履歴から自動要約を更新」で選曲履歴などを含めて再生成してください。
+                </p>
+              ) : !userTasteAutoProfileForUse(aiTasteAutoProfileText) &&
+                aiTastePromptPreview &&
+                !aiTasteSummary.trim() ? (
+                <p className="mt-1.5 text-xs text-gray-500">
+                  いまは左の公開プロフィールの仮プレビューです。選曲履歴なども含めて反映するには「利用履歴から自動要約を更新」を押してください。
+                </p>
+              ) : null}
+              <label className="mt-3 block text-xs font-medium text-gray-400">手動メモ（編集して保存）</label>
               <textarea
                 value={aiTasteSummary}
                 onChange={(e) => setAiTasteSummary(e.target.value)}
                 maxLength={USER_AI_TASTE_SUMMARY_MAX_CHARS}
-                rows={5}
-                className="mt-2 w-full rounded border border-gray-600 bg-gray-800 px-3 py-2 text-sm text-white placeholder-gray-500"
+                rows={4}
+                className="mt-1 w-full rounded border border-gray-600 bg-gray-800 px-3 py-2 text-sm text-white placeholder-gray-500"
                 placeholder="例：2000年代ポップパンク・アヴリル系が好き。バラードよりアップテンポ。英語詞のニュアンスも話したい。"
-                aria-label="AI向けの趣向メモ"
+                aria-label="手動の趣向メモ"
               />
               <div className="mt-1 flex flex-wrap items-center justify-between gap-2 text-xs text-gray-500">
                 <span>
-                  {aiTasteSummary.length} / {USER_AI_TASTE_SUMMARY_MAX_CHARS} 文字
+                  手動 {aiTasteSummary.length} / {USER_AI_TASTE_SUMMARY_MAX_CHARS} 文字
                 </span>
                 <div className="flex flex-wrap gap-2">
                   <button
@@ -2772,7 +2912,7 @@ export default function MyPage({
                     disabled={aiTasteSaving || aiTasteAutoRefreshing}
                     className="rounded border border-gray-500 bg-gray-700 px-3 py-1.5 text-sm text-gray-100 hover:bg-gray-600 disabled:opacity-50"
                   >
-                    {aiTasteAutoRefreshing ? '自動要約を生成中…' : '履歴から自動要約を更新'}
+                    {aiTasteAutoRefreshing ? '自動要約を生成中…' : '利用履歴から自動要約を更新'}
                   </button>
                   <button
                     type="button"
@@ -2780,28 +2920,9 @@ export default function MyPage({
                     disabled={aiTasteSaving || aiTasteAutoRefreshing}
                     className="rounded bg-blue-600 px-3 py-1.5 text-sm text-white hover:bg-blue-700 disabled:opacity-50"
                   >
-                    {aiTasteSaving ? '保存中…' : '保存'}
+                    {aiTasteSaving ? '保存中…' : '手動メモを保存'}
                   </button>
                 </div>
-              </div>
-              <div className="mt-3 rounded border border-gray-600/80 bg-gray-900/40 p-2">
-                <p className="text-xs font-medium text-gray-400">自動要約の内容（読み取り専用）</p>
-                <p className="mt-0.5 text-xs text-gray-500">
-                  「@」応答のプロンプトに載るテキストです。未更新のときは空です。
-                  {aiTasteAutoUpdatedAt ? (
-                    <>
-                      {' '}
-                      最終更新:{' '}
-                      {new Date(aiTasteAutoUpdatedAt).toLocaleString('ja-JP', {
-                        dateStyle: 'short',
-                        timeStyle: 'short',
-                      })}
-                    </>
-                  ) : null}
-                </p>
-                <pre className="mt-2 max-h-40 overflow-y-auto whitespace-pre-wrap break-words text-xs text-gray-300">
-                  {aiTasteAutoProfileText.trim() ? aiTasteAutoProfileText : '（まだありません。「履歴から自動要約を更新」を実行してください）'}
-                </pre>
               </div>
             </>
           )}
@@ -2815,7 +2936,7 @@ export default function MyPage({
 
         {/* 選曲に参加する */}
         {onParticipatesInSelectionChange && (
-          <div className="mt-6 rounded border border-gray-700 bg-gray-800/50 p-3">
+          <div className="rounded border border-gray-700 bg-gray-800/50 p-3">
             <label className="block text-xs text-gray-500">選曲に参加する</label>
             <p className="mt-1 text-sm text-gray-400">オフにすると視聴専用になります（順番はスキップされます）。</p>
             <div className="mt-2 flex items-center gap-2">
@@ -2836,8 +2957,11 @@ export default function MyPage({
             </div>
           </div>
         )}
-
-        <div className="mt-6 rounded border border-gray-700 bg-gray-800/50 p-3">
+            </>
+          }
+          col3={
+            <>
+        <div className="rounded border border-gray-700 bg-gray-800/50 p-3">
           <label className="block text-xs text-gray-500">参加者の入室・退室の効果音</label>
           <p className="mt-1 text-sm text-gray-400">
             オンにすると、誰かが入室したときと退室したときにそれぞれ通知音が鳴ります。オフにするとこのブラウザだけ無音です。入室・退出のチャット表示は常に出ます。設定はこの端末に保存され、入退室を繰り返しても維持されます。
@@ -2847,7 +2971,7 @@ export default function MyPage({
 
         {/* 自分のステータス（参加者名横に表示） */}
         {onUserStatusChange && (
-          <div className="mt-6 rounded border border-gray-700/80 bg-gray-800/50 p-3">
+          <div className="rounded border border-gray-700/80 bg-gray-800/50 p-3">
             <h3 className="mb-2 text-sm font-medium text-gray-300">自分のステータス</h3>
             <p className="mb-2 text-xs text-gray-400">選択したステータスは参加者欄の自分の名前の横に表示されます。</p>
             <div className="flex flex-wrap gap-1.5">
@@ -2868,7 +2992,7 @@ export default function MyPage({
         )}
 
         {/* 発言のテキストカラー（クリックでモーダル） */}
-        <div className="mt-6 border-t border-gray-700 pt-4">
+        <div className="rounded border border-gray-700/80 bg-gray-800/50 p-3">
           <h3 className="mb-2 text-sm font-medium text-gray-300">発言のテキストカラー</h3>
           <div className="flex items-center gap-2">
             <span className="text-sm text-gray-400">現在:</span>
@@ -2930,12 +3054,59 @@ export default function MyPage({
           )}
         </div>
 
-          </>
-        ) : null}
+        <div className="rounded border border-red-900/40 bg-red-950/20 p-3">
+          <p className="mb-2 text-xs text-gray-500">
+            アカウントを削除すると、登録情報はデータベースから完全に削除され、元に戻せません。
+          </p>
+          {!deleteConfirmOpen ? (
+            <button
+              type="button"
+              onClick={() => setDeleteConfirmOpen(true)}
+              className="rounded border border-red-800 bg-red-900/50 px-3 py-2 text-sm text-red-300 hover:bg-red-900/70"
+            >
+              アカウントを削除する
+            </button>
+          ) : (
+            <div className="space-y-2 rounded border border-red-800 bg-red-900/20 p-3">
+              <p className="text-sm text-red-200">
+                本当にアカウントを削除しますか？ この操作は取り消せません。
+              </p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={handleDeleteAccount}
+                  disabled={deleteInProgress}
+                  className="rounded bg-red-700 px-3 py-2 text-sm text-white hover:bg-red-800 disabled:opacity-50"
+                >
+                  {deleteInProgress ? '削除中…' : '削除する'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDeleteConfirmOpen(false)}
+                  disabled={deleteInProgress}
+                  className="rounded border border-gray-600 px-3 py-2 text-sm text-gray-300 hover:bg-gray-700"
+                >
+                  キャンセル
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+            </>
+          }
+        />
+      ) : null}
 
         {/* 選曲リスト / お気に入り / お題プレイリスト（タブ切り替え） */}
         {mainTab === 'music' || mainTab === 'mylist' || mainTab === 'themeMission' ? (
-        <div className="mt-6 border-t border-gray-700 pt-4">
+        <div
+          className={`mc-scrollbar-stable min-h-0 flex-1 border-t border-gray-800 pt-4 ${
+            (mainTab === 'music' && (historyTab === 'songs' || historyTab === 'favorites')) ||
+            (mainTab === 'mylist' && myListTab === 'newSongs')
+              ? 'flex flex-col overflow-y-auto'
+              : 'overflow-y-auto'
+          }`}
+        >
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
             <div className="flex flex-wrap gap-2">
               {mainTab === 'music' ? (
@@ -2993,7 +3164,8 @@ export default function MyPage({
             </button>
           </div>
           {mainTab === 'music' && historyTab === 'songs' && (
-            <>
+            <div className="flex min-h-0 flex-1 flex-col gap-4 lg:flex-row lg:items-start">
+              <div className="min-w-0 flex-1">
               {songHistoryLoading ? (
             <p className="text-sm text-gray-500">読み込み中…</p>
           ) : songHistory.length === 0 ? (
@@ -3036,7 +3208,14 @@ export default function MyPage({
                             const title = row.title || row.video_id;
                             const artist = row.artist ? `（${row.artist}）` : '';
                             return (
-                              <li key={row.id} className="border-b border-gray-700/50 pb-2 last:border-0 last:pb-0">
+                              <li
+                                key={row.id}
+                                className={`border-b border-gray-700/50 pb-2 last:border-0 last:pb-0 ${
+                                  musicPreview?.videoId === row.video_id
+                                    ? 'rounded bg-lime-950/20 px-1 ring-1 ring-lime-700/40'
+                                    : ''
+                                }`}
+                              >
                                 <p className="text-xs text-gray-500">
                                   部屋 {row.room_id || '—'} · {timeStr}
                                   {roundSuffix}
@@ -3068,7 +3247,28 @@ export default function MyPage({
                                   <span className="text-gray-500">—</span>
                                 ) : null}
                               </div>
-                                <div className="mt-1 flex items-center gap-2">
+                                <div className="mt-1 flex flex-wrap items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      openMusicPreview({
+                                        videoId: row.video_id,
+                                        url: row.url,
+                                        title: row.title,
+                                        artist: row.artist,
+                                        style: row.style ?? null,
+                                        era: row.era ?? null,
+                                      })
+                                    }
+                                    className={`shrink-0 rounded border px-2 py-1 text-xs font-medium ${
+                                      musicPreview?.videoId === row.video_id
+                                        ? 'border-lime-500 bg-lime-800 text-white'
+                                        : 'border-lime-700/60 bg-lime-900/30 text-lime-200 hover:bg-lime-900/50'
+                                    }`}
+                                    title="右のプレイヤーで再生"
+                                  >
+                                    再生
+                                  </button>
                                   <a
                                     href={row.url}
                                     target="_blank"
@@ -3088,7 +3288,7 @@ export default function MyPage({
                                   <button
                                     type="button"
                                     onClick={() =>
-                                      void postMyListItem({
+                                      void addToMyListWithAlert({
                                         videoId: row.video_id,
                                         url: row.url,
                                         title: row.title,
@@ -3153,10 +3353,22 @@ export default function MyPage({
               ) : null}
             </>
           )}
-            </>
+              </div>
+              <div className="min-w-0 shrink-0 lg:sticky lg:top-2 lg:w-[min(100%,28rem)] xl:w-[min(100%,32rem)]">
+                <MyPageMusicPreviewPanel
+                  selection={musicPreview}
+                  onPickSong={pickSongFromMyList}
+                  onAddToMyList={(payload) =>
+                    void addToMyListFromPreview(payload, 'song_history')
+                  }
+                  myListAddBusy={myListAddBusy}
+                />
+              </div>
+            </div>
           )}
           {mainTab === 'music' && historyTab === 'favorites' && (
-            <>
+            <div className="flex min-h-0 flex-1 flex-col gap-4 lg:flex-row lg:items-start">
+              <div className="min-w-0 flex-1">
               <p className="mb-3 text-xs text-gray-500">
                 視聴履歴からお気に入りにした曲です。新しい順で表示しています。
               </p>
@@ -3174,7 +3386,14 @@ export default function MyPage({
                       const artistTitle = f.artist_name && f.title ? `${f.artist_name} - ${f.title}` : (f.title || f.video_id);
                       const url = `https://www.youtube.com/watch?v=${f.video_id}`;
                       return (
-                        <div key={f.id} className="rounded border border-gray-700 bg-gray-800/50 p-2">
+                        <div
+                          key={f.id}
+                          className={`rounded border border-gray-700 bg-gray-800/50 p-2 ${
+                            musicPreview?.videoId === f.video_id
+                              ? 'ring-1 ring-lime-700/40 bg-lime-950/20'
+                              : ''
+                          }`}
+                        >
                           <p className="text-xs text-gray-500">
                             {dateStr} {timeStr} · {f.display_name}
                           </p>
@@ -3203,6 +3422,27 @@ export default function MyPage({
                             ) : null}
                           </div>
                           <div className="mt-1 flex flex-wrap items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                openMusicPreview({
+                                  videoId: f.video_id,
+                                  url,
+                                  title: f.title,
+                                  artist: f.artist_name,
+                                  style: f.style ?? null,
+                                  era: f.era ?? null,
+                                })
+                              }
+                              className={`shrink-0 rounded border px-2 py-1 text-xs font-medium ${
+                                musicPreview?.videoId === f.video_id
+                                  ? 'border-lime-500 bg-lime-800 text-white'
+                                  : 'border-lime-700/60 bg-lime-900/30 text-lime-200 hover:bg-lime-900/50'
+                              }`}
+                              title="右のプレイヤーで再生"
+                            >
+                              再生
+                            </button>
                             <a href={url} target="_blank" rel="noopener noreferrer" className="break-all text-xs text-blue-400 hover:underline">
                               {url}
                             </a>
@@ -3225,7 +3465,7 @@ export default function MyPage({
                             <button
                               type="button"
                               onClick={() =>
-                                void postMyListItem({
+                                void addToMyListWithAlert({
                                   videoId: f.video_id,
                                   url,
                                   title: f.title,
@@ -3286,7 +3526,18 @@ export default function MyPage({
                   ) : null}
                 </>
               )}
-            </>
+              </div>
+              <div className="min-w-0 shrink-0 lg:sticky lg:top-2 lg:w-[min(100%,28rem)] xl:w-[min(100%,32rem)]">
+                <MyPageMusicPreviewPanel
+                  selection={musicPreview}
+                  onPickSong={pickSongFromMyList}
+                  onAddToMyList={(payload) =>
+                    void addToMyListFromPreview(payload, 'favorites')
+                  }
+                  myListAddBusy={myListAddBusy}
+                />
+              </div>
+            </div>
           )}
           {mainTab === 'music' && historyTab === 'participation' && (
             <>
@@ -3433,6 +3684,8 @@ export default function MyPage({
                       </button>
                     </div>
                   </div>
+                  <div className="flex min-h-0 flex-1 flex-col gap-4 lg:flex-row lg:items-start">
+                    <div className="min-w-0 flex-1">
                   {myListLoading ? (
                     <p className="text-sm text-gray-500">読み込み中…</p>
                   ) : myListItems.length === 0 ? (
@@ -3441,7 +3694,7 @@ export default function MyPage({
                     </p>
                   ) : (
                     <div className="space-y-3">
-                      <div className="max-h-72 space-y-3 overflow-y-auto">
+                      <div className="space-y-3">
                         {myListNewSongsPageItems.map((item) => {
                           const added = new Date(item.created_at);
                           const updated = new Date(item.updated_at);
@@ -3454,7 +3707,14 @@ export default function MyPage({
                               ? `${item.artist} — ${item.title}`
                               : item.title || item.artist || item.video_id;
                           return (
-                            <div key={item.id} className="rounded border border-gray-700 bg-gray-800/50 p-2">
+                            <div
+                              key={item.id}
+                              className={`rounded border border-gray-700 bg-gray-800/50 p-2 ${
+                                musicPreview?.videoId === item.video_id
+                                  ? 'ring-1 ring-lime-700/40 bg-lime-950/20'
+                                  : ''
+                              }`}
+                            >
                               <p className="text-xs text-gray-500">
                                 追加: {added.toLocaleString('ja-JP')}
                                 {item.source ? <span className="ml-2 text-gray-600">· {item.source}</span> : null}
@@ -3569,6 +3829,27 @@ export default function MyPage({
                                     <p className="mt-1 text-xs text-gray-400 whitespace-pre-wrap">{item.note}</p>
                                   ) : null}
                                   <div className="mt-1 flex flex-wrap items-center gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        openMusicPreview({
+                                          videoId: item.video_id,
+                                          url: item.url,
+                                          title: item.title,
+                                          artist: item.artist,
+                                          style: item.style ?? null,
+                                          era: item.era ?? null,
+                                        })
+                                      }
+                                      className={`shrink-0 rounded border px-2 py-1 text-xs font-medium ${
+                                        musicPreview?.videoId === item.video_id
+                                          ? 'border-lime-500 bg-lime-800 text-white'
+                                          : 'border-lime-700/60 bg-lime-900/30 text-lime-200 hover:bg-lime-900/50'
+                                      }`}
+                                      title="右のプレイヤーで再生"
+                                    >
+                                      再生
+                                    </button>
                                     <a
                                       href={item.url}
                                       target="_blank"
@@ -3650,6 +3931,15 @@ export default function MyPage({
                       ) : null}
                     </div>
                   )}
+                    </div>
+                    <div className="min-w-0 shrink-0 lg:sticky lg:top-2 lg:w-[min(100%,28rem)] xl:w-[min(100%,32rem)]">
+                      <MyPageMusicPreviewPanel
+                        selection={musicPreview}
+                        onPickSong={pickSongFromMyList}
+                        hideAddToMyList
+                      />
+                    </div>
+                  </div>
                 </>
               ) : null}
               {myListTab === 'artists' ? (
@@ -3774,49 +4064,8 @@ export default function MyPage({
           )}
         </div>
         ) : null}
-
-        {/* アカウント削除 */}
-        {mainTab === 'user' ? (
-        <div className="mt-6 border-t border-gray-700 pt-4">
-          <p className="mb-2 text-xs text-gray-500">
-            アカウントを削除すると、登録情報はデータベースから完全に削除され、元に戻せません。
-          </p>
-          {!deleteConfirmOpen ? (
-            <button
-              type="button"
-              onClick={() => setDeleteConfirmOpen(true)}
-              className="rounded border border-red-800 bg-red-900/50 px-3 py-2 text-sm text-red-300 hover:bg-red-900/70"
-            >
-              アカウントを削除する
-            </button>
-          ) : (
-            <div className="space-y-2 rounded border border-red-800 bg-red-900/20 p-3">
-              <p className="text-sm text-red-200">
-                本当にアカウントを削除しますか？ この操作は取り消せません。
-              </p>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={handleDeleteAccount}
-                  disabled={deleteInProgress}
-                  className="rounded bg-red-700 px-3 py-2 text-sm text-white hover:bg-red-800 disabled:opacity-50"
-                >
-                  {deleteInProgress ? '削除中…' : '削除する'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDeleteConfirmOpen(false)}
-                  disabled={deleteInProgress}
-                  className="rounded border border-gray-600 px-3 py-2 text-sm text-gray-300 hover:bg-gray-700"
-                >
-                  キャンセル
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-        ) : null}
       </div>
+
       {myListArtistProfileOpen && (
         <div
           className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-4"
@@ -3851,6 +4100,6 @@ export default function MyPage({
           </div>
         </div>
       )}
-    </div>
+    </MyPageModalFrame>
   );
 }

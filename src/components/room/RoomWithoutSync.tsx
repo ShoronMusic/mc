@@ -2151,13 +2151,6 @@ export default function RoomWithoutSync({
       />
 
       {myPageOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
-          role="dialog"
-          aria-modal="true"
-          aria-label="マイページ"
-        >
-          <div className="max-h-full max-w-md overflow-auto">
             <MyPage
               onClose={() => setMyPageOpen(false)}
               currentUserTextColor={userTextColor}
@@ -2169,8 +2162,6 @@ export default function RoomWithoutSync({
               }}
               onRoomProfileSaved={({ displayTitle }) => setRoomDisplayTitleCurrent(displayTitle)}
             />
-          </div>
-        </div>
       )}
 
       {chatSummaryModalOpen && (

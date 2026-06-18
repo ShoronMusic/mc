@@ -8,6 +8,10 @@ import { clearGuestRoomPersistence } from '@/lib/guest-room-persistence';
 import { clearLastRoomEnter } from '@/lib/room-enter-resume';
 import RoomWithSync from '@/components/room/RoomWithSync';
 import RoomWithoutSync from '@/components/room/RoomWithoutSync';
+import {
+  registerActiveAblyClient,
+  unregisterActiveAblyClient,
+} from '@/lib/ably-client-safe';
 import { createClient } from '@/lib/supabase/client';
 
 const DEFAULT_DISPLAY_NAME = 'ゲスト';
@@ -55,19 +59,29 @@ export function AblyProviderWrapper({
   const key = getValidKey();
   const client = useMemo(() => {
     if (!key) return null;
-    const opts: { key: string; clientId?: string } = { key };
+    const opts: Ably.ClientOptions = {
+      key,
+      disconnectedRetryTimeout: 15_000,
+      suspendedRetryTimeout: 30_000,
+    };
     if (clientIdProp && clientIdProp.trim()) opts.clientId = clientIdProp.trim();
     return new Ably.Realtime(opts);
   }, [key, clientIdProp]);
 
   useEffect(() => {
     if (!client) return;
+    registerActiveAblyClient(client);
+
+    const onFailed = (stateChange: Ably.ConnectionStateChange) => {
+      if (stateChange.current === 'closed') return;
+      // eslint-disable-next-line no-console
+      console.warn('[Ably] connection state:', stateChange.current, stateChange.reason ?? '');
+    };
+    client.connection.on('failed', onFailed);
+
     return () => {
-      try {
-        client.close();
-      } catch {
-        /* 退室直後の detach 競合は無視 */
-      }
+      client.connection.off('failed', onFailed);
+      unregisterActiveAblyClient(client);
     };
   }, [client]);
 

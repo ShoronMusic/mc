@@ -4,6 +4,7 @@ import {
   extractMusic8SongFieldsFromPersistedSnapshot,
   parseMusicaichatStructuredMetadataFromFactsText,
   resolveOriginalReleaseDateFromMusic8Json,
+  resolveOriginalReleaseDateFromMusic8WpSongsFileJson,
   resolveSongStyleForOverwriteFromMusic8,
   wordpressPublishDateToPostgresDate,
 } from '@/lib/music8-song-fields';
@@ -62,6 +63,15 @@ function run() {
       acf: { spotify_release_date: '2003-10-28' },
     }),
     '2012-11-01',
+  );
+
+  assert.equal(
+    resolveOriginalReleaseDateFromMusic8WpSongsFileJson({
+      id: 6382,
+      releaseDate: '1996-02-19T16:45:00',
+      acf: { spotify_release_date: '2010' },
+    }),
+    '1996-02-19',
   );
 
   console.log('music8-song-fields.unit-test: ok');

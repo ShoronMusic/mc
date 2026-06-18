@@ -8,13 +8,18 @@ import {
 import { HomeRoomLinks } from '@/components/home/HomeRoomLinks';
 import { createClient, isSupabaseConfigured } from '@/lib/supabase/client';
 
+type TopPageLoginAndLiveRoomsProps = {
+  /** all=従来どおり / live=開催中一覧のみ / auth=ログイン・ゲスト導線のみ */
+  part?: 'all' | 'live' | 'auth';
+};
+
 /**
  * 開催中（参加者あり）の部屋があるときは、その一覧を主催導線より上に置く。
  * flex の order で並べ替え、HomeRoomLinks を再マウントしない。
  *
  * 未ログイン時は「新規で部屋を立ち上げる」「過去の主催を再開（ログイン）」から選び、同じ認証UIへ進む。
  */
-export function TopPageLoginAndLiveRooms() {
+export function TopPageLoginAndLiveRooms({ part = 'all' }: TopPageLoginAndLiveRoomsProps) {
   const [hasActiveLiveRooms, setHasActiveLiveRooms] = useState(false);
   const [authIntent, setAuthIntent] = useState<TopPageLoginEntryIntent | null>(null);
   const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null);
@@ -91,6 +96,14 @@ export function TopPageLoginAndLiveRooms() {
         </button>
       </div>
     );
+  }
+
+  if (part === 'live') {
+    return <HomeRoomLinks onActivePresenceKnown={handleActivePresenceKnown} />;
+  }
+
+  if (part === 'auth') {
+    return renderHostColumn();
   }
 
   return (

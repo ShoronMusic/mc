@@ -14,7 +14,7 @@ type GuideIndexPageProps = {
 };
 
 export default function GuideIndexPage({ searchParams }: GuideIndexPageProps) {
-  const sections = GUIDE_SECTIONS.filter((s) => s.slug);
+  const sections = GUIDE_SECTIONS.filter((s) => s.slug && s.slug !== 'enjoy');
   const isModal =
     (Array.isArray(searchParams?.modal) ? searchParams?.modal[0] : searchParams?.modal) === '1';
 
@@ -23,7 +23,15 @@ export default function GuideIndexPage({ searchParams }: GuideIndexPageProps) {
       <div>
         <h1 className="text-2xl font-bold text-white">ご利用上の注意</h1>
         <p className="mt-2 text-sm leading-relaxed text-gray-400">
-          洋楽AIチャットを快適に使っていただくためのマナーと注意事項です。内容はトピックごとに分けています。利用条件の要約は{' '}
+          洋楽AIチャットを快適に使っていただくためのマナーと注意事項です。内容はトピックごとに分けています。
+          機能の紹介は{' '}
+          <Link
+            href={withPolicyModalQuery('/guide/enjoy', isModal)}
+            className="text-sky-400 underline-offset-2 hover:underline"
+          >
+            楽しみ方
+          </Link>
+          をご覧ください。利用条件の要約は{' '}
           <Link
             href={withPolicyModalQuery('/terms', isModal)}
             className="text-amber-400 underline-offset-2 hover:underline"
@@ -35,6 +43,18 @@ export default function GuideIndexPage({ searchParams }: GuideIndexPageProps) {
         <div className="mt-4">
           <YouTubeDataApiQuotaCallout />
         </div>
+      </div>
+      <Link
+        href={withPolicyModalQuery('/guide/enjoy', isModal)}
+        className="block rounded-xl border border-sky-800/60 bg-sky-950/30 p-4 transition hover:border-sky-600/70 hover:bg-sky-950/50"
+      >
+        <span className="font-semibold text-sky-100">洋楽AIチャットの楽しみ方</span>
+        <span className="mt-1 block text-sm text-gray-400">
+          基本機能・ライブラリ・AI・マイページなどを分類して紹介しています。はじめての方はこちらから。
+        </span>
+      </Link>
+      <div>
+        <h2 className="text-sm font-semibold text-gray-300">ご利用上の注意</h2>
       </div>
       <ul className="grid gap-3 sm:grid-cols-1">
         {sections.map((s) => (

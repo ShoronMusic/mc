@@ -5,8 +5,15 @@ import {
   type Music8ArtistJson,
 } from '@/lib/music8-artist-display';
 
-/** ライブラリ「アーティスト詳細」列用（DB `artists` 未登録時の Music8 フォールバック） */
-export function LibraryArtistDetailMusic8Body({ artist }: { artist: Music8ArtistJson }) {
+/** ライブラリ「アーティスト詳細」列用（DB 未整備時は Music8 GCS JSON を表示） */
+export function LibraryArtistDetailMusic8Body({
+  artist,
+  dbRegistered = false,
+}: {
+  artist: Music8ArtistJson;
+  /** DB `artists` に行はあるがプロフィール未整備のとき true */
+  dbRegistered?: boolean;
+}) {
   const lines = formatMusic8ArtistDisplayLines(artist);
 
   return (
@@ -41,7 +48,9 @@ export function LibraryArtistDetailMusic8Body({ artist }: { artist: Music8Artist
           {lines.descriptionJa}
         </p>
       ) : null}
-      <p className="text-[10px] text-gray-500">参照: Music8（曲マスタ未登録のため）</p>
+      <p className="text-[10px] text-gray-500">
+        {dbRegistered ? '参照: Music8（DB プロフィール未整備）' : '参照: Music8（曲マスタ未登録のため）'}
+      </p>
     </div>
   );
 }

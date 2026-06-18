@@ -3,6 +3,57 @@ export const DEFAULT_USER_ROOM_AI_COMMENTARY_ENABLED = true;
 export const DEFAULT_USER_ROOM_AI_SONG_QUIZ_ENABLED = true;
 export const DEFAULT_USER_ROOM_AI_NEXT_SONG_RECOMMEND_ENABLED = true;
 
+export const USER_ROOM_AI_FEATURES_PERSIST_HINT =
+  '部屋AI設定の保存用テーブル（user_room_ai_features）がありません。下の SQL を Supabase の SQL Editor で実行すると保存できます。';
+
+/** テーブルはあるが列だけ足りないとき（policy already exists で止まった場合など） */
+export const USER_ROOM_AI_FEATURES_ADD_COLUMN_SQL = `alter table public.user_room_ai_features
+  add column if not exists ai_next_song_recommend_enabled boolean not null default true;`;
+
+/** 初回セットアップ・再実行可（docs/supabase-setup.md 第 17 章と同期） */
+export const USER_ROOM_AI_FEATURES_FULL_SETUP_SQL = `create table if not exists public.user_room_ai_features (
+  user_id uuid primary key references auth.users (id) on delete cascade,
+  ai_commentary_enabled boolean not null default true,
+  ai_song_quiz_enabled boolean not null default true,
+  ai_next_song_recommend_enabled boolean not null default true,
+  updated_at timestamptz not null default now()
+);
+
+alter table public.user_room_ai_features
+  add column if not exists ai_next_song_recommend_enabled boolean not null default true;
+
+create index if not exists user_room_ai_features_updated_idx
+  on public.user_room_ai_features (updated_at desc);
+
+alter table public.user_room_ai_features enable row level security;
+
+drop policy if exists "user_room_ai_features_select_own" on public.user_room_ai_features;
+drop policy if exists "user_room_ai_features_insert_own" on public.user_room_ai_features;
+drop policy if exists "user_room_ai_features_update_own" on public.user_room_ai_features;
+drop policy if exists "user_room_ai_features_delete_own" on public.user_room_ai_features;
+
+create policy "user_room_ai_features_select_own"
+  on public.user_room_ai_features for select
+  using (auth.uid() = user_id);
+
+create policy "user_room_ai_features_insert_own"
+  on public.user_room_ai_features for insert
+  with check (auth.uid() = user_id);
+
+create policy "user_room_ai_features_update_own"
+  on public.user_room_ai_features for update
+  using (auth.uid() = user_id);
+
+create policy "user_room_ai_features_delete_own"
+  on public.user_room_ai_features for delete
+  using (auth.uid() = user_id);`;
+
+export function isUserRoomAiFeaturesSetupMessage(message: string | null | undefined): boolean {
+  if (!message || typeof message !== 'string') return false;
+  if (message.startsWith('保存しました')) return false;
+  return message.includes('user_room_ai_features') || message.includes('部屋AI設定の保存用テーブル');
+}
+
 export type UserRoomAiFeaturesBody = {
   commentaryEnabled: boolean;
   songQuizEnabled: boolean;

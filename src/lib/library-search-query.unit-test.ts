@@ -3,6 +3,7 @@ import { findLibraryMainArtistInIndex } from '@/lib/library-artist-index-match';
 import {
   expandLibrarySearchQueryVariants,
   expandMainArtistNamesForLibraryFilter,
+  primaryArtistForLibraryIndex,
   songMainArtistIncludesArtist,
 } from '@/lib/library-search-query';
 
@@ -30,6 +31,11 @@ function run() {
   assert.equal(songMainArtistIncludesArtist('Bruno Mars', 'Bruno Mars'), true);
   assert.equal(songMainArtistIncludesArtist('Bruno Mars', 'Mars'), false);
   assert.equal(songMainArtistIncludesArtist('Die With A Smile', 'Die'), false);
+
+  assert.equal(primaryArtistForLibraryIndex('Calvin Harris'), 'Calvin Harris');
+  assert.equal(primaryArtistForLibraryIndex('Calvin Harris, Dua Lipa'), 'Calvin Harris');
+  assert.equal(primaryArtistForLibraryIndex('Calvin Harris, Disciples'), 'Calvin Harris');
+  assert.equal(primaryArtistForLibraryIndex('Lady Gaga & Bruno Mars'), 'Lady Gaga');
 
   const index = [
     { main_artist: 'Oasis' },

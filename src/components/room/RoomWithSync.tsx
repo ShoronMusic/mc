@@ -2,12 +2,8 @@
 
 import Image from 'next/image';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  useChannel,
-  useChannelStateListener,
-  usePresence,
-  usePresenceListener,
-} from 'ably/react';
+import { useChannel, useChannelStateListener, usePresenceListener } from 'ably/react';
+import { useRoomAblyPresence } from '@/hooks/useRoomAblyPresence';
 import type { RealtimeChannel } from 'ably';
 import Chat from '@/components/chat/Chat';
 import ChatInput, { type ChatInputHandle } from '@/components/chat/ChatInput';
@@ -18,6 +14,7 @@ import YouTubePlayer, {
   YT_PLAYER_STATE_PLAYING,
 } from '@/components/player/YouTubePlayer';
 import { GuestRegisterPromptModal } from '@/components/auth/GuestRegisterPromptModal';
+import { PolicyDocsModal, type PolicyDocsTab } from '@/components/legal/PolicyDocsModal';
 import MyPage from '@/components/mypage/MyPage';
 import RoomMainLayout from '@/components/room/RoomMainLayout';
 import RoomPlaybackHistory from '@/components/room/RoomPlaybackHistory';
@@ -438,7 +435,7 @@ export default function RoomWithSync({
   const [joinLocked, setJoinLocked] = useState(false);
   const [joinLockSaving, setJoinLockSaving] = useState(false);
   const [mobileHeaderMenuOpen, setMobileHeaderMenuOpen] = useState(false);
-  const [policyTab, setPolicyTab] = useState<'terms' | 'privacy' | 'guide'>('terms');
+  const [policyTab, setPolicyTab] = useState<PolicyDocsTab>('terms');
   const performLogoutAndLeave = useCallback(async () => {
     const supabase = createClient();
     if (supabase) await supabase.auth.signOut();
@@ -964,7 +961,7 @@ export default function RoomWithSync({
       sessionClaim,
     ],
   );
-  const { updateStatus } = usePresence(channelName, presencePayload);
+  const { updateStatus } = useRoomAblyPresence(channelName, presencePayload);
   const { presenceData } = usePresenceListener<PresenceMemberData>(channelName);
   presentClientIdsRef.current = new Set([
     ...presenceData.map((p) => p.clientId),
@@ -6782,13 +6779,6 @@ export default function RoomWithSync({
       />
 
       {myPageOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
-          role="dialog"
-          aria-modal="true"
-          aria-label="マイページ"
-        >
-          <div className="max-h-full max-w-md overflow-auto">
             <MyPage
               onClose={() => setMyPageOpen(false)}
               currentUserTextColor={userTextColor}
@@ -6967,8 +6957,6 @@ export default function RoomWithSync({
                   : undefined
               }
             />
-          </div>
-        </div>
       )}
 
       {chatSummaryModalOpen && (
@@ -7006,80 +6994,12 @@ export default function RoomWithSync({
         </div>
       )}
 
-      {termsModalOpen && (
-        <div
-          className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 p-4"
-          role="dialog"
-          aria-modal="true"
-          aria-label="利用規約"
-          onClick={() => setTermsModalOpen(false)}
-        >
-          <div
-            className="h-[85vh] w-full max-w-5xl overflow-hidden rounded-lg border border-gray-700 bg-gray-900"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between border-b border-gray-700 px-3 py-2">
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setPolicyTab('terms')}
-                  className={`rounded px-2.5 py-1 text-xs ${
-                    policyTab === 'terms'
-                      ? 'bg-gray-700 text-white'
-                      : 'text-gray-300 hover:bg-gray-800'
-                  }`}
-                >
-                  利用規約
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPolicyTab('privacy')}
-                  className={`rounded px-2.5 py-1 text-xs ${
-                    policyTab === 'privacy'
-                      ? 'bg-gray-700 text-white'
-                      : 'text-gray-300 hover:bg-gray-800'
-                  }`}
-                >
-                  プライバシー
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPolicyTab('guide')}
-                  className={`rounded px-2.5 py-1 text-xs ${
-                    policyTab === 'guide'
-                      ? 'bg-gray-700 text-white'
-                      : 'text-gray-300 hover:bg-gray-800'
-                  }`}
-                >
-                  ご利用上の注意
-                </button>
-              </div>
-              <button
-                type="button"
-                onClick={() => setTermsModalOpen(false)}
-                className="rounded border border-gray-600 bg-gray-800 px-3 py-1.5 text-sm text-gray-200 hover:bg-gray-700"
-              >
-                閉じる
-              </button>
-            </div>
-            <iframe
-              src={
-                policyTab === 'terms'
-                  ? '/terms?modal=1'
-                  : policyTab === 'privacy'
-                    ? '/privacy?modal=1'
-                    : `/guide?modal=1${
-                        roomId?.trim()
-                          ? `&returnTo=${encodeURIComponent(roomId.trim())}`
-                          : ''
-                      }`
-              }
-              title="ポリシー"
-              className="h-[calc(85vh-46px)] w-full border-0 bg-gray-950"
-            />
-          </div>
-        </div>
-      )}
+      <PolicyDocsModal
+        open={termsModalOpen}
+        onClose={() => setTermsModalOpen(false)}
+        initialTab={policyTab}
+        returnToSegment={roomId?.trim() || null}
+      />
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       <RoomMainLayout

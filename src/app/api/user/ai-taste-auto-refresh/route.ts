@@ -1,8 +1,15 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { gatherUserTasteSignalsForAutoProfile } from '@/lib/gather-user-taste-signals';
+import {
+  buildFallbackTasteProfileFromSignals,
+  gatherUserTasteSignalsForAutoProfile,
+} from '@/lib/gather-user-taste-signals';
 import { generateUserTasteAutoProfile } from '@/lib/gemini';
-import { USER_AI_TASTE_AUTO_PROFILE_MAX_CHARS } from '@/lib/user-ai-taste-auto-profile';
+import {
+  USER_AI_TASTE_AUTO_PROFILE_MAX_CHARS,
+  isSubstantiveUserTasteAutoProfile,
+  looksTruncatedUserTasteAutoProfile,
+} from '@/lib/user-ai-taste-auto-profile';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,7 +34,7 @@ export async function POST() {
 
     const { data: existing, error: loadErr } = await supabase
       .from('user_ai_taste_auto_profile')
-      .select('updated_at')
+      .select('updated_at, profile_text')
       .eq('user_id', userId)
       .maybeSingle();
 
@@ -47,7 +54,18 @@ export async function POST() {
     }
 
     const lastAt = existing?.updated_at ? new Date(String(existing.updated_at)).getTime() : 0;
-    if (Number.isFinite(lastAt) && lastAt > 0 && Date.now() - lastAt < MIN_REFRESH_INTERVAL_MS) {
+    const lastProfileText =
+      typeof existing?.profile_text === 'string' ? existing.profile_text.trim() : '';
+    const allowRapidRetry =
+      lastProfileText.length > 0 &&
+      (!isSubstantiveUserTasteAutoProfile(lastProfileText) ||
+        looksTruncatedUserTasteAutoProfile(lastProfileText));
+    if (
+      !allowRapidRetry &&
+      Number.isFinite(lastAt) &&
+      lastAt > 0 &&
+      Date.now() - lastAt < MIN_REFRESH_INTERVAL_MS
+    ) {
       const retryAfterSec = Math.ceil((MIN_REFRESH_INTERVAL_MS - (Date.now() - lastAt)) / 1000);
       return NextResponse.json(
         {
@@ -69,17 +87,35 @@ export async function POST() {
     }
 
     const profile = await generateUserTasteAutoProfile(signals, { roomId: null, videoId: null });
-    if (!profile?.trim()) {
+    let text = profile?.trim() ?? '';
+    if (!isSubstantiveUserTasteAutoProfile(text)) {
+      const fallback = buildFallbackTasteProfileFromSignals(signals);
+      if (fallback?.trim()) {
+        text = fallback.trim();
+      }
+    }
+
+    if (!text) {
       return NextResponse.json(
         { error: '要約を生成できませんでした。しばらくしてから再度お試しください。' },
         { status: 503 },
       );
     }
 
-    let text = profile.trim();
     if (text.length > USER_AI_TASTE_AUTO_PROFILE_MAX_CHARS) {
       text = text.slice(0, USER_AI_TASTE_AUTO_PROFILE_MAX_CHARS - 1) + '…';
     }
+
+    if (!isSubstantiveUserTasteAutoProfile(text)) {
+      return NextResponse.json({
+        ok: true,
+        skipped: true,
+        reason: 'weak_generation',
+        message:
+          '要約の内容が薄すぎるため保存しませんでした。選曲履歴・お気に入り・マイリスト・プロフィールを増やしてから再度お試しください。',
+      });
+    }
+
 
     const { error: upsertErr } = await supabase.from('user_ai_taste_auto_profile').upsert(
       {

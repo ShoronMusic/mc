@@ -23,7 +23,7 @@ function GuideSidebarInner({ returnSegment }: { returnSegment: string | null }) 
       aria-label="ガイド目次"
     >
       <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
-        ご利用上の注意
+        ご案内
       </p>
       <ul className="space-y-1 text-sm">
         {GUIDE_SECTIONS.map((item) => {

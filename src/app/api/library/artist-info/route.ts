@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { artistNameToMusic8Slug } from '@/lib/music8-artist-display';
+import { artistNameToMusic8Slug, type Music8ArtistJson } from '@/lib/music8-artist-display';
+import { fetchMusic8ArtistJsonByName } from '@/lib/music8-artist-json-by-name-server';
 
 export const dynamic = 'force-dynamic';
 
@@ -94,5 +95,12 @@ export async function GET(request: Request) {
     rows[0] ??
     null;
 
-  return NextResponse.json({ artist: picked });
+  let music8: Music8ArtistJson | null = null;
+  try {
+    music8 = await fetchMusic8ArtistJsonByName(artist);
+  } catch (e) {
+    console.warn('[api/library/artist-info] music8 fetch skipped', e);
+  }
+
+  return NextResponse.json({ artist: picked, music8 });
 }

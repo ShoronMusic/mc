@@ -75,6 +75,17 @@ export function parseCollabArtistNamesFromMainArtist(mainArtist: string): string
 }
 
 /**
+ * ライブラリ索引の集計キー用：共演表記は先頭アーティストに寄せる。
+ * 例: `Calvin Harris, Dua Lipa` → `Calvin Harris`
+ */
+export function primaryArtistForLibraryIndex(mainArtist: string): string {
+  const trimmed = mainArtist.trim();
+  if (!trimmed) return '(表示なし)';
+  const parts = parseCollabArtistNamesFromMainArtist(trimmed);
+  return parts[0]?.trim() || trimmed;
+}
+
+/**
  * 曲の `main_artist` が、絞り込みで選んだ単独アーティスト名に該当するか。
  * 完全一致または共演列のいずれかと一致（部分文字列マッチはしない）。
  */
@@ -107,6 +118,63 @@ type SongRowWithMainArtist = { id: string; main_artist: string | null };
 /** indexed_pick: 索引からの確定名（広い %…% を避ける）。search_broad: キーワード検索用 */
 export type FetchSongsForLibraryArtistMode = 'indexed_pick' | 'search_broad';
 
+/** `artists.name` の大文字小文字無視完全一致で ID を解決 */
+export async function resolveArtistIdsForLibrarySelection(
+  admin: SupabaseClient,
+  artistName: string,
+): Promise<string[]> {
+  const sel = artistName.trim();
+  if (!sel) return [];
+
+  const escaped = escapeLikeForIlike(sel);
+  const { data, error } = await admin.from('artists').select('id, name').ilike('name', escaped).limit(24);
+  if (error) {
+    if (error.code === '42P01') return [];
+    throw new Error(error.message);
+  }
+
+  const ids: string[] = [];
+  for (const row of (data ?? []) as { id?: string; name?: string }[]) {
+    if (!row.id) continue;
+    const n = (row.name ?? '').trim();
+    if (n.localeCompare(sel, undefined, { sensitivity: 'base' }) === 0) ids.push(row.id);
+  }
+  return ids;
+}
+
+/** `song_credits` 経由でアーティストに紐づく曲（feat. 等のサブクレジット含む） */
+export async function fetchSongsLinkedViaSongCredits<T extends SongRowWithMainArtist>(
+  admin: SupabaseClient,
+  artistIds: string[],
+  select: string,
+  limit: number,
+): Promise<T[]> {
+  if (artistIds.length === 0) return [];
+
+  const { data: credits, error: credErr } = await admin
+    .from('song_credits')
+    .select('song_id')
+    .in('artist_id', artistIds)
+    .limit(Math.min(limit * 4, 2000));
+  if (credErr) {
+    if (credErr.code === '42P01') return [];
+    throw new Error(credErr.message);
+  }
+
+  const songIds = [
+    ...new Set(
+      (credits ?? [])
+        .map((c) => (c as { song_id?: string }).song_id)
+        .filter((id): id is string => typeof id === 'string' && id.length > 0),
+    ),
+  ].slice(0, limit);
+  if (songIds.length === 0) return [];
+
+  const { data: songs, error: songErr } = await admin.from('songs').select(select).in('id', songIds).limit(limit);
+  if (songErr) throw new Error(songErr.message);
+  return (songs ?? []) as unknown as T[];
+}
+
 /**
  * 単独アーティスト名で曲を取得（ソロ＋「A, B」共演のいずれかに含まれる行）。
  */
@@ -121,10 +189,17 @@ export async function fetchSongsForLibraryArtistSelection<T extends SongRowWithM
   if (!sel) return [];
 
   const byId = new Map<string, T>();
-  const add = (rows: unknown) => {
+  const addFromMainArtist = (rows: unknown) => {
     const list = (Array.isArray(rows) ? rows : []) as unknown as T[];
     for (const row of list) {
       if (!row?.id || !songMainArtistIncludesArtist(row.main_artist, sel)) continue;
+      byId.set(row.id, row);
+    }
+  };
+  const addAny = (rows: unknown) => {
+    const list = (Array.isArray(rows) ? rows : []) as unknown as T[];
+    for (const row of list) {
+      if (!row?.id) continue;
       byId.set(row.id, row);
     }
   };
@@ -135,7 +210,7 @@ export async function fetchSongsForLibraryArtistSelection<T extends SongRowWithM
     .eq('main_artist', sel)
     .limit(limit);
   if (exactErr) throw new Error(exactErr.message);
-  add(exact);
+  addFromMainArtist(exact);
 
   const escaped = escapeLikeForIlike(sel);
 
@@ -149,18 +224,21 @@ export async function fetchSongsForLibraryArtistSelection<T extends SongRowWithM
         .ilike('main_artist', pat)
         .limit(perPattern);
       if (error) throw new Error(error.message);
-      add(data);
+      addFromMainArtist(data);
     }
-    return [...byId.values()];
+  } else {
+    const { data: fuzzy, error: fuzzyErr } = await admin
+      .from('songs')
+      .select(select)
+      .ilike('main_artist', `%${escaped}%`)
+      .limit(Math.min(limit * 4, 400));
+    if (fuzzyErr) throw new Error(fuzzyErr.message);
+    addFromMainArtist(fuzzy);
   }
 
-  const { data: fuzzy, error: fuzzyErr } = await admin
-    .from('songs')
-    .select(select)
-    .ilike('main_artist', `%${escaped}%`)
-    .limit(Math.min(limit * 4, 400));
-  if (fuzzyErr) throw new Error(fuzzyErr.message);
-  add(fuzzy);
+  const artistIds = await resolveArtistIdsForLibrarySelection(admin, sel);
+  const creditSongs = await fetchSongsLinkedViaSongCredits<T>(admin, artistIds, select, limit);
+  addAny(creditSongs);
 
   return [...byId.values()];
 }

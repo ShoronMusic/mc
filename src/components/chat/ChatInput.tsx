@@ -34,6 +34,12 @@ import {
 } from '@heroicons/react/24/outline';
 import { SongSelectionHowtoModal } from '@/components/chat/SongSelectionHowtoModal';
 import { LibraryArtistDetailMusic8Body } from '@/components/chat/LibraryArtistDetailMusic8Body';
+import { isLibraryArtistInfoSparse } from '@/lib/library-artist-info-display';
+import { LibraryMusic8SongComment } from '@/components/chat/LibraryMusic8SongComment';
+import {
+  LibrarySongArtistsDetail,
+  useLibrarySongArtists,
+} from '@/components/chat/LibrarySongArtistsDetail';
 import type { Music8ArtistJson } from '@/lib/music8-artist-display';
 import { isYoutubeKeywordSearchEnabled } from '@/lib/youtube-keyword-search-ui';
 import { useIsLgViewport } from '@/hooks/useLgViewport';
@@ -205,6 +211,17 @@ function libraryModalArtistIndexKey(name: string | null): string {
   return LIBRARY_MODAL_INDEX_OTHER;
 }
 
+/** 索引の `main_artist` 表記に合わせる（DaBaby → Dababy など） */
+function resolveLibraryMainArtistName(
+  name: string,
+  items: { main_artist: string }[],
+): string {
+  const n = name.trim();
+  if (!n) return n;
+  const lower = n.toLowerCase();
+  return items.find((a) => a.main_artist.toLowerCase() === lower)?.main_artist ?? n;
+}
+
 function sortLibraryModalLetterKeys(keys: string[]): string[] {
   const rank = (k: string): number => {
     if (k === LIBRARY_MODAL_INDEX_OTHER) return 1002;
@@ -275,6 +292,125 @@ const LIBRARY_MOBILE_PANEL = {
     body: 'max-lg:bg-violet-950/25 max-lg:p-2',
   },
 } as const;
+
+/** タブ画像 PNG の表示サイズ（元画像高さ 44px 前提） */
+const LIBRARY_TAB_IMAGE_HEIGHT_PX = 24;
+const LIBRARY_TAB_IMAGE_NATIVE_HEIGHT_PX = 44;
+const LIBRARY_TAB_B_DISPLAY_WIDTH_PX = Math.round(
+  (108 / LIBRARY_TAB_IMAGE_NATIVE_HEIGHT_PX) * LIBRARY_TAB_IMAGE_HEIGHT_PX,
+);
+
+type LibrarySectionId = 'search';
+
+/** A 検索セクションラベル */
+const LIBRARY_SECTION_BADGE: Record<LibrarySectionId, { letter: string; border: string; text: string }> = {
+  search: { letter: 'A', border: 'border-amber-400/95', text: 'text-amber-300' },
+};
+
+function LibrarySectionBadge({
+  section,
+  small = false,
+  title,
+}: {
+  section: LibrarySectionId;
+  small?: boolean;
+  title?: string;
+}) {
+  const { letter, border, text } = LIBRARY_SECTION_BADGE[section];
+  const box = small ? 'h-4 min-w-4 text-[8px]' : 'h-5 min-w-5 text-[10px]';
+  return (
+    <span
+      className={`inline-flex shrink-0 items-center justify-center rounded-sm border-2 bg-gray-950/90 font-bold tabular-nums leading-none ${box} ${border} ${text}`}
+      title={title}
+      aria-hidden
+    >
+      {letter}
+    </span>
+  );
+}
+
+type LibraryTabImageId = 'index' | 'artistList' | 'artistDetail' | 'songList' | 'songDetail';
+
+const LIBRARY_TAB_IMAGE: Record<
+  LibraryTabImageId,
+  { color: string; off?: string; title: string }
+> = {
+  index: { color: '/images/library_tab_b.png', title: 'B：A–Z 索引' },
+  artistList: {
+    color: '/images/library_tab_c.png',
+    off: '/images/library_tab_c_off.png',
+    title: 'C：アーティスト一覧',
+  },
+  artistDetail: {
+    color: '/images/library_tab_d.png',
+    off: '/images/library_tab_d_off.png',
+    title: 'D：アーティスト詳細',
+  },
+  songList: {
+    color: '/images/library_tab_e.png',
+    off: '/images/library_tab_e_off.png',
+    title: 'E：曲一覧',
+  },
+  songDetail: {
+    color: '/images/library_tab_f.png',
+    off: '/images/library_tab_f_off.png',
+    title: 'F：曲詳細',
+  },
+};
+
+function LibrarySectionTabImage({
+  section,
+  active = true,
+  small = false,
+}: {
+  section: LibraryTabImageId;
+  active?: boolean;
+  small?: boolean;
+}) {
+  const { color, off, title } = LIBRARY_TAB_IMAGE[section];
+  const src = active || !off ? color : off;
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={src}
+      alt=""
+      title={title}
+      aria-hidden
+      className="w-auto shrink-0 object-contain object-left"
+      style={{ height: LIBRARY_TAB_IMAGE_HEIGHT_PX }}
+    />
+  );
+}
+
+/** ライブラリ未操作時：A 検索 / B A–Z 索引の案内 */
+function LibraryEntryGuide({ className = '' }: { className?: string }) {
+  return (
+    <div
+      className={`rounded-lg border border-lime-700/45 bg-lime-950/35 px-3 py-3 ${className}`}
+      role="note"
+      aria-label="ライブラリの使い方"
+    >
+      <p className="mb-2.5 text-xs font-semibold text-lime-100/90">はじめに</p>
+      <ol className="space-y-2.5">
+        <li className="flex items-start gap-2 text-[11px] leading-snug text-gray-300">
+          <LibrarySectionBadge section="search" />
+          <span>
+            上の<strong className="font-medium text-gray-200">検索欄</strong>
+            にアーティスト名・曲名を入れて「検索」
+          </span>
+        </li>
+        <li className="flex items-start gap-2 text-[11px] leading-snug text-gray-300">
+          <LibrarySectionTabImage section="index" />
+          <span>
+            <strong className="font-medium text-gray-200 lg:hidden">アルファベット索引</strong>
+            <strong className="hidden font-medium text-gray-200 lg:inline">左の A–Z</strong>
+            から頭文字を選び、アーティストを探す
+          </span>
+        </li>
+      </ol>
+    </div>
+  );
+}
 
 function libraryArtistIndexLetterMatchesSidebarKey(indexLetter: string, sidebarKey: string | null): boolean {
   if (sidebarKey === null) return true;
@@ -858,6 +994,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
     const name = (artistName ?? '').trim();
     if (!name) {
       setLibraryArtistInfo(null);
+      setLibraryDetailMusic8Artist(null);
       setLibraryArtistInfoError(null);
       setLibraryArtistInfoLoading(false);
       return;
@@ -870,18 +1007,25 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
       const data = await res.json().catch(() => null);
       if (!res.ok) {
         setLibraryArtistInfo(null);
+        setLibraryDetailMusic8Artist(null);
         setLibraryArtistInfoError(
           typeof data?.error === 'string' ? data.error : 'アーティスト情報の取得に失敗しました。',
         );
         return;
       }
       const a = data?.artist;
+      const music8 =
+        data?.music8 && typeof data.music8 === 'object'
+          ? (data.music8 as Music8ArtistJson)
+          : null;
+
       if (!a || typeof a !== 'object') {
         setLibraryArtistInfo(null);
+        setLibraryDetailMusic8Artist(music8);
         return;
       }
-      setLibraryDetailMusic8Artist(null);
-      setLibraryArtistInfo({
+
+      const dbInfo: LibraryArtistInfo = {
         id: typeof a.id === 'string' ? a.id : '',
         name: typeof a.name === 'string' ? a.name : name,
         name_ja: typeof a.name_ja === 'string' ? a.name_ja : null,
@@ -892,9 +1036,14 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
         image_url: typeof a.image_url === 'string' ? a.image_url : null,
         image_credit: typeof a.image_credit === 'string' ? a.image_credit : null,
         profile_text: typeof a.profile_text === 'string' ? a.profile_text : null,
-      });
+      };
+      setLibraryArtistInfo(dbInfo);
+      setLibraryDetailMusic8Artist(
+        music8 && isLibraryArtistInfoSparse(dbInfo) ? music8 : null,
+      );
     } catch {
       setLibraryArtistInfo(null);
+      setLibraryDetailMusic8Artist(null);
       setLibraryArtistInfoError('アーティスト情報の取得に失敗しました。');
     } finally {
       setLibraryArtistInfoLoading(false);
@@ -1022,10 +1171,12 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
 
   const filteredLibraryRows = useMemo(() => {
     if (!librarySelectedArtistName) return letterFilteredLibraryRows;
+    // ブラウズ API は song_credits 経由の参加曲も返すため main_artist で再絞り込みしない
+    if (librarySongSource === 'browse') return letterFilteredLibraryRows;
     return letterFilteredLibraryRows.filter((r) =>
       songMainArtistIncludesArtist(r.main_artist, librarySelectedArtistName),
     );
-  }, [letterFilteredLibraryRows, librarySelectedArtistName]);
+  }, [letterFilteredLibraryRows, librarySelectedArtistName, librarySongSource]);
 
   const librarySongRowsSortedForList = useMemo(() => {
     const rows = [...filteredLibraryRows];
@@ -1072,6 +1223,12 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
       ? filteredLibraryRows.find((r) => r.id === librarySelectedSongId) ?? null
       : null;
 
+  const librarySongArtists = useLibrarySongArtists(
+    selectedLibraryRow?.id ?? null,
+    librarySelectedVideoId,
+    selectedLibraryRow?.main_artist ?? null,
+  );
+
   const libraryMobileFocus = useMemo(
     () =>
       resolveLibraryMobileFocus({
@@ -1104,16 +1261,43 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
 
   useEffect(() => {
     if (!librarySelectedArtistName) return;
+    const selected = librarySelectedArtistName.trim();
+    if (!selected) return;
+
     if (librarySongSource === 'search') {
-      if (!searchArtistNameCandidates.some((a) => a === librarySelectedArtistName)) {
+      const match = searchArtistNameCandidates.find(
+        (a) => a.toLowerCase() === selected.toLowerCase(),
+      );
+      if (!match) {
         setLibrarySelectedArtistName(null);
+      } else if (match !== librarySelectedArtistName) {
+        setLibrarySelectedArtistName(match);
       }
-    } else {
-      if (!browseArtistIndexRows.some((a) => a.main_artist === librarySelectedArtistName)) {
-        setLibrarySelectedArtistName(null);
-      }
+      return;
     }
-  }, [librarySelectedArtistName, librarySongSource, searchArtistNameCandidates, browseArtistIndexRows]);
+
+    if (!libraryArtistIndexActive || !libraryArtistsReady || libraryArtistLetter === null) {
+      return;
+    }
+    if (browseArtistIndexRows.length === 0) return;
+
+    const match = browseArtistIndexRows.find(
+      (a) => a.main_artist.toLowerCase() === selected.toLowerCase(),
+    );
+    if (!match) {
+      setLibrarySelectedArtistName(null);
+    } else if (match.main_artist !== librarySelectedArtistName) {
+      setLibrarySelectedArtistName(match.main_artist);
+    }
+  }, [
+    librarySelectedArtistName,
+    librarySongSource,
+    searchArtistNameCandidates,
+    browseArtistIndexRows,
+    libraryArtistIndexActive,
+    libraryArtistsReady,
+    libraryArtistLetter,
+  ]);
 
   useEffect(() => {
     if (!libraryOpen) return;
@@ -1147,6 +1331,8 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
     librarySongSource !== 'idle' ||
     libraryLetterModalOpen;
 
+  const libraryEntryIdle = !libraryHasExpandedContent;
+
   const openLibraryModal = useCallback(() => {
     if (roomInteractionLocked) return;
     resetLibraryExpanded();
@@ -1158,6 +1344,29 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
     if (!libraryOpen || libraryArtistsReady || libraryArtistsLoading) return;
     void loadLibraryArtists();
   }, [libraryOpen, libraryArtistsReady, libraryArtistsLoading, loadLibraryArtists]);
+
+  const switchLibraryToArtist = useCallback(
+    (artistName: string) => {
+      const name = resolveLibraryMainArtistName(artistName, libraryArtistItems);
+      if (!name) return;
+      setLibraryQuery('');
+      setLibraryJaMainArtistMatches([]);
+      setLibraryCopyState('idle');
+      setLibrarySelectedArtistName(name);
+      setLibrarySelectedSongId(null);
+      setLibrarySongVideos([]);
+      setLibrarySelectedVideoId(null);
+      setLibraryVideoError(null);
+      setLibraryDetailMusic8Artist(null);
+      setLibrarySongSource('browse');
+      setLibraryArtistIndexActive(true);
+      setLibraryArtistLetter(libraryModalArtistIndexKey(name));
+      if (librarySongListScrollRef.current) librarySongListScrollRef.current.scrollTop = 0;
+      void loadLibrarySongsForArtist(name);
+      void loadLibraryArtistInfo(name);
+    },
+    [libraryArtistItems, loadLibrarySongsForArtist, loadLibraryArtistInfo],
+  );
 
   const openLibraryModalForArtist = useCallback(
     async (mainArtist: string, options?: { music8Artist?: Music8ArtistJson | null }) => {
@@ -1289,6 +1498,17 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
   }, [librarySelectedArtistName, libraryArtistLetter, librarySongSource]);
 
   const selectedArtistForInfo = librarySelectedArtistName ?? selectedLibraryRow?.main_artist ?? null;
+
+  const libraryTabCActive =
+    (libraryArtistIndexActive &&
+      !libraryArtistsLoading &&
+      browseArtistIndexRows.length > 0) ||
+    (!libraryLoading &&
+      librarySongSource === 'search' &&
+      searchArtistNameCandidates.length > 0);
+  const libraryTabDActive = Boolean(selectedArtistForInfo && !libraryArtistInfoLoading);
+  const libraryTabEActive = !libraryLoading && filteredLibraryRows.length > 0;
+  const libraryTabFActive = Boolean(selectedLibraryRow);
 
   useEffect(() => {
     if (!libraryOpen || !selectedArtistForInfo) {
@@ -1879,20 +2099,39 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                     <span className="text-gray-600">（{libraryArtistItems.length} アーティスト）</span>
                   </p>
                 ) : null}
+                {libraryEntryIdle && !isMobileLandscape ? (
+                  <p className="hidden min-w-0 flex-1 truncate text-[11px] text-gray-400 sm:block lg:hidden">
+                    <span className="text-gray-500">はじめに：</span>
+                    <span className="inline-flex items-center gap-1">
+                      <LibrarySectionBadge section="search" small />
+                      検索
+                    </span>
+                    <span className="mx-1 text-gray-600">または</span>
+                    <span className="inline-flex items-center gap-1">
+                      <LibrarySectionTabImage section="index" small />
+                      A–Z
+                    </span>
+                  </p>
+                ) : null}
                 {isMobileLandscape ? (
-                  <input
-                    type="search"
-                    value={libraryQuery}
-                    onChange={(e) => setLibraryQuery(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        handleLibrarySearch();
-                      }
-                    }}
-                    placeholder="アーティスト名・曲名で検索"
-                    className="h-8 min-w-0 flex-1 rounded border border-gray-700 bg-gray-900 px-2 text-xs text-gray-100 outline-none focus:border-lime-500"
-                  />
+                  <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                    <LibrarySectionBadge section="search" small title="A：検索" />
+                    <input
+                      type="search"
+                      value={libraryQuery}
+                      onChange={(e) => setLibraryQuery(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleLibrarySearch();
+                        }
+                      }}
+                      placeholder="アーティスト名・曲名で検索"
+                      className={`h-8 min-w-0 flex-1 rounded border border-gray-700 bg-gray-900 px-2 text-xs text-gray-100 outline-none focus:border-lime-500 ${
+                        libraryEntryIdle ? 'ring-1 ring-amber-500/50' : ''
+                      }`}
+                    />
+                  </div>
                 ) : null}
               </div>
               <div
@@ -1901,19 +2140,24 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                 }`}
               >
                 {!isMobileLandscape ? (
-                  <input
-                    type="search"
-                    value={libraryQuery}
-                    onChange={(e) => setLibraryQuery(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        handleLibrarySearch();
-                      }
-                    }}
-                    placeholder="アーティスト名・曲名で検索"
-                    className="h-9 min-w-0 flex-1 rounded border border-gray-700 bg-gray-900 px-3 text-sm text-gray-100 outline-none focus:border-lime-500 sm:w-[16rem] sm:flex-none md:w-[18rem]"
-                  />
+                  <div className="flex items-center gap-1.5 sm:w-[16rem] sm:flex-none md:w-[18rem]">
+                    <LibrarySectionBadge section="search" title="A：検索" />
+                    <input
+                      type="search"
+                      value={libraryQuery}
+                      onChange={(e) => setLibraryQuery(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleLibrarySearch();
+                        }
+                      }}
+                      placeholder="アーティスト名・曲名で検索"
+                      className={`h-9 min-w-0 flex-1 rounded border border-gray-700 bg-gray-900 px-3 text-sm text-gray-100 outline-none focus:border-lime-500 ${
+                        libraryEntryIdle ? 'ring-1 ring-amber-500/50' : ''
+                      }`}
+                    />
+                  </div>
                 ) : null}
                 <button
                   type="button"
@@ -1946,6 +2190,20 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                   閉じる
                 </button>
               </div>
+              {libraryEntryIdle && !isMobileLandscape ? (
+                <p className="w-full text-[11px] leading-snug text-gray-400 lg:order-last lg:basis-full">
+                  <span className="text-gray-500">はじめに：</span>
+                  <span className="inline-flex items-center gap-1">
+                    <LibrarySectionBadge section="search" small />
+                    検索
+                  </span>
+                  <span className="mx-1.5 text-gray-600">または</span>
+                  <span className="inline-flex items-center gap-1">
+                    <LibrarySectionTabImage section="index" small />
+                    左の A–Z 索引
+                  </span>
+                </p>
+              ) : null}
             </div>
             <div
               className={`grid min-h-0 flex-1 grid-cols-1 gap-3 px-2 pb-2 pt-1 max-lg:gap-2 max-lg:bg-gray-950/80 lg:gap-0 lg:p-0 lg:bg-transparent lg:grid-cols-12 lg:pb-0 ${
@@ -1966,12 +2224,15 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                 }`}
               >
               <aside
-                className="hidden max-h-[40vh] w-[3.5rem] shrink-0 flex-col border-b border-lime-900/60 lg:flex lg:max-h-none lg:border-b-0 lg:border-r lg:border-r-lime-900/60"
+                className={`hidden max-h-[40vh] shrink-0 flex-col border-b border-lime-900/60 lg:flex lg:max-h-none lg:border-b-0 lg:border-r lg:border-r-lime-900/60 ${
+                  libraryEntryIdle ? 'bg-cyan-950/15 ring-2 ring-inset ring-cyan-500/30' : ''
+                }`}
+                style={{ width: LIBRARY_TAB_B_DISPLAY_WIDTH_PX }}
                 aria-label="アーティスト頭文字"
               >
-                <p className="hidden border-b border-lime-900/50 px-1 py-1 text-[9px] font-medium uppercase leading-tight tracking-wide text-gray-500 lg:block">
-                  A–Z
-                </p>
+                <div className="hidden shrink-0 border-b border-lime-900/50 lg:flex lg:items-center lg:justify-center lg:py-2">
+                  <LibrarySectionTabImage section="index" />
+                </div>
                 <div className="mc-scrollbar-stable flex min-h-0 flex-1 flex-row flex-wrap gap-0.5 px-1 py-1.5 lg:flex-col lg:flex-nowrap lg:gap-0.5 lg:overflow-y-auto">
                   {libraryLetterKeys.map((L) => (
                     <button
@@ -2004,34 +2265,33 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
               </aside>
               {/* アーティスト一覧（索引と密着・選択後も表示） */}
               <section
-                className={`flex min-h-0 w-full min-w-0 flex-col border-b border-lime-900/60 lg:w-[11rem] lg:shrink-0 lg:border-b-0 xl:w-[12.5rem] ${LIBRARY_MOBILE_PANEL.artistList.section} ${libraryMobileArtistListSectionExtra(libraryMobileFocus, isMobileLandscape)}`}
+                className={`flex min-h-0 w-full min-w-0 flex-col overflow-hidden border-b border-lime-900/60 lg:w-[11rem] lg:shrink-0 lg:border-b-0 xl:w-[12.5rem] ${LIBRARY_MOBILE_PANEL.artistList.section} ${libraryMobileArtistListSectionExtra(libraryMobileFocus, isMobileLandscape)}`}
               >
                 <div className="shrink-0 border-b border-lime-900/60 px-2 py-2 max-lg:border-lime-700/35 max-lg:bg-lime-950/40 lg:hidden">
-                  <button
-                    type="button"
-                    onClick={() => setLibraryLetterModalOpen(true)}
-                    className="h-9 w-full rounded border border-lime-500/70 bg-lime-900/30 px-2 text-xs text-lime-100 hover:bg-lime-900/60"
-                    aria-haspopup="dialog"
-                    aria-expanded={libraryLetterModalOpen}
-                    aria-label="アルファベット索引を開く"
-                  >
-                    アルファベット索引
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <LibrarySectionTabImage section="index" />
+                    <button
+                      type="button"
+                      onClick={() => setLibraryLetterModalOpen(true)}
+                      className={`h-9 min-w-0 flex-1 rounded border border-lime-500/70 bg-lime-900/30 px-2 text-xs text-lime-100 hover:bg-lime-900/60 ${
+                        libraryEntryIdle ? 'ring-1 ring-cyan-500/45' : ''
+                      }`}
+                      aria-haspopup="dialog"
+                      aria-expanded={libraryLetterModalOpen}
+                      aria-label="アルファベット索引を開く"
+                    >
+                      アルファベット索引
+                    </button>
+                  </div>
                 </div>
                 <div className={`shrink-0 lg:hidden ${LIBRARY_MOBILE_PANEL.artistList.header}`}>
                   <div className="flex min-w-0 items-center gap-2">
-                    <span
-                      className={`${LIBRARY_MOBILE_PANEL.stepBadge} ${LIBRARY_MOBILE_PANEL.artistList.badge}`}
-                      aria-hidden
-                    >
-                      1
-                    </span>
-                    <p className={`min-w-0 ${LIBRARY_MOBILE_PANEL.artistList.title}`}>
-                      アーティスト一覧
-                      {libraryArtistIndexActive && libraryArtistLetter
-                        ? `（${libraryArtistLetter}）`
-                        : ''}
-                    </p>
+                    <LibrarySectionTabImage section="artistList" active={libraryTabCActive} />
+                    {libraryArtistIndexActive && libraryArtistLetter ? (
+                      <p className={`min-w-0 tabular-nums ${LIBRARY_MOBILE_PANEL.artistList.title}`}>
+                        （{libraryArtistLetter}）
+                      </p>
+                    ) : null}
                   </div>
                   {librarySelectedArtistName ? (
                     <button
@@ -2050,6 +2310,32 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                     </button>
                   ) : null}
                 </div>
+                <div className="hidden shrink-0 items-center justify-between gap-1 border-b border-lime-900/50 px-2.5 py-2 lg:flex">
+                  <div className="flex min-w-0 items-center gap-1.5">
+                    <LibrarySectionTabImage section="artistList" active={libraryTabCActive} />
+                    {libraryArtistIndexActive && libraryArtistLetter ? (
+                      <p className="min-w-0 text-[10px] leading-snug tabular-nums text-gray-500">
+                        （{libraryArtistLetter}）
+                      </p>
+                    ) : null}
+                  </div>
+                  {librarySelectedArtistName ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLibrarySelectedArtistName(null);
+                        setLibraryRows([]);
+                        setLibrarySongSource('idle');
+                        setLibrarySelectedSongId(null);
+                        setLibrarySongVideos([]);
+                        setLibrarySelectedVideoId(null);
+                      }}
+                      className="shrink-0 rounded border border-gray-700 bg-gray-900 px-1.5 py-0.5 text-[10px] text-gray-200 hover:bg-gray-800"
+                    >
+                      解除
+                    </button>
+                  ) : null}
+                </div>
                 <div
                   className={`mc-scrollbar-stable flex min-h-0 flex-1 flex-col gap-0 overflow-y-auto lg:overflow-x-hidden ${LIBRARY_MOBILE_PANEL.artistList.body}`}
                 >
@@ -2060,39 +2346,24 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                   ) : null}
                   {librarySongSource !== 'search' ? (
                     <div className="border-b border-lime-900/50 px-2 py-2 max-lg:border-0 max-lg:px-3 max-lg:py-2 lg:px-2.5">
-                      <div className="mb-2 flex items-center justify-between gap-1 max-lg:hidden">
-                        <p className="min-w-0 text-[10px] leading-snug text-gray-500">
-                          アーティスト一覧
-                          {libraryArtistIndexActive && libraryArtistLetter
-                            ? `（${libraryArtistLetter}）`
-                            : ''}
-                        </p>
-                          {librarySelectedArtistName ? (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setLibrarySelectedArtistName(null);
-                                setLibraryRows([]);
-                                setLibrarySongSource('idle');
-                                setLibrarySelectedSongId(null);
-                                setLibrarySongVideos([]);
-                                setLibrarySelectedVideoId(null);
-                              }}
-                              className="shrink-0 rounded border border-gray-700 bg-gray-900 px-1.5 py-0.5 text-[10px] text-gray-200 hover:bg-gray-800"
-                            >
-                              解除
-                            </button>
-                          ) : null}
-                      </div>
                       {!libraryArtistIndexActive && !libraryArtistsLoading ? (
-                        <>
-                          <p className="px-0.5 py-1 text-[10px] leading-snug text-lime-200/55 lg:hidden">
-                            アルファベット索引から字母を選ぶと一覧が表示されます。
-                          </p>
-                          <p className="hidden px-0.5 py-1 text-[10px] leading-snug text-gray-500 lg:block">
-                            左の A–Z から字母を選ぶと一覧が表示されます。
-                          </p>
-                        </>
+                        libraryEntryIdle ? (
+                          <>
+                            <LibraryEntryGuide className="mx-0.5 my-1 max-lg:my-2 lg:hidden" />
+                            <p className="hidden px-0.5 py-1 text-[10px] leading-snug text-gray-500 lg:block">
+                              A 検索 または左の A–Z B から始めてください。
+                            </p>
+                          </>
+                        ) : (
+                          <>
+                            <p className="px-0.5 py-1 text-[10px] leading-snug text-lime-200/55 lg:hidden">
+                              アルファベット索引から字母を選ぶと一覧が表示されます。
+                            </p>
+                            <p className="hidden px-0.5 py-1 text-[10px] leading-snug text-gray-500 lg:block">
+                              左の A–Z から字母を選ぶと一覧が表示されます。
+                            </p>
+                          </>
+                        )
                       ) : null}
                       {libraryArtistsLoading && libraryArtistIndexActive ? (
                         <LibraryArtistListLoading />
@@ -2193,19 +2464,13 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                   className={`shrink-0 border-b border-lime-900/60 px-3 py-2 ${LIBRARY_MOBILE_PANEL.artistDetail.header}`}
                 >
                   <div className="flex min-w-0 items-start gap-2 max-lg:items-center">
-                    <span
-                      className={`${LIBRARY_MOBILE_PANEL.stepBadge} ${LIBRARY_MOBILE_PANEL.artistDetail.badge} lg:hidden`}
-                      aria-hidden
-                    >
-                      2
-                    </span>
+                    <LibrarySectionTabImage section="artistDetail" active={libraryTabDActive} />
                     <p
                       className={`min-w-0 flex-1 truncate text-[11px] font-medium leading-snug text-gray-400 ${LIBRARY_MOBILE_PANEL.artistDetail.title}`}
                     >
-                      <span className="text-gray-400 max-lg:text-sky-50">アーティスト詳細</span>
                       {librarySelectedArtistName ? (
                         <>
-                          <span className="mx-1.5 font-medium text-lime-100/90 max-lg:text-sky-100/90">
+                          <span className="font-medium text-lime-100/90 max-lg:text-sky-100/90">
                             {librarySelectedArtistName}
                           </span>
                           {selectedBrowseArtistRow?.count != null ? (
@@ -2222,13 +2487,24 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                   className={`mc-scrollbar-stable min-h-0 flex-1 overflow-y-auto px-3 py-2 text-xs ${LIBRARY_MOBILE_PANEL.artistDetail.body}`}
                 >
                   {!selectedArtistForInfo ? (
-                    <p className="text-gray-500 max-lg:text-sky-200/55">
-                      索引で字母を選び、一覧からアーティストを選ぶと詳細が表示されます。
-                    </p>
+                    libraryEntryIdle ? (
+                      <p className="text-gray-500 max-lg:text-sky-200/55">
+                        A または B のあと、アーティストを選ぶと詳細が表示されます。
+                      </p>
+                    ) : (
+                      <p className="text-gray-500 max-lg:text-sky-200/55">
+                        C でアーティストを選ぶと詳細が表示されます。
+                      </p>
+                    )
                   ) : libraryArtistInfoLoading ? (
                     <p className="text-gray-500">読み込み中…</p>
                   ) : libraryArtistInfoError ? (
                     <p className="text-amber-300">{libraryArtistInfoError}</p>
+                  ) : libraryDetailMusic8Artist ? (
+                    <LibraryArtistDetailMusic8Body
+                      artist={libraryDetailMusic8Artist}
+                      dbRegistered={Boolean(libraryArtistInfo?.id)}
+                    />
                   ) : libraryArtistInfo ? (
                     <div className="flex flex-col gap-2">
                       <div className="flex gap-3">
@@ -2267,8 +2543,6 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                         </p>
                       ) : null}
                     </div>
-                  ) : libraryDetailMusic8Artist ? (
-                    <LibraryArtistDetailMusic8Body artist={libraryDetailMusic8Artist} />
                   ) : (
                     <p className="text-gray-500">このアーティストの詳細はまだ登録されていません。</p>
                   )}
@@ -2282,15 +2556,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                   className={`flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-lime-900/60 px-3 py-2 ${LIBRARY_MOBILE_PANEL.songList.header}`}
                 >
                   <div className="flex min-w-0 items-center gap-2">
-                    <span
-                      className={`${LIBRARY_MOBILE_PANEL.stepBadge} ${LIBRARY_MOBILE_PANEL.songList.badge} lg:hidden`}
-                      aria-hidden
-                    >
-                      3
-                    </span>
-                    <p className={`text-[11px] font-medium text-gray-400 ${LIBRARY_MOBILE_PANEL.songList.title}`}>
-                      曲一覧
-                    </p>
+                    <LibrarySectionTabImage section="songList" active={libraryTabEActive} />
                   </div>
                   <div
                     className="flex flex-wrap items-center gap-x-2 gap-y-1"
@@ -2357,13 +2623,17 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                   {libraryLoading ? <LibrarySongListLoading /> : null}
                   {libraryError && <p className="px-2 py-2 text-xs text-amber-300">{libraryError}</p>}
                   {!libraryLoading && !libraryError && filteredLibraryRows.length === 0 && (
-                    <p className="px-2 py-2 text-xs text-gray-500 max-lg:text-violet-200/55">
-                      {librarySongSource === 'idle'
-                        ? '索引で字母を選びアーティストを選ぶか、検索で曲を探せます。'
-                        : librarySongSource === 'search'
-                          ? '候補がありません。別のキーワードを試してください。'
-                          : '候補がありません。'}
-                    </p>
+                    libraryEntryIdle ? (
+                      <LibraryEntryGuide className="mx-1 my-2" />
+                    ) : (
+                      <p className="px-2 py-2 text-xs text-gray-500 max-lg:text-violet-200/55">
+                        {librarySongSource === 'idle'
+                          ? '索引で字母を選びアーティストを選ぶか、検索で曲を探せます。'
+                          : librarySongSource === 'search'
+                            ? '候補がありません。別のキーワードを試してください。'
+                            : '候補がありません。'}
+                      </p>
+                    )
                   )}
                   <ul className="space-y-1.5">
                     {librarySongRowsSortedForList.map((row) => {
@@ -2417,7 +2687,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                     <div className="mb-2 rounded border border-gray-800 bg-gray-900/60 px-3 py-2">
                       <p className="text-sm font-medium text-gray-100">{selectedLibraryRow.title}</p>
                       <p className="mt-1 text-xs text-gray-400">
-                        {selectedLibraryRow.main_artist ?? '—'} / {selectedLibraryRow.style ?? '—'}
+                        {librarySongArtists.artistsLine} / {selectedLibraryRow.style ?? '—'}
                       </p>
                     </div>
                     <div className="mb-2">
@@ -2535,9 +2805,14 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
               {isLg && (
               <section className="min-h-0 flex-col lg:col-span-4 lg:flex">
                 <div className="border-b border-lime-900/60 px-3 py-2">
-                  <p className="text-[11px] text-gray-400">
-                    曲一覧で選ぶと、動画バージョン（公式優先）を選べます。
-                  </p>
+                  <div className="flex items-center gap-2">
+                    <LibrarySectionTabImage section="songDetail" active={libraryTabFActive} />
+                    <p className="text-[11px] text-gray-400">
+                      {libraryEntryIdle
+                        ? '曲を選ぶと、動画バージョン（公式優先）を選べます。'
+                        : 'E の曲一覧で選ぶと、動画バージョン（公式優先）を選べます。'}
+                    </p>
+                  </div>
                 </div>
                 <div className="mc-scrollbar-stable min-h-0 flex-1 overflow-y-auto p-3">
                   {selectedLibraryRow ? (
@@ -2545,7 +2820,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                       <div className="mb-2 rounded border border-gray-800 bg-gray-900/60 px-3 py-2">
                         <p className="text-sm font-medium text-gray-100">{selectedLibraryRow.title}</p>
                         <p className="mt-1 text-xs text-gray-400">
-                          {selectedLibraryRow.main_artist ?? '—'} / {selectedLibraryRow.style ?? '—'}
+                          {librarySongArtists.artistsLine} / {selectedLibraryRow.style ?? '—'}
                         </p>
                       </div>
                       <div className="mb-2">
@@ -2645,8 +2920,13 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                       )}
                       {selectedLibraryRow && (
                         <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-2 gap-y-1 text-xs text-gray-300">
+                          <LibrarySongArtistsDetail
+                            artists={librarySongArtists.artists}
+                            loading={librarySongArtists.loading}
+                            fallbackMainArtist={selectedLibraryRow.main_artist}
+                            onSelectArtist={switchLibraryToArtist}
+                          />
                           {[
-                            ['メインアーティスト', selectedLibraryRow.main_artist],
                             ['曲タイトル', selectedLibraryRow.song_title],
                             ['スタイル', selectedLibraryRow.style],
                             ['ジャンル', selectedLibraryRow.genres],
@@ -2668,10 +2948,19 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                             ))}
                         </dl>
                       )}
+                      {selectedLibraryRow ? (
+                        <LibraryMusic8SongComment
+                          videoId={librarySelectedVideoId}
+                          artistName={
+                            librarySongArtists.artists?.[0]?.name ?? selectedLibraryRow.main_artist
+                          }
+                          songTitle={selectedLibraryRow.song_title ?? selectedLibraryRow.title}
+                        />
+                      ) : null}
                     </>
                   ) : (
                     <p className="text-sm text-gray-500">
-                      曲一覧から曲を選んでください（索引・検索で絞り込めます）。
+                      E の曲一覧から曲を選んでください（A・B で絞り込めます）。
                     </p>
                   )}
                 </div>
@@ -2688,14 +2977,9 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
               >
               <div className="flex items-center justify-between gap-2 border-b border-amber-700/45 bg-amber-900/50 px-3 py-2">
                 <div className="flex min-w-0 items-center gap-2">
-                  <span
-                    className={`${LIBRARY_MOBILE_PANEL.stepBadge} bg-amber-600`}
-                    aria-hidden
-                  >
-                    4
-                  </span>
+                  <LibrarySectionTabImage section="songDetail" active={libraryTabFActive} />
                   <p className="truncate text-xs font-medium text-amber-50">
-                    曲・動画を選ぶ（上の「曲一覧」で曲を選択）
+                    曲・動画を選ぶ（E の曲一覧で曲を選択）
                   </p>
                 </div>
                 <button
@@ -2719,7 +3003,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                     <div className="mb-2 rounded border border-gray-800 bg-gray-900/60 px-3 py-2">
                       <p className="text-sm font-medium text-gray-100">{selectedLibraryRow.title}</p>
                       <p className="mt-1 text-xs text-gray-400">
-                        {selectedLibraryRow.main_artist ?? '—'} / {selectedLibraryRow.style ?? '—'}
+                        {librarySongArtists.artistsLine} / {selectedLibraryRow.style ?? '—'}
                       </p>
                     </div>
                     <div className="mb-2">

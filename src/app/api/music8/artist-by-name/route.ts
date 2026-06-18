@@ -3,7 +3,7 @@ import {
   getMusic8ArtistJsonUrlCandidates,
   type Music8ArtistJson,
 } from '@/lib/music8-artist-display';
-import { fetchJsonWithOptionalGcsAuth } from '@/lib/music8-gcs-server';
+import { fetchMusic8ArtistJsonByName } from '@/lib/music8-artist-json-by-name-server';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,15 +22,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ artist: null });
   }
 
-  for (const artistUrl of artistUrls) {
-    try {
-      const artist = await fetchJsonWithOptionalGcsAuth<Music8ArtistJson>(artistUrl);
-      if (!artist) continue;
-      return NextResponse.json({ artist });
-    } catch {
-      continue;
-    }
-  }
-  return NextResponse.json({ artist: null });
+  const artist = await fetchMusic8ArtistJsonByName(artistName);
+  return NextResponse.json({ artist });
 }
 

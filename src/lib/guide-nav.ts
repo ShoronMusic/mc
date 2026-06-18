@@ -7,6 +7,12 @@ export const GUIDE_SECTIONS = [
     short: '各ページへの案内',
   },
   {
+    href: '/guide/enjoy',
+    slug: 'enjoy',
+    title: '楽しみ方',
+    short: '基本機能・ライブラリ・AIなどの一覧',
+  },
+  {
     href: '/guide/chat',
     slug: 'chat',
     title: 'チャットのマナー',

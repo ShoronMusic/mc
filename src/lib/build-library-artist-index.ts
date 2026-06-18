@@ -1,11 +1,15 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { fetchAllSongRowsForArtistAggregation } from '@/lib/library-artist-count-rows';
+import {
+  fetchAllSongCreditRowsForArtistAggregation,
+  fetchAllSongRowsForArtistAggregation,
+} from '@/lib/library-artist-count-rows';
 import {
   compareDisplayTitleCaseInsensitive,
   indexLetterForArtist,
   stripLeadingArticleForSort,
 } from '@/lib/admin-library-index';
 import { songRowLooksJapaneseDomesticForAdminLibrary } from '@/lib/admin-library-jp-exclude';
+import { primaryArtistForLibraryIndex } from '@/lib/library-search-query';
 
 export type LibraryArtistIndexItem = {
   main_artist: string;
@@ -18,6 +22,11 @@ export type LibraryArtistIndexPayload = {
   letters: string[];
 };
 
+type ArtistIndexBucket = {
+  display: string;
+  songIds: Set<string>;
+};
+
 const INDEX_CACHE_TTL_MS = 15 * 60 * 1000;
 
 let indexCache: { builtAt: number; payload: LibraryArtistIndexPayload } | null = null;
@@ -26,17 +35,64 @@ export function clearLibraryArtistIndexCache(): void {
   indexCache = null;
 }
 
+function artistIndexKey(name: string): string {
+  return name.trim().toLowerCase();
+}
+
+function mergeArtistDisplayName(existing: string, candidate: string): string {
+  const c = candidate.trim();
+  if (!existing) return c;
+  if (existing.includes(',') && !c.includes(',')) return c;
+  return existing;
+}
+
 /** `songs` 全行を走査してアーティスト索引を構築（邦楽寄り除外あり） */
 export async function buildLibraryArtistIndex(
   client: SupabaseClient,
 ): Promise<LibraryArtistIndexPayload> {
+  const songIdsByArtist = new Map<string, ArtistIndexBucket>();
+  const registerSong = (artistLabel: string, songId: string) => {
+    const primary = primaryArtistForLibraryIndex(artistLabel);
+    const key = artistIndexKey(primary === '(表示なし)' ? '' : primary);
+    if (!key) return;
+
+    let bucket = songIdsByArtist.get(key);
+    if (!bucket) {
+      bucket = { display: primary, songIds: new Set() };
+      songIdsByArtist.set(key, bucket);
+    } else {
+      bucket.display = mergeArtistDisplayName(bucket.display, primary);
+    }
+    bucket.songIds.add(songId);
+  };
+
   const rows = await fetchAllSongRowsForArtistAggregation(client);
-  const counts = new Map<string, number>();
   for (const r of rows) {
     if (songRowLooksJapaneseDomesticForAdminLibrary(r)) continue;
-    const a = (r.main_artist ?? '').trim();
-    const key = a || '(表示なし)';
-    counts.set(key, (counts.get(key) ?? 0) + 1);
+    registerSong(r.main_artist ?? '', r.id);
+  }
+
+  try {
+    const creditRows = await fetchAllSongCreditRowsForArtistAggregation(client);
+    for (const r of creditRows) {
+      if (
+        songRowLooksJapaneseDomesticForAdminLibrary({
+          main_artist: r.main_artist,
+          song_title: r.song_title,
+          display_title: r.display_title,
+        })
+      ) {
+        continue;
+      }
+      registerSong(r.artist_name, r.song_id);
+    }
+  } catch (e) {
+    console.warn('[buildLibraryArtistIndex] song_credits skipped', e);
+  }
+
+  const counts = new Map<string, number>();
+  for (const [, bucket] of songIdsByArtist) {
+    counts.set(bucket.display, bucket.songIds.size);
   }
 
   const items: LibraryArtistIndexItem[] = Array.from(counts.entries())

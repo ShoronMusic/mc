@@ -15,6 +15,7 @@ import {
 import { persistGeminiUsageLog } from '@/lib/gemini-usage-log';
 import { resolveGenerationModelId } from '@/lib/gemini-model-routing';
 import { SONG_ERA_OPTIONS, type SongEraOption } from '@/lib/song-era-options';
+import { looksTruncatedUserTasteAutoProfile } from '@/lib/user-ai-taste-auto-profile';
 
 export {
   getGeminiGenerationRoutingSummary,
@@ -881,14 +882,16 @@ ${input}
 
 【出力】
 - 日本語で、箇条書き3〜6行程度、合計${USER_TASTE_AUTO_PROFILE_OUTPUT_MAX}文字以内。
+- 1行目から「・」または「-」で始まる箇条書きのみ。前置き・導入文（「以下の通りです」等）は書かない。
+- 各行は句点（。）で終える。途中で文を切らない。
 - 好むジャンル・時代・アーティスト傾向、チャットで繰り返し出る話題があれば簡潔に。
 - 断定しすぎず「〜の傾向」「〜が多い」などにとどめる。
 - マークダウン見出し・コードブロックは使わない。`;
 
-  try {
+  const runOnce = async (maxOutputTokens: number): Promise<string | null> => {
     const tasteGen: GenerationConfig = {
       temperature: 0.2,
-      maxOutputTokens: 512,
+      maxOutputTokens,
     };
     const result = await model.generateContent({
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
@@ -899,12 +902,24 @@ ${input}
       roomId: usageMeta?.roomId ?? null,
       videoId: usageMeta?.videoId ?? null,
     });
-    let text = readGeneratedText(result.response, 'user_taste_auto_profile');
-    if (!text) return null;
-    text = text.replace(/\r\n/g, '\n');
+    const raw = readGeneratedText(result.response, 'user_taste_auto_profile');
+    if (!raw) return null;
+    let text = raw.replace(/\r\n/g, '\n').trim();
     if (text.length > USER_TASTE_AUTO_PROFILE_OUTPUT_MAX) {
       text = text.slice(0, USER_TASTE_AUTO_PROFILE_OUTPUT_MAX - 1) + '…';
     }
+    return text;
+  };
+
+  try {
+    let text = await runOnce(2048);
+    if (text && looksTruncatedUserTasteAutoProfile(text)) {
+      const retry = await runOnce(4096);
+      if (retry && (!text || retry.length > text.length)) {
+        text = retry;
+      }
+    }
+    if (!text) return null;
     return text;
   } catch (e) {
     console.error('[gemini] generateUserTasteAutoProfile:', e);

@@ -71,6 +71,37 @@ export async function gatherUserTasteSignalsForAutoProfile(
     pushSection(sections, 'お気に入り', lines.filter(Boolean));
   }
 
+  const { data: profileRow, error: profileErr } = await supabase
+    .from('user_public_profile')
+    .select('tagline, favorite_artists, listening_note')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (!profileErr && profileRow) {
+    const profileLines: string[] = [];
+    const tagline =
+      typeof profileRow.tagline === 'string' ? profileRow.tagline.replace(/\s+/g, ' ').trim() : '';
+    if (tagline) profileLines.push(`一言: ${tagline.length > 200 ? `${tagline.slice(0, 199)}…` : tagline}`);
+    const listening =
+      typeof profileRow.listening_note === 'string'
+        ? profileRow.listening_note.replace(/\s+/g, ' ').trim()
+        : '';
+    if (listening) {
+      profileLines.push(
+        `補足: ${listening.length > 200 ? `${listening.slice(0, 199)}…` : listening}`,
+      );
+    }
+    const artistsRaw = profileRow.favorite_artists;
+    if (Array.isArray(artistsRaw)) {
+      const artists = artistsRaw
+        .filter((x): x is string => typeof x === 'string')
+        .map((a) => a.trim())
+        .filter(Boolean)
+        .slice(0, 8);
+      if (artists.length) profileLines.push(`好きなアーティスト: ${artists.join('、')}`);
+    }
+    pushSection(sections, 'マイページの公開プロフィール（本人入力）', profileLines);
+  }
+
   const { data: listRows, error: listErr } = await supabase
     .from('user_my_list_items')
     .select('title, artist, note, created_at')
@@ -97,4 +128,54 @@ export async function gatherUserTasteSignalsForAutoProfile(
     text = text.slice(0, MAX_SIGNAL_CHARS - 1) + '…';
   }
   return text;
+}
+
+/** Gemini が薄い要約しか返さないときの簡易フォールバック（公開プロフィール・履歴の抜粋） */
+export function buildFallbackTasteProfileFromSignals(signals: string): string | null {
+  const src = signals.trim();
+  if (!src) return null;
+
+  const sectionBody = (title: string): string[] => {
+    const re = new RegExp(`### ${title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\n([\\s\\S]*?)(?=\\n### |$)`);
+    const m = src.match(re);
+    if (!m?.[1]) return [];
+    return m[1]
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean);
+  };
+
+  const lines: string[] = [];
+
+  for (const line of sectionBody('マイページの公開プロフィール（本人入力）')) {
+    if (line.startsWith('一言:')) {
+      const body = line.slice(3).trim();
+      if (body) lines.push(`・${body}`);
+    } else if (line.startsWith('好きなアーティスト:')) {
+      const body = line.slice('好きなアーティスト:'.length).trim();
+      if (body) lines.push(`・好きなアーティスト: ${body}`);
+    } else if (line.startsWith('補足:')) {
+      const body = line.slice(3).trim();
+      if (body) lines.push(`・${body}`);
+    }
+  }
+
+  const history = sectionBody('選曲履歴（自分が貼った曲）')
+    .slice(0, 5)
+    .map((l) => l.replace(/^- /, '').trim())
+    .filter(Boolean);
+  if (history.length) {
+    lines.push(`・選曲履歴から: ${history.join(' / ')}`);
+  }
+
+  const favorites = sectionBody('お気に入り')
+    .slice(0, 4)
+    .map((l) => l.replace(/^- /, '').trim())
+    .filter(Boolean);
+  if (favorites.length) {
+    lines.push(`・お気に入り: ${favorites.join(' / ')}`);
+  }
+
+  if (!lines.length) return null;
+  return lines.slice(0, 8).join('\n');
 }

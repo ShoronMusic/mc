@@ -218,6 +218,18 @@ export function resolveOriginalReleaseDateFromMusic8Json(data: unknown): string 
   return null;
 }
 
+/**
+ * `data/songs/{artist}_{slug}.json` の `releaseDate` のみ（原盤）。
+ * `acf.ytreleasedate` / Spotify / WP 投稿 `date` は使わない（サイト表示・バックフィル用）。
+ */
+export function resolveOriginalReleaseDateFromMusic8WpSongsFileJson(data: unknown): string | null {
+  const obj = asObj(data);
+  if (!obj) return null;
+  const rd = asStr(obj.releaseDate ?? '').trim();
+  if (!rd) return null;
+  return parseFlexibleMusic8DateToPostgresDate(rd);
+}
+
 /** 保存済み `music8_song_data` から原盤日を復元 */
 export function resolveOriginalReleaseDateFromPersistedSnapshot(data: unknown): string | null {
   const o = asObj(data);

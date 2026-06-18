@@ -1,13 +1,19 @@
 'use client';
 
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import {
   getSafeInternalReturnPath,
   readRememberedGuideReturnPath,
 } from '@/lib/safe-return-path';
 
+function guideHeaderTitle(pathname: string | null): string {
+  if (pathname === '/guide/enjoy') return '楽しみ方';
+  return 'ご利用上の注意';
+}
+
 export function GuideLayoutHeader() {
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const fromQuery = getSafeInternalReturnPath(searchParams.get('returnTo'));
   const returnTo = fromQuery ?? readRememberedGuideReturnPath();
@@ -29,7 +35,7 @@ export function GuideLayoutHeader() {
           ) : null}
         </div>
         <span className="justify-self-center whitespace-nowrap text-sm font-medium text-white">
-          ご利用上の注意
+          {guideHeaderTitle(pathname)}
         </span>
         <span className="justify-self-end" aria-hidden />
       </div>

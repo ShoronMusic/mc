@@ -30,12 +30,14 @@ function GuideLayoutShellInner({ children }: { children: ReactNode }) {
   const searchParams = useSearchParams();
   const isModal = searchParams.get('modal') === '1';
   const isGuideIndex = pathname === '/guide' || pathname === '/guide/';
+  const isEnjoyPage = pathname === '/guide/enjoy';
+  const showModalBackLink = !isGuideIndex && !isEnjoyPage;
 
   if (isModal) {
     return (
       <div className="min-h-0 bg-gray-950 text-gray-100">
         <div className="mx-auto max-w-3xl px-4 py-6">
-          {!isGuideIndex ? (
+          {showModalBackLink ? (
             <div className="mb-4 border-b border-gray-800 pb-3">
               <Link
                 href="/guide?modal=1"

@@ -554,28 +554,38 @@ create policy "user_public_profile_select_visible"
 
 ---
 
-## 17. 部屋の AI 曲解説・曲クイズ（`user_room_ai_features`）
+## 17. 部屋の AI 曲解説・曲クイズ・おすすめ曲（`user_room_ai_features`）
 
-ログインユーザーがマイページで **AI曲解説**（comment-pack／従来の commentary）と **AI曲クイズ** を ON/OFF します。**未作成の行はどちらも ON** として扱います。
+ログインユーザーがマイページ「ユーザー機能」で **AI曲解説**・**AI曲クイズ**・**AIおすすめ曲** を、このアカウントの端末から API を呼ぶか ON/OFF します（部屋全体の許可はオーナー機能タブ）。**行が無いときはすべて ON** として扱います。
 
-- **マイページ**: 「ユーザー」タブの ON/OFF ボタン
+- **マイページ**: 「ユーザー機能」タブの ON/OFF ボタン
 - **API**: `GET` / `PUT` → `/api/user/room-ai-features`（セッション必須）
 - **RLS**: 本人の行のみ SELECT / INSERT / UPDATE / DELETE
 
-Supabase の **SQL Editor** で実行:
+Supabase の **SQL Editor** で実行（**再実行可**。ポリシーは一度作ると `create policy` だけ再流しすると `42710: policy ... already exists` になるため、`drop policy if exists` を挟む）:
 
 ```sql
 create table if not exists public.user_room_ai_features (
   user_id uuid primary key references auth.users (id) on delete cascade,
   ai_commentary_enabled boolean not null default true,
   ai_song_quiz_enabled boolean not null default true,
+  ai_next_song_recommend_enabled boolean not null default true,
   updated_at timestamptz not null default now()
 );
+
+-- 第 17 章の旧 SQL だけ流した DB 向け（列が無いとマイページが「テーブルがありません」と出続ける）
+alter table public.user_room_ai_features
+  add column if not exists ai_next_song_recommend_enabled boolean not null default true;
 
 create index if not exists user_room_ai_features_updated_idx
   on public.user_room_ai_features (updated_at desc);
 
 alter table public.user_room_ai_features enable row level security;
+
+drop policy if exists "user_room_ai_features_select_own" on public.user_room_ai_features;
+drop policy if exists "user_room_ai_features_insert_own" on public.user_room_ai_features;
+drop policy if exists "user_room_ai_features_update_own" on public.user_room_ai_features;
+drop policy if exists "user_room_ai_features_delete_own" on public.user_room_ai_features;
 
 create policy "user_room_ai_features_select_own"
   on public.user_room_ai_features for select
@@ -594,7 +604,14 @@ create policy "user_room_ai_features_delete_own"
   using (auth.uid() = user_id);
 ```
 
-テーブルが無い状態では API は 503 と案内文を返します。
+**既にテーブルとポリシーだけある**（`policy already exists` で止まった）場合は、次の 1 行だけでも可:
+
+```sql
+alter table public.user_room_ai_features
+  add column if not exists ai_next_song_recommend_enabled boolean not null default true;
+```
+
+テーブルが無い／列不足のとき、API はマイページに保存不可の案内を返します。
 
 ---
 
