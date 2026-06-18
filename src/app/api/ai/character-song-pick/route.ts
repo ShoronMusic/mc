@@ -1,5 +1,9 @@
 import { NextResponse } from 'next/server';
 import { checkCharacterSongPickRateLimit } from '@/lib/character-song-pick-rate-limit';
+import {
+  buildCharacterSongPickExcludes,
+  matchesExcludedUserSongArtistTitle,
+} from '@/lib/character-song-pick-exclude';
 import { getChatAiClientIp } from '@/lib/chat-ai-rate-limit';
 import { checkYouTubeSearchRateLimit } from '@/lib/youtube-search-rate-limit';
 import { formatArtistTitle } from '@/lib/format-song-display';
@@ -46,11 +50,24 @@ export async function POST(request: Request) {
 
     let currentSong: string | null = null;
     let currentSongStyle: string | null = null;
+    const supabase = await createClient();
+    let excludeBundle = {
+      excludeVideoIds: videoId ? [videoId] : [] as string[],
+      recentUserPicks: [] as { artist: string; song: string }[],
+      recentUserSongLabels: [] as string[],
+    };
+    if (roomId && supabase) {
+      excludeBundle = await buildCharacterSongPickExcludes(supabase, roomId, {
+        aiCharacterDisplayName,
+        nowPlayingVideoId: videoId || undefined,
+        maxUserPicks: USER_PICK_EXCLUDE_MAX,
+      });
+    }
+
     if (videoId) {
       const oembed = await fetchOEmbed(videoId);
       const title = oembed?.title ?? videoId;
       currentSong = formatArtistTitle(title, oembed?.author_name) || null;
-      const supabase = await createClient();
       if (supabase) {
         currentSongStyle = (await getStyleFromDb(supabase, videoId)) ?? null;
       }
@@ -59,7 +76,9 @@ export async function POST(request: Request) {
     const pick = await generateCharacterSongPick(messages, currentSong, currentSongStyle, {
       roomId: roomId || undefined,
       videoId: videoId || undefined,
-    });
+    }, excludeBundle.recentUserSongLabels.length > 0
+      ? { recentUserSongLabels: excludeBundle.recentUserSongLabels }
+      : undefined);
     if (!pick) {
       console.log('[ai/character-song-pick] no_pick', {
         roomId: roomId || '',
@@ -97,39 +116,24 @@ export async function POST(request: Request) {
       if (!ytRl.ok) {
         youtube = { ok: false, reason: 'rate_limit', retryAfterSec: ytRl.retryAfterSec };
       } else {
-        const excludeSet = new Set<string>();
-        if (videoId) excludeSet.add(videoId);
-        if (roomId) {
-          const supabase = await createClient();
-          if (supabase) {
-            const { data: roomHistoryRows, error: roomHistoryError } = await supabase
-              .from('room_playback_history')
-              .select('video_id, display_name')
-              .eq('room_id', roomId)
-              .order('played_at', { ascending: false })
-              .limit(USER_PICK_EXCLUDE_MAX * 3);
-            if (roomHistoryError && roomHistoryError.code !== '42P01') {
-              console.warn('[ai/character-song-pick] room_playback_history read failed', roomHistoryError.message);
-            } else if (Array.isArray(roomHistoryRows)) {
-              for (const row of roomHistoryRows as Array<{ video_id?: string | null; display_name?: string | null }>) {
-                const vid = typeof row.video_id === 'string' ? row.video_id.trim() : '';
-                if (!vid) continue;
-                const who = typeof row.display_name === 'string' ? row.display_name.trim() : '';
-                if (aiCharacterDisplayName && who === aiCharacterDisplayName) continue;
-                excludeSet.add(vid);
-                if (excludeSet.size >= USER_PICK_EXCLUDE_MAX) break;
-              }
-            }
-          }
-        }
-        const exclude = Array.from(excludeSet);
         const resolved = await resolveYoutubeQueryForPaste({
           query: pick.query,
           roomId: roomId || undefined,
           apiSource: 'api/ai/character-song-pick',
-          excludeVideoIds: exclude,
+          excludeVideoIds: excludeBundle.excludeVideoIds,
+          excludeUserSongPicks: excludeBundle.recentUserPicks,
         });
-        if (resolved.ok) {
+        if (
+          resolved.ok &&
+          matchesExcludedUserSongArtistTitle(resolved.artistTitle, excludeBundle.recentUserPicks)
+        ) {
+          console.log('[ai/character-song-pick] youtube_hit_matched_excluded_user_song', {
+            roomId: roomId || '',
+            resolvedArtistTitle: resolved.artistTitle,
+            resolvedVideoId: resolved.videoId,
+          });
+          youtube = { ok: false, reason: 'no_hit' };
+        } else if (resolved.ok) {
           youtube = {
             ok: true,
             videoId: resolved.videoId,
@@ -150,7 +154,9 @@ export async function POST(request: Request) {
             resolvedArtistTitle: resolved.artistTitle,
             resolvedVideoId: resolved.videoId,
             watchUrl: resolved.watchUrl,
-            excludedVideoIds: exclude.length > 0 ? exclude : undefined,
+            excludedVideoIds:
+              excludeBundle.excludeVideoIds.length > 0 ? excludeBundle.excludeVideoIds : undefined,
+            excludedUserSongPickCount: excludeBundle.recentUserPicks.length || undefined,
           });
         } else {
           youtube = { ok: false, reason: 'no_hit' };

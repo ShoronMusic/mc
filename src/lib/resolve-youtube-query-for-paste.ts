@@ -1,3 +1,4 @@
+import type { UserSongPickExclude } from '@/lib/character-song-pick-exclude';
 import { formatArtistTitle } from '@/lib/format-song-display';
 import { searchYouTubeWithFallback } from '@/lib/youtube-search';
 
@@ -7,6 +8,7 @@ export type ResolveYoutubeQueryForPasteInput = {
   /** searchYouTubeWithFallback のログ用 source */
   apiSource: string;
   excludeVideoIds?: string[];
+  excludeUserSongPicks?: UserSongPickExclude[];
 };
 
 export type ResolveYoutubeQueryForPasteOk = {
@@ -37,8 +39,11 @@ export async function resolveYoutubeQueryForPaste(
       roomId: input.roomId,
       source: input.apiSource,
     },
-    input.excludeVideoIds && input.excludeVideoIds.length > 0
-      ? { excludeVideoIds: input.excludeVideoIds }
+    input.excludeVideoIds?.length || input.excludeUserSongPicks?.length
+      ? {
+          excludeVideoIds: input.excludeVideoIds,
+          excludeUserSongPicks: input.excludeUserSongPicks,
+        }
       : undefined,
   );
   if (!hit) return { ok: false, reason: 'no_hit' };

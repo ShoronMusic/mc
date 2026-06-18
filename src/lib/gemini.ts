@@ -414,6 +414,7 @@ export async function generateCharacterSongPick(
   currentSong?: string | null,
   currentSongStyle?: string | null,
   usageMeta?: GeminiUsageLogMeta,
+  options?: { recentUserSongLabels?: readonly string[] },
 ): Promise<CharacterSongPick | null> {
   const model = getGeminiModel('character_song_pick');
   if (!model) return null;
@@ -427,6 +428,14 @@ export async function generateCharacterSongPick(
     .join('\n');
   const songHint = currentSong?.trim() ? `【現在の曲】${currentSong.trim()}\n` : '';
   const styleHint = currentSongStyle?.trim() ? `【現在の曲のジャンル】${currentSongStyle.trim()}\n` : '';
+  const recentUserLabels = (options?.recentUserSongLabels ?? [])
+    .map((s) => (typeof s === 'string' ? s.trim() : ''))
+    .filter(Boolean)
+    .slice(0, 24);
+  const recentUserHint =
+    recentUserLabels.length > 0
+      ? `・直近に参加者が選んだ曲は再選しない（別の YouTube 動画でも同じ曲名は不可）: ${recentUserLabels.join('、')}\n`
+      : '';
 
   const prompt = `あなたは洋楽に詳しいDJアシスタントです。この選曲ターンでは会話の空気に合う曲を1首だけ選びます。
 ・第2候補・別曲の列挙・「ほかにも」「次に○○も」など複数曲に触れる表現は禁止（1曲のみ）。
@@ -439,7 +448,7 @@ ${lines || '(会話なし)'}
 ・**AIキャラ自身が直前にかけた曲**や、**AI曲解説の話題だけ**に引きずって、参加者がかけている路線（例: US オルタナティブロック、90年代ロックなど）から大きく外れたジャンル（例: 盛り上がり目的だけのファンク／ディスコ連打）に飛ばさないでください。同じムードの中で次の一曲、または自然な横展開（同系統のアーティスト・同年代の近いサウンド）にしてください。
 ・上に【現在の曲】【現在の曲のジャンル】があるときは、**それに沿うか、会話で参加者が触れている系統に合わせる**ことを強く推奨します。ジャンルがロック／オルタナ系なのに、理由なくパーティー・ファンク中心だけを続けないでください。
 ・会話ログの「AI:」行は参考程度とし、**誰が選曲したか・何が流れているかは参加者の行と【現在の曲】を主**に判断してください。
-
+${recentUserHint}
 【出力ルール】
 ・候補がある場合は必ず3行だけで出力（行を増やさない）:
 1行目: YouTube検索用クエリ（Artist Song）

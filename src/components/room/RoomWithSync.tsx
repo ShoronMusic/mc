@@ -4981,6 +4981,7 @@ export default function RoomWithSync({
         videoId: vidForPick || undefined,
         roomId: charAutoPickCtxRef.current.roomId,
         roomTitle: roomDisplayTitleCurrent || roomTitle || undefined,
+        aiCharacterDisplayName: ownerAiCharacterNameRef.current || AI_CHARACTER_DEFAULT_NAME,
         isGuest: charAutoPickCtxRef.current.isGuest,
       }),
     })
@@ -5143,6 +5144,7 @@ export default function RoomWithSync({
             pasteIntent: 'ai_character_auto_song_pick',
             pickConfirmationText:
               typeof pick.confirmationText === 'string' ? pick.confirmationText : undefined,
+            aiCharacterDisplayName: ownerAiCharacterNameRef.current || AI_CHARACTER_DEFAULT_NAME,
             excludeVideoIds: (() => {
               const v = (videoIdRef.current ?? '').trim();
               return v ? [v] : [];

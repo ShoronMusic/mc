@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server';
+import { buildCharacterSongPickExcludes } from '@/lib/character-song-pick-exclude';
 import { getChatAiClientIp } from '@/lib/chat-ai-rate-limit';
 import { checkYouTubeSearchRateLimit } from '@/lib/youtube-search-rate-limit';
 import { resolveYoutubeQueryForPaste } from '@/lib/resolve-youtube-query-for-paste';
 import { isYouTubeConfigured } from '@/lib/youtube-search';
+import { createClient } from '@/lib/supabase/server';
 import {
   isYoutubeAiCharacterServerResolveEnabled,
   isYoutubeKeywordSearchEnabled,
@@ -30,12 +32,26 @@ export async function POST(request: Request) {
       typeof body?.pickConfirmationText === 'string'
         ? body.pickConfirmationText.trim().slice(0, 240)
         : '';
+    const aiCharacterDisplayName =
+      typeof body?.aiCharacterDisplayName === 'string' ? body.aiCharacterDisplayName.trim() : '';
     const rawExclude = body?.excludeVideoIds;
-    const excludeVideoIds: string[] = Array.isArray(rawExclude)
+    let excludeVideoIds: string[] = Array.isArray(rawExclude)
       ? rawExclude
           .filter((x: unknown): x is string => typeof x === 'string' && x.trim() !== '')
           .map((x: string) => x.trim())
       : [];
+    let excludeUserSongPicks: { artist: string; song: string }[] = [];
+    if (pasteIntent.startsWith('ai_character') && roomId) {
+      const supabase = await createClient();
+      if (supabase) {
+        const bundle = await buildCharacterSongPickExcludes(supabase, roomId, {
+          aiCharacterDisplayName,
+          maxUserPicks: 120,
+        });
+        excludeVideoIds = [...new Set([...excludeVideoIds, ...bundle.excludeVideoIds])];
+        excludeUserSongPicks = bundle.recentUserPicks;
+      }
+    }
     if (!query) {
       return NextResponse.json({ ok: false }, { status: 200 });
     }
@@ -66,6 +82,7 @@ export async function POST(request: Request) {
       roomId: roomId || undefined,
       apiSource: 'api/ai/paste-by-query',
       excludeVideoIds,
+      excludeUserSongPicks,
     });
     if (!resolved.ok) {
       console.log('[paste-by-query] no hit for query:', query);

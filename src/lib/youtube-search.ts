@@ -2,6 +2,11 @@
  * YouTube Data API v3 で検索（サーバー専用）
  * 環境変数 YOUTUBE_API_KEY が必要です。
  */
+import {
+  getArtistAndSong,
+} from '@/lib/format-song-display';
+import type { UserSongPickExclude } from '@/lib/character-song-pick-exclude';
+import { matchesExcludedUserSongPick } from '@/lib/character-song-pick-exclude';
 import { persistYouTubeApiUsageLog } from '@/lib/youtube-api-usage-log';
 
 export interface YouTubeSearchResult {
@@ -32,6 +37,8 @@ export function isYouTubeConfigured(): boolean {
 export type SearchYouTubeOptions = {
   /** 検索ヒットから除外する videoId（再生中の曲の再ヒット防止など） */
   excludeVideoIds?: readonly string[];
+  /** 参加者が直近選曲した曲（別 videoId でも同一曲なら除外） */
+  excludeUserSongPicks?: readonly UserSongPickExclude[];
 };
 
 export async function searchYouTube(
@@ -120,6 +127,14 @@ export async function searchYouTube(
       const sn = item?.snippet;
       if (!vid || !sn) continue;
       if (exclude.has(vid)) continue;
+      if (options?.excludeUserSongPicks && options.excludeUserSongPicks.length > 0) {
+        const parsed = getArtistAndSong(sn.title ?? '', sn.channelTitle ?? null);
+        const artist = (parsed.artist ?? '').trim();
+        const song = (parsed.song ?? '').trim();
+        if (artist || song) {
+          if (matchesExcludedUserSongPick(artist, song, options.excludeUserSongPicks)) continue;
+        }
+      }
       const thumbs = sn.thumbnails;
       const thumbUrl =
         thumbs?.medium?.url || thumbs?.high?.url || thumbs?.default?.url || undefined;
