@@ -28,6 +28,9 @@ assert.equal(compoundArtistCanonicalIfKnown('Kool & the Gang'), 'Kool & the Gang
 assert.equal(compoundArtistCanonicalIfKnown('Kool and the Gang'), 'Kool & the Gang');
 assert.equal(compoundArtistCanonicalIfKnown('Katrina & The Waves'), 'Katrina & The Waves');
 assert.equal(compoundArtistCanonicalIfKnown('Katrina and The Waves'), 'Katrina & The Waves');
+assert.equal(compoundArtistCanonicalIfKnown('Angus & Julia Stone'), 'Angus & Julia Stone');
+assert.equal(compoundArtistCanonicalIfKnown('Simon and Garfunkel'), 'Simon & Garfunkel');
+assert.equal(compoundArtistCanonicalIfKnown('Sleeping With Sirens'), 'Sleeping With Sirens');
 
 assert.equal(getMainArtist('Die With A Smile'), 'Die With A Smile');
 assert.equal(getArtistDisplayString('Die With A Smile'), 'Die With A Smile');

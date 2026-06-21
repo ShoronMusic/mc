@@ -1,6 +1,7 @@
 /**
  * 「&」「and」を含んでも**1組のアーティスト名**として扱う一覧。
- * ref/YTtoWP-YouTube動画をWP新規投稿で開く.js の exclusionArtists をベースに、
+ * ref/YTtoWP-YouTube動画をWP新規投稿で開く.js および
+ * chrome-extension-yttowp/content.js の exclusionArtists をベースに、
  * 本プロジェクト用の追加分を含む。
  *
  * 照合は大文字小文字無視。`and` と `&` は同一視してマッチする。

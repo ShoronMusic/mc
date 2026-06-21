@@ -12,6 +12,7 @@
 1. NotebookLM で新規ノートブックを作成する。
 2. **ソース**に次を追加する（推奨順）:
    - **本ファイル**（`NotebookLM用-楽しみ方プレゼン.md`）
+   - **`docs/guide-enjoy-page.md`**（`/guide/enjoy` ページの現行構成・全文 Markdown）
    - `docs/洋楽AIチャットの楽しみ方01.txt`（原稿・箇条書き）
    - （任意）`docs/pr-beta-feature-brief-ja.md`（β版 PR 概要）
    - （任意）画面キャプチャ・ロゴ（`videosozai/music_ai_chat_logo.png` 等）

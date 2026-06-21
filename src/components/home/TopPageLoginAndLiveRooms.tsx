@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   TopPageLoginEntry,
   type TopPageLoginEntryIntent,
@@ -14,13 +14,10 @@ type TopPageLoginAndLiveRoomsProps = {
 };
 
 /**
- * 開催中（参加者あり）の部屋があるときは、その一覧を主催導線より上に置く。
- * flex の order で並べ替え、HomeRoomLinks を再マウントしない。
- *
- * 未ログイン時は「新規で部屋を立ち上げる」「過去の主催を再開（ログイン）」から選び、同じ認証UIへ進む。
+ * 未ログイン時は「新規で部屋を立ち上げる」「過去の主催を再開（ログイン）」を上に、
+ * その下に開催中（参加者あり）の部屋一覧を置く。
  */
 export function TopPageLoginAndLiveRooms({ part = 'all' }: TopPageLoginAndLiveRoomsProps) {
-  const [hasActiveLiveRooms, setHasActiveLiveRooms] = useState(false);
   const [authIntent, setAuthIntent] = useState<TopPageLoginEntryIntent | null>(null);
   const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null);
 
@@ -52,10 +49,6 @@ export function TopPageLoginAndLiveRooms({ part = 'all' }: TopPageLoginAndLiveRo
   useEffect(() => {
     if (isLoggedIn === true) setAuthIntent(null);
   }, [isLoggedIn]);
-
-  const handleActivePresenceKnown = useCallback((hasActive: boolean) => {
-    setHasActiveLiveRooms(hasActive);
-  }, []);
 
   function renderHostColumn() {
     if (isLoggedIn === true) {
@@ -99,7 +92,7 @@ export function TopPageLoginAndLiveRooms({ part = 'all' }: TopPageLoginAndLiveRo
   }
 
   if (part === 'live') {
-    return <HomeRoomLinks onActivePresenceKnown={handleActivePresenceKnown} />;
+    return <HomeRoomLinks />;
   }
 
   if (part === 'auth') {
@@ -108,10 +101,8 @@ export function TopPageLoginAndLiveRooms({ part = 'all' }: TopPageLoginAndLiveRo
 
   return (
     <div className="flex flex-col gap-4">
-      <div className={hasActiveLiveRooms ? 'order-1' : 'order-2'}>
-        <HomeRoomLinks onActivePresenceKnown={handleActivePresenceKnown} />
-      </div>
-      <div className={hasActiveLiveRooms ? 'order-2' : 'order-1'}>{renderHostColumn()}</div>
+      {renderHostColumn()}
+      <HomeRoomLinks />
     </div>
   );
 }

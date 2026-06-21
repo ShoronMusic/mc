@@ -3,6 +3,7 @@
   "AC/DC",
   "Allie X",
   "Anderson .Paak & The Free Nationals",
+  "Angus & Julia Stone",
   "Belle and Sebastian",
   "Bob Marley and The Wailers",
   "Chance the Rapper",
@@ -43,7 +44,11 @@
   "Prince & The Revolution",
   "Q-Tip",
   "Salt-N-Pepa",
-  "Simon & Garfunkel",
+  {
+    "canonical": "Simon & Garfunkel",
+    "aliases": ["Simon and Garfunkel"]
+  },
+  "Sleeping With Sirens",
   "T-Pain",
   {
     "canonical": "Tegan and Sara",

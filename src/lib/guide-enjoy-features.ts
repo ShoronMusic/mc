@@ -5,12 +5,23 @@
 
 export type GuideEnjoyFeatureBadge = 'beta' | 'login' | 'optional';
 
+export type GuideEnjoyIllustration = {
+  src: string;
+  alt: string;
+  width: number;
+  height: number;
+  caption?: string;
+};
+
 export type GuideEnjoyFeature = {
   title: string;
   description: string;
+  /** 複数段落で表示する説明（指定時は description より優先） */
+  descriptionParagraphs?: readonly string[];
   href?: string;
   hrefLabel?: string;
   badge?: GuideEnjoyFeatureBadge;
+  image?: GuideEnjoyIllustration;
 };
 
 export type GuideEnjoyCategory = {
@@ -19,6 +30,8 @@ export type GuideEnjoyCategory = {
   tabLabel?: string;
   lead: string;
   features: GuideEnjoyFeature[];
+  /** 機能カードの列数（2 で縦2×横2など） */
+  featureGridCols?: 1 | 2;
 };
 
 export type GuideEnjoyStep = {
@@ -27,6 +40,10 @@ export type GuideEnjoyStep = {
   description: string;
   href?: string;
   hrefLabel?: string;
+  imageSrc: string;
+  imageAlt: string;
+  imageWidth: number;
+  imageHeight: number;
 };
 
 export const GUIDE_ENJOY_INTRO = {
@@ -44,11 +61,19 @@ export const GUIDE_ENJOY_USAGE_HIGHLIGHTS = [
     title: 'みんなでワイワイ',
     description:
       '友達や初対面の参加者と同じ部屋に入り、URL やライブラリで順番に選曲。曲解説をきっかけに感想を交わし、クイズやお題で盛り上がる。',
+    imageSrc: '/images/point_illust_01r2.png',
+    imageAlt: '複数の参加者が Music AI Chat でつながり、一緒に楽しむイラスト',
+    imageWidth: 390,
+    imageHeight: 221,
   },
   {
     title: 'ひとりでじっくり',
     description:
       '自分で会を立てて一人入室。好きな曲を流し、AI 解説を読みながら @ で深掘り質問。お気に入りやマイリストに残して次回につなげる。',
+    imageSrc: '/images/point_illust_02r2.png',
+    imageAlt: 'ヘッドフォンをつけて一人で曲を聴き、タブレットで楽しむイラスト',
+    imageWidth: 290,
+    imageHeight: 214,
   },
 ] as const;
 
@@ -59,22 +84,161 @@ export const GUIDE_ENJOY_THREE_STEPS: GuideEnjoyStep[] = [
     title: 'チャットルームを選んで入室',
     description:
       'トップページから開催中の部屋に入るか、ログインして自分で会を立ち上げます。ゲストでも参加できます。',
+    imageSrc: '/images/point_illust_03_1.png',
+    imageAlt: 'チャットルームに入室するイラスト',
+    imageWidth: 182,
+    imageHeight: 141,
   },
   {
     step: 2,
     title: '聴きたい曲を選曲',
     description:
       'YouTube の URL を発言欄に貼って送信するのが基本です。ライブラリから曲を選ぶ方法もあります。',
-    href: '/guide/first-song',
-    hrefLabel: '選曲のしかた',
+    imageSrc: '/images/point_illust_03_2.png',
+    imageAlt: 'YouTube URL を貼って選曲するイラスト',
+    imageWidth: 182,
+    imageHeight: 148,
   },
   {
     step: 3,
     title: '曲の動画（PV 等）を視聴',
     description:
       '部屋の参加者みんなで同じタイミングに再生されます。視聴しながらチャットで感想を伝え合えます。',
+    imageSrc: '/images/point_illust_03_3.png',
+    imageAlt: 'みんなで同時に動画を視聴するイラスト',
+    imageWidth: 133,
+    imageHeight: 141,
   },
 ];
+
+/** 3ステップの直後：選曲の基本操作と楽しみ方 */
+export type GuideEnjoySelectionMethod = {
+  step: number;
+  title: string;
+  /** タブボタン用の短いラベル */
+  tabLabel: string;
+  description: string;
+  /** 複数段落で表示する説明（指定時は description より優先） */
+  descriptionParagraphs?: readonly string[];
+  href?: string;
+  hrefLabel?: string;
+  badge?: GuideEnjoyFeatureBadge;
+  images?: readonly GuideEnjoyIllustration[];
+};
+
+export const GUIDE_ENJOY_SONG_SELECTION = {
+  title: '選曲方法',
+  lead:
+    '順番に曲を流していく——みんなで回す DJ ブースを再現できるのが、洋楽AIチャットの大きな魅力です。次の3つが選曲の基本。ほかにも、番が回るまでの準備や、流れを意識した楽しみ方があります。',
+  methods: [
+    {
+      step: 1,
+      tabLabel: 'YouTube URL',
+      title: 'YouTube で URL をコピーしてスタンバイ',
+      description:
+        'PC版YouTubeではアドレス欄のURLをコピー、または共有ボタン→コピー。スマホYouTubeアプリでは共有ボタン→コピーで曲のURLをコピーできます。自分の番になったら発言欄に貼って送信するのが基本です。',
+      descriptionParagraphs: [
+        'PC版YouTubeではアドレス欄のURLをコピー、または共有ボタン→コピー。',
+        'スマホYouTubeアプリでは共有ボタン→コピーで曲のURLをコピーできます。',
+        '自分の番になったら発言欄に貼って送信するのが基本です。',
+      ],
+      href: '/guide/first-song',
+      hrefLabel: '選曲のしかた（PC）',
+      images: [
+        {
+          src: '/images/point_illust_04_1.png',
+          alt: 'YouTube で URL をコピーして選曲するイラスト',
+          width: 327,
+          height: 254,
+          caption: 'PC版YouTube',
+        },
+        {
+          src: '/images/point_illust_04_2.png',
+          alt: '発言欄に URL を貼って送信するイラスト',
+          width: 150,
+          height: 254,
+          caption: 'スマホYouTubeアプリ',
+        },
+      ],
+    },
+    {
+      step: 2,
+      tabLabel: 'ライブラリ',
+      title: 'ライブラリから「選曲」ボタンで一発選曲',
+      description:
+        'チャット画面の右下の「ライブラリ」ボタンをクリックでライブラリが開きます。A 検索欄にキーワードを入れるか、B A–Z 索引で頭文字を選んで探します。C アーティスト一覧→D アーティスト詳細→E 曲一覧→F 曲詳細の順に進み、F の「この曲を選曲」で部屋に流せます。YouTube を行き来せず、アプリ内で完結します。',
+      descriptionParagraphs: [
+        'チャット画面の右下の「ライブラリ」ボタンをクリックでライブラリが開きます。',
+        'A 検索欄にアーティスト名・曲名を入れるか、B A–Z 索引から頭文字を選んで探します。',
+        'C アーティスト一覧でアーティストを選ぶと、D アーティスト詳細が表示されます。',
+        'E 曲一覧で曲を選ぶと、F 曲詳細にプレビュー動画と曲情報が出ます。',
+        'F の「この曲を選曲」を押すと、部屋にそのまま流せます。YouTube を行き来せず、アプリ内で完結します。',
+      ],
+      images: [
+        {
+          src: '/images/point_illust_04_3.png',
+          alt: 'ライブラリから選曲ボタンで曲を選ぶイラスト',
+          width: 161,
+          height: 250,
+        },
+      ],
+    },
+    {
+      step: 3,
+      tabLabel: 'マイリスト',
+      title: 'マイリスト・お気に入りに候補曲をストック',
+      description:
+        'マイページのマイリストやお気に入りに、あらかじめ次に流したい曲を登録しておけます。チャット画面のマイページボタンをクリックでマイページが開きます。マイリストから曲を選び「再生」→「この曲を選曲」を押す。または一覧の「選曲」を押すと、部屋にそのまま流せます。YouTube を行き来せず、アプリ内で完結します。',
+      descriptionParagraphs: [
+        'マイページのマイリストやお気に入りに、あらかじめ次に流したい曲を登録しておけます。',
+        'チャット画面のマイページボタンをクリックでマイページが開きます。',
+        'マイリストから曲を選び「再生」→「この曲を選曲」を押す。または一覧の「選曲」を押しても選べます。',
+        '部屋にそのまま流せます。YouTube を行き来せず、アプリ内で完結します。',
+      ],
+      badge: 'login',
+      images: [
+        {
+          src: '/images/point_illust_04_4.png',
+          alt: 'マイリストやお気に入りに曲をストックするイラスト',
+          width: 401,
+          height: 250,
+        },
+      ],
+    },
+  ] satisfies GuideEnjoySelectionMethod[],
+  basics: [
+    {
+      title: '自分の選曲が終わってから、次の番までに次曲をセット',
+      description:
+        '順番制のため、流れている曲を聴きながら次の一曲を決めておけます。候補リストに次曲を溜めておく方法も使えます。自分の番が来る前に選曲すると「予約済み」と表示されます。',
+      image: {
+        src: '/images/point_illust_05_1.png',
+        alt: '次の番までに次曲をセットするイラスト',
+        width: 300,
+        height: 49,
+      },
+    },
+    {
+      title: '選曲者と部屋オーナーは、再生中の曲をスキップできる',
+      description:
+        '自分が選んだ曲の再生中は、スキップで次の曲へ進められます。部屋オーナーも、必要に応じて再生中の曲をスキップできます。長尺のライブ映像など、途中で次に進めたいときに使います。',
+      image: {
+        src: '/images/point_illust_05_2.png',
+        alt: '再生中の曲をスキップするイラスト',
+        width: 300,
+        height: 49,
+      },
+    },
+  ] satisfies GuideEnjoyFeature[],
+  charmText:
+    '他の参加者の選曲にインスパイアされることも多く、部屋の流れを意識した選曲を楽しむのも醍醐味です。次の自分の番までに曲を探す緊張感とワクワク感も、音楽チャットならではの魅力のひとつ。お題プレイリスト・ミッションがあるときは、テーマに合う曲を予習して用意しておくのも、事前の楽しみ方のひとつです。',
+  charmImage: {
+    src: '/images/point_illust_06_1.png',
+    alt: '部屋の流れを意識した選曲を楽しむイラスト',
+    width: 700,
+    height: 388,
+  },
+};
 
 /** タブより上に常時表示するセクション（txt の「チャットルームならでは」「マルチデバイス」） */
 export const GUIDE_ENJOY_CORE_SECTIONS: GuideEnjoyCategory[] = [
@@ -82,18 +246,29 @@ export const GUIDE_ENJOY_CORE_SECTIONS: GuideEnjoyCategory[] = [
     id: 'room-unique',
     title: 'チャットルームならでは楽しみ方',
     lead: '同時視聴とチャットが一体になっているのが、このサービスのいちばんの特徴です。',
+    featureGridCols: 2,
     features: [
       {
         title: '選曲は順番制で、再生中は参加者同時視聴',
         description:
           '流れている曲は全員が同じタイミングで聴きます。次の曲は順番に選んでいく使い方が基本です。',
+        image: {
+          src: '/images/point_illust_07_1.png',
+          alt: '順番制で参加者全員が同時に視聴するイラスト',
+          width: 247,
+          height: 250,
+        },
       },
       {
         title: '視聴しながらテキスト入力で会話',
         description:
           '再生中の曲への感想や雑談を、その場でやり取りできます。',
-        href: '/guide/chat',
-        hrefLabel: 'チャットのマナー',
+        image: {
+          src: '/images/point_illust_07_2.png',
+          alt: '視聴しながらテキスト入力で会話するイラスト',
+          width: 231,
+          height: 250,
+        },
       },
       {
         title: '趣向や年代の異なるユーザーとの出会い',
@@ -135,13 +310,48 @@ export const GUIDE_ENJOY_CORE_SECTIONS: GuideEnjoyCategory[] = [
   },
 ];
 
+/** 「もっと楽しむ」タブの直前：2種類のオリジナル AI の役割概要 */
+export type GuideEnjoyOriginalAiRole = {
+  id: string;
+  title: string;
+  tagline: string;
+  description: string;
+  relatedTabId: GuideEnjoyCategory['id'];
+  badge?: GuideEnjoyFeatureBadge;
+};
+
+export const GUIDE_ENJOY_ORIGINAL_AIS = {
+  title: '2つのオリジナル AI がサポート',
+  lead:
+    '洋楽AIチャットには、役割の異なる2種類のオリジナル AI があります。どちらも部屋の体験を豊かにします。',
+  roles: [
+    {
+      id: 'ai-curator',
+      title: 'AI キュレーター',
+      tagline: '選曲の進行をナビゲートし、解説・質問・おススメ曲を提案する AI',
+      description:
+        'システム側の AI が、選曲の順番や進行を案内します。曲が流れるたびに短い曲解説を出し、@ 付きの質問に答え、次に聴く候補（おススメ曲）を提案することもあります。場の流れをつくる「司会・解説役」です。',
+      relatedTabId: 'ai-support',
+    },
+    {
+      id: 'ai-agent',
+      title: 'AI エージェント',
+      tagline: 'ユーザーと同じ立場で選曲に参加し、会話で場を盛り上げる AI',
+      description:
+        '人間の参加者と同じように、順番が回ってきたら曲を選ぶこともあります。会話に合いの手を入れたり、参加者が少ないときの相棒として、部屋の空気をやわらげます。キャラクター性のある「一緒に楽しむ仲間」です。',
+      relatedTabId: 'ai-agent',
+      badge: 'beta',
+    },
+  ] satisfies GuideEnjoyOriginalAiRole[],
+} as const;
+
 /** txt の後半セクション（タブ切り替え） */
 export const GUIDE_ENJOY_TAB_CATEGORIES: GuideEnjoyCategory[] = [
   {
     id: 'ai-support',
-    title: '便利な AI サポート機能',
+    title: 'AI キュレーター（便利な AI サポート）',
     tabLabel: 'AI',
-    lead: '選曲の進行や解説、質問対応を AI がサポートします。',
+    lead: '選曲の進行ナビ、曲解説、@ 質問、おススメ曲提案など、AI キュレーターがサポートします。',
     features: [
       {
         title: '選曲の順番は AI が先導',
@@ -162,13 +372,19 @@ export const GUIDE_ENJOY_TAB_CATEGORIES: GuideEnjoyCategory[] = [
         href: '/guide/ai',
         hrefLabel: '質問のしかた',
       },
+      {
+        title: 'いま流れた曲をもとに、次に聴く候補を AI が提案',
+        description:
+          '曲の流れに合わせて、次に聴く候補を AI が提案します。ひとりで新しい曲を開拓したいときにも向いています。',
+        badge: 'beta',
+      },
     ],
   },
   {
     id: 'ai-agent',
-    title: '愉快な AI エージェントも参加',
+    title: 'AI エージェント（愉快な参加型 AI）',
     tabLabel: 'エージェント',
-    lead: '人間の参加者に加え、キャラクター性のある AI エージェントも部屋に加わることがあります。',
+    lead: 'ユーザーと同じ立場で選曲に参加し、会話に入って場を盛り上げる AI エージェントです。',
     features: [
       {
         title: 'ユーザーに交じり AI エージェントも選曲参加',
@@ -194,18 +410,12 @@ export const GUIDE_ENJOY_TAB_CATEGORIES: GuideEnjoyCategory[] = [
     id: 'while-watching',
     title: '曲を視聴しながら楽しめる機能',
     tabLabel: '視聴中',
-    lead: '聴いている最中や直後に、クイズやおすすめ、曲情報を楽しめます。',
+    lead: '聴いている最中や直後に、クイズや曲情報を楽しめます。',
     features: [
       {
         title: '曲解説のあと、同じ曲の文脈で三択クイズが出題',
         description:
           '条件を満たす曲では、曲解説のあと三択クイズが出ることがあります。みんなで答えて正解発表を待つ参加型の楽しみ方です。',
-        badge: 'beta',
-      },
-      {
-        title: 'いま流れた曲をもとに、次に聴く候補を AI が提案',
-        description:
-          '曲の流れに合わせて、次に聴く候補を AI が提案します。ひとりで新しい曲を開拓したいときにも向いています。',
         badge: 'beta',
       },
       {

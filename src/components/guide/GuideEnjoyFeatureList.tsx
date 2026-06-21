@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useState } from 'react';
@@ -7,6 +8,8 @@ import {
   GUIDE_ENJOY_BADGE_LABELS,
   GUIDE_ENJOY_CORE_SECTIONS,
   GUIDE_ENJOY_INTRO,
+  GUIDE_ENJOY_ORIGINAL_AIS,
+  GUIDE_ENJOY_SONG_SELECTION,
   GUIDE_ENJOY_TAB_CATEGORIES,
   GUIDE_ENJOY_THREE_STEPS,
   GUIDE_ENJOY_USAGE_HIGHLIGHTS,
@@ -33,6 +36,26 @@ function FeatureBadge({ badge }: { badge: GuideEnjoyFeatureBadge }) {
   );
 }
 
+function SelectionMethodDescription({
+  description,
+  descriptionParagraphs,
+}: {
+  description: string;
+  descriptionParagraphs?: readonly string[];
+}) {
+  if (descriptionParagraphs?.length) {
+    return (
+      <div className="mt-2 space-y-2 text-sm text-gray-400">
+        {descriptionParagraphs.map((paragraph) => (
+          <p key={paragraph}>{paragraph}</p>
+        ))}
+      </div>
+    );
+  }
+
+  return <p className="mt-2 text-sm text-gray-400">{description}</p>;
+}
+
 function EnjoyCategoryPanel({
   category,
   showHeading = true,
@@ -42,6 +65,8 @@ function EnjoyCategoryPanel({
   showHeading?: boolean;
   linkSearchParams?: { modal?: string; returnTo?: string };
 }) {
+  const twoColGrid = category.featureGridCols === 2;
+
   return (
     <section className="space-y-4" aria-labelledby={`enjoy-${category.id}`}>
       <div>
@@ -56,29 +81,64 @@ function EnjoyCategoryPanel({
         )}
         <p className={`text-sm text-gray-500 ${showHeading ? 'mt-1' : ''}`}>{category.lead}</p>
       </div>
-      <ul className="grid gap-3">
-        {category.features.map((feature) => (
+      <ul className={`grid gap-3 ${twoColGrid ? 'sm:grid-cols-2' : ''}`}>
+        {category.features.map((feature) => {
+          const imageBelow = Boolean(feature.image && twoColGrid);
+          const imageBeside = Boolean(feature.image && !twoColGrid);
+
+          return (
           <li
             key={feature.title}
-            className="rounded-xl border border-gray-700 bg-gray-900/50 p-4 transition hover:border-gray-600"
+            className="flex flex-col rounded-xl border border-gray-700 bg-gray-900/50 transition hover:border-gray-600"
           >
-            <div className="flex flex-wrap items-start justify-between gap-2">
-              <h3 className="font-semibold text-white">{feature.title}</h3>
-              {feature.badge ? <FeatureBadge badge={feature.badge} /> : null}
-            </div>
-            <p className="mt-2 text-gray-400">{feature.description}</p>
-            {feature.href ? (
-              <p className="mt-3">
-                <Link
-                  href={guideInternalHref(feature.href, linkSearchParams)}
-                  className="text-sm text-sky-400 underline-offset-2 hover:text-sky-300 hover:underline"
+            <div
+              className={
+                imageBeside
+                  ? 'flex flex-1 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between'
+                  : imageBelow
+                    ? 'flex flex-1 flex-col p-4'
+                    : 'flex-1 p-4'
+              }
+            >
+              <div className={imageBeside ? 'min-w-0 flex-1 p-4 pb-0 sm:pb-4' : ''}>
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <h3 className="font-semibold text-white">{feature.title}</h3>
+                  {feature.badge ? <FeatureBadge badge={feature.badge} /> : null}
+                </div>
+                <p className="mt-2 text-sm text-gray-400">{feature.description}</p>
+                {feature.href ? (
+                  <p className="mt-3">
+                    <Link
+                      href={guideInternalHref(feature.href, linkSearchParams)}
+                      className="text-sm text-sky-400 underline-offset-2 hover:text-sky-300 hover:underline"
+                    >
+                      {feature.hrefLabel ?? '詳しく見る'} →
+                    </Link>
+                  </p>
+                ) : null}
+              </div>
+              {feature.image ? (
+                <div
+                  className={
+                    imageBelow
+                      ? 'mt-3 flex justify-center'
+                      : 'flex shrink-0 justify-end px-3 py-3 sm:px-4 sm:py-4'
+                  }
                 >
-                  {feature.hrefLabel ?? '詳しく見る'} →
-                </Link>
-              </p>
-            ) : null}
+                  <Image
+                    src={feature.image.src}
+                    alt={feature.image.alt}
+                    width={feature.image.width}
+                    height={feature.image.height}
+                    className="h-auto shrink-0"
+                    sizes={`${feature.image.width}px`}
+                  />
+                </div>
+              ) : null}
+            </div>
           </li>
-        ))}
+          );
+        })}
       </ul>
     </section>
   );
@@ -91,8 +151,14 @@ export function GuideEnjoyFeatureList() {
     returnTo: searchParams.get('returnTo') ?? undefined,
   };
   const [activeTabId, setActiveTabId] = useState(GUIDE_ENJOY_TAB_CATEGORIES[0]?.id ?? 'ai-support');
+  const [activeSelectionStep, setActiveSelectionStep] = useState(
+    GUIDE_ENJOY_SONG_SELECTION.methods[0]?.step ?? 1,
+  );
   const activeCategory =
     GUIDE_ENJOY_TAB_CATEGORIES.find((c) => c.id === activeTabId) ?? GUIDE_ENJOY_TAB_CATEGORIES[0];
+  const activeSelectionMethod =
+    GUIDE_ENJOY_SONG_SELECTION.methods.find((m) => m.step === activeSelectionStep) ??
+    GUIDE_ENJOY_SONG_SELECTION.methods[0];
 
   return (
     <article className="space-y-8 text-sm leading-relaxed text-gray-300">
@@ -102,14 +168,27 @@ export function GuideEnjoyFeatureList() {
         </p>
         <h1 className="text-2xl font-bold text-white">{GUIDE_ENJOY_INTRO.title}</h1>
         <p className="text-gray-400">{GUIDE_ENJOY_INTRO.lead}</p>
-        <ul className="grid gap-3 sm:grid-cols-2">
+        <ul className="flex flex-nowrap items-start gap-2 overflow-x-auto">
           {GUIDE_ENJOY_USAGE_HIGHLIGHTS.map((pattern) => (
             <li
               key={pattern.title}
-              className="rounded-xl border border-gray-700 bg-gray-900/60 p-4"
+              className="flex shrink-0 flex-col rounded-xl border border-gray-700 bg-gray-900/60"
+              style={{ width: pattern.imageWidth + 24 }}
             >
-              <h2 className="text-base font-semibold text-white">{pattern.title}</h2>
-              <p className="mt-2 text-sm text-gray-400">{pattern.description}</p>
+              <div className="p-4 pb-0">
+                <h2 className="text-base font-semibold text-white">{pattern.title}</h2>
+                <p className="mt-2 text-sm text-gray-400">{pattern.description}</p>
+              </div>
+              <div className="px-3 pb-3">
+                <Image
+                  src={pattern.imageSrc}
+                  alt={pattern.imageAlt}
+                  width={pattern.imageWidth}
+                  height={pattern.imageHeight}
+                  className="mt-4 h-auto w-full"
+                  sizes={`${pattern.imageWidth}px`}
+                />
+              </div>
             </li>
           ))}
         </ul>
@@ -126,24 +205,176 @@ export function GuideEnjoyFeatureList() {
           {GUIDE_ENJOY_THREE_STEPS.map((item) => (
             <li
               key={item.step}
-              className="rounded-xl border border-sky-800/50 bg-sky-950/25 p-4"
+              className="flex flex-col rounded-xl border border-sky-800/50 bg-sky-950/25"
             >
-              <p className="text-xs font-bold tabular-nums text-sky-400">STEP {item.step}</p>
-              <h3 className="mt-1 font-semibold text-white">{item.title}</h3>
-              <p className="mt-2 text-sm text-gray-400">{item.description}</p>
-              {item.href ? (
-                <p className="mt-3">
-                  <Link
-                    href={guideInternalHref(item.href, linkSearchParams)}
-                    className="text-sm text-sky-400 underline-offset-2 hover:text-sky-300 hover:underline"
-                  >
-                    {item.hrefLabel ?? '詳しく見る'} →
-                  </Link>
-                </p>
-              ) : null}
+              <div className="p-4 pb-0">
+                <p className="text-xs font-bold tabular-nums text-sky-400">STEP {item.step}</p>
+                <h3 className="mt-1 font-semibold text-white">{item.title}</h3>
+                <p className="mt-2 text-sm text-gray-400">{item.description}</p>
+                {item.href ? (
+                  <p className="mt-3">
+                    <Link
+                      href={guideInternalHref(item.href, linkSearchParams)}
+                      className="text-sm text-sky-400 underline-offset-2 hover:text-sky-300 hover:underline"
+                    >
+                      {item.hrefLabel ?? '詳しく見る'} →
+                    </Link>
+                  </p>
+                ) : null}
+              </div>
+              <div className="mt-4 flex justify-center px-3 pb-3">
+                <Image
+                  src={item.imageSrc}
+                  alt={item.imageAlt}
+                  width={item.imageWidth}
+                  height={item.imageHeight}
+                  className="h-auto"
+                  sizes={`${item.imageWidth}px`}
+                />
+              </div>
             </li>
           ))}
         </ol>
+      </section>
+
+      <section className="space-y-4" aria-labelledby="enjoy-song-selection-heading">
+        <div>
+          <h2 id="enjoy-song-selection-heading" className="text-base font-semibold text-white">
+            {GUIDE_ENJOY_SONG_SELECTION.title}
+          </h2>
+          <p className="mt-1 text-sm text-gray-500">{GUIDE_ENJOY_SONG_SELECTION.lead}</p>
+        </div>
+        <div
+          role="tablist"
+          aria-label="選曲方法"
+          className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-1 [scrollbar-width:thin]"
+        >
+          {GUIDE_ENJOY_SONG_SELECTION.methods.map((item) => {
+            const selected = item.step === activeSelectionStep;
+            return (
+              <button
+                key={item.step}
+                type="button"
+                role="tab"
+                id={`enjoy-selection-tab-${item.step}`}
+                aria-selected={selected}
+                aria-controls={`enjoy-selection-tabpanel-${item.step}`}
+                onClick={() => setActiveSelectionStep(item.step)}
+                className={`shrink-0 rounded-lg px-3 py-2 text-sm font-medium transition ${
+                  selected
+                    ? 'bg-emerald-900/60 text-emerald-100 shadow-sm ring-1 ring-emerald-700/50'
+                    : 'bg-gray-800/80 text-gray-400 hover:bg-gray-800 hover:text-gray-200'
+                }`}
+              >
+                {item.tabLabel}
+              </button>
+            );
+          })}
+        </div>
+        {activeSelectionMethod ? (
+          <div
+            role="tabpanel"
+            id={`enjoy-selection-tabpanel-${activeSelectionMethod.step}`}
+            aria-labelledby={`enjoy-selection-tab-${activeSelectionMethod.step}`}
+            className="rounded-xl border border-emerald-800/45 bg-emerald-950/20"
+          >
+            <div
+              className={
+                activeSelectionMethod.images?.length
+                  ? 'flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between'
+                  : 'p-4'
+              }
+            >
+              <div
+                className={
+                  activeSelectionMethod.images?.length ? 'min-w-0 flex-1 p-4 pb-0 sm:pb-4' : ''
+                }
+              >
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <h3 className="font-semibold text-white">{activeSelectionMethod.title}</h3>
+                  {activeSelectionMethod.badge ? (
+                    <FeatureBadge badge={activeSelectionMethod.badge} />
+                  ) : null}
+                </div>
+                <SelectionMethodDescription
+                  description={activeSelectionMethod.description}
+                  descriptionParagraphs={activeSelectionMethod.descriptionParagraphs}
+                />
+                {activeSelectionMethod.href ? (
+                  <p className="mt-3">
+                    <Link
+                      href={guideInternalHref(activeSelectionMethod.href, linkSearchParams)}
+                      className="text-sm text-sky-400 underline-offset-2 hover:text-sky-300 hover:underline"
+                    >
+                      {activeSelectionMethod.hrefLabel ?? '詳しく見る'} →
+                    </Link>
+                  </p>
+                ) : null}
+              </div>
+              {activeSelectionMethod.images?.length ? (
+                <div className="flex shrink-0 flex-nowrap items-end justify-end gap-2 px-3 py-3 sm:gap-3 sm:px-4 sm:py-4">
+                  {activeSelectionMethod.images.map((image) => (
+                    <figure key={image.src} className="flex shrink-0 flex-col items-center">
+                      {image.caption ? (
+                        <figcaption className="mb-1.5 text-center text-xs font-medium text-gray-300">
+                          {image.caption}
+                        </figcaption>
+                      ) : null}
+                      <Image
+                        src={image.src}
+                        alt={image.alt}
+                        width={image.width}
+                        height={image.height}
+                        className="h-auto shrink-0"
+                        sizes={`${image.width}px`}
+                      />
+                    </figure>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+        <ul className="grid gap-3 sm:grid-cols-2">
+          {GUIDE_ENJOY_SONG_SELECTION.basics.map((item) => (
+            <li
+              key={item.title}
+              className="flex flex-col rounded-xl border border-gray-700 bg-gray-900/50 p-4"
+            >
+              <h3 className="break-keep font-semibold text-white">{item.title}</h3>
+              <p className="mt-2 flex-1 break-keep text-sm leading-relaxed text-gray-400">
+                {item.description}
+              </p>
+              {item.image ? (
+                <div className="mt-3 flex justify-center overflow-x-auto">
+                  <Image
+                    src={item.image.src}
+                    alt={item.image.alt}
+                    width={item.image.width}
+                    height={item.image.height}
+                    className="h-auto w-[300px] max-w-none shrink-0"
+                    sizes="300px"
+                  />
+                </div>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+        <div className="rounded-xl border border-violet-800/40 bg-violet-950/20 px-4 py-3">
+          <p className="break-keep text-sm leading-relaxed text-gray-400">
+            {GUIDE_ENJOY_SONG_SELECTION.charmText}
+          </p>
+          <div className="mt-3 flex justify-center overflow-x-auto">
+            <Image
+              src={GUIDE_ENJOY_SONG_SELECTION.charmImage.src}
+              alt={GUIDE_ENJOY_SONG_SELECTION.charmImage.alt}
+              width={GUIDE_ENJOY_SONG_SELECTION.charmImage.width}
+              height={GUIDE_ENJOY_SONG_SELECTION.charmImage.height}
+              className="h-auto w-full max-w-[700px] shrink-0"
+              sizes="(max-width: 768px) 100vw, 700px"
+            />
+          </div>
+        </div>
       </section>
 
       {GUIDE_ENJOY_CORE_SECTIONS.map((section) => (
@@ -161,6 +392,39 @@ export function GuideEnjoyFeatureList() {
           </h2>
           <p className="mt-1 text-xs text-gray-500">タブを切り替えて、機能をカテゴリごとに確認できます。</p>
         </div>
+
+        <section className="space-y-4" aria-labelledby="enjoy-original-ais-heading">
+          <div>
+            <h3 id="enjoy-original-ais-heading" className="text-sm font-semibold text-white">
+              {GUIDE_ENJOY_ORIGINAL_AIS.title}
+            </h3>
+            <p className="mt-1 text-xs text-gray-500">{GUIDE_ENJOY_ORIGINAL_AIS.lead}</p>
+          </div>
+          <ul className="grid gap-3 sm:grid-cols-2">
+            {GUIDE_ENJOY_ORIGINAL_AIS.roles.map((role) => (
+              <li
+                key={role.id}
+                className="flex flex-col rounded-xl border border-gray-700 bg-gray-900/50 p-4"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <h4 className="font-semibold text-white">{role.title}</h4>
+                  {role.badge ? <FeatureBadge badge={role.badge} /> : null}
+                </div>
+                <p className="mt-2 text-sm font-medium text-sky-200/90">{role.tagline}</p>
+                <p className="mt-2 flex-1 text-sm text-gray-400">{role.description}</p>
+                <p className="mt-3">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTabId(role.relatedTabId)}
+                    className="text-sm text-sky-400 underline-offset-2 hover:text-sky-300 hover:underline"
+                  >
+                    詳しい機能を見る →
+                  </button>
+                </p>
+              </li>
+            ))}
+          </ul>
+        </section>
 
         <div
           role="tablist"
