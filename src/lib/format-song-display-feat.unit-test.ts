@@ -366,6 +366,25 @@ assert.equal(isSupergroupByManualHints('Traveling Wilburys'), true);
   assert.equal(r.artistLabel, 'SZA, Tame Impala');
 }
 
+// 「Dr. Dre - The Next Episode … ft. …」: The 始まり曲名をバンド名と誤判定して左右入れ替えしない
+{
+  const title =
+    'Dr. Dre - The Next Episode (Official Music Video) ft. Snoop Dogg, Kurupt, Nate Dogg';
+  const r = getArtistAndSong(title, 'DrDreVEVO', { youtubeChannelTitle: 'Dr. Dre' });
+  assert.match(r.artistDisplay ?? '', /Dr\.?\s*Dre/i);
+  assert.match(r.artistDisplay ?? '', /Snoop Dogg/i);
+  assert.ok(/Next Episode/i.test(r.song));
+  const labels = buildAiCommentaryPromptLabels({
+    artistDisplay: r.artistDisplay,
+    artist: r.artist,
+    authorName: 'DrDreVEVO',
+    song: r.song,
+    titleFallback: title,
+  });
+  assert.ok(/Next Episode/i.test(labels.songLabel));
+  assert.match(labels.artistLabel, /Dr\.?\s*Dre/i);
+}
+
 console.log('format-song-display feat separator unit tests: OK');
 
 // 「Paramore - Paramore: Hard Times」のような二重アーティスト表記を落とす

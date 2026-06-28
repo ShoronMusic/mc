@@ -893,6 +893,87 @@ function leadingArtistSegmentBeforeFeat(segment: string): string {
   return (m?.[1] ?? s).trim();
 }
 
+/** 「The Next Episode」等、The 始まりでもバンド名ではなく曲タイトルになりやすい語 */
+function thePrefixedSegmentLooksLikeSongTitle(segment: string): boolean {
+  const t = segment.trim();
+  if (!/^The\s+/i.test(t)) return false;
+  const afterThe = t.replace(/^The\s+/i, '').trim();
+  if (!afterThe) return false;
+  const words = afterThe.split(/\s+/).filter(Boolean);
+  if (words.length < 1 || words.length > 4) return false;
+  const commonTitleWords = new Set([
+    'next',
+    'episode',
+    'first',
+    'last',
+    'best',
+    'only',
+    'one',
+    'same',
+    'other',
+    'whole',
+    'real',
+    'new',
+    'old',
+    'true',
+    'good',
+    'great',
+    'right',
+    'wrong',
+    'long',
+    'short',
+    'end',
+    'beginning',
+    'time',
+    'day',
+    'night',
+    'way',
+    'life',
+    'love',
+    'story',
+    'song',
+    'moment',
+    'answer',
+    'reason',
+    'season',
+    'show',
+    'game',
+    'party',
+    'ride',
+    'walk',
+    'run',
+    'change',
+    'memory',
+    'thing',
+    'man',
+    'woman',
+    'girl',
+    'boy',
+    'world',
+    'home',
+    'heart',
+    'soul',
+    'mind',
+    'dream',
+    'star',
+    'moon',
+    'sun',
+    'sky',
+    'sea',
+    'road',
+    'street',
+    'door',
+    'fire',
+    'water',
+    'wind',
+    'rain',
+    'snow',
+    'light',
+    'dark',
+  ]);
+  return words.every((w) => commonTitleWords.has(w.toLowerCase().replace(/[^a-z]/g, '')));
+}
+
 /**
  * タイトルから取った曲名に、客演っぽい語（with / and / & / feat）が含まれる可能性があるか。
  * このとき概要欄の単独曲名と突き合わせる（「Be With You」の with を誤爆しやすい）。
@@ -1278,11 +1359,23 @@ export function getArtistAndSong(
     const keepLongerCapsTokenLeftAsArtist =
       bothStylizedCapsTokens && left.length >= right.length;
 
+    /**
+     * 左が「A, B, C - 曲名」のカンマ共演（& / and / × 無し）のとき、曲名が複語で looksLikeArtistName を通すと
+     * branch 2（左の方が長い→逆順）で誤スワップする（例: Bryan Adams, Rod Stewart, Sting - All For Love）。
+     */
+    const artistCommaListFormLeftOnly =
+      /,\s+[A-Za-z]/.test(left.trim()) && !multiArtistOnRight;
+
+    /** parseArtistTitle が曲側の ft. を左（アーティスト）へ移したとき（Dr. Dre ft. … - The Next Episode 等） */
+    const artistFeatFormLeftOnly = /\b(?:ft\.?|feat\.?|fet\.|featuring)\s+/i.test(left.trim());
+    const artistLineupFormOnLeft = artistCommaListFormLeftOnly || artistFeatFormLeftOnly;
+
     // 3) oEmbed が「曲名 - アーティスト」で、右に & / and（バンド名）・左に無いときは入れ替え。
     //    チャンネルが hueylewisofficial のようにアーティスト文字列と一致しないケースもここで救う。
     const shouldSwapTitleArtistOrder =
       !channelLooksLikeRight &&
       !channelLooksLikeLeft &&
+      !artistLineupFormOnLeft &&
       multiArtistOnRight &&
       !multiArtistOnLeft &&
       looksLikeArtistName(right) &&
@@ -1299,7 +1392,8 @@ export function getArtistAndSong(
       /^The\s+/i.test(right.trim()) &&
       rightTheWords.length >= 2 &&
       rightTheWords.length <= 4 &&
-      !/\b(will|come|again|you|me|my|your|our|this|that|to|for|of|in|on)\b/i.test(right);
+      !/\b(will|come|again|you|me|my|your|our|this|that|to|for|of|in|on)\b/i.test(right) &&
+      !thePrefixedSegmentLooksLikeSongTitle(right);
     /** 「The Prodigy - Breathe」「The Beatles - Hey Jude」型。左が The 始まりバンド名なのに branch 2 で誤スワップしない */
     const leftTheWords = left
       .trim()
@@ -1312,6 +1406,7 @@ export function getArtistAndSong(
       !/\b(will|come|again|you|me|my|your|our|this|that|to|for|of|in|on)\b/i.test(left);
     const songFirstLeadingTheOnRight =
       !channelLooksLikeLeft &&
+      !artistLineupFormOnLeft &&
       looksLikeArtistName(right) &&
       looksLikeSongTitle(left) &&
       rightLooksLikeTheBandName &&
@@ -1327,6 +1422,7 @@ export function getArtistAndSong(
     const songFirstMultiWordLeftSingleWordRightLonger =
       !channelLooksLikeLeft &&
       !channelLooksLikeRight &&
+      !artistLineupFormOnLeft &&
       looksLikeArtistName(right) &&
       looksLikeSongTitle(left) &&
       /\s/.test(left.trim()) &&
@@ -1342,13 +1438,6 @@ export function getArtistAndSong(
      * leftLooksLikeStrongArtistCandidate が & を単語扱いして false になり、下の branch 2 だけで誤スワップするのを防ぐ。
      */
     const artistDuoFormLeftOnly = multiArtistOnLeft && !multiArtistOnRight;
-
-    /**
-     * 左が「A, B, C - 曲名」のカンマ共演（& / and / × 無し）のとき、曲名が複語で looksLikeArtistName を通すと
-     * branch 2（左の方が長い→逆順）で誤スワップする（例: Bryan Adams, Rod Stewart, Sting - All For Love）。
-     */
-    const artistCommaListFormLeftOnly =
-      /,\s+[A-Za-z]/.test(left.trim()) && !multiArtistOnRight;
 
     // swap条件:
     // 1) チャンネル名が右側に含まれる（強い根拠）
@@ -1367,7 +1456,7 @@ export function getArtistAndSong(
         !bothSingleWordLatinArtistLike &&
         !artistFirstLikelySingleLeftMultiWordRight &&
         !artistDuoFormLeftOnly &&
-        !artistCommaListFormLeftOnly) ||
+        !artistLineupFormOnLeft) ||
       shouldSwapTitleArtistOrder ||
       songFirstLeadingTheOnRight ||
       songFirstMultiWordLeftSingleWordRightLonger;
