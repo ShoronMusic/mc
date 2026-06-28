@@ -193,6 +193,13 @@ export function cleanAuthor(author: string): string {
     .trim();
 }
 
+/** oEmbed author_name / channelTitle が YouTube 自動生成 Topic チャンネルか */
+export function isYoutubeTopicChannelAuthor(authorName: string | null | undefined): boolean {
+  const raw = (authorName ?? '').trim();
+  if (!raw) return false;
+  return /\s*-\s*Topic\s*$/i.test(raw);
+}
+
 /** タイトル末尾の「| A COLORS SHOW」（https://www.youtube.com/@COLORSxSTUDIOS の定番フォーマット） */
 const COLORS_SHOW_TITLE_SUFFIX = /\|\s*A\s+COLORS\s+SHOW\b/i;
 
@@ -429,6 +436,40 @@ export function shouldSkipAiCommentaryForPromotionalOrProseMetadata(params: {
   return false;
 }
 
+/** 制作クレジット行を曲名と誤認したメタデータか（曲解説前のガード用） */
+export function looksLikeGarbageArtistSongMetadataForCommentary(params: {
+  artist: string | null;
+  artistDisplay: string | null;
+  song: string | null | undefined;
+  artistLabel?: string | null;
+  songLabel?: string | null;
+}): boolean {
+  if (process.env.AI_COMMENTARY_SKIP_GARBAGE_METADATA === '0') return false;
+  const candidates: { artist: string; song: string }[] = [];
+  const push = (artist: string | null | undefined, song: string | null | undefined) => {
+    const a = (artist ?? '').trim();
+    const s = (song ?? '').trim();
+    if (a && s) candidates.push({ artist: a, song: s });
+  };
+  push(params.artistLabel, params.songLabel);
+  push(params.artistDisplay ?? params.artist, params.songLabel ?? params.song);
+  push(params.artistDisplay ?? params.artist, params.song);
+  for (const p of candidates) {
+    if (isGarbageArtistSongParse(p)) return true;
+  }
+  return false;
+}
+
+/** 誤メタデータで生成されたと分かる曲解説本文（DB キャッシュ無効化用） */
+export function storedCommentaryLooksLikeProductionCreditHallucination(body: string | null | undefined): boolean {
+  const b = (body ?? '').trim();
+  if (!b) return false;
+  if (/Coの『Producer/i.test(b)) return true;
+  if (/Composer Lyricist:/i.test(b) && /Producer, Producer/i.test(b)) return true;
+  if (/制作クレジットをそのまま楽曲名とした/i.test(b)) return true;
+  return false;
+}
+
 /**
  * チャンネル名が「個人のアップロード者」っぽいか。
  * 他者の曲を上げている個人チャンネル（例: Nicolas Fernandez）を
@@ -570,9 +611,40 @@ export function buildAiCommentaryPromptLabels(input: {
 }
 
 /** YouTube 概要の日付・公開メタ行が「アーティスト - 曲名」と誤爆しないよう除外する */
+function looksLikeProductionCreditDescriptionLine(line: string): boolean {
+  const s = line.trim();
+  if (!s) return false;
+  const hasRoleWord =
+    /\b(?:co-?producers?|producers?|composers?|lyricists?|songwriters?|mix(?:ing)? engineers?|recording engineers?|arrangers?|performers?|vocalists?)\b/i.test(
+      s,
+    );
+  if (!hasRoleWord) return false;
+  if (/:\s*[A-Za-z\u00C0-\u024F]/.test(s)) return true;
+  const roleHits = s.match(/(?:Producer|Composer|Lyricist|Songwriter|Engineer)/gi);
+  return Boolean(roleHits && roleHits.length >= 2);
+}
+
+function looksLikeProductionCreditSongSegment(song: string): boolean {
+  const t = song.trim();
+  if (!t) return false;
+  if (looksLikeProductionCreditDescriptionLine(t)) return true;
+  if (/\b(?:co-?producers?|composers?|lyricists?|songwriters?)\b/i.test(t) && /:\s*/.test(t)) {
+    return true;
+  }
+  return false;
+}
+
+function looksLikeProductionCreditArtistSegment(artist: string): boolean {
+  const a = artist.trim();
+  if (/^co$/i.test(a)) return true;
+  if (/^co-?producers?$/i.test(a)) return true;
+  return false;
+}
+
 function isYoutubeDescriptionMetadataLine(line: string): boolean {
   const s = line.trim();
   if (!s) return true;
+  if (looksLikeProductionCreditDescriptionLine(s)) return true;
   if (/^provided\s+to\s+youtube\s+by\b/i.test(s)) return true;
   if (/^released\s+on\s*:/i.test(s)) return true;
   if (/^premiered\s*:/i.test(s)) return true;
@@ -612,7 +684,16 @@ function looksLikeMetadataSongSegment(song: string): boolean {
 
 export function isGarbageArtistSongParse(parsed: { artist: string; song: string }): boolean {
   if (looksLikeMetadataArtistSegment(parsed.artist)) return true;
-  if (looksLikeMetadataSongSegment(parsed.song) && looksLikeMetadataArtistSegment(parsed.artist)) return true;
+  if (looksLikeMetadataSongSegment(parsed.song) && looksLikeMetadataArtistSegment(parsed.artist)) {
+    return true;
+  }
+  if (looksLikeProductionCreditSongSegment(parsed.song)) return true;
+  if (
+    looksLikeProductionCreditArtistSegment(parsed.artist) &&
+    /\b(?:producer|composer|lyricist|songwriter)\b/i.test(parsed.song)
+  ) {
+    return true;
+  }
   return false;
 }
 
@@ -1505,7 +1586,9 @@ export function getArtistAndSong(
     );
   }
   const channel = authorName && cleanAuthor(authorName) ? cleanAuthor(authorName) : null;
-  const useChannelAsArtist = channel && !isLikelyPersonalChannelName(channel);
+  const topicChannel = isYoutubeTopicChannelAuthor(authorName);
+  const useChannelAsArtist =
+    channel && (!isLikelyPersonalChannelName(channel) || topicChannel);
   const songFallback = refineSongTitleWithDescription(cleaned, options?.videoDescription);
   const artistForStrip = useChannelAsArtist ? getMainArtist(channel) ?? channel ?? '' : '';
   const songNormalized = stripRepeatedArtistColonPrefix(songFallback, artistForStrip);

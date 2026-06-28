@@ -11,8 +11,11 @@ import {
   getArtistAndSong,
   getArtistDisplayString,
   getMainArtist,
+  isGarbageArtistSongParse,
+  looksLikeGarbageArtistSongMetadataForCommentary,
   parsePerformingFromDescription,
   repairQuotedSongArtistPackInversion,
+  storedCommentaryLooksLikeProductionCreditHallucination,
 } from './format-song-display';
 import { reapplyCommentaryLibraryBodyPrefix } from './commentary-library';
 import { compoundArtistCanonicalIfKnown } from './artist-compound-names';
@@ -384,6 +387,51 @@ assert.equal(isSupergroupByManualHints('Traveling Wilburys'), true);
   assert.ok(/Next Episode/i.test(labels.songLabel));
   assert.match(labels.artistLabel, /Dr\.?\s*Dre/i);
 }
+
+// Vernon Burch - Get Up（Topic: タイトルは曲名のみ、概要は制作クレジット行）
+{
+  const desc =
+    'Co-Producer, Producer, Composer Lyricist: Vernon Burch\nGet Up\n\nProvided to YouTube by Universal Music Group';
+  const r = getArtistAndSong('Get Up', 'Vernon Burch - Topic', {
+    videoDescription: desc,
+    youtubeChannelTitle: 'Vernon Burch - Topic',
+  });
+  assert.match(r.artistDisplay ?? '', /Vernon Burch/i);
+  assert.equal(r.song, 'Get Up');
+}
+{
+  const desc = 'Co - Producer, Producer, Composer Lyricist: Vernon Burch';
+  const r = resolveArtistSongForPack('Get Up', 'Vernon Burch - Topic', {
+    title: 'Get Up',
+    description: desc,
+    channelTitle: 'Vernon Burch - Topic',
+  });
+  assert.match(r.artistDisplay ?? '', /Vernon Burch/i);
+  assert.equal(r.song, 'Get Up');
+}
+assert.equal(
+  isGarbageArtistSongParse({
+    artist: 'Co',
+    song: 'Producer, Producer, Composer Lyricist: Vernon Burch',
+  }),
+  true,
+);
+assert.equal(
+  looksLikeGarbageArtistSongMetadataForCommentary({
+    artist: 'Co',
+    artistDisplay: 'Co',
+    song: 'Producer, Producer, Composer Lyricist: Vernon Burch',
+    artistLabel: 'Co',
+    songLabel: 'Producer, Producer, Composer Lyricist: Vernon Burch',
+  }),
+  true,
+);
+assert.equal(
+  storedCommentaryLooksLikeProductionCreditHallucination(
+    "Coの『Producer, Producer, Composer Lyricist: Vernon Burch』は、そのタイトルが示す通り",
+  ),
+  true,
+);
 
 console.log('format-song-display feat separator unit tests: OK');
 

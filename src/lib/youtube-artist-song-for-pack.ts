@@ -6,6 +6,7 @@ import {
   getArtistAndSong,
   getArtistDisplayString,
   getMainArtist,
+  isYoutubeTopicChannelAuthor,
   parseArtistTitleFromDescription,
   swapIfCompoundArtistStuckInSongSlot,
 } from '@/lib/format-song-display';
@@ -21,9 +22,20 @@ function isMyListOembedArtistTitleModeEnv(): boolean {
 function enrichArtistSongFromSnippet(
   result: { artist: string | null; artistDisplay: string | null; song: string },
   snippet: VideoSnippet | null,
+  authorName?: string | null,
 ): { artist: string | null; artistDisplay: string | null; song: string } {
   let { artist, artistDisplay, song } = result;
   if (!artistDisplay || !artist) {
+    const channelRaw = (authorName ?? snippet?.channelTitle ?? '').trim();
+    if (isYoutubeTopicChannelAuthor(channelRaw)) {
+      const ch = cleanAuthor(channelRaw);
+      if (ch) {
+        artist = getMainArtist(ch) || ch;
+        artistDisplay = getArtistDisplayString(ch) || ch;
+        if (!song.trim() && snippet?.title?.trim()) song = snippet.title.trim();
+        return { artist, artistDisplay, song };
+      }
+    }
     if (snippet?.description) {
       const fromDesc = parseArtistTitleFromDescription(snippet.description);
       if (fromDesc) {
@@ -91,7 +103,7 @@ export function resolveArtistSongForPack(
     videoDescription: snippet?.description ?? null,
     youtubeChannelTitle: snippet?.channelTitle ?? null,
   });
-  return finalizePackArtistSong(enrichArtistSongFromSnippet(base, snippet), snippet?.description);
+  return finalizePackArtistSong(enrichArtistSongFromSnippet(base, snippet, authorName), snippet?.description);
 }
 
 /**
@@ -170,7 +182,7 @@ export async function resolveArtistSongForPackAsync(
         'musicbrainz:left_is_artist',
         title,
         authorName,
-        finalizePackArtistSong(enrichArtistSongFromSnippet(base, snippet), snippet?.description),
+        finalizePackArtistSong(enrichArtistSongFromSnippet(base, snippet, authorName), snippet?.description),
       );
     }
     if (hint === 'right_is_artist') {
@@ -179,7 +191,7 @@ export async function resolveArtistSongForPackAsync(
         'musicbrainz:right_is_artist',
         title,
         authorName,
-        finalizePackArtistSong(enrichArtistSongFromSnippet(base, snippet), snippet?.description),
+        finalizePackArtistSong(enrichArtistSongFromSnippet(base, snippet, authorName), snippet?.description),
       );
     }
   }

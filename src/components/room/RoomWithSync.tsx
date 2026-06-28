@@ -42,10 +42,9 @@ import { USER_SONG_HISTORY_UPDATED_EVENT } from '@/lib/user-song-history-events'
 import { NON_YOUTUBE_URL_SYSTEM_MESSAGE } from '@/lib/chat-non-youtube-url';
 import {
   SYSTEM_MESSAGE_COMMENTARY_FETCH_FAILED,
-  SYSTEM_MESSAGE_JP_NO_COMMENTARY,
   SYSTEM_MESSAGE_QUEUE_SONG_DEFERRED,
   buildAiQuestionGuardSoftDeclineMessage,
-  shouldShowJpNoCommentarySystemMessage,
+  resolveSkipCommentarySystemMessage,
   JOIN_PASTE_YOUTUBE_URL_HINT_PLAIN,
 } from '@/lib/chat-system-copy';
 import type { SongQuizPayload } from '@/lib/song-quiz-types';
@@ -4006,10 +4005,9 @@ export default function RoomWithSync({
               jpDomesticSilenceVideoIdRef.current === vid;
             const skipReason =
               typeof pack?.skipReason === 'string' ? pack.skipReason : undefined;
-            if (
-              shouldShowJpNoCommentarySystemMessage(skipReason, isJpSilenceVideo)
-            ) {
-              addSystemMessage(SYSTEM_MESSAGE_JP_NO_COMMENTARY);
+            const skipMsg = resolveSkipCommentarySystemMessage(skipReason, isJpSilenceVideo);
+            if (skipMsg) {
+              addSystemMessage(skipMsg);
             }
             return null;
           }
@@ -4556,10 +4554,9 @@ export default function RoomWithSync({
                     jpDomesticSilenceVideoIdRef.current === vid;
                   const skipReason =
                     typeof data?.skipReason === 'string' ? data.skipReason : undefined;
-                  if (
-                    shouldShowJpNoCommentarySystemMessage(skipReason, isJpSilenceVideo)
-                  ) {
-                    addSystemMessage(SYSTEM_MESSAGE_JP_NO_COMMENTARY);
+                  const skipMsg = resolveSkipCommentarySystemMessage(skipReason, isJpSilenceVideo);
+                  if (skipMsg) {
+                    addSystemMessage(skipMsg);
                   }
                   return null;
                 }

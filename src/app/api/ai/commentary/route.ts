@@ -5,8 +5,10 @@ import { fetchOEmbed } from '@/lib/youtube-oembed';
 import {
   buildAiCommentaryPromptLabels,
   formatArtistTitle,
+  looksLikeGarbageArtistSongMetadataForCommentary,
   shouldSkipAiCommentaryForPromotionalOrProseMetadata,
   shouldSkipAiCommentaryForUncertainArtistResolution,
+  storedCommentaryLooksLikeProductionCreditHallucination,
 } from '@/lib/format-song-display';
 import { generateCommentary } from '@/lib/gemini';
 import { attachMusic8SongDataIfFetched, upsertSongAndVideo } from '@/lib/song-entities';
@@ -173,6 +175,22 @@ export async function POST(request: Request) {
       aiPromptLabels.artistLabel.trim() ||
       (artistDisplay ?? artist ?? authorName ?? undefined);
     const commentarySongLabel = aiPromptLabels.songLabel.trim() || song || title;
+    if (
+      looksLikeGarbageArtistSongMetadataForCommentary({
+        artist,
+        artistDisplay,
+        song,
+        artistLabel: String(artistLabel ?? ''),
+        songLabel: commentarySongLabel,
+      })
+    ) {
+      return NextResponse.json({
+        skipAiCommentary: true,
+        videoId,
+        skipReason: 'unreliable_metadata',
+        ...songQuizExtensionFinal,
+      });
+    }
     const introOnlyText = buildSongIntroOnlyArtistFocusComment({
       artistLabel: String(artistLabel ?? '').trim() || 'このアーティスト',
       songLabel: String(commentarySongLabel ?? '').trim() || 'この曲',
@@ -191,7 +209,7 @@ export async function POST(request: Request) {
         .limit(1)
         .maybeSingle();
       const bodyText = typeof data?.body === 'string' ? data.body.trim() : '';
-      if (bodyText) {
+      if (bodyText && !storedCommentaryLooksLikeProductionCreditHallucination(bodyText)) {
         const bodyForReturn = songIntroOnlyDiscography ? introOnlyText : bodyText;
         if (
           !shouldRegenerateLibraryWhenMusicaichatSong(musicaichatSong, skipMusic8FactInject)

@@ -10,6 +10,8 @@ import {
   isGeniusChannelAuthor,
   shouldSkipAiCommentaryForPromotionalOrProseMetadata,
   shouldSkipAiCommentaryForUncertainArtistResolution,
+  looksLikeGarbageArtistSongMetadataForCommentary,
+  storedCommentaryLooksLikeProductionCreditHallucination,
 } from '@/lib/format-song-display';
 import {
   resolveArtistSongForPackAsync,
@@ -515,6 +517,26 @@ export async function POST(request: Request) {
       authorName ||
       'Unknown Artist';
     const songLabelForAiPrompt = aiPromptLabels.songLabel.trim() || song || title;
+
+    if (
+      looksLikeGarbageArtistSongMetadataForCommentary({
+        artist,
+        artistDisplay,
+        song,
+        artistLabel: artistLabelPre,
+        songLabel: songLabelForAiPrompt,
+      })
+    ) {
+      return NextResponse.json({
+        skipAiCommentary: true,
+        songId,
+        videoId,
+        skipReason: 'unreliable_metadata',
+        ...songQuizExtensionFinal,
+        songQuiz: { enabled: false as const },
+      });
+    }
+
     const supergroupBlockPre = await buildSupergroupPromptBlock(artistLabelPre);
     const isSupergroupArtist = supergroupBlockPre.trim().length > 0;
 
@@ -532,6 +554,8 @@ export async function POST(request: Request) {
         if (nrCached) {
           if (isSupergroupArtist && !hasSupergroupContext(nrCached.baseComment)) {
             // 旧キャッシュでスーパーグループ背景が欠ける場合は再生成を優先
+          } else if (storedCommentaryLooksLikeProductionCreditHallucination(nrCached.baseComment)) {
+            // 制作クレジット誤認で保存された旧 DB を返さない
           } else {
             let baseOut = polishCachedBodiesForGemma
               ? polishGemmaModelVisibleText(nrCached.baseComment)
@@ -564,6 +588,8 @@ export async function POST(request: Request) {
         if (cached) {
           if (isSupergroupArtist && !hasSupergroupContext(cached.baseComment)) {
             // 旧キャッシュでスーパーグループ背景が欠ける場合は再生成を優先
+          } else if (storedCommentaryLooksLikeProductionCreditHallucination(cached.baseComment)) {
+            // 制作クレジット誤認で保存された旧 DB を返さない
           } else {
             const filtered = applySlotsToPackBodies(
               cached.baseComment,
