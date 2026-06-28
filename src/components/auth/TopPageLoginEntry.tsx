@@ -8,7 +8,7 @@ import { setOAuthReturnPathCookie } from '@/lib/oauth-return-path';
 import { TRIAL_ROOM_IDS, pickTrialRoomId } from '@/lib/trial-rooms';
 import { assignDefaultGuestDisplayName } from '@/lib/guest-display-name';
 import { FROM_START_KEY } from './FromStartMarker';
-import { rememberGuestRoom } from '@/lib/guest-room-persistence';
+import { rememberGuestRoom, readGuestDisplayNameHint } from '@/lib/guest-room-persistence';
 import { SimpleAuthForm } from './SimpleAuthForm';
 
 function GoogleBrandIcon({ className }: { className?: string }) {
@@ -73,6 +73,8 @@ export function TopPageLoginEntry({
   const supabase = createClient();
   const hasSupabase = isSupabaseConfigured() && !!supabase;
   const [showSimpleForm, setShowSimpleForm] = useState(false);
+  const [showGuestForm, setShowGuestForm] = useState(false);
+  const [guestHandle, setGuestHandle] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [authNotice, setAuthNotice] = useState<string | null>(null);
   const [guestJoining, setGuestJoining] = useState(false);
@@ -119,7 +121,13 @@ export function TopPageLoginEntry({
     }
   };
 
-  const handleGuestJoin = async () => {
+  const openGuestForm = () => {
+    setError(null);
+    setGuestHandle(readGuestDisplayNameHint() || assignDefaultGuestDisplayName());
+    setShowGuestForm(true);
+  };
+
+  const navigateToGuestRoom = async (guestName: string) => {
     setError(null);
     setGuestJoining(true);
     try {
@@ -135,7 +143,6 @@ export function TopPageLoginEntry({
           return a.roomId.localeCompare(b.roomId);
         });
       const selected = candidates[0]?.roomId || pickTrialRoomId();
-      const guestName = assignDefaultGuestDisplayName();
       rememberGuestRoom(selected, guestName);
       try {
         sessionStorage.removeItem(FROM_START_KEY);
@@ -145,7 +152,6 @@ export function TopPageLoginEntry({
     } catch {
       // 通信に失敗した場合だけランダムにフォールバック
       const fallback = pickTrialRoomId();
-      const guestName = assignDefaultGuestDisplayName();
       rememberGuestRoom(fallback, guestName);
       try {
         sessionStorage.removeItem(FROM_START_KEY);
@@ -155,6 +161,13 @@ export function TopPageLoginEntry({
     } finally {
       setGuestJoining(false);
     }
+  };
+
+  const handleGuestSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (guestJoining) return;
+    const name = guestHandle.trim() || assignDefaultGuestDisplayName();
+    await navigateToGuestRoom(name);
   };
 
   if (isLoggedIn === true) {
@@ -192,9 +205,9 @@ export function TopPageLoginEntry({
           )}
           <button
             type="button"
-            onClick={handleGuestJoin}
+            onClick={openGuestForm}
             disabled={guestJoining}
-            className="flex items-center justify-center gap-2 rounded border border-gray-600 bg-gray-800 px-3 py-2 text-sm text-white hover:bg-gray-700"
+            className="flex items-center justify-center gap-2 rounded border border-gray-600 bg-gray-800 px-3 py-2 text-sm text-white hover:bg-gray-700 disabled:opacity-50"
           >
             {guestJoining ? 'ゲスト向けの部屋を準備中…' : 'ゲストで参加'}
           </button>
@@ -206,6 +219,54 @@ export function TopPageLoginEntry({
         </div>
         {error && <p className="mt-2 text-center text-xs text-red-400">{error}</p>}
       </div>
+
+      {showGuestForm && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-sm rounded-lg border border-gray-700 bg-gray-900 p-6">
+            <h2 className="mb-4 text-lg font-semibold text-white">ゲストで参加</h2>
+            <p className="mb-3 text-sm text-gray-400">
+              ハンドルネームを入力してください（未入力の場合は「ゲスト」＋番号が自動で付きます）
+            </p>
+            <form onSubmit={(e) => void handleGuestSubmit(e)} className="flex flex-col gap-3">
+              <label className="flex flex-col gap-1">
+                <span className="text-sm text-gray-300">ハンドルネーム</span>
+                <input
+                  type="text"
+                  value={guestHandle}
+                  onChange={(e) => setGuestHandle(e.target.value)}
+                  maxLength={30}
+                  disabled={guestJoining}
+                  className="rounded border border-gray-600 bg-gray-800 px-3 py-2 text-white placeholder-gray-500 disabled:opacity-50"
+                  autoComplete="nickname"
+                  autoFocus
+                />
+              </label>
+              {guestJoining && (
+                <p className="text-sm text-gray-400" role="status">
+                  ゲスト向けの部屋を準備中…
+                </p>
+              )}
+              <div className="flex gap-2">
+                <button
+                  type="submit"
+                  disabled={guestJoining}
+                  className="flex-1 rounded-lg bg-amber-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-amber-500 disabled:opacity-50"
+                >
+                  参加する
+                </button>
+                <button
+                  type="button"
+                  disabled={guestJoining}
+                  onClick={() => setShowGuestForm(false)}
+                  className="rounded-lg border border-gray-600 px-3 py-2 text-sm text-gray-300 hover:bg-gray-800 disabled:opacity-50"
+                >
+                  キャンセル
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {showSimpleForm && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4">

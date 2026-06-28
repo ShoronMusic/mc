@@ -16,12 +16,15 @@ import {
   AtSymbolIcon,
   ArrowTopRightOnSquareIcon,
   ChevronDownIcon,
+  MusicalNoteIcon,
 } from '@heroicons/react/24/outline';
+import { SongSelectionHowtoModal } from '@/components/chat/SongSelectionHowtoModal';
 import { useIsLgViewport } from '@/hooks/useLgViewport';
 import type { ChatMessage as ChatMessageType } from '@/types/chat';
 import {
   getAiChatDisclaimerCommentsTabForDisplay,
   getAiConversationGuideQuestionTabForModal,
+  JOIN_PASTE_YOUTUBE_URL_HINT_INTRO,
 } from '@/lib/chat-system-copy';
 import { AI_GUARD_OBJECTION_REASON_OPTIONS } from '@/lib/ai-guard-objection';
 import {
@@ -95,6 +98,8 @@ interface ChatProps {
   participantsWithColor?: { displayName: string; textColor?: string }[];
   /** 現在再生中の videoId（AIコメント評価用） */
   currentVideoId?: string | null;
+  /** いま動画が再生中なら true（選曲案内の「はい」無効化用） */
+  currentVideoPlaying?: boolean;
   /** song_tidbits をライブラリから外す NG（最高管理者のみ） */
   canRejectTidbit?: boolean;
   onTidbitLibraryReject?: (messageId: string, tidbitId: string) => void | Promise<void>;
@@ -133,6 +138,10 @@ interface ChatProps {
   onPreviewStop?: () => void;
   /** 曲解説後三択クイズの選択（同期部屋では Ably で共有） */
   onSongQuizPick?: (quizMessageId: string, videoId: string, pickedIndex: number) => void;
+  /** 入室直後の選曲案内「はい」→ AI エージェントが先に選曲。成功時 true */
+  onJoinPasteHintAiPick?: (messageId: string) => void | Promise<boolean>;
+  /** 入室直後の選曲案内から部屋ライブラリを開く */
+  onOpenLibraryFromChat?: () => void;
   /** マイページで進行中のお題ミッションがあるとき、ヘッダー2段目に進捗を表示 */
   themePlaylistActiveMission?: ThemePlaylistRoomSubmitBanner | null;
   /** 「実施中」モーダル: 視聴履歴と同様の列・お気に入り・年代スタイル補完用 */
@@ -630,6 +639,7 @@ export default function Chat({
   participantTextColors = {},
   participantsWithColor = [],
   currentVideoId,
+  currentVideoPlaying = false,
   canRejectTidbit = false,
   onTidbitLibraryReject,
   onNextSongRecommendReject,
@@ -650,6 +660,8 @@ export default function Chat({
   onPreviewStart,
   onPreviewStop,
   onSongQuizPick,
+  onJoinPasteHintAiPick,
+  onOpenLibraryFromChat,
   themePlaylistActiveMission = null,
   themePlaylistMissionRoom,
 }: ChatProps) {
@@ -671,6 +683,11 @@ export default function Chat({
     libraryMatchLine: string;
   } | null>(null);
   const [myListAddBusyVideoId, setMyListAddBusyVideoId] = useState<string | null>(null);
+  const [songHowtoOpen, setSongHowtoOpen] = useState(false);
+  const [joinPasteHintAiPickBusyId, setJoinPasteHintAiPickBusyId] = useState<string | null>(null);
+  const [joinPasteHintAiPickDoneIds, setJoinPasteHintAiPickDoneIds] = useState<Set<string>>(
+    () => new Set(),
+  );
 
   const addNextSongRecommendToMyList = useCallback(
     async (payload: {
@@ -1377,7 +1394,26 @@ export default function Chat({
               const feedback = feedbackState[m.id];
               const bodyContent: ReactNode =
                 m.messageType === 'ai'
-                  ? isSelectionAnnounce
+                  ? m.joinPasteHintCta
+                    ? (
+                        <span className="whitespace-pre-wrap break-words">
+                          {JOIN_PASTE_YOUTUBE_URL_HINT_INTRO}
+                          または右下の
+                          {onOpenLibraryFromChat ? (
+                            <button
+                              type="button"
+                              onClick={onOpenLibraryFromChat}
+                              className="mx-0.5 inline rounded border border-lime-500/60 bg-lime-900/20 px-1.5 py-0.5 text-sm font-medium text-lime-100 hover:bg-lime-900/35"
+                            >
+                              ライブラリ
+                            </button>
+                          ) : (
+                            'ライブラリ'
+                          )}
+                          からも選曲できます。
+                        </span>
+                      )
+                  : isSelectionAnnounce
                     ? renderSelectionAnnounceBodyWithMusicNote(bodyTextForDisplay)
                     : isCharacterChatMessage
                       ? <span className="whitespace-pre-wrap break-words">{bodyTextForDisplay}</span>
@@ -1455,6 +1491,7 @@ export default function Chat({
                 } ${isNextSongRecommendMessage ? 'animate-next-recommend-fade-in' : ''}`}
               >
                 {m.messageType === 'ai' ? (
+                  <>
                   <div className="flex items-baseline justify-between gap-2">
                     <div
                       className={`min-w-0 flex-1 break-words whitespace-pre-wrap ${
@@ -1506,6 +1543,60 @@ export default function Chat({
                       <span className="text-xs text-gray-500">{formatTime(m.createdAt)}</span>
                     </div>
                   </div>
+                  {m.joinPasteHintCta &&
+                    ownerAiCharacterJoinEnabled &&
+                    onJoinPasteHintAiPick && (
+                      <div className="mt-2 space-y-2 border-t border-gray-700/60 pt-2">
+                        <button
+                          type="button"
+                          onClick={() => setSongHowtoOpen(true)}
+                          className="inline-flex items-center gap-1 rounded border border-sky-700/60 bg-sky-900/25 px-2 py-1 text-xs text-sky-100 hover:bg-sky-800/40"
+                          aria-haspopup="dialog"
+                          aria-expanded={songHowtoOpen}
+                        >
+                          <MusicalNoteIcon className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                          選曲方法
+                        </button>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-xs leading-relaxed text-gray-400">
+                            AIエージェントから先に選曲しましょうか？
+                          </span>
+                          {joinPasteHintAiPickDoneIds.has(m.id) ? (
+                            <span className="text-xs text-gray-500">選曲を依頼しました</span>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled={
+                                currentVideoPlaying ||
+                                joinPasteHintAiPickBusyId === m.id
+                              }
+                              onClick={() => {
+                                setJoinPasteHintAiPickBusyId(m.id);
+                                void Promise.resolve(onJoinPasteHintAiPick(m.id))
+                                  .then((ok) => {
+                                    if (ok) {
+                                      setJoinPasteHintAiPickDoneIds((prev) => {
+                                        const next = new Set(prev);
+                                        next.add(m.id);
+                                        return next;
+                                      });
+                                    }
+                                  })
+                                  .finally(() => {
+                                    setJoinPasteHintAiPickBusyId((cur) =>
+                                      cur === m.id ? null : cur,
+                                    );
+                                  });
+                              }}
+                              className="rounded border border-amber-600/70 bg-amber-900/35 px-2.5 py-1 text-xs font-medium text-amber-100 hover:bg-amber-800/45 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              {joinPasteHintAiPickBusyId === m.id ? '選曲中…' : 'はい'}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </>
                 ) : (
                   <>
                     <div className="mb-0.5 flex items-baseline justify-between gap-2">
@@ -2412,6 +2503,7 @@ export default function Chat({
           </div>
         </div>
       )}
+      <SongSelectionHowtoModal open={songHowtoOpen} onClose={() => setSongHowtoOpen(false)} />
     </div>
   );
 }

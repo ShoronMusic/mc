@@ -475,6 +475,8 @@ export interface ChatInputHandle {
     mainArtist: string,
     options?: { music8Artist?: Music8ArtistJson | null },
   ) => void;
+  /** 部屋ライブラリモーダルを開く（選曲案内リンク用） */
+  openLibrary: () => void;
 }
 
 interface ChatInputProps {
@@ -1414,8 +1416,11 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
       openLibraryForArtist(mainArtist: string, options?: { music8Artist?: Music8ArtistJson | null }) {
         void openLibraryModalForArtist(mainArtist, options);
       },
+      openLibrary() {
+        openLibraryModal();
+      },
     }),
-    [runYoutubeKeywordSearch, openLibraryModalForArtist],
+    [runYoutubeKeywordSearch, openLibraryModalForArtist, openLibraryModal],
   );
 
   const handleLibrarySearch = useCallback(() => {

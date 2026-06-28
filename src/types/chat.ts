@@ -86,6 +86,8 @@ export interface ChatMessage {
   songQuiz?: SongQuizPayload;
   /** character_chat 選曲リード用: Music8 の日本語アーティスト名（TTS のみ・表示には使わない） */
   characterTtsArtistJa?: string | null;
+  /** 入室直後の選曲案内に「選曲方法」リンクと AI 先出しボタンを付ける */
+  joinPasteHintCta?: boolean;
 }
 
 /** Ably で送るチャットイベントのペイロード */
@@ -150,4 +152,6 @@ export interface ChatMessagePayload {
   songQuiz?: SongQuizPayload;
   /** character_chat 選曲リード用: Music8 の日本語アーティスト名（TTS のみ） */
   characterTtsArtistJa?: string | null;
+  /** 入室直後の選曲案内 CTA */
+  joinPasteHintCta?: boolean;
 }

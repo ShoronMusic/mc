@@ -23,6 +23,7 @@ type Manifest = {
   files: {
     songKeysApply: string;
     artistSlugsApply: string;
+    artistSlugsNew?: string;
     manifest: string;
   };
 };
@@ -41,6 +42,8 @@ function parseArgs(argv: string[]) {
     sleepMsSongs: parseInt(args.get('sleep-ms-songs') ?? '80', 10),
     skipArtists: argv.includes('--skip-artists'),
     skipSongs: argv.includes('--skip-songs'),
+    /** stale（mtime 起因）を除き new のみ。曲は new + fingerprint stale のまま */
+    realDeltaOnly: argv.includes('--real-delta-only'),
     forwardFile: args.get('forward-file')?.trim() || null,
     help: argv.includes('--help') || argv.includes('-h'),
   };
@@ -113,8 +116,10 @@ function printUsage(): void {
   console.log(`Usage:
   npx tsx scripts/apply-music8-sync-plan.ts --manifest=tmp/.../manifest.json [--apply]
     [--sleep-ms-artists=200] [--sleep-ms-songs=80]
-    [--skip-artists] [--skip-songs]
-    [--forward-file=tmp/music8-bulk-forward-args.txt]`);
+    [--skip-artists] [--skip-songs] [--real-delta-only]
+    [--forward-file=tmp/music8-bulk-forward-args.txt]
+
+  --real-delta-only  アーティストは artist-slugs-new.txt のみ（mtime 起因の stale をスキップ）`);
 }
 
 async function main(): Promise<void> {
@@ -126,7 +131,11 @@ async function main(): Promise<void> {
   }
 
   const manifest = loadManifest(opts.manifest);
-  const artistFile = path.resolve(manifest.files.artistSlugsApply);
+  const artistFile = path.resolve(
+    opts.realDeltaOnly && manifest.files.artistSlugsNew
+      ? manifest.files.artistSlugsNew
+      : manifest.files.artistSlugsApply,
+  );
   const songFile = path.resolve(manifest.files.songKeysApply);
   const artistCount = countLines(artistFile);
   const songCount = countLines(songFile);
@@ -139,6 +148,7 @@ async function main(): Promise<void> {
         manifest: path.resolve(opts.manifest),
         artistCount,
         songCount,
+        realDeltaOnly: opts.realDeltaOnly,
         artistsDir: manifest.artistsDir,
         songsDir: manifest.songsDir,
       },

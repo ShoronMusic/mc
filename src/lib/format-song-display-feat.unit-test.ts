@@ -190,6 +190,21 @@ assert.equal(isSupergroupByManualHints('Traveling Wilburys'), true);
   assert.equal(r.artistDisplay, 'a-ha');
   assert.equal(r.song, 'Take On Me');
 }
+{
+  const r = getArtistAndSong('THE - DREAM - Love Sex Magic', null);
+  assert.equal(r.artistDisplay, 'The-Dream');
+  assert.equal(r.song, 'Love Sex Magic');
+}
+{
+  const r = getArtistAndSong('The-Dream - Love Sex Magic', null);
+  assert.equal(r.artistDisplay, 'The-Dream');
+  assert.equal(r.song, 'Love Sex Magic');
+}
+{
+  const r = getArtistAndSong('THE-DREAM - Tampa ft. Usher (Official Audio)', null);
+  assert.equal(r.artistDisplay, 'The-Dream, Usher');
+  assert.equal(r.song, 'Tampa');
+}
 
 // クォート曲名の後ろに Official MV / Choreography などが続いても抽出できる
 {

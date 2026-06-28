@@ -27,6 +27,7 @@ param(
   [switch] $Apply,
   [switch] $SkipApply,
   [switch] $SkipDryRun,
+  [switch] $RealDeltaOnly,
   [string] $ForwardArgsFile = 'tmp\music8-bulk-forward-args.txt'
 )
 
@@ -126,6 +127,10 @@ try {
       '--apply'
       "--forward-file=$ForwardArgsFile"
     )
+    if ($RealDeltaOnly) {
+      $applyArgs += '--real-delta-only'
+      Write-Host '[3/3] real-delta-only: new artists + fingerprint-stale songs only'
+    }
     Invoke-NpxTsx -Arguments $applyArgs -StepName '03-apply-db'
   } else {
     Write-Host '[3/3] skipped (pass -Apply to write DB). Plan dir:' $OutDir

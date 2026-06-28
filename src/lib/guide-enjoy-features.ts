@@ -22,6 +22,8 @@ export type GuideEnjoyFeature = {
   hrefLabel?: string;
   badge?: GuideEnjoyFeatureBadge;
   image?: GuideEnjoyIllustration;
+  /** 枠内を白背景にする（暗いページ上でイラストが見やすいカード用） */
+  cardTone?: 'light';
 };
 
 export type GuideEnjoyCategory = {
@@ -44,6 +46,19 @@ export type GuideEnjoyStep = {
   imageAlt: string;
   imageWidth: number;
   imageHeight: number;
+  /** 枠内を白背景にする（暗いページ上でイラストが見やすいカード用） */
+  cardTone?: 'light';
+};
+
+export type GuideEnjoyUsageHighlight = {
+  title: string;
+  description: string;
+  imageSrc: string;
+  imageAlt: string;
+  imageWidth: number;
+  imageHeight: number;
+  /** 枠内を白背景にする（暗いページ上でイラストが見やすいカード用） */
+  cardTone?: 'light';
 };
 
 export const GUIDE_ENJOY_INTRO = {
@@ -56,24 +71,26 @@ export const GUIDE_ENJOY_INTRO = {
 };
 
 /** リード直下の楽しみ方ハイライト（2パターン） */
-export const GUIDE_ENJOY_USAGE_HIGHLIGHTS = [
+export const GUIDE_ENJOY_USAGE_HIGHLIGHTS: readonly GuideEnjoyUsageHighlight[] = [
   {
     title: 'みんなでワイワイ',
     description:
       '友達や初対面の参加者と同じ部屋に入り、URL やライブラリで順番に選曲。曲解説をきっかけに感想を交わし、クイズやお題で盛り上がる。',
-    imageSrc: '/images/point_illust_01r2.png',
+    imageSrc: '/images/point_illust_01r4.png',
     imageAlt: '複数の参加者が Music AI Chat でつながり、一緒に楽しむイラスト',
     imageWidth: 390,
     imageHeight: 221,
+    cardTone: 'light',
   },
   {
     title: 'ひとりでじっくり',
     description:
       '自分で会を立てて一人入室。好きな曲を流し、AI 解説を読みながら @ で深掘り質問。お気に入りやマイリストに残して次回につなげる。',
-    imageSrc: '/images/point_illust_02r2.png',
+    imageSrc: '/images/point_illust_02r3.png',
     imageAlt: 'ヘッドフォンをつけて一人で曲を聴き、タブレットで楽しむイラスト',
     imageWidth: 290,
     imageHeight: 214,
+    cardTone: 'light',
   },
 ] as const;
 
@@ -84,30 +101,33 @@ export const GUIDE_ENJOY_THREE_STEPS: GuideEnjoyStep[] = [
     title: 'チャットルームを選んで入室',
     description:
       'トップページから開催中の部屋に入るか、ログインして自分で会を立ち上げます。ゲストでも参加できます。',
-    imageSrc: '/images/point_illust_03_1.png',
+    imageSrc: '/images/point_illust_03_1r.png',
     imageAlt: 'チャットルームに入室するイラスト',
-    imageWidth: 182,
-    imageHeight: 141,
+    imageWidth: 214,
+    imageHeight: 168,
+    cardTone: 'light',
   },
   {
     step: 2,
     title: '聴きたい曲を選曲',
     description:
       'YouTube の URL を発言欄に貼って送信するのが基本です。ライブラリから曲を選ぶ方法もあります。',
-    imageSrc: '/images/point_illust_03_2.png',
+    imageSrc: '/images/point_illust_03_2r.png',
     imageAlt: 'YouTube URL を貼って選曲するイラスト',
-    imageWidth: 182,
-    imageHeight: 148,
+    imageWidth: 224,
+    imageHeight: 113,
+    cardTone: 'light',
   },
   {
     step: 3,
     title: '曲の動画（PV 等）を視聴',
     description:
       '部屋の参加者みんなで同じタイミングに再生されます。視聴しながらチャットで感想を伝え合えます。',
-    imageSrc: '/images/point_illust_03_3.png',
+    imageSrc: '/images/point_illust_03_3r.png',
     imageAlt: 'みんなで同時に動画を視聴するイラスト',
-    imageWidth: 133,
-    imageHeight: 141,
+    imageWidth: 209,
+    imageHeight: 166,
+    cardTone: 'light',
   },
 ];
 
@@ -124,6 +144,8 @@ export type GuideEnjoySelectionMethod = {
   hrefLabel?: string;
   badge?: GuideEnjoyFeatureBadge;
   images?: readonly GuideEnjoyIllustration[];
+  /** 枠内を白背景にする（暗いページ上でイラストが見やすいカード用） */
+  cardTone?: 'light';
 };
 
 export const GUIDE_ENJOY_SONG_SELECTION = {
@@ -144,19 +166,20 @@ export const GUIDE_ENJOY_SONG_SELECTION = {
       ],
       href: '/guide/first-song',
       hrefLabel: '選曲のしかた（PC）',
+      cardTone: 'light',
       images: [
         {
-          src: '/images/point_illust_04_1.png',
+          src: '/images/point_illust_04_1r.png',
           alt: 'YouTube で URL をコピーして選曲するイラスト',
-          width: 327,
-          height: 254,
+          width: 352,
+          height: 272,
           caption: 'PC版YouTube',
         },
         {
-          src: '/images/point_illust_04_2.png',
+          src: '/images/point_illust_04_2r.png',
           alt: '発言欄に URL を貼って送信するイラスト',
-          width: 150,
-          height: 254,
+          width: 160,
+          height: 272,
           caption: 'スマホYouTubeアプリ',
         },
       ],
@@ -174,12 +197,13 @@ export const GUIDE_ENJOY_SONG_SELECTION = {
         'E 曲一覧で曲を選ぶと、F 曲詳細にプレビュー動画と曲情報が出ます。',
         'F の「この曲を選曲」を押すと、部屋にそのまま流せます。YouTube を行き来せず、アプリ内で完結します。',
       ],
+      cardTone: 'light',
       images: [
         {
-          src: '/images/point_illust_04_3.png',
+          src: '/images/point_illust_04_3r.png',
           alt: 'ライブラリから選曲ボタンで曲を選ぶイラスト',
-          width: 161,
-          height: 250,
+          width: 163,
+          height: 252,
         },
       ],
     },
@@ -196,12 +220,13 @@ export const GUIDE_ENJOY_SONG_SELECTION = {
         '部屋にそのまま流せます。YouTube を行き来せず、アプリ内で完結します。',
       ],
       badge: 'login',
+      cardTone: 'light',
       images: [
         {
-          src: '/images/point_illust_04_4.png',
+          src: '/images/point_illust_04_4r.png',
           alt: 'マイリストやお気に入りに曲をストックするイラスト',
-          width: 401,
-          height: 250,
+          width: 403,
+          height: 252,
         },
       ],
     },
@@ -211,32 +236,34 @@ export const GUIDE_ENJOY_SONG_SELECTION = {
       title: '自分の選曲が終わってから、次の番までに次曲をセット',
       description:
         '順番制のため、流れている曲を聴きながら次の一曲を決めておけます。候補リストに次曲を溜めておく方法も使えます。自分の番が来る前に選曲すると「予約済み」と表示されます。',
+      cardTone: 'light',
       image: {
-        src: '/images/point_illust_05_1.png',
+        src: '/images/point_illust_05_1r.png',
         alt: '次の番までに次曲をセットするイラスト',
-        width: 300,
-        height: 49,
+        width: 328,
+        height: 58,
       },
     },
     {
       title: '選曲者と部屋オーナーは、再生中の曲をスキップできる',
       description:
         '自分が選んだ曲の再生中は、スキップで次の曲へ進められます。部屋オーナーも、必要に応じて再生中の曲をスキップできます。長尺のライブ映像など、途中で次に進めたいときに使います。',
+      cardTone: 'light',
       image: {
-        src: '/images/point_illust_05_2.png',
+        src: '/images/point_illust_05_2r.png',
         alt: '再生中の曲をスキップするイラスト',
-        width: 300,
-        height: 49,
+        width: 323,
+        height: 58,
       },
     },
   ] satisfies GuideEnjoyFeature[],
   charmText:
     '他の参加者の選曲にインスパイアされることも多く、部屋の流れを意識した選曲を楽しむのも醍醐味です。次の自分の番までに曲を探す緊張感とワクワク感も、音楽チャットならではの魅力のひとつ。お題プレイリスト・ミッションがあるときは、テーマに合う曲を予習して用意しておくのも、事前の楽しみ方のひとつです。',
   charmImage: {
-    src: '/images/point_illust_06_1.png',
+    src: '/images/point_illust_06_1r.png',
     alt: '部屋の流れを意識した選曲を楽しむイラスト',
-    width: 700,
-    height: 388,
+    width: 647,
+    height: 360,
   },
 };
 
@@ -252,8 +279,9 @@ export const GUIDE_ENJOY_CORE_SECTIONS: GuideEnjoyCategory[] = [
         title: '選曲は順番制で、再生中は参加者同時視聴',
         description:
           '流れている曲は全員が同じタイミングで聴きます。次の曲は順番に選んでいく使い方が基本です。',
+        cardTone: 'light',
         image: {
-          src: '/images/point_illust_07_1.png',
+          src: '/images/point_illust_07_1r.png',
           alt: '順番制で参加者全員が同時に視聴するイラスト',
           width: 247,
           height: 250,
@@ -263,10 +291,11 @@ export const GUIDE_ENJOY_CORE_SECTIONS: GuideEnjoyCategory[] = [
         title: '視聴しながらテキスト入力で会話',
         description:
           '再生中の曲への感想や雑談を、その場でやり取りできます。',
+        cardTone: 'light',
         image: {
-          src: '/images/point_illust_07_2.png',
+          src: '/images/point_illust_07_2r.png',
           alt: '視聴しながらテキスト入力で会話するイラスト',
-          width: 231,
+          width: 305,
           height: 250,
         },
       },
@@ -293,18 +322,39 @@ export const GUIDE_ENJOY_CORE_SECTIONS: GuideEnjoyCategory[] = [
           'ブラウザから利用できます。スマホでは YouTube の共有から URL をコピーして選曲する流れも用意しています。',
         href: '/guide/first-song-mobile',
         hrefLabel: 'スマホでの選曲',
+        cardTone: 'light',
+        image: {
+          src: '/images/point_illust_10r.png',
+          alt: 'PC・タブレット・スマホで利用できるイラスト',
+          width: 301,
+          height: 150,
+        },
       },
       {
         title: 'メールアドレス、または Google 認証でユーザー登録',
         description:
           '登録するとお気に入り・選曲履歴・マイリストなどが残り、次回以降も引き継げます。',
         badge: 'login',
+        cardTone: 'light',
+        image: {
+          src: '/images/point_illust_11r.png',
+          alt: 'メールまたは Google でユーザー登録するイラスト',
+          width: 403,
+          height: 200,
+        },
       },
       {
         title: 'ユーザー登録しないでゲスト参加も可能',
         description:
           'ログインしなくても部屋に入ってチャット・視聴できます。',
         badge: 'optional',
+        cardTone: 'light',
+        image: {
+          src: '/images/point_illust_12r.png',
+          alt: 'ゲスト参加で部屋に入るイラスト（ハンドルネーム入力）',
+          width: 194,
+          height: 100,
+        },
       },
     ],
   },

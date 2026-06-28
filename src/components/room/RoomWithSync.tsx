@@ -46,6 +46,7 @@ import {
   SYSTEM_MESSAGE_QUEUE_SONG_DEFERRED,
   buildAiQuestionGuardSoftDeclineMessage,
   shouldShowJpNoCommentarySystemMessage,
+  JOIN_PASTE_YOUTUBE_URL_HINT_PLAIN,
 } from '@/lib/chat-system-copy';
 import type { SongQuizPayload } from '@/lib/song-quiz-types';
 import {
@@ -236,6 +237,22 @@ function isHumanParticipantClientId(clientId: string): boolean {
   return clientId.trim() !== AI_CHARACTER_CLIENT_ID;
 }
 
+function findFirstPresentHumanInSelectionOrder(
+  order: ReadonlyArray<{
+    clientId: string;
+    displayName: string;
+    participatesInSelection?: boolean;
+  }>,
+  present: ReadonlySet<string>,
+) {
+  return order.find(
+    (p) =>
+      isHumanParticipantClientId(p.clientId) &&
+      present.has(p.clientId) &&
+      p.participatesInSelection !== false,
+  );
+}
+
 function playJoinChimeClip(): void {
   chimeDebug('▶ play JOIN', { src: JOIN_CHIME_AUDIO_PATH });
   try {
@@ -309,9 +326,8 @@ const AI_FIRST_VOICE =
 /** 選曲順の説明 */
 const TURN_ORDER_VOICE =
   '入室した順で、選曲に参加している方から曲を貼っていきます（視聴専用の方は順番に含めず案内も飛ばします）。退席した方は順番から外れ、再入室時はその時点の末尾に入ります。';
-/** ターン未取得時の選曲案内（黄色強調） */
-const JOIN_PASTE_YOUTUBE_URL_HINT =
-  'YouTubeで選曲した洋楽のURLを発言欄に貼ってください';
+/** 初回・ターン未取得時の選曲案内（Chat 側でライブラリリンクを描画） */
+const JOIN_PASTE_YOUTUBE_URL_HINT = JOIN_PASTE_YOUTUBE_URL_HINT_PLAIN;
 const TIDBIT_COOLDOWN_SEC = 60;
 
 function createMessageId(): string {
@@ -573,6 +589,7 @@ export default function RoomWithSync({
   const aiCharacterEpochHumanDebounceTimerRef = useRef<number | null>(null);
   const currentSongPosterClientIdRef = useRef('');
   const characterManualSongPickInFlightRef = useRef(false);
+  const joinPasteHintAiPickUsedRef = useRef(false);
   const lastSendAtRef = useRef(0);
   const sendTimestampsRef = useRef<number[]>([]);
   const playbackHistoryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1807,6 +1824,7 @@ export default function RoomWithSync({
             ...(p.characterTtsArtistJa
               ? { characterTtsArtistJa: p.characterTtsArtistJa }
               : {}),
+            ...(p.joinPasteHintCta ? { joinPasteHintCta: true as const } : {}),
           },
         ];
       });
@@ -2641,6 +2659,9 @@ export default function RoomWithSync({
         playingRef.current = false;
         trackEndedGraceWindowUntilRef.current = Date.now() + TRACK_ENDED_GRACE_MS;
         setPlaying(false);
+        if (lastChangeVideoPublisherRef.current === AI_CHARACTER_CLIENT_ID) {
+          joinPasteHintAiPickUsedRef.current = false;
+        }
         // 曲終了直後に UI の「再生中」枠・スキップ表示を解除し、次の方へ切り替える
         setSkipUsedForVideoId(endedVideoId);
         setCurrentSongPosterClientId('');
@@ -2712,6 +2733,8 @@ export default function RoomWithSync({
         skipCharacterTts?: boolean;
         /** Music8 の日本語アーティスト名（選曲リード TTS 用・表示には使わない） */
         characterTtsArtistJa?: string | null;
+        /** 入室直後の選曲案内 CTA（選曲方法リンク・AI先出しボタン） */
+        joinPasteHintCta?: boolean;
       }
     ) => {
       if (aiFreeSpeechStopped && !options?.allowWhenAiStopped) return;
@@ -2751,6 +2774,7 @@ export default function RoomWithSync({
         ...(options?.characterTtsArtistJa?.trim()
           ? { characterTtsArtistJa: options.characterTtsArtistJa.trim() }
           : {}),
+        ...(options?.joinPasteHintCta ? { joinPasteHintCta: true as const } : {}),
       };
       if (!options?.localOnly) {
         safePublish(CHAT_MESSAGE_EVENT, payload);
@@ -2785,6 +2809,7 @@ export default function RoomWithSync({
           ...(payload.characterTtsArtistJa
             ? { characterTtsArtistJa: payload.characterTtsArtistJa }
             : {}),
+          ...(payload.joinPasteHintCta ? { joinPasteHintCta: true as const } : {}),
         },
       ]);
       if (
@@ -3281,6 +3306,20 @@ export default function RoomWithSync({
 
   useEffect(() => {
     if (initialGreetingDoneRef.current || messages.length > 0) return;
+    const present = presentClientIdsRef.current;
+    const firstHuman = findFirstPresentHumanInSelectionOrder(participatingOrder, present);
+    // presence 同期前は AI だけが選曲順に入ることがある。人間が揃うまで初回挨拶を遅延する。
+    if (!firstHuman) {
+      if (myClientId && isHumanParticipantClientId(myClientId) && !present.has(myClientId)) {
+        return;
+      }
+      if (
+        ownerAiCharacterJoinEnabled &&
+        participatingOrder.some((p) => !isHumanParticipantClientId(p.clientId))
+      ) {
+        return;
+      }
+    }
     initialGreetingDoneRef.current = true;
     let cancelled = false;
 
@@ -3336,17 +3375,27 @@ export default function RoomWithSync({
       if (!isWelcomeBack) {
         addAiMessage(AI_FIRST_VOICE, localGuide);
         addAiMessage(TURN_ORDER_VOICE, localGuide);
-        if (participatingOrder.length > 0) {
-          const present = presentClientIdsRef.current;
-          const first =
-            participatingOrder.find(
-              (p) => present.has(p.clientId) && p.participatesInSelection !== false,
-            ) ?? participatingOrder[0];
-          setCurrentTurnClientId(first.clientId);
-          publishRef.current?.(TURN_STATE_EVENT, buildTurnStatePayload(first.clientId));
-          addAiMessage(`${first.displayName}さん、曲を貼ってください`, localGuide);
+        const presentNow = presentClientIdsRef.current;
+        const firstHumanNow = findFirstPresentHumanInSelectionOrder(
+          participatingOrder,
+          presentNow,
+        );
+        if (firstHumanNow) {
+          setCurrentTurnClientId(firstHumanNow.clientId);
+          publishRef.current?.(
+            TURN_STATE_EVENT,
+            buildTurnStatePayload(firstHumanNow.clientId),
+          );
+          addAiMessage(JOIN_PASTE_YOUTUBE_URL_HINT, {
+            ...localGuide,
+            joinPasteHintCta: ownerAiCharacterJoinEnabledRef.current,
+          });
         } else {
-          addAiMessage(JOIN_PASTE_YOUTUBE_URL_HINT, { ...localGuide, aiBodyEmphasis: 'yellow' });
+          addAiMessage(JOIN_PASTE_YOUTUBE_URL_HINT, {
+            ...localGuide,
+            aiBodyEmphasis: 'yellow',
+            joinPasteHintCta: ownerAiCharacterJoinEnabledRef.current,
+          });
         }
       }
       touchActivity();
@@ -3364,6 +3413,8 @@ export default function RoomWithSync({
     touchActivity,
     buildTurnStatePayload,
     isGuest,
+    myClientId,
+    ownerAiCharacterJoinEnabled,
   ]);
 
   useEffect(() => {
@@ -3608,8 +3659,17 @@ export default function RoomWithSync({
 
   /** 視聴専用をスキップしつつ、次の選曲者に促す。曲終了・5分経過時は投稿者のクライアントのみ実行 */
   const promptNextTurn = useCallback((options?: { fiveMinElapsed?: boolean }) => {
-    if (myClientId !== lastChangeVideoPublisherRef.current) return;
+    const posterId = lastChangeVideoPublisherRef.current;
+    const imPromptExecutor =
+      Boolean(myClientId) &&
+      (myClientId === posterId ||
+        (posterId === AI_CHARACTER_CLIENT_ID &&
+          Boolean(oldestRef.current) &&
+          myClientId === oldestRef.current));
+    if (!imPromptExecutor) return;
     const fiveMinElapsed = options?.fiveMinElapsed === true;
+    const afterAiCharacterSong =
+      posterId === AI_CHARACTER_CLIENT_ID && ownerAiCharacterJoinEnabledRef.current;
     let cur = currentTurnClientIdRef.current;
     const order = participatingOrderRef.current;
     const orderLength = order.length;
@@ -3645,18 +3705,41 @@ export default function RoomWithSync({
 
     clearPendingFreeCommentTimers();
 
+    const postGuestPickPromptAfterAiSong = () => {
+      joinPasteHintAiPickUsedRef.current = false;
+      addAiMessage(JOIN_PASTE_YOUTUBE_URL_HINT, {
+        allowWhenAiStopped: true,
+        joinPasteHintCta: true,
+      });
+    };
+
     // 参加者が1人だけのとき（通常の曲終了時）は、シンプルに全員宛てのメッセージにする
     if (orderLength <= 1) {
-      addAiMessage('次の曲をどうぞ', { allowWhenAiStopped: true });
+      if (afterAiCharacterSong) {
+        postGuestPickPromptAfterAiSong();
+      } else {
+        addAiMessage('次の曲をどうぞ', { allowWhenAiStopped: true });
+      }
       return;
     }
 
     const prefix = fiveMinElapsed ? '5分経過しましたので、' : '';
     if (cur) {
       const displayName = order.find((o) => o.clientId === cur)?.displayName ?? '次の方';
-      addAiMessage(`${prefix}${displayName}さん、次の曲を貼ってください`, { allowWhenAiStopped: true });
+      if (
+        afterAiCharacterSong &&
+        isHumanParticipantClientId(cur)
+      ) {
+        postGuestPickPromptAfterAiSong();
+      } else {
+        addAiMessage(`${prefix}${displayName}さん、次の曲を貼ってください`, { allowWhenAiStopped: true });
+      }
     } else {
-      addAiMessage(`${prefix}次の曲を貼ってください`, { allowWhenAiStopped: true });
+      if (afterAiCharacterSong) {
+        postGuestPickPromptAfterAiSong();
+      } else {
+        addAiMessage(`${prefix}次の曲を貼ってください`, { allowWhenAiStopped: true });
+      }
     }
   }, [participants, addAiMessage, myClientId, clearPendingFreeCommentTimers, buildTurnStatePayload]);
 
@@ -4877,6 +4960,247 @@ export default function RoomWithSync({
     ]
   );
 
+  const handleJoinPasteHintAiPick = useCallback(async (): Promise<boolean> => {
+    if (!ownerAiCharacterJoinEnabledRef.current) return false;
+    if (joinPasteHintAiPickUsedRef.current) return false;
+    if (characterManualSongPickInFlightRef.current) return false;
+    if (aiCharacterAutoPickInFlightRef.current) return false;
+    const curVid = (videoIdRef.current ?? '').trim();
+    if (curVid) {
+      let activelyPlaying = playingRef.current;
+      try {
+        const st = playerRef.current?.getPlayerState?.() ?? null;
+        if (st === YT_PLAYER_STATE_PLAYING || st === YT_PLAYER_STATE_BUFFERING) {
+          activelyPlaying = true;
+        }
+      } catch {
+        /* noop */
+      }
+      if (activelyPlaying) return false;
+    }
+    const jpS = jpDomesticSilenceVideoIdRef.current;
+    const vCur = videoIdRef.current;
+    if (jpS != null && vCur != null && jpS === vCur) return false;
+
+    joinPasteHintAiPickUsedRef.current = true;
+    characterManualSongPickInFlightRef.current = true;
+
+    const resolveNextHumanTurnAfterAi = (): string => {
+      const order = participatingOrderRef.current;
+      const present = presentClientIdsRef.current;
+      for (const p of order) {
+        if (p.clientId === AI_CHARACTER_CLIENT_ID) continue;
+        if (present.has(p.clientId) && p.participatesInSelection !== false) return p.clientId;
+      }
+      return '';
+    };
+
+    const listForCharacterAi = [
+      ...messagesForAiCharacterPickRef.current,
+      {
+        id: createMessageId(),
+        body: CHARACTER_SONG_PICK_AUTO_USER_PROMPT,
+        messageType: 'user' as const,
+        createdAt: new Date().toISOString(),
+      },
+    ].map((m) => ({
+      displayName: m.displayName,
+      body: m.body,
+      messageType: m.messageType,
+    }));
+
+    try {
+      const r0 = await fetch('/api/ai/character-song-pick', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: listForCharacterAi,
+          roomId: roomId ?? undefined,
+          roomTitle: roomDisplayTitleCurrent || roomTitle || undefined,
+          aiCharacterDisplayName: ownerAiCharacterNameRef.current || AI_CHARACTER_DEFAULT_NAME,
+          isGuest,
+        }),
+      });
+      const pick = r0.ok ? await r0.json().catch(() => null) : null;
+      if (pick && typeof pick === 'object' && (pick as { throttled?: boolean }).throttled === true) {
+        const sec =
+          typeof (pick as { retryAfterSec?: number }).retryAfterSec === 'number'
+            ? (pick as { retryAfterSec: number }).retryAfterSec
+            : 60;
+        addSystemMessage(
+          `選曲提案はこの部屋では短時間に複数回出せません。約${sec}秒後にもう一度お試しください。`,
+        );
+        joinPasteHintAiPickUsedRef.current = false;
+        return false;
+      }
+      if (!pick?.ok || !pick?.query) {
+        addSystemMessage('AIエージェントの選曲に失敗しました。URLを貼って選曲してください。');
+        joinPasteHintAiPickUsedRef.current = false;
+        return false;
+      }
+
+      const runAfterResolvedPayload = (
+        data2: { ok?: boolean; videoId?: string; artistTitle?: string; watchUrl?: string } | null,
+      ): boolean => {
+        if (data2?.ok && data2?.videoId && data2?.artistTitle) {
+          const playingVid = (videoIdRef.current ?? '').trim();
+          const pickedVid = data2.videoId.trim();
+          const watchUrlForChat =
+            typeof data2.watchUrl === 'string' && data2.watchUrl.trim()
+              ? data2.watchUrl.trim()
+              : undefined;
+          if (playingVid && playingVid === pickedVid) {
+            const u = watchUrlForChat || buildAiCharacterYoutubeWatchUrl(pickedVid);
+            addAiMessage(
+              u
+                ? `いま再生中と同じ動画が返ってきました。別の言い方で試すか、このURLから開いてください。\n${u}`
+                : 'いま再生中と同じ動画が返ってきました。別の言い方で試すか、YouTubeのURLを直接貼ってください。',
+              {
+                allowWhenAiStopped: true,
+                aiSource: 'character_chat',
+                displayName: ownerAiCharacterNameRef.current,
+              },
+            );
+            touchActivity();
+            joinPasteHintAiPickUsedRef.current = false;
+            return false;
+          }
+          const nextHumanId = resolveNextHumanTurnAfterAi();
+          rememberAiCharacterPickReason(
+            pickedVid,
+            data2.artistTitle,
+            (pick as { reason?: unknown }).reason,
+          );
+          const rawPickLogId = (pick as { pickLogId?: unknown }).pickLogId;
+          const pickLogIdRow = typeof rawPickLogId === 'string' ? rawPickLogId.trim() : '';
+          if (pickLogIdRow) {
+            characterPickLogIdByVideoIdRef.current.set(pickedVid, pickLogIdRow);
+            characterPickUtteranceLinesByLogIdRef.current.delete(pickLogIdRow);
+          }
+          const useReservationQueue = shouldAiCharacterUseReservationQueue();
+          if (useReservationQueue) {
+            if (
+              songReservationQueueRef.current.some(
+                (e) => e.publisherClientId === AI_CHARACTER_CLIENT_ID,
+              )
+            ) {
+              const u = watchUrlForChat || buildAiCharacterYoutubeWatchUrl(pickedVid);
+              addAiMessage(
+                u
+                  ? `選曲予約はすでに1件入っているため、追加できませんでした。案内した次の1曲のURLは次のとおりです。\n${u}`
+                  : '選曲予約はすでに1件入っているため、追加できませんでした。',
+                {
+                  allowWhenAiStopped: true,
+                  aiSource: 'character_chat',
+                  displayName: ownerAiCharacterNameRef.current,
+                },
+              );
+              touchActivity();
+              joinPasteHintAiPickUsedRef.current = false;
+              return false;
+            }
+            pendingThemePlaylistBlurbRef.current = null;
+            safePublish('queueSong', {
+              type: 'queueSong',
+              videoId: pickedVid,
+              publisherClientId: AI_CHARACTER_CLIENT_ID,
+            } as PlaybackMessage);
+          } else {
+            applyImmediateChangeVideo(pickedVid, AI_CHARACTER_CLIENT_ID, {
+              nextTurnClientIdOverride: nextHumanId,
+            });
+          }
+          const pickedBody = buildAiCharacterPickedSongChatBody(
+            pickedVid,
+            useReservationQueue,
+            watchUrlForChat,
+          );
+          if (pickedBody) {
+            addAiMessage(pickedBody, {
+              allowWhenAiStopped: true,
+              aiSource: 'character_chat',
+              displayName: ownerAiCharacterNameRef.current,
+              skipCharacterTts: true,
+            });
+            const logId = characterPickLogIdByVideoIdRef.current.get(pickedVid);
+            if (logId) {
+              const merged = pushAiCharacterPickUtteranceLine(
+                characterPickUtteranceLinesByLogIdRef,
+                logId,
+                pickedBody,
+              );
+              postAiCharacterPickUtteranceToLog({
+                pickLogId: logId,
+                utterance: merged,
+                pickedVideoId: pickedVid,
+                isGuest: isGuest === true,
+              });
+            }
+          }
+          touchActivity();
+          return true;
+        }
+        addSystemMessage('AIエージェントの選曲に失敗しました。URLを貼って選曲してください。');
+        joinPasteHintAiPickUsedRef.current = false;
+        return false;
+      };
+
+      const resolvedFromPick = extractCharacterSongPickResolvedYoutube(pick);
+      if (resolvedFromPick) {
+        return runAfterResolvedPayload({
+          ok: true,
+          videoId: resolvedFromPick.videoId,
+          artistTitle: resolvedFromPick.artistTitle,
+          watchUrl: resolvedFromPick.watchUrl,
+        });
+      }
+
+      const r2 = await fetch('/api/ai/paste-by-query', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: String(pick.query),
+          isGuest,
+          roomId: roomId ?? undefined,
+          pasteIntent: 'ai_character_manual_song_pick',
+          pickConfirmationText: String(pick.query),
+          excludeVideoIds: (() => {
+            const v = (videoIdRef.current ?? '').trim();
+            return v ? [v] : [];
+          })(),
+        }),
+      });
+      const data2 = (await r2.json().catch(() => null)) as {
+        ok?: boolean;
+        videoId?: string;
+        artistTitle?: string;
+        watchUrl?: string;
+      } | null;
+      return runAfterResolvedPayload(data2);
+    } catch {
+      addSystemMessage('AIエージェントの選曲に失敗しました。URLを貼って選曲してください。');
+      joinPasteHintAiPickUsedRef.current = false;
+      return false;
+    } finally {
+      characterManualSongPickInFlightRef.current = false;
+    }
+  }, [
+    addAiMessage,
+    addSystemMessage,
+    applyImmediateChangeVideo,
+    buildAiCharacterPickedSongChatBody,
+    buildAiCharacterYoutubeWatchUrl,
+    isGuest,
+    rememberAiCharacterPickReason,
+    roomDisplayTitleCurrent,
+    roomId,
+    roomTitle,
+    safePublish,
+    shouldAiCharacterUseReservationQueue,
+    touchActivity,
+  ]);
+
   const charAutoPickCtxRef = useRef({
     applyImmediateChangeVideo,
     addAiMessage,
@@ -4942,8 +5266,17 @@ export default function RoomWithSync({
       return '';
     };
 
-    // すでにAIが現在曲の投稿者なのに再びAIターンになった場合は、再選曲せず人間へ強制返却する。
     const currentVid = (videoIdRef.current ?? '').trim();
+    const nextHumanId = resolveNextHumanTurnAfterAi();
+    // まだ曲が流れておらず人間が在室なら、AI の自動選曲は行わずユーザーにターンを返す
+    if (!currentVid && nextHumanId) {
+      const b = charAutoPickCtxRef.current.buildTurnStatePayload;
+      setCurrentTurnClientId(nextHumanId);
+      publishRef.current?.(TURN_STATE_EVENT, b(nextHumanId));
+      return;
+    }
+
+    // すでにAIが現在曲の投稿者なのに再びAIターンになった場合は、再選曲せず人間へ強制返却する。
     if (currentVid && currentSongPosterClientIdRef.current === AI_CHARACTER_CLIENT_ID) {
       const nextHumanId = resolveNextHumanTurnAfterAi();
       const b = charAutoPickCtxRef.current.buildTurnStatePayload;
@@ -7051,6 +7384,7 @@ export default function RoomWithSync({
               .filter((p) => p.textColor)
               .map((p) => ({ displayName: p.displayName, textColor: p.textColor }))}
             currentVideoId={videoId}
+            currentVideoPlaying={playing}
             canRejectTidbit={canRejectTidbit && !isGuest}
             onTidbitLibraryReject={handleTidbitLibraryReject}
             onNextSongRecommendReject={handleNextSongRecommendReject}
@@ -7075,6 +7409,8 @@ export default function RoomWithSync({
             onPreviewStart={handlePreviewStart}
             onPreviewStop={handlePreviewStop}
             onSongQuizPick={publishSongQuizAnswer}
+            onJoinPasteHintAiPick={() => handleJoinPasteHintAiPick()}
+            onOpenLibraryFromChat={() => chatInputRef.current?.openLibrary()}
             themePlaylistActiveMission={themePlaylistRoomSubmit}
             themePlaylistMissionRoom={{
               roomId: roomId?.trim() || undefined,

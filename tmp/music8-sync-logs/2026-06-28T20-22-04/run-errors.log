@@ -1,0 +1,6 @@
+Command failed (exit -1): npx tsx scripts/apply-music8-sync-plan.ts --manifest=E:\mc\tmp\music8-sync-plan-2026-06-28T20-22-04\manifest.json --apply --forward-file=tmp\music8-bulk-forward-args.txt
+2026-06-28T20:38:04.6330527+09:00
+Command failed (exit -1): npx tsx scripts/apply-music8-sync-plan.ts --manifest=E:\mc\tmp\music8-sync-plan-2026-06-28T20-22-04\manifest.json --apply --forward-file=tmp\music8-bulk-forward-args.txt
+at Invoke-NpxTsx, E:\mc\scripts\run-music8-weekly-sync.ps1: line 78
+at <ScriptBlock>, E:\mc\scripts\run-music8-weekly-sync.ps1: line 129
+at <ScriptBlock>, C:\Users\ymap6\AppData\Local\Temp\ps-script-21413696-326a-4762-a7a0-aa89909f4040.ps1: line 143

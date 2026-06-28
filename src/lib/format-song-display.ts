@@ -69,6 +69,37 @@ function mergeKnownHyphenArtistLeadingParts(parts: string[]): { artist: string; 
   return null;
 }
 
+function escapeRegExpLiteral(s: string): string {
+  return s.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
+}
+
+/** タイトル分割前に、名前内ハイフンを持つ既知アーティストをプレースホルダへ退避（THE-DREAM 等） */
+function shieldKnownHyphenArtistsInRawTitle(raw: string): {
+  shielded: string;
+  unshield: (s: string) => string;
+} {
+  const replacements: Array<{ token: string; value: string }> = [];
+  let shielded = raw;
+  for (const [i, name] of readHyphenArtistPrefixes().entries()) {
+    const token = `__HYPHEN_ARTIST_${i}__`;
+    const re = new RegExp(escapeRegExpLiteral(name), 'gi');
+    const next = shielded.replace(re, token);
+    if (next === shielded) continue;
+    shielded = next;
+    replacements.push({ token, value: name });
+  }
+  return {
+    shielded,
+    unshield: (s: string) => {
+      let out = s;
+      for (const { token, value } of replacements) {
+        out = out.split(token).join(value);
+      }
+      return out;
+    },
+  };
+}
+
 /**
  * YouTube タイトルに付く配信向けの副題のうち、**Remix・Remaster は楽曲バージョンとして残す**。
  * Album Version / Radio Edit など、別表記の区別に用いないメタだけ落とす。
@@ -693,17 +724,21 @@ export function parseArtistTitle(
   }
 
   // 区切り（Unicode ダッシュ含む）で分割。最初の区切りだけ使い、残りは曲名として結合
-  const parts = raw.split(ARTIST_TITLE_SEPARATOR).map((p) => p.trim()).filter(Boolean);
+  const { shielded: rawForHyphenSplit, unshield: unshieldHyphenArtists } =
+    shieldKnownHyphenArtistsInRawTitle(raw);
+  const parts = rawForHyphenSplit.split(ARTIST_TITLE_SEPARATOR).map((p) => p.trim()).filter(Boolean);
   if (parts.length >= 2) {
     const hyphenMerged = mergeKnownHyphenArtistLeadingParts(parts);
-    let artist = hyphenMerged ? hyphenMerged.artist : parts[0];
-    let songRaw = hyphenMerged ? hyphenMerged.songParts.join(' - ') : parts.slice(1).join(' - ');
+    let artist = unshieldHyphenArtists(hyphenMerged ? hyphenMerged.artist : parts[0]!);
+    let songRaw = unshieldHyphenArtists(
+      hyphenMerged ? hyphenMerged.songParts.join(' - ') : parts.slice(1).join(' - '),
+    );
     // 曲名側に " ft. X" / " feat. X" があれば、曲名はその前だけにし、X はアーティストに含める
     // ※ 単独の "with" は含めない。「Be With You」「Walk with Me」等を誤って feat 扱いしないため
     const featInSong = songRaw.match(/^(.+?)\s+(ft\.?|feat\.?|fet\.?|featuring|w\/?)\s+(.+)$/i);
     if (featInSong) {
       const songOnly = featInSong[1].trim();
-      const featured = featInSong[3].trim();
+      let featured = stripTrailingOfficialStyleParensFromSegment(featInSong[3].trim());
       if (songOnly && featured) {
         artist = `${artist} ft. ${featured}`;
         songRaw = songOnly;
@@ -834,6 +869,28 @@ export function repairQuotedSongArtistPackInversion(r: {
     artistDisplay: newDisplay,
     song: newSong,
   };
+}
+
+function normHyphenArtistCompareKey(s: string): string {
+  return s.toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+/** ハイフン入り／合体アーティストの登録名と一致するか（順序スワップ抑止用） */
+function isRegisteredHyphenOrCompoundArtistName(name: string): boolean {
+  const t = name.trim();
+  if (!t) return false;
+  if (compoundArtistCanonicalIfKnown(t)) return true;
+  const k = normHyphenArtistCompareKey(t);
+  for (const canonical of readHyphenArtistPrefixes()) {
+    if (k === normHyphenArtistCompareKey(canonical)) return true;
+  }
+  return false;
+}
+
+function leadingArtistSegmentBeforeFeat(segment: string): string {
+  const s = stripTrailingOfficialStyleParensFromSegment(segment.trim());
+  const m = s.match(/^(.+?)\s+(?:ft\.?|feat\.?|fet\.?|featuring)\s+/i);
+  return (m?.[1] ?? s).trim();
 }
 
 /**
@@ -1336,6 +1393,9 @@ export function getArtistAndSong(
       shouldSwap = false;
     }
     if (explicitQuotedArtistSongPattern) {
+      shouldSwap = false;
+    }
+    if (isRegisteredHyphenOrCompoundArtistName(leadingArtistSegmentBeforeFeat(leftForCh))) {
       shouldSwap = false;
     }
 

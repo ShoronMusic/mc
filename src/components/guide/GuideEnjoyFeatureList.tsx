@@ -39,13 +39,17 @@ function FeatureBadge({ badge }: { badge: GuideEnjoyFeatureBadge }) {
 function SelectionMethodDescription({
   description,
   descriptionParagraphs,
+  lightTone = false,
 }: {
   description: string;
   descriptionParagraphs?: readonly string[];
+  lightTone?: boolean;
 }) {
+  const textClass = lightTone ? 'text-gray-600' : 'text-gray-400';
+
   if (descriptionParagraphs?.length) {
     return (
-      <div className="mt-2 space-y-2 text-sm text-gray-400">
+      <div className={`mt-2 space-y-2 text-sm ${textClass}`}>
         {descriptionParagraphs.map((paragraph) => (
           <p key={paragraph}>{paragraph}</p>
         ))}
@@ -53,7 +57,7 @@ function SelectionMethodDescription({
     );
   }
 
-  return <p className="mt-2 text-sm text-gray-400">{description}</p>;
+  return <p className={`mt-2 text-sm ${textClass}`}>{description}</p>;
 }
 
 function EnjoyCategoryPanel({
@@ -85,11 +89,16 @@ function EnjoyCategoryPanel({
         {category.features.map((feature) => {
           const imageBelow = Boolean(feature.image && twoColGrid);
           const imageBeside = Boolean(feature.image && !twoColGrid);
+          const isLightCard = feature.cardTone === 'light';
 
           return (
           <li
             key={feature.title}
-            className="flex flex-col rounded-xl border border-gray-700 bg-gray-900/50 transition hover:border-gray-600"
+            className={`flex flex-col rounded-xl border transition ${
+              isLightCard
+                ? 'border-gray-200 bg-white hover:border-gray-300'
+                : 'border-gray-700 bg-gray-900/50 hover:border-gray-600'
+            }`}
           >
             <div
               className={
@@ -102,15 +111,31 @@ function EnjoyCategoryPanel({
             >
               <div className={imageBeside ? 'min-w-0 flex-1 p-4 pb-0 sm:pb-4' : ''}>
                 <div className="flex flex-wrap items-start justify-between gap-2">
-                  <h3 className="font-semibold text-white">{feature.title}</h3>
+                  <h3
+                    className={`font-semibold ${
+                      isLightCard ? 'text-gray-900' : 'text-white'
+                    }`}
+                  >
+                    {feature.title}
+                  </h3>
                   {feature.badge ? <FeatureBadge badge={feature.badge} /> : null}
                 </div>
-                <p className="mt-2 text-sm text-gray-400">{feature.description}</p>
+                <p
+                  className={`mt-2 text-sm ${
+                    isLightCard ? 'text-gray-600' : 'text-gray-400'
+                  }`}
+                >
+                  {feature.description}
+                </p>
                 {feature.href ? (
                   <p className="mt-3">
                     <Link
                       href={guideInternalHref(feature.href, linkSearchParams)}
-                      className="text-sm text-sky-400 underline-offset-2 hover:text-sky-300 hover:underline"
+                      className={`text-sm underline-offset-2 hover:underline ${
+                        isLightCard
+                          ? 'text-sky-700 hover:text-sky-800'
+                          : 'text-sky-400 hover:text-sky-300'
+                      }`}
                     >
                       {feature.hrefLabel ?? '詳しく見る'} →
                     </Link>
@@ -159,6 +184,9 @@ export function GuideEnjoyFeatureList() {
   const activeSelectionMethod =
     GUIDE_ENJOY_SONG_SELECTION.methods.find((m) => m.step === activeSelectionStep) ??
     GUIDE_ENJOY_SONG_SELECTION.methods[0];
+  const usageHighlightImageDisplayHeight = Math.max(
+    ...GUIDE_ENJOY_USAGE_HIGHLIGHTS.map((item) => Math.round(item.imageHeight * 0.9)),
+  );
 
   return (
     <article className="space-y-8 text-sm leading-relaxed text-gray-300">
@@ -168,31 +196,60 @@ export function GuideEnjoyFeatureList() {
         </p>
         <h1 className="text-2xl font-bold text-white">{GUIDE_ENJOY_INTRO.title}</h1>
         <p className="text-gray-400">{GUIDE_ENJOY_INTRO.lead}</p>
-        <ul className="flex flex-nowrap items-start gap-2 overflow-x-auto">
-          {GUIDE_ENJOY_USAGE_HIGHLIGHTS.map((pattern) => (
+        <ul className="flex flex-nowrap items-stretch gap-2 overflow-x-auto">
+          {GUIDE_ENJOY_USAGE_HIGHLIGHTS.map((pattern) => {
+            const imageDisplayWidth = Math.round(pattern.imageWidth * 0.9);
+            const isLightCard = pattern.cardTone === 'light';
+
+            return (
             <li
               key={pattern.title}
-              className="flex shrink-0 flex-col rounded-xl border border-gray-700 bg-gray-900/60"
+              className={`flex shrink-0 flex-col rounded-xl border ${
+                isLightCard
+                  ? 'border-gray-200 bg-white'
+                  : 'border-gray-700 bg-gray-900/60'
+              }`}
               style={{ width: pattern.imageWidth + 24 }}
             >
-              <div className="p-4 pb-0">
-                <h2 className="text-base font-semibold text-white">{pattern.title}</h2>
-                <p className="mt-2 text-sm text-gray-400">{pattern.description}</p>
+              <div className="flex-1 p-4 pb-0">
+                <h2
+                  className={`text-base font-semibold ${
+                    isLightCard ? 'text-gray-900' : 'text-white'
+                  }`}
+                >
+                  {pattern.title}
+                </h2>
+                <p
+                  className={`mt-2 text-sm ${
+                    isLightCard ? 'text-gray-600' : 'text-gray-400'
+                  }`}
+                >
+                  {pattern.description}
+                </p>
               </div>
-              <div className="px-3 pb-3">
+              <div
+                className="flex shrink-0 items-center justify-center px-3 pb-3 pt-4"
+                style={{ minHeight: usageHighlightImageDisplayHeight + 16 }}
+              >
                 <Image
                   src={pattern.imageSrc}
                   alt={pattern.imageAlt}
                   width={pattern.imageWidth}
                   height={pattern.imageHeight}
-                  className="mt-4 h-auto w-full"
-                  sizes={`${pattern.imageWidth}px`}
+                  className="h-auto shrink-0"
+                  style={{
+                    width: `${imageDisplayWidth}px`,
+                    height: 'auto',
+                  }}
+                  sizes={`${imageDisplayWidth}px`}
+                  draggable={false}
                 />
               </div>
             </li>
-          ))}
+            );
+          })}
         </ul>
-        <p className="rounded-lg border border-gray-800 bg-gray-900/50 px-3 py-2 text-xs text-gray-500">
+        <p className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-600">
           {GUIDE_ENJOY_INTRO.note}
         </p>
       </header>
@@ -201,39 +258,73 @@ export function GuideEnjoyFeatureList() {
         <h2 id="enjoy-three-steps-heading" className="text-base font-semibold text-white">
           使い方は簡単！3ステップ
         </h2>
-        <ol className="grid gap-3 sm:grid-cols-3">
-          {GUIDE_ENJOY_THREE_STEPS.map((item) => (
+        <ol className="grid gap-3 sm:grid-cols-3 sm:items-stretch">
+          {GUIDE_ENJOY_THREE_STEPS.map((item) => {
+            const isLightCard = item.cardTone === 'light';
+
+            return (
             <li
               key={item.step}
-              className="flex flex-col rounded-xl border border-sky-800/50 bg-sky-950/25"
+              className={`flex flex-col rounded-xl border ${
+                isLightCard
+                  ? 'border-gray-200 bg-white'
+                  : 'border-sky-800/50 bg-sky-950/25'
+              }`}
             >
               <div className="p-4 pb-0">
-                <p className="text-xs font-bold tabular-nums text-sky-400">STEP {item.step}</p>
-                <h3 className="mt-1 font-semibold text-white">{item.title}</h3>
-                <p className="mt-2 text-sm text-gray-400">{item.description}</p>
+                <p
+                  className={`text-xs font-bold tabular-nums ${
+                    isLightCard ? 'text-sky-700' : 'text-sky-400'
+                  }`}
+                >
+                  STEP {item.step}
+                </p>
+                <h3
+                  className={`mt-1 font-semibold ${
+                    isLightCard ? 'text-gray-900' : 'text-white'
+                  }`}
+                >
+                  {item.title}
+                </h3>
+                <p
+                  className={`mt-2 text-sm ${
+                    isLightCard ? 'text-gray-600' : 'text-gray-400'
+                  }`}
+                >
+                  {item.description}
+                </p>
                 {item.href ? (
                   <p className="mt-3">
                     <Link
                       href={guideInternalHref(item.href, linkSearchParams)}
-                      className="text-sm text-sky-400 underline-offset-2 hover:text-sky-300 hover:underline"
+                      className={`text-sm underline-offset-2 hover:underline ${
+                        isLightCard
+                          ? 'text-sky-700 hover:text-sky-800'
+                          : 'text-sky-400 hover:text-sky-300'
+                      }`}
                     >
                       {item.hrefLabel ?? '詳しく見る'} →
                     </Link>
                   </p>
                 ) : null}
               </div>
-              <div className="mt-4 flex justify-center px-3 pb-3">
+              <div className="flex min-h-[8rem] flex-1 items-center justify-center px-4 py-4">
                 <Image
                   src={item.imageSrc}
                   alt={item.imageAlt}
                   width={item.imageWidth}
                   height={item.imageHeight}
-                  className="h-auto"
-                  sizes={`${item.imageWidth}px`}
+                  className="h-auto max-w-full shrink-0"
+                  style={{
+                    width: `${Math.round(item.imageWidth * 0.9)}px`,
+                    height: 'auto',
+                  }}
+                  sizes={`${Math.round(item.imageWidth * 0.9)}px`}
                 />
               </div>
             </li>
-          ))}
+            );
+          })}
         </ol>
       </section>
 
@@ -276,7 +367,11 @@ export function GuideEnjoyFeatureList() {
             role="tabpanel"
             id={`enjoy-selection-tabpanel-${activeSelectionMethod.step}`}
             aria-labelledby={`enjoy-selection-tab-${activeSelectionMethod.step}`}
-            className="rounded-xl border border-emerald-800/45 bg-emerald-950/20"
+            className={`rounded-xl border ${
+              activeSelectionMethod.cardTone === 'light'
+                ? 'border-gray-200 bg-white'
+                : 'border-emerald-800/45 bg-emerald-950/20'
+            }`}
           >
             <div
               className={
@@ -291,7 +386,13 @@ export function GuideEnjoyFeatureList() {
                 }
               >
                 <div className="flex flex-wrap items-start justify-between gap-2">
-                  <h3 className="font-semibold text-white">{activeSelectionMethod.title}</h3>
+                  <h3
+                    className={`font-semibold ${
+                      activeSelectionMethod.cardTone === 'light' ? 'text-gray-900' : 'text-white'
+                    }`}
+                  >
+                    {activeSelectionMethod.title}
+                  </h3>
                   {activeSelectionMethod.badge ? (
                     <FeatureBadge badge={activeSelectionMethod.badge} />
                   ) : null}
@@ -299,12 +400,17 @@ export function GuideEnjoyFeatureList() {
                 <SelectionMethodDescription
                   description={activeSelectionMethod.description}
                   descriptionParagraphs={activeSelectionMethod.descriptionParagraphs}
+                  lightTone={activeSelectionMethod.cardTone === 'light'}
                 />
                 {activeSelectionMethod.href ? (
                   <p className="mt-3">
                     <Link
                       href={guideInternalHref(activeSelectionMethod.href, linkSearchParams)}
-                      className="text-sm text-sky-400 underline-offset-2 hover:text-sky-300 hover:underline"
+                      className={`text-sm underline-offset-2 hover:underline ${
+                        activeSelectionMethod.cardTone === 'light'
+                          ? 'text-sky-700 hover:text-sky-800'
+                          : 'text-sky-400 hover:text-sky-300'
+                      }`}
                     >
                       {activeSelectionMethod.hrefLabel ?? '詳しく見る'} →
                     </Link>
@@ -315,8 +421,14 @@ export function GuideEnjoyFeatureList() {
                 <div className="flex shrink-0 flex-nowrap items-end justify-end gap-2 px-3 py-3 sm:gap-3 sm:px-4 sm:py-4">
                   {activeSelectionMethod.images.map((image) => (
                     <figure key={image.src} className="flex shrink-0 flex-col items-center">
-                      {image.caption ? (
-                        <figcaption className="mb-1.5 text-center text-xs font-medium text-gray-300">
+                      {'caption' in image && image.caption ? (
+                        <figcaption
+                          className={`mb-1.5 text-center text-xs font-medium ${
+                            activeSelectionMethod.cardTone === 'light'
+                              ? 'text-gray-600'
+                              : 'text-gray-300'
+                          }`}
+                        >
                           {image.caption}
                         </figcaption>
                       ) : null}
@@ -336,13 +448,30 @@ export function GuideEnjoyFeatureList() {
           </div>
         ) : null}
         <ul className="grid gap-3 sm:grid-cols-2">
-          {GUIDE_ENJOY_SONG_SELECTION.basics.map((item) => (
+          {GUIDE_ENJOY_SONG_SELECTION.basics.map((item) => {
+            const isLightCard = item.cardTone === 'light';
+
+            return (
             <li
               key={item.title}
-              className="flex flex-col rounded-xl border border-gray-700 bg-gray-900/50 p-4"
+              className={`flex flex-col rounded-xl border p-4 ${
+                isLightCard
+                  ? 'border-gray-200 bg-white'
+                  : 'border-gray-700 bg-gray-900/50'
+              }`}
             >
-              <h3 className="break-keep font-semibold text-white">{item.title}</h3>
-              <p className="mt-2 flex-1 break-keep text-sm leading-relaxed text-gray-400">
+              <h3
+                className={`break-keep font-semibold ${
+                  isLightCard ? 'text-gray-900' : 'text-white'
+                }`}
+              >
+                {item.title}
+              </h3>
+              <p
+                className={`mt-2 flex-1 break-keep text-sm leading-relaxed ${
+                  isLightCard ? 'text-gray-600' : 'text-gray-400'
+                }`}
+              >
                 {item.description}
               </p>
               {item.image ? (
@@ -358,10 +487,11 @@ export function GuideEnjoyFeatureList() {
                 </div>
               ) : null}
             </li>
-          ))}
+            );
+          })}
         </ul>
-        <div className="rounded-xl border border-violet-800/40 bg-violet-950/20 px-4 py-3">
-          <p className="break-keep text-sm leading-relaxed text-gray-400">
+        <div className="rounded-xl border border-gray-200 bg-white px-4 py-3">
+          <p className="break-keep text-sm leading-relaxed text-gray-600">
             {GUIDE_ENJOY_SONG_SELECTION.charmText}
           </p>
           <div className="mt-3 flex justify-center overflow-x-auto">
@@ -370,8 +500,13 @@ export function GuideEnjoyFeatureList() {
               alt={GUIDE_ENJOY_SONG_SELECTION.charmImage.alt}
               width={GUIDE_ENJOY_SONG_SELECTION.charmImage.width}
               height={GUIDE_ENJOY_SONG_SELECTION.charmImage.height}
-              className="h-auto w-full max-w-[700px] shrink-0"
-              sizes="(max-width: 768px) 100vw, 700px"
+              className="h-auto shrink-0"
+              style={{
+                width: `${Math.round(GUIDE_ENJOY_SONG_SELECTION.charmImage.width * 0.9)}px`,
+                height: 'auto',
+              }}
+              sizes={`${Math.round(GUIDE_ENJOY_SONG_SELECTION.charmImage.width * 0.9)}px`}
+              draggable={false}
             />
           </div>
         </div>

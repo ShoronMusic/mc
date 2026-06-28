@@ -38,7 +38,7 @@ export function GoogleBrandIcon({ className }: { className?: string }) {
 }
 
 function getInitialGuestHandle(): string {
-  return readGuestDisplayNameHint();
+  return readGuestDisplayNameHint() || assignDefaultGuestDisplayName();
 }
 
 export interface JoinChoiceProps {
@@ -225,7 +225,10 @@ export function JoinChoice({ onJoin, roomId, joinVerifying = false }: JoinChoice
           <button
             type="button"
             disabled={joinVerifying}
-            onClick={() => setShowGuestForm(true)}
+            onClick={() => {
+              setGuestHandle(readGuestDisplayNameHint() || assignDefaultGuestDisplayName());
+              setShowGuestForm(true);
+            }}
             className="rounded-lg border border-gray-600 bg-gray-800 px-4 py-3 text-white transition hover:bg-gray-700 disabled:opacity-50"
           >
             ゲストで参加

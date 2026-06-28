@@ -110,3 +110,10 @@ export const SYSTEM_MESSAGE_COMMENTARY_FETCH_FAILED = '曲解説を取得でき�
 /** 複数人在室の部屋で再生開始から5分以内に次曲がキューされたとき */
 export const SYSTEM_MESSAGE_QUEUE_SONG_DEFERRED =
   '選曲を受け付けました。現在の曲の再生が終わり次第、次の曲を再生します。';
+
+/** 入室直後の選曲案内（本文の前半。UI では「ライブラリ」をリンク化） */
+export const JOIN_PASTE_YOUTUBE_URL_HINT_INTRO =
+  '視聴したい曲を別タブのYouTubeやYouTubeアプリから検索して、選んだ曲のURLをコピーして、貼ってください。';
+
+/** チャット保存用のプレーンテキスト全文（リンクなし） */
+export const JOIN_PASTE_YOUTUBE_URL_HINT_PLAIN = `${JOIN_PASTE_YOUTUBE_URL_HINT_INTRO}または右下のライブラリからも選曲できます。`;
