@@ -427,6 +427,41 @@ const KATA_NAME_LIKE = /[\u30A1-\u30FF\uFF66-\uFF9Fー]{3,}/u;
 
 const LATIN_NAME_LIKE = /\b[A-Za-z][A-Za-z0-9 .,'&-]{3,}\b/;
 
+/** 楽曲クレジット・共演・プロデュース参加への言及（曲名が無くても通す） */
+const MUSIC_CREDIT_PARTICIPATION_RE = new RegExp(
+  [
+    '参加',
+    '共演',
+    '客演',
+    'ゲスト',
+    'フィーチャ',
+    'プロデュース',
+    'プロデューサー',
+    'featuring',
+    String.raw`\bfeat\.?\b`,
+    String.raw`\bproduced by\b`,
+    String.raw`\bproduced\b`,
+    String.raw`\bproducer\b`,
+  ].join('|'),
+  'iu',
+);
+
+/**
+ * 直前が洋楽チャット文脈のとき、ミュージシャン名＋参加・共演・プロデュース等の短い確認。
+ * 例: 「@スティービーワンダーが参加してますね」（The Crown の Stevie Wonder クレジット）
+ */
+export function isMusicCreditParticipationQuestion(
+  question: string,
+  recent: readonly AboutDetailRecentMessage[],
+): boolean {
+  if (!recentMessagesSuggestMusicRoomContext(recent)) return false;
+  const t = question.trim().normalize('NFKC').replace(/\r\n/g, '\n');
+  if (!t || t.includes('\n')) return false;
+  if (t.length < 6 || t.length > 160) return false;
+  if (!MUSIC_CREDIT_PARTICIPATION_RE.test(t)) return false;
+  return KATA_NAME_LIKE.test(t) || LATIN_NAME_LIKE.test(t);
+}
+
 /**
  * アーティスト名を一覧に書かなくても、カタカナ連続 or 英字名と強い音楽語があれば通す。
  * 直近が洋楽文脈のときのみ（単独「について」等ではヒットしない）。

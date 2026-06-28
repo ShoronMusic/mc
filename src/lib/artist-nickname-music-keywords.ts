@@ -123,6 +123,11 @@ export const ARTIST_NICKNAME_MUSIC_KEYWORDS = [
   'ビリージョエル',
   'エリック・クラプトン',
   'エリッククラプトン',
+  // Stevie Wonder
+  'スティービーワンダー',
+  'スティービー・ワンダー',
+  'stevie wonder',
+  '\\bsteviewonder\\b',
   // 国内アーティスト・タレント
   'ヒッキー',
   '宇多田ヒカル',

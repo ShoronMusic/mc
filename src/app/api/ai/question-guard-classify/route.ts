@@ -37,8 +37,8 @@ function normalizeRecent(raw: unknown): IncomingMsg[] | null {
 }
 
 /**
- * クライアント側ヒューリスティックで弾かれた「@」質問を Gemini で再判定。
- * 未設定・失敗時は skipped: true（呼び出し側は従来どおりブロック扱い）。
+ * 「@」質問の音楽関連判定（Gemini が主判定。クライアントは API 未設定時 fail-open）。
+ * 未設定・失敗時は skipped: true（呼び出し側は通す）。
  */
 export async function POST(request: Request) {
   try {

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {
   isAboutDetailMusicFollowupQuestion,
+  isMusicCreditParticipationQuestion,
   isMusicFanbaseFollowupQuestion,
   isOutlineTeachMusicFollowupQuestion,
   isOffTopicAboutSubject,
@@ -151,6 +152,25 @@ assert.equal(
     musicCtxRecent
   ),
   true
+);
+
+assert.equal(
+  isMusicCreditParticipationQuestion('スティービーワンダーが参加してますね', musicCtxRecent),
+  true
+);
+assert.equal(
+  isMusicCreditParticipationQuestion('Stevie Wonder produced this track, right?', musicCtxRecent),
+  true
+);
+assert.equal(
+  isMusicCreditParticipationQuestion('スティービーワンダーが参加してますね', [
+    { messageType: 'user', body: 'こんにちは' },
+  ]),
+  false
+);
+assert.equal(
+  isMusicCreditParticipationQuestion('今日の会議に参加してます', musicCtxRecent),
+  false
 );
 
 console.log('ai-question-about-detail-heuristic unit tests: OK');

@@ -139,6 +139,12 @@ assert.equal(isMusicRelatedAiQuestion('この曲のコーラスは誰？'), true
 assert.equal(isMusicRelatedAiQuestion('Who produced I Feel for You?'), true);
 
 assert.equal(
+  isMusicRelatedAiQuestion('スティービーワンダーが参加してますね'),
+  true,
+);
+assert.equal(isMusicRelatedAiQuestion('Stevie Wonder produced this?'), true);
+
+assert.equal(
   isMusicRelatedAiQuestion('MadonnaのHung Upのダンスのスタイルは？'),
   true,
 );

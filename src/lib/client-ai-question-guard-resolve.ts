@@ -1,17 +1,11 @@
 /**
- * ブラウザ用: 「@」本文がクライアントヒューリスティックで非音楽扱いのとき、API で再判定。
+ * ブラウザ用: 「@」質問の音楽関連判定（AI ファースト）。
+ * ルールはガード無効・空文・選曲順の確認のみ。それ以外は Gemini 分類 API に委ねる。
+ * API 未設定・失敗・タイムアウト時は fail-open（通す）。明示的 false のときだけ block。
  */
 
-import {
-  isAboutDetailMusicFollowupQuestion,
-  isMusicFanbaseFollowupQuestion,
-  isMusicLikelyKatakanaOrLatinWithStrongAnchors,
-  isOutlineTeachMusicFollowupQuestion,
-  isShortMusicBiographyFollowupQuestion,
-} from '@/lib/ai-question-about-detail-heuristic';
 import { isAiTurnOrderClarificationText } from '@/lib/ai-turn-order-clarification';
 import { isAiQuestionGuardDisabledClient } from '@/lib/chat-system-copy';
-import { isMusicRelatedAiQuestion } from '@/lib/is-music-related-ai-question';
 
 export type GuardRecentMessage = {
   displayName?: string;
@@ -24,7 +18,38 @@ export type ResolveAiQuestionMusicRelatedResult =
   | { outcome: 'block' }
   | { outcome: 'defer'; message: string };
 
-const DEFAULT_TIMEOUT_MS = 4500;
+const DEFAULT_TIMEOUT_MS = 6000;
+
+export type QuestionGuardClassifyApiPayload = {
+  skipped?: boolean;
+  musicRelated?: boolean | null;
+  error?: string;
+  message?: string;
+};
+
+/**
+ * 分類 API の HTTP 応答を outcome に変換（単体テスト用に export）。
+ * fail-open: skipped / null / サーバー障害 / タイムアウト相当は allow。
+ * block は Gemini が musicRelated:false を返したときのみ。
+ */
+export function resolveQuestionGuardClassifyApiOutcome(
+  httpStatus: number,
+  data: QuestionGuardClassifyApiPayload | null,
+): ResolveAiQuestionMusicRelatedResult {
+  if (httpStatus === 429 && data?.error === 'rate_limit') {
+    return { outcome: 'allow' };
+  }
+  if (!httpStatus || httpStatus < 200 || httpStatus >= 300) {
+    return { outcome: 'allow' };
+  }
+  if (data?.skipped === true || data?.musicRelated == null) {
+    return { outcome: 'allow' };
+  }
+  if (data.musicRelated === true) {
+    return { outcome: 'allow' };
+  }
+  return { outcome: 'block' };
+}
 
 /**
  * @param aiPromptText 「@」を除いた質問本文
@@ -44,12 +69,6 @@ export async function resolveAiQuestionMusicRelated(
   const q = aiPromptText.trim();
   if (!q) return { outcome: 'allow' };
   if (isAiTurnOrderClarificationText(q)) return { outcome: 'allow' };
-  if (isAboutDetailMusicFollowupQuestion(q, recentMessages)) return { outcome: 'allow' };
-  if (isOutlineTeachMusicFollowupQuestion(q, recentMessages)) return { outcome: 'allow' };
-  if (isShortMusicBiographyFollowupQuestion(q, recentMessages)) return { outcome: 'allow' };
-  if (isMusicFanbaseFollowupQuestion(q, recentMessages)) return { outcome: 'allow' };
-  if (isMusicLikelyKatakanaOrLatinWithStrongAnchors(q, recentMessages)) return { outcome: 'allow' };
-  if (isMusicRelatedAiQuestion(q)) return { outcome: 'allow' };
 
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const ctrl = new AbortController();
@@ -72,50 +91,13 @@ export async function resolveAiQuestionMusicRelated(
       signal: ctrl.signal,
     });
 
-    const data = (await res.json().catch(() => null)) as {
-      skipped?: boolean;
-      musicRelated?: boolean | null;
-      error?: string;
-      message?: string;
-    } | null;
-
-    if (res.status === 429 && data?.error === 'rate_limit') {
-      return {
-        outcome: 'defer',
-        message:
-          typeof data.message === 'string' && data.message.trim()
-            ? data.message
-            : '質問の自動判定が混雑しています。少し待ってから再度「@」付きで送ってください。',
-      };
-    }
-
-    if (!res.ok) {
-      return {
-        outcome: 'defer',
-        message: '質問の分類に失敗しました。しばらくしてから再度お試しください。',
-      };
-    }
-
-    if (data?.skipped === true || data?.musicRelated == null) {
-      return { outcome: 'block' };
-    }
-
-    if (data.musicRelated === true) {
-      return { outcome: 'allow' };
-    }
-
-    return { outcome: 'block' };
+    const data = (await res.json().catch(() => null)) as QuestionGuardClassifyApiPayload | null;
+    return resolveQuestionGuardClassifyApiOutcome(res.status, data);
   } catch (e) {
     if (e instanceof Error && e.name === 'AbortError') {
-      return {
-        outcome: 'defer',
-        message: '判定がタイムアウトしました。もう一度送ってください。',
-      };
+      return { outcome: 'allow' };
     }
-    return {
-      outcome: 'defer',
-      message: '質問の分類に失敗しました。しばらくしてから再度お試しください。',
-    };
+    return { outcome: 'allow' };
   } finally {
     clearTimeout(tid);
   }
