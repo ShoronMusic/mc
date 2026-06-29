@@ -1,5 +1,6 @@
 'use client';
 
+import { StartPageFirstReadModal } from '@/components/home/StartPageFirstReadModal';
 import { MeetingStartPanel } from '@/components/home/MeetingStartPanel';
 import { StartPageFooter } from '@/components/home/StartPageFooter';
 import {
@@ -12,10 +13,24 @@ import { hasGuestRoomPersistence } from '@/lib/guest-room-persistence';
 import { useEffect, useState } from 'react';
 
 function StartPageTitle() {
+  const [firstReadOpen, setFirstReadOpen] = useState(false);
+
   return (
-    <h1 className="mb-6 text-center text-xl font-bold text-white lg:text-left">
-      洋楽AIチャット（β版）
-    </h1>
+    <>
+      <h1 className="mb-2 text-center text-xl font-bold text-white lg:text-left">
+        洋楽AIチャット（β版）
+      </h1>
+      <p className="mb-6 text-center text-sm lg:text-left">
+        <button
+          type="button"
+          onClick={() => setFirstReadOpen(true)}
+          className="text-amber-400 underline-offset-2 hover:underline"
+        >
+          はじめにお読みください
+        </button>
+      </p>
+      <StartPageFirstReadModal open={firstReadOpen} onClose={() => setFirstReadOpen(false)} />
+    </>
   );
 }
 

@@ -1,5 +1,4 @@
 import { Suspense } from 'react';
-import { ConsentEntryGate } from '@/components/auth/ConsentEntryGate';
 import { FromStartMarker } from '@/components/auth/FromStartMarker';
 import { TopPageAuthBar } from '@/components/auth/TopPageAuthBar';
 import { AuthErrorBanner } from '@/components/auth/AuthErrorBanner';
@@ -10,7 +9,7 @@ import { SharePendingNotice } from '@/components/home/SharePendingNotice';
 
 export default function StartPage() {
   return (
-    <ConsentEntryGate>
+    <>
       <FromStartMarker />
       <TopPageAuthBar />
       <Suspense fallback={null}>
@@ -21,11 +20,11 @@ export default function StartPage() {
           <AdminLoginHint />
         </div>
       </Suspense>
-    <div className="flex min-h-screen flex-col items-center justify-center bg-gray-950 p-4 pt-16">
-      <SessionReplacedNotice />
-      <SharePendingNotice />
-      <StartPageMainCard />
-    </div>
-    </ConsentEntryGate>
+      <div className="flex min-h-screen flex-col items-center justify-center bg-gray-950 p-4 pt-16">
+        <SessionReplacedNotice />
+        <SharePendingNotice />
+        <StartPageMainCard />
+      </div>
+    </>
   );
 }
