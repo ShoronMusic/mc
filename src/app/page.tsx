@@ -7,11 +7,15 @@ import { StartPageMainCard } from '@/components/home/StartPageMainCard';
 import { SessionReplacedNotice } from '@/components/home/SessionReplacedNotice';
 import { SharePendingNotice } from '@/components/home/SharePendingNotice';
 
+export const dynamic = 'force-dynamic';
+
 export default function StartPage() {
   return (
     <>
       <FromStartMarker />
-      <TopPageAuthBar />
+      <Suspense fallback={null}>
+        <TopPageAuthBar />
+      </Suspense>
       <Suspense fallback={null}>
         <AuthErrorBanner />
       </Suspense>

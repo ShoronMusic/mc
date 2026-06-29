@@ -1,3 +1,5 @@
+'use client';
+
 import Link from 'next/link';
 import { YouTubeDataApiQuotaCallout } from '@/components/guide/YouTubeDataApiQuotaCallout';
 import {
