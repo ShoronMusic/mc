@@ -250,7 +250,7 @@ export function SimpleAuthForm({
             type="text"
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}
-            placeholder="チャットで表示する名前"
+            placeholder="チャットで表示する名前（登録後に変更可能）"
             className="rounded border border-gray-600 bg-gray-800 px-3 py-2 text-white placeholder-gray-500"
             autoComplete="nickname"
           />
