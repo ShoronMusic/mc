@@ -109,7 +109,36 @@ Google認証で参加できるようにするには、Supabase 側で Google を
 
 - 確認前はログインできません（未確認でセッションが付いた場合もアプリ側でサインアウト）。
 - **パスワード最低 8 文字**（アプリは `src/lib/auth-password-policy.ts`）。Supabase の **Authentication** 設定に最低文字数がある場合は **8** に揃える。
-- 確認メールが届かない場合: 登録画面の **確認メールを再送信**、または Supabase の **Authentication → Email Templates** を確認。
+- 確認メールが届かない場合: 登録画面の **確認メールを再送信**、または下記 **§5.2 メール文面** を確認。
+
+### 5.2 確認メールの文面（日本語・サービス名）
+
+Supabase の UI 表記は **Email Templates** ではなく **Emails** です。
+
+1. 左メニュー **Authentication** → **Emails**（または **NOTIFICATIONS** 内の **Emails**）
+2. 上部タブ **Templates** を開く（**SMTP Settings** の隣）
+3. **Authentication** 見出しの **1 行目「Confirm sign up」** をクリック（`>` で行全体がリンク）
+4. **Subject** と **Body** を編集して **Save**
+
+**件名（例）**
+
+```
+【洋楽AIチャット】メールアドレスの確認
+```
+
+**本文（例・HTML）**
+
+```html
+<h2>洋楽AIチャット（Musicai.jp）へのご登録ありがとうございます</h2>
+<p>下のリンクを開いて、メールアドレスの確認を完了してください。</p>
+<p><a href="{{ .ConfirmationURL }}">メールアドレスを確認する</a></p>
+<p>心当たりがない場合は、このメールを無視してください。</p>
+<p>洋楽AIチャット<br>https://www.musicai.jp</p>
+```
+
+`{{ .ConfirmationURL }}` は削除しないこと（確認リンク用）。
+
+同様に **Reset password** も日本語化しておくとよい。差出人名を `musicai.jp` ドメインにしたい場合は **Emails → SMTP Settings** でカスタム SMTP を設定する（任意）。
 
 ---
 
@@ -576,7 +605,7 @@ create policy "user_public_profile_select_visible"
 
 ## 17. 部屋の AI 曲解説・曲クイズ・おすすめ曲（`user_room_ai_features`）
 
-ログインユーザーがマイページ「ユーザー機能」で **AI曲解説**・**AI曲クイズ**・**AIおすすめ曲** を、このアカウントの端末から API を呼ぶか ON/OFF します（部屋全体の許可はオーナー機能タブ）。**行が無いときはすべて ON** として扱います。
+ログインユーザーがマイページ「ユーザー機能」で **AI曲解説**・**AI曲クイズ**・**AIおすすめ曲** を、このアカウントの端末から API を呼ぶか ON/OFF します（部屋全体の許可はオーナー機能タブ）。**行が無いときは曲解説 ON、クイズ・おすすめ OFF**（初回は AI解説1 のみ想定）。部屋オーナーのセッション既定も **AI解説1・曲クイズOFF・おすすめ曲OFF・AI参加OFF** です。
 
 - **マイページ**: 「ユーザー機能」タブの ON/OFF ボタン
 - **API**: `GET` / `PUT` → `/api/user/room-ai-features`（セッション必須）
@@ -588,14 +617,14 @@ Supabase の **SQL Editor** で実行（**再実行可**。ポリシーは一度
 create table if not exists public.user_room_ai_features (
   user_id uuid primary key references auth.users (id) on delete cascade,
   ai_commentary_enabled boolean not null default true,
-  ai_song_quiz_enabled boolean not null default true,
-  ai_next_song_recommend_enabled boolean not null default true,
+  ai_song_quiz_enabled boolean not null default false,
+  ai_next_song_recommend_enabled boolean not null default false,
   updated_at timestamptz not null default now()
 );
 
 -- 第 17 章の旧 SQL だけ流した DB 向け（列が無いとマイページが「テーブルがありません」と出続ける）
 alter table public.user_room_ai_features
-  add column if not exists ai_next_song_recommend_enabled boolean not null default true;
+  add column if not exists ai_next_song_recommend_enabled boolean not null default false;
 
 create index if not exists user_room_ai_features_updated_idx
   on public.user_room_ai_features (updated_at desc);
@@ -628,7 +657,7 @@ create policy "user_room_ai_features_delete_own"
 
 ```sql
 alter table public.user_room_ai_features
-  add column if not exists ai_next_song_recommend_enabled boolean not null default true;
+  add column if not exists ai_next_song_recommend_enabled boolean not null default false;
 ```
 
 テーブルが無い／列不足のとき、API はマイページに保存不可の案内を返します。
@@ -933,3 +962,16 @@ alter table public.song_external_metrics enable row level security;
 
 - **想定用途**: 将来の再取り込み時に、外部メタ（人気度比較・ジャンル候補）を再利用しやすくする。
 - **RLS**: ポリシーは付けず、アプリ側は **`SUPABASE_SERVICE_ROLE_KEY`** で書き込み（既存管理APIと同様）。
+
+---
+
+## 23. AI お試し 10 曲（`user_ai_trial`）
+
+登録ユーザー向け **生涯 10 曲** の AI 付き選曲お試しと **@ 5 回** 枠。
+
+**SQL・列説明・付与/消費**は **`docs/supabase-user-ai-trial-table.md`** を参照し、Supabase SQL Editor で実行してください。
+
+- **有効化**: テーブル作成後、アプリの `.env.local` に **`AI_TRIAL_ENFORCEMENT_ENABLED=1`**（コミット禁止）。未設定時は preview（枠非消費）。
+- **付与**: メール確認済みユーザーが `GET /api/user/ai-trial` を初めて呼んだとき（Google 等は即）。
+- **消費**: `POST /api/ai/comment-pack` · `packPhase=base` · `aiMode=full` で 1 曲。`@` は `/api/ai/chat` で別枠。
+- **監査ログ**（任意）: `user_ai_trial_consumption_log` — SQL は `docs/supabase-user-ai-trial-table.md` 末尾。

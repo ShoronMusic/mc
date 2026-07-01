@@ -265,6 +265,11 @@ interface RoomPlaybackHistoryProps {
   currentVideoId: string | null;
   /** 変更されると再取得する（部屋側で10秒後にPOSTしたあと更新用） */
   refreshKey?: number;
+  /**
+   * 指定時は played_at >= この ISO 時刻の行のみ取得（ゲスト単独セッション向け）。
+   * 未指定なら部屋の直近履歴（既定100件）。
+   */
+  playbackHistorySinceIso?: string;
   /** 選曲者列の色（チャット・UserBar と同じ。表示名一致で適用） */
   participantsWithColor?: { displayName: string; textColor: string }[];
   /** ゲストでないときのみお気に入り利用可 */
@@ -308,7 +313,8 @@ export default function RoomPlaybackHistory({
   roomId,
   roomClientId = '',
   currentVideoId,
-  refreshKey,
+  refreshKey = 0,
+  playbackHistorySinceIso,
   participantsWithColor = [],
   isGuest = true,
   favoritedVideoIds = [],
@@ -517,6 +523,8 @@ export default function RoomPlaybackHistory({
         const qs = new URLSearchParams({ roomId });
         const cid = typeof roomClientId === 'string' ? roomClientId.trim() : '';
         if (cid) qs.set('clientId', cid);
+        const since = playbackHistorySinceIso?.trim() ?? '';
+        if (since) qs.set('since', since);
         appendRoomPlaybackHistoryPagination(qs, { offset });
         const url = `/api/room-playback-history?${qs.toString()}`;
 
@@ -564,7 +572,7 @@ export default function RoomPlaybackHistory({
         }
       }
     },
-    [roomId, roomClientId, normalizeHistoryRows],
+    [roomId, roomClientId, playbackHistorySinceIso, normalizeHistoryRows],
   );
 
   const fetchItems = useCallback(() => fetchHistoryPage(0, false), [fetchHistoryPage]);
@@ -602,6 +610,8 @@ export default function RoomPlaybackHistory({
   });
 
   const currentRow = currentVideoId ? sorted.find((r) => r.video_id === currentVideoId) : undefined;
+
+  const sessionOnlyHistory = Boolean(playbackHistorySinceIso?.trim());
 
   const toggleSort = useCallback(() => {
     setSortOrder((o) => (o === 'desc' ? 'asc' : 'desc'));
@@ -816,26 +826,30 @@ export default function RoomPlaybackHistory({
               ソングデータ
             </button>
           )}
-          <button
-            type="button"
-            onClick={() => setEraDistOpen(true)}
-            className="ml-1 flex items-center gap-1 border-l border-gray-600 pl-2 text-sm text-gray-400 transition hover:text-gray-200"
-            title="年代を表示"
-            aria-label="年代を表示"
-          >
-            <CalendarDaysIcon className="h-4 w-4 flex-shrink-0" aria-hidden />
-            <span className="hidden rounded px-2 py-1 hover:bg-gray-700/50 sm:inline">年代</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setStyleDistOpen(true)}
-            className="flex items-center gap-1 text-sm text-gray-400 transition hover:text-gray-200"
-            title="スタイルを表示"
-            aria-label="スタイルを表示"
-          >
-            <ChartBarIcon className="h-4 w-4 flex-shrink-0" aria-hidden />
-            <span className="hidden rounded px-2 py-1 hover:bg-gray-700/50 sm:inline">スタイル</span>
-          </button>
+          {!sessionOnlyHistory && (
+            <>
+              <button
+                type="button"
+                onClick={() => setEraDistOpen(true)}
+                className="ml-1 flex items-center gap-1 border-l border-gray-600 pl-2 text-sm text-gray-400 transition hover:text-gray-200"
+                title="年代を表示"
+                aria-label="年代を表示"
+              >
+                <CalendarDaysIcon className="h-4 w-4 flex-shrink-0" aria-hidden />
+                <span className="hidden rounded px-2 py-1 hover:bg-gray-700/50 sm:inline">年代</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setStyleDistOpen(true)}
+                className="flex items-center gap-1 text-sm text-gray-400 transition hover:text-gray-200"
+                title="スタイルを表示"
+                aria-label="スタイルを表示"
+              >
+                <ChartBarIcon className="h-4 w-4 flex-shrink-0" aria-hidden />
+                <span className="hidden rounded px-2 py-1 hover:bg-gray-700/50 sm:inline">スタイル</span>
+              </button>
+            </>
+          )}
         </div>
         {watchInNewTabUrl && (
           <a
@@ -956,7 +970,9 @@ export default function RoomPlaybackHistory({
             ) : sorted.length === 0 ? (
               <tr>
                 <td colSpan={8} className="py-2 text-center text-gray-500">
-                  履歴がありません
+                  {sessionOnlyHistory
+                    ? 'このセッションではまだ再生履歴がありません'
+                    : '履歴がありません'}
                 </td>
               </tr>
             ) : (

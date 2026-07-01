@@ -6,6 +6,9 @@ import {
   escapeLikeForIlike,
   fetchSongsForLibraryArtistSelection,
   resolveMainArtistsForLibrarySearch,
+  dedupeLibraryArtistDisplayNames,
+  resolveLibrarySearchPriorityArtistNames,
+  songMainArtistIncludesArtist,
 } from '@/lib/library-search-query';
 import { songRowLooksJapaneseDomesticForAdminLibrary } from '@/lib/admin-library-jp-exclude';
 
@@ -124,6 +127,21 @@ function sortSongRows(rows: SongRow[]): SongRow[] {
   });
 }
 
+/** 日本語略称ヒット時は同名英語バンドを先頭に（スミス→The Smiths 等） */
+function prioritizeLibrarySearchSongs(rows: SongRow[], priorityArtists: string[]): SongRow[] {
+  if (priorityArtists.length === 0) return sortSongRows(rows);
+  const prioritized: SongRow[] = [];
+  const others: SongRow[] = [];
+  for (const row of rows) {
+    if (priorityArtists.some((a) => songMainArtistIncludesArtist(row.main_artist, a))) {
+      prioritized.push(row);
+    } else {
+      others.push(row);
+    }
+  }
+  return [...sortSongRows(prioritized), ...sortSongRows(others)];
+}
+
 export async function GET(request: Request) {
   const admin = createAdminClient();
   if (!admin) {
@@ -139,15 +157,19 @@ export async function GET(request: Request) {
   if (q) {
     const variants = expandLibrarySearchQueryVariants(q);
     const mainArtistsFromTable = await resolveMainArtistsForLibrarySearch(admin, q);
+    const priorityArtists = dedupeLibraryArtistDisplayNames([
+      ...mainArtistsFromTable,
+      ...resolveLibrarySearchPriorityArtistNames(q),
+    ]);
     const perVariant = Math.min(limit, 80);
     const fromText = await fetchSongsByTextVariants(admin, variants, perVariant);
     const fromArtists =
-      mainArtistsFromTable.length > 0
-        ? await fetchSongsByMainArtists(admin, mainArtistsFromTable, perVariant)
+      priorityArtists.length > 0
+        ? await fetchSongsByMainArtists(admin, priorityArtists, perVariant)
         : [];
     const merged = new Map<string, SongRow>();
     for (const row of [...fromText, ...fromArtists]) merged.set(row.id, row);
-    songs = sortSongRows([...merged.values()]).slice(0, limit);
+    songs = prioritizeLibrarySearchSongs([...merged.values()], priorityArtists).slice(0, limit);
   } else {
     const { data: songRows, error: songErr } = await admin
       .from('songs')

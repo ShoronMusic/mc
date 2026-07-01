@@ -45,6 +45,11 @@ import {
   stripUiLabelPrefixFromBody,
 } from '@/lib/chat-message-ui-labels';
 import type { CommentPackSlotSelection } from '@/lib/comment-pack-slots';
+import {
+  DEFAULT_OWNER_AI_CHARACTER_JOIN_ENABLED,
+  DEFAULT_OWNER_NEXT_SONG_RECOMMEND_ENABLED,
+  DEFAULT_OWNER_SONG_QUIZ_ENABLED,
+} from '@/types/room-owner';
 import { formatMcDbMatchDisplayLine } from '@/lib/next-song-recommend-display';
 import { postMyListItemClient } from '@/lib/my-list-client-post';
 import type { ThemePlaylistRoomSubmitBanner } from '@/hooks/useThemePlaylistRoomSubmitMission';
@@ -52,6 +57,8 @@ import ThemePlaylistMissionEntriesModal, {
   type ThemePlaylistMissionEntriesModalRoomProps,
 } from '@/components/chat/ThemePlaylistMissionEntriesModal';
 import AiCharacterTtsReplayButton from '@/components/chat/AiCharacterTtsReplayButton';
+import { AiTrialStatusBadge } from '@/components/shared/AiTrialStatusBadge';
+import type { AiTrialStatus } from '@/lib/ai-trial-status';
 
 /** 詳細フィードバック用モーダルの状態 */
 type FeedbackModalState =
@@ -146,6 +153,19 @@ interface ChatProps {
   themePlaylistActiveMission?: ThemePlaylistRoomSubmitBanner | null;
   /** 「実施中」モーダル: 視聴履歴と同様の列・お気に入り・年代スタイル補完用 */
   themePlaylistMissionRoom?: ThemePlaylistMissionEntriesModalRoomProps;
+  /** ゲストなら true（AIお試し残・AI設定 は非表示） */
+  viewerIsGuest?: boolean;
+  /** 在室に Supabase 登録ユーザー（authUserId）が1人でもいる */
+  roomHasRegisteredParticipant?: boolean;
+  /** ログイン時の AI お試し残（GET /api/user/ai-trial） */
+  aiTrialStatus?: AiTrialStatus | null;
+  aiTrialLoading?: boolean;
+  /** マイページ（ユーザー設定タブ）を開く */
+  onAiSettingsClick?: () => void;
+  /** ログイン時: 自分の選曲向け AI ON/OFF（ヘッダー「自分OFF」表示用） */
+  personalAiCommentaryEnabled?: boolean;
+  personalAiSongQuizEnabled?: boolean;
+  personalAiRecommendEnabled?: boolean;
 }
 
 function formatTime(createdAt: string): string {
@@ -192,9 +212,9 @@ function ownerRoomFeatureHeaderPillClass(
   variant: 'commentary' | 'quiz' | 'recommend' | 'character',
 ): string {
   const base =
-    'shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-semibold leading-none tracking-tight';
+    'shrink-0 rounded border px-1.5 text-[10px] font-semibold leading-none tracking-tight';
   if (!active) {
-    return `${base} border-gray-600/55 bg-gray-800/45 text-gray-500`;
+    return `${base} border-gray-600/55 bg-gray-800/45 text-gray-500 py-0.5`;
   }
   if (variant === 'commentary') {
     return `${base} border-sky-500/70 bg-sky-900/35 text-sky-200`;
@@ -203,9 +223,48 @@ function ownerRoomFeatureHeaderPillClass(
     return `${base} border-emerald-500/70 bg-emerald-900/35 text-emerald-200`;
   }
   if (variant === 'character') {
-    return `${base} border-amber-500/70 bg-amber-900/35 text-amber-200`;
+    return `${base} border-amber-500/70 bg-amber-900/35 text-amber-200 py-0.5`;
   }
   return `${base} border-violet-500/70 bg-violet-900/35 text-violet-200`;
+}
+
+function OwnerRoomFeatureHeaderPill({
+  active,
+  variant,
+  label,
+  personalSelfOff = false,
+  forceInactive = false,
+  inactiveTitle,
+}: {
+  active: boolean;
+  variant: 'commentary' | 'quiz' | 'recommend' | 'character';
+  label: ReactNode;
+  personalSelfOff?: boolean;
+  /** ゲスト単独など、部屋設定はあるが選曲付随AIは出ないとき */
+  forceInactive?: boolean;
+  inactiveTitle?: string;
+}) {
+  const showSelfOff = active && personalSelfOff && !forceInactive;
+  const pillActive = active && !forceInactive;
+  return (
+    <span
+      className={`${ownerRoomFeatureHeaderPillClass(pillActive, variant)} inline-flex flex-col items-center justify-center gap-0.5 ${
+        showSelfOff ? 'py-0.5' : 'py-0.5'
+      }`}
+      title={
+        forceInactive
+          ? inactiveTitle
+          : showSelfOff
+            ? '部屋ではオン。自分の選曲だけオフ'
+            : undefined
+      }
+    >
+      <span>{label}</span>
+      {showSelfOff ? (
+        <span className="text-[8px] font-medium leading-none text-gray-400/95">自分OFF</span>
+      ) : null}
+    </span>
+  );
 }
 
 function renderSelectionAnnounceBodyWithMusicNote(body: string): ReactNode {
@@ -647,9 +706,9 @@ export default function Chat({
   jpAiUnlockEnabled = false,
   ownerAiCommentaryEnabled = true,
   ownerCommentPackSlots,
-  ownerSongQuizEnabled = true,
-  ownerNextSongRecommendEnabled = true,
-  ownerAiCharacterJoinEnabled = true,
+  ownerSongQuizEnabled = DEFAULT_OWNER_SONG_QUIZ_ENABLED,
+  ownerNextSongRecommendEnabled = DEFAULT_OWNER_NEXT_SONG_RECOMMEND_ENABLED,
+  ownerAiCharacterJoinEnabled = DEFAULT_OWNER_AI_CHARACTER_JOIN_ENABLED,
   roomId,
   myClientId,
   styleAdminChatTools = false,
@@ -664,6 +723,14 @@ export default function Chat({
   onOpenLibraryFromChat,
   themePlaylistActiveMission = null,
   themePlaylistMissionRoom,
+  viewerIsGuest = false,
+  roomHasRegisteredParticipant = true,
+  aiTrialStatus = null,
+  aiTrialLoading = false,
+  onAiSettingsClick,
+  personalAiCommentaryEnabled = true,
+  personalAiSongQuizEnabled = true,
+  personalAiRecommendEnabled = true,
 }: ChatProps) {
   const pathname = usePathname();
   const pathSegs = pathname?.split('/').filter(Boolean) ?? [];
@@ -1184,6 +1251,13 @@ export default function Chat({
     ownerCommentarySlotNumbers === '1 2 3 4 5'
       ? 'ALL'
       : ownerCommentarySlotNumbers;
+  /** ゲストのみ・登録ユーザー不在 → 自分の選曲では AI 付随機能は出ない */
+  const guestSelectionAiHeaderOff = viewerIsGuest && !roomHasRegisteredParticipant;
+  const guestSelectionAiHeaderTitle =
+    '登録ユーザーの選曲時のみ有効（ゲストは AI 付き選曲不可）';
+  const headerCommentaryActive = ownerAiCommentaryEnabled && !guestSelectionAiHeaderOff;
+  const headerQuizActive = ownerSongQuizEnabled && !guestSelectionAiHeaderOff;
+  const headerRecommendActive = ownerNextSongRecommendEnabled && !guestSelectionAiHeaderOff;
   const aiQuestionExamples = [
     {
       question: '@アヴリル・ラヴィーンのデビュー曲は？',
@@ -1204,7 +1278,7 @@ export default function Chat({
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden rounded-lg border border-gray-700 bg-gray-900/50">
-      <div className="flex flex-nowrap items-center gap-x-2 gap-y-0 border-b border-gray-700 px-3 py-2 max-lg:py-1.5 lg:flex-wrap lg:gap-x-3 lg:gap-y-1">
+      <div className="flex flex-nowrap items-center gap-x-2 gap-y-0 border-b border-gray-700 px-3 py-2 max-lg:py-1.5 lg:flex-wrap lg:items-center lg:gap-x-3 lg:gap-y-1.5">
         <span
           className="shrink-0 text-sm font-medium text-gray-300"
           title="参加者同士のチャット欄です。"
@@ -1214,26 +1288,78 @@ export default function Chat({
         <div
           className="inline-flex min-w-0 flex-1 flex-nowrap items-center gap-x-1.5 overflow-x-auto lg:flex-wrap lg:gap-x-2 lg:gap-y-1 lg:overflow-visible"
           role="status"
-          aria-label={`部屋のAI機能: 曲解説${ownerAiCommentaryEnabled ? 'オン' : 'オフ'}、曲クイズ${
-            ownerSongQuizEnabled ? 'オン' : 'オフ'
-          }、おすすめ曲${ownerNextSongRecommendEnabled ? 'オン' : 'オフ'}、AIキャラクター参加${
-            ownerAiCharacterJoinEnabled ? 'オン' : 'オフ'
+          aria-label={`部屋のAI機能: 曲解説${headerCommentaryActive ? 'オン' : 'オフ'}${
+            headerCommentaryActive && !personalAiCommentaryEnabled && !viewerIsGuest
+              ? '（自分オフ）'
+              : ''
+          }、曲クイズ${headerQuizActive ? 'オン' : 'オフ'}${
+            headerQuizActive && !personalAiSongQuizEnabled && !viewerIsGuest ? '（自分オフ）' : ''
+          }、おすすめ曲${headerRecommendActive ? 'オン' : 'オフ'}${
+            headerRecommendActive && !personalAiRecommendEnabled && !viewerIsGuest
+              ? '（自分オフ）'
+              : ''
+          }、AIキャラクター参加${ownerAiCharacterJoinEnabled ? 'オン' : 'オフ'}${
+            guestSelectionAiHeaderOff ? '（ゲストのみのため選曲付随AIはオフ表示）' : ''
           }`}
         >
-          <span className={ownerRoomFeatureHeaderPillClass(ownerAiCommentaryEnabled, 'commentary')}>
-            AI曲解説{ownerCommentarySlotSuffix ? ` ${ownerCommentarySlotSuffix}` : ''}
-          </span>
-          <span className={ownerRoomFeatureHeaderPillClass(ownerSongQuizEnabled, 'quiz')}>曲クイズ</span>
-          <span className={ownerRoomFeatureHeaderPillClass(ownerNextSongRecommendEnabled, 'recommend')}>
-            おすすめ曲
-          </span>
-          <span className={ownerRoomFeatureHeaderPillClass(ownerAiCharacterJoinEnabled, 'character')}>
-            AI参加
-          </span>
+          <OwnerRoomFeatureHeaderPill
+            active={ownerAiCommentaryEnabled}
+            forceInactive={guestSelectionAiHeaderOff}
+            inactiveTitle={guestSelectionAiHeaderTitle}
+            variant="commentary"
+            personalSelfOff={!viewerIsGuest && !personalAiCommentaryEnabled}
+            label={
+              <>
+                AI曲解説
+                {headerCommentaryActive && ownerCommentarySlotSuffix
+                  ? ` ${ownerCommentarySlotSuffix}`
+                  : ''}
+              </>
+            }
+          />
+          <OwnerRoomFeatureHeaderPill
+            active={ownerSongQuizEnabled}
+            forceInactive={guestSelectionAiHeaderOff}
+            inactiveTitle={guestSelectionAiHeaderTitle}
+            variant="quiz"
+            personalSelfOff={!viewerIsGuest && !personalAiSongQuizEnabled}
+            label="曲クイズ"
+          />
+          <OwnerRoomFeatureHeaderPill
+            active={ownerNextSongRecommendEnabled}
+            forceInactive={guestSelectionAiHeaderOff}
+            inactiveTitle={guestSelectionAiHeaderTitle}
+            variant="recommend"
+            personalSelfOff={!viewerIsGuest && !personalAiRecommendEnabled}
+            label="おすすめ曲"
+          />
+          <OwnerRoomFeatureHeaderPill
+            active={ownerAiCharacterJoinEnabled}
+            variant="character"
+            label="AI参加"
+          />
           {jpAiUnlockEnabled ? (
             <span className="shrink-0 rounded border border-emerald-600/70 bg-emerald-900/40 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-200">
               邦楽解禁
             </span>
+          ) : null}
+          {!viewerIsGuest ? (
+            <AiTrialStatusBadge
+              status={aiTrialStatus}
+              loading={aiTrialLoading}
+              variant="header"
+            />
+          ) : null}
+          {!viewerIsGuest && onAiSettingsClick ? (
+            <button
+              type="button"
+              onClick={onAiSettingsClick}
+              className="shrink-0 rounded border border-violet-500/65 bg-violet-900/35 px-1.5 py-0.5 text-[10px] font-semibold leading-none tracking-tight text-violet-200 hover:bg-violet-900/55"
+              aria-label="AI 設定（マイページのユーザー設定を開く）"
+              title="自分の選曲 AI（解説・クイズ・おすすめの opt-out）。部屋上限・エージェントは部屋設定タブ"
+            >
+              AI設定
+            </button>
           ) : null}
         </div>
         {isLg ? (

@@ -1,11 +1,12 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { stripLeadingArticleForSort } from '@/lib/admin-library-index';
 
 /**
  * ライブラリ検索（`/api/library/search`）用クエリ展開。
  * 日本語カタカナ表記ゆれ（・／スペース／スウィフト↔スイフト）と代表英語名の補完。
  */
 
-/** カタカナ検索から追加する英語 main_artist（部分一致） */
+/** カタカナ検索から追加する英語 main_artist */
 const KATAKANA_MAIN_ARTIST_HINTS: { test: (compact: string) => boolean; names: string[] }[] = [
   {
     test: (c) =>
@@ -13,10 +14,34 @@ const KATAKANA_MAIN_ARTIST_HINTS: { test: (compact: string) => boolean; names: s
       (/スウィフト/.test(c) || /スイフト/.test(c) || /スィフト/.test(c) || /スウィフト/.test(c)),
     names: ['Taylor Swift'],
   },
+  {
+    test: (c) => /^(ザ)?ビートルズ$/.test(c),
+    names: ['The Beatles'],
+  },
+  {
+    test: (c) => /^(ザ)?スミス$/.test(c),
+    names: ['The Smiths'],
+  },
 ];
 
 function compactJa(s: string): string {
   return s.replace(/[・･\u30FB\s\u3000]+/g, '').trim();
+}
+
+/** 日本語カタカナ／略称から優先表示する英語 `main_artist`（検索 API の並び替えにも使用） */
+export function resolveLibrarySearchPriorityArtistNames(rawQuery: string): string[] {
+  const q = rawQuery.trim();
+  if (!q) return [];
+
+  const names = new Set<string>();
+  const compact = compactJa(q);
+  for (const hint of KATAKANA_MAIN_ARTIST_HINTS) {
+    if (hint.test(compact)) {
+      for (const name of hint.names) names.add(name);
+    }
+  }
+  if (/^smiths?$/i.test(q)) names.add('The Smiths');
+  return [...names];
 }
 
 /** スウィフト ↔ スイフト 等のカタカナゆれ */
@@ -49,11 +74,8 @@ export function expandLibrarySearchQueryVariants(raw: string, max = 12): string[
     for (const v of katakanaWiSuVariants(base)) add(v);
   }
 
-  const compact = compactJa(q);
-  for (const hint of KATAKANA_MAIN_ARTIST_HINTS) {
-    if (hint.test(compact)) {
-      for (const name of hint.names) add(name);
-    }
+  for (const name of resolveLibrarySearchPriorityArtistNames(q)) {
+    add(name);
   }
 
   return [...out].slice(0, max);
@@ -85,6 +107,86 @@ export function primaryArtistForLibraryIndex(mainArtist: string): string {
   return parts[0]?.trim() || trimmed;
 }
 
+/** 先頭 The/A/An を除いた表記でも同一アーティストとみなす（Beatles ↔ The Beatles） */
+export function artistNamesMatchIgnoringLeadingArticle(a: string, b: string): boolean {
+  const x = stripLeadingArticleForSort(a).trim();
+  const y = stripLeadingArticleForSort(b).trim();
+  if (!x || !y) return false;
+  return x.localeCompare(y, undefined, { sensitivity: 'base' }) === 0;
+}
+
+/** `main_artist` 検索用: 入力名と先頭冠詞あり／なしの表記バリエーション */
+export function libraryArtistNameLookupVariants(name: string): string[] {
+  const s = name.trim();
+  if (!s) return [];
+  const out = new Set<string>([s]);
+  const stripped = stripLeadingArticleForSort(s);
+  if (stripped && stripped !== s) out.add(stripped);
+  if (stripped && !/^the\s+/i.test(s)) {
+    const theForm = `The ${stripped}`;
+    if (theForm !== s) out.add(theForm);
+  }
+  return [...out];
+}
+
+function libraryArtistDisplayNameKey(name: string): string {
+  return stripLeadingArticleForSort(name).trim().toLowerCase();
+}
+
+/** 同一アーティストの表記ゆれ（Beatles / The Beatles）を1件にまとめるときの代表名 */
+export function preferLibraryArtistDisplayName(a: string, b: string): string {
+  const x = a.trim();
+  const y = b.trim();
+  if (!x) return y;
+  if (!y) return x;
+  if (libraryArtistDisplayNameKey(x) !== libraryArtistDisplayNameKey(y)) return x;
+  if (/^the\s+/i.test(y) && !/^the\s+/i.test(x)) return y;
+  if (/^the\s+/i.test(x) && !/^the\s+/i.test(y)) return x;
+  return x.localeCompare(y, 'en', { sensitivity: 'base' }) <= 0 ? x : y;
+}
+
+/** ライブラリ UI 用: 先頭冠詞ゆれを除いてアーティスト名をユニーク化 */
+export function dedupeLibraryArtistDisplayNames(names: string[]): string[] {
+  const byKey = new Map<string, string>();
+  for (const raw of names) {
+    const name = raw.trim();
+    if (!name) continue;
+    const key = libraryArtistDisplayNameKey(name);
+    const existing = byKey.get(key);
+    byKey.set(key, existing ? preferLibraryArtistDisplayName(existing, name) : name);
+  }
+  return [...byKey.values()].sort((a, b) => a.localeCompare(b, 'en', { sensitivity: 'base' }));
+}
+
+export type LibraryArtistIndexMergeItem = {
+  main_artist: string;
+  count: number;
+  indexLetter: string;
+};
+
+/** 索引 API 応答: Beatles / The Beatles などを1行に統合（曲数は合算） */
+export function mergeLibraryArtistIndexItems(
+  items: LibraryArtistIndexMergeItem[],
+): LibraryArtistIndexMergeItem[] {
+  const byKey = new Map<string, LibraryArtistIndexMergeItem>();
+  for (const item of items) {
+    const name = (item.main_artist ?? '').trim();
+    if (!name) continue;
+    const key = libraryArtistDisplayNameKey(name);
+    const existing = byKey.get(key);
+    if (!existing) {
+      byKey.set(key, { ...item, main_artist: name });
+      continue;
+    }
+    existing.count += item.count;
+    existing.main_artist = preferLibraryArtistDisplayName(existing.main_artist, name);
+    existing.indexLetter = item.indexLetter || existing.indexLetter;
+  }
+  return [...byKey.values()].sort((a, b) =>
+    a.main_artist.localeCompare(b.main_artist, 'en', { sensitivity: 'base' }),
+  );
+}
+
 /**
  * 曲の `main_artist` が、絞り込みで選んだ単独アーティスト名に該当するか。
  * 完全一致または共演列のいずれかと一致（部分文字列マッチはしない）。
@@ -98,8 +200,13 @@ export function songMainArtistIncludesArtist(
   const raw = (songMainArtist ?? '').trim();
   if (!raw) return false;
   if (raw.localeCompare(sel, undefined, { sensitivity: 'base' }) === 0) return true;
+  if (artistNamesMatchIgnoringLeadingArticle(raw, sel)) return true;
   const parts = parseCollabArtistNamesFromMainArtist(raw);
-  return parts.some((p) => p.localeCompare(sel, undefined, { sensitivity: 'base' }) === 0);
+  return parts.some(
+    (p) =>
+      p.localeCompare(sel, undefined, { sensitivity: 'base' }) === 0 ||
+      artistNamesMatchIgnoringLeadingArticle(p, sel),
+  );
 }
 
 /** 検索結果の「アーティストで絞り込み」候補（結合表記＋個別名） */
@@ -137,7 +244,12 @@ export async function resolveArtistIdsForLibrarySelection(
   for (const row of (data ?? []) as { id?: string; name?: string }[]) {
     if (!row.id) continue;
     const n = (row.name ?? '').trim();
-    if (n.localeCompare(sel, undefined, { sensitivity: 'base' }) === 0) ids.push(row.id);
+    if (
+      n.localeCompare(sel, undefined, { sensitivity: 'base' }) === 0 ||
+      artistNamesMatchIgnoringLeadingArticle(n, sel)
+    ) {
+      ids.push(row.id);
+    }
   }
   return ids;
 }
@@ -204,13 +316,15 @@ export async function fetchSongsForLibraryArtistSelection<T extends SongRowWithM
     }
   };
 
-  const { data: exact, error: exactErr } = await admin
-    .from('songs')
-    .select(select)
-    .eq('main_artist', sel)
-    .limit(limit);
-  if (exactErr) throw new Error(exactErr.message);
-  addFromMainArtist(exact);
+  for (const variant of libraryArtistNameLookupVariants(sel)) {
+    const { data: exact, error: exactErr } = await admin
+      .from('songs')
+      .select(select)
+      .eq('main_artist', variant)
+      .limit(limit);
+    if (exactErr) throw new Error(exactErr.message);
+    addFromMainArtist(exact);
+  }
 
   const escaped = escapeLikeForIlike(sel);
 
@@ -273,5 +387,5 @@ export async function resolveMainArtistsForLibrarySearch(
       if (n) names.add(n);
     }
   }
-  return [...names];
+  return dedupeLibraryArtistDisplayNames([...names]);
 }

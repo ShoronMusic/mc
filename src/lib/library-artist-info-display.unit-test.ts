@@ -19,6 +19,12 @@ function run() {
     }),
     false,
   );
+  assert.equal(
+    isLibraryArtistInfoSparse({
+      name_ja: 'ビートルズ',
+    }),
+    true,
+  );
 
   console.log('library-artist-info-display.unit-test: ok');
 }

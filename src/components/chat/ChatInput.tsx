@@ -21,6 +21,12 @@ import { SHARE_SET_CHAT_TEXT_EVENT } from '@/lib/share-target-delivery';
 import { consumePendingShareChatText } from '@/lib/share-target-pending';
 import { NON_YOUTUBE_URL_SYSTEM_MESSAGE } from '@/lib/chat-non-youtube-url';
 import { extractVideoId, isStandaloneNonYouTubeUrl } from '@/lib/youtube';
+import type { AiTrialStatus } from '@/lib/ai-trial-status';
+import {
+  resolveAiSelectionMode,
+  shouldShowAiDualSelectionButtons,
+  type AiSelectionMode,
+} from '@/lib/ai-selection-mode';
 import { postMyListItemClient } from '@/lib/my-list-client-post';
 import type { SystemMessageOptions } from '@/types/chat';
 import { isAiQuestionGuardDisabledClient } from '@/lib/chat-system-copy';
@@ -47,7 +53,11 @@ import { useIsMobileLandscapeViewport } from '@/hooks/useMobileLandscapeViewport
 import {
   expandMainArtistNamesForLibraryFilter,
   songMainArtistIncludesArtist,
+  dedupeLibraryArtistDisplayNames,
+  mergeLibraryArtistIndexItems,
+  artistNamesMatchIgnoringLeadingArticle,
 } from '@/lib/library-search-query';
+import { findLibraryMainArtistInIndex } from '@/lib/library-artist-index-match';
 
 type SearchResultRow = {
   videoId: string;
@@ -211,15 +221,14 @@ function libraryModalArtistIndexKey(name: string | null): string {
   return LIBRARY_MODAL_INDEX_OTHER;
 }
 
-/** 索引の `main_artist` 表記に合わせる（DaBaby → Dababy など） */
+/** 索引の `main_artist` 表記に合わせる（DaBaby → Dababy、Beatles → The Beatles など） */
 function resolveLibraryMainArtistName(
   name: string,
   items: { main_artist: string }[],
 ): string {
   const n = name.trim();
   if (!n) return n;
-  const lower = n.toLowerCase();
-  return items.find((a) => a.main_artist.toLowerCase() === lower)?.main_artist ?? n;
+  return findLibraryMainArtistInIndex([n], items) ?? n;
 }
 
 function sortLibraryModalLetterKeys(keys: string[]): string[] {
@@ -483,10 +492,20 @@ interface ChatInputProps {
   onSendMessage: (text: string) => void;
   onVideoUrl?: (
     url: string,
-    opts?: { themePlaylistThemeId?: string | null; themePlaylistThemeLabel?: string | null },
+    opts?: {
+      themePlaylistThemeId?: string | null;
+      themePlaylistThemeLabel?: string | null;
+      aiMode?: AiSelectionMode;
+    },
   ) => void;
   /** ゲスト時は検索APIの制限を低めにするために送る */
   isGuest?: boolean;
+  /** AI お試し残数（二段選曲ボタン用） */
+  aiTrialStatus?: AiTrialStatus | null;
+  /** 視聴専用（選曲に参加しない） */
+  participatesInSelection?: boolean;
+  /** ゲストが AI 付き選曲を試したとき */
+  onGuestAiSelectionBlocked?: () => void;
   onSystemMessage?: (text: string, opts?: SystemMessageOptions) => void;
   /** 検索結果から「候補リスト」に追加するためのコールバック（任意） */
   onAddCandidate?: (row: SearchResultRow) => void;
@@ -516,6 +535,9 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
     onSendMessage,
     onVideoUrl,
     isGuest = false,
+    aiTrialStatus = null,
+    participatesInSelection = true,
+    onGuestAiSelectionBlocked,
     onSystemMessage,
     onAddCandidate,
     onPreviewStart,
@@ -746,7 +768,12 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
 
     const videoId = extractVideoId(trimmed);
     if (videoId && onVideoUrl) {
-      onVideoUrl(trimmed);
+      const aiMode = resolveAiSelectionMode({
+        isGuest,
+        participatesInSelection,
+        aiTrialStatus,
+      });
+      onVideoUrl(trimmed, { aiMode });
       setValue('');
       return;
     }
@@ -759,6 +786,32 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
     onSendMessage(trimmed);
     setValue('');
   };
+
+  const submitVideoUrl = (mode: AiSelectionMode) => {
+    if (roomInteractionLocked || !onVideoUrl) return;
+    const trimmed = value.trim();
+    if (!extractVideoId(trimmed)) return;
+    if (isGuest && mode === 'full') {
+      onGuestAiSelectionBlocked?.();
+      return;
+    }
+    const aiMode = resolveAiSelectionMode({
+      explicitMode: mode,
+      isGuest,
+      participatesInSelection,
+      aiTrialStatus,
+    });
+    onVideoUrl(trimmed, { aiMode });
+    setValue('');
+  };
+
+  const trimmedInput = value.trim();
+  const urlVideoIdInInput = extractVideoId(trimmedInput);
+  const showDualSongButtons = Boolean(
+    onVideoUrl &&
+      urlVideoIdInInput &&
+      shouldShowAiDualSelectionButtons({ isGuest, participatesInSelection, aiTrialStatus }),
+  );
 
   const openThemePlaylistConfirm = () => {
     const trimmed = value.trim();
@@ -781,6 +834,12 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
     onVideoUrl(trimmed, {
       themePlaylistThemeId: themePlaylistRoomSubmit.themeId,
       themePlaylistThemeLabel: themePlaylistRoomSubmit.themeLabel,
+      aiMode: resolveAiSelectionMode({
+        explicitMode: 'full',
+        isGuest,
+        participatesInSelection,
+        aiTrialStatus,
+      }),
     });
     setValue('');
     setThemePlaylistConfirmOpen(false);
@@ -864,7 +923,13 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
         );
         return false;
       }
-      setLibraryArtistItems(Array.isArray(data?.items) ? data.items : []);
+      setLibraryArtistItems(
+        mergeLibraryArtistIndexItems(
+          Array.isArray(data?.items)
+            ? (data.items as LibraryArtistIndexRow[])
+            : [],
+        ),
+      );
       setLibraryIndexLetters(Array.isArray(data?.letters) ? data.letters : []);
       setLibraryArtistsReady(true);
       return true;
@@ -1077,16 +1142,25 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
     );
   }, [libraryRows, libraryArtistLetter, librarySongSource]);
 
-  /** 検索モード: 表示中の曲行からユニークなアーティスト名 */
-  const searchArtistNameCandidates = useMemo(() => {
-    const uniq = new Set<string>();
-    for (const row of letterFilteredLibraryRows) {
-      for (const name of expandMainArtistNamesForLibraryFilter(row.main_artist ?? '')) {
-        uniq.add(name);
-      }
-    }
-    return [...uniq].sort((a, b) => a.localeCompare(b, 'en', { sensitivity: 'base' }));
+  /** 検索モード: 表示中の曲行からユニークなアーティスト名＋曲数 */
+  const searchArtistRows = useMemo(() => {
+    const names = dedupeLibraryArtistDisplayNames(
+      letterFilteredLibraryRows.flatMap((row) =>
+        expandMainArtistNamesForLibraryFilter(row.main_artist ?? ''),
+      ),
+    );
+    return names.map((main_artist) => ({
+      main_artist,
+      count: letterFilteredLibraryRows.filter((r) =>
+        songMainArtistIncludesArtist(r.main_artist, main_artist),
+      ).length,
+    }));
   }, [letterFilteredLibraryRows]);
+
+  const searchArtistNameCandidates = useMemo(
+    () => searchArtistRows.map((a) => a.main_artist),
+    [searchArtistRows],
+  );
 
   /** ブラウズモード: 索引から（字母＋入力欄の部分一致でアーティスト名を絞り込み） */
   useEffect(() => {
@@ -1134,7 +1208,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
         return ma.includes(q) || jaMatch.has(ma);
       });
     }
-    return [...items].sort((a, b) =>
+    return mergeLibraryArtistIndexItems(items).sort((a, b) =>
       a.main_artist.localeCompare(b.main_artist, 'en', { sensitivity: 'base' }),
     );
   }, [
@@ -1164,6 +1238,26 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
       browseArtistIndexRows.find((a) => a.main_artist === librarySelectedArtistName) ?? null
     );
   }, [browseArtistIndexRows, librarySelectedArtistName]);
+
+  const selectedArtistSongCount = useMemo(() => {
+    if (!librarySelectedArtistName) return null;
+    if (librarySongSource === 'search') {
+      const sel = librarySelectedArtistName.trim();
+      return (
+        searchArtistRows.find(
+          (a) =>
+            a.main_artist.localeCompare(sel, undefined, { sensitivity: 'base' }) === 0 ||
+            artistNamesMatchIgnoringLeadingArticle(a.main_artist, sel),
+        )?.count ?? null
+      );
+    }
+    return selectedBrowseArtistRow?.count ?? null;
+  }, [
+    librarySelectedArtistName,
+    librarySongSource,
+    searchArtistRows,
+    selectedBrowseArtistRow,
+  ]);
 
   /** 公開ライブラリ（索引と同じ集計・邦楽寄り除外は API 側） */
   const libraryTotalSongCount = useMemo(
@@ -1268,7 +1362,9 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
 
     if (librarySongSource === 'search') {
       const match = searchArtistNameCandidates.find(
-        (a) => a.toLowerCase() === selected.toLowerCase(),
+        (a) =>
+          a.toLowerCase() === selected.toLowerCase() ||
+          artistNamesMatchIgnoringLeadingArticle(a, selected),
       );
       if (!match) {
         setLibrarySelectedArtistName(null);
@@ -2220,7 +2316,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
               }`}
             >
               <div
-                className={`flex min-h-0 flex-col border-b border-lime-900/60 max-lg:border-0 lg:col-span-3 lg:flex-row lg:border-b-0 lg:border-r lg:border-r-lime-900/60 ${
+                className={`flex min-h-0 flex-col border-b border-lime-900/60 max-lg:border-0 lg:col-span-3 lg:h-full lg:min-h-0 lg:flex-row lg:border-b-0 lg:border-r lg:border-r-lime-900/60 ${
                   !isMobileLandscape && !isLg && libraryMobileFocus === 'split'
                     ? 'max-lg:hidden'
                     : isMobileLandscape && selectedLibraryRow
@@ -2270,7 +2366,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
               </aside>
               {/* アーティスト一覧（索引と密着・選択後も表示） */}
               <section
-                className={`flex min-h-0 w-full min-w-0 flex-col overflow-hidden border-b border-lime-900/60 lg:w-[11rem] lg:shrink-0 lg:border-b-0 xl:w-[12.5rem] ${LIBRARY_MOBILE_PANEL.artistList.section} ${libraryMobileArtistListSectionExtra(libraryMobileFocus, isMobileLandscape)}`}
+                className={`flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden border-b border-lime-900/60 lg:w-[11rem] lg:shrink-0 lg:border-b-0 xl:w-[12.5rem] ${LIBRARY_MOBILE_PANEL.artistList.section} ${libraryMobileArtistListSectionExtra(libraryMobileFocus, isMobileLandscape)}`}
               >
                 <div className="shrink-0 border-b border-lime-900/60 px-2 py-2 max-lg:border-lime-700/35 max-lg:bg-lime-950/40 lg:hidden">
                   <div className="flex items-center gap-2">
@@ -2350,7 +2446,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                     </p>
                   ) : null}
                   {librarySongSource !== 'search' ? (
-                    <div className="border-b border-lime-900/50 px-2 py-2 max-lg:border-0 max-lg:px-3 max-lg:py-2 lg:px-2.5">
+                    <div className="flex min-h-0 flex-1 flex-col border-b border-lime-900/50 px-2 py-2 max-lg:border-0 max-lg:px-3 max-lg:py-2 lg:px-2.5">
                       {!libraryArtistIndexActive && !libraryArtistsLoading ? (
                         libraryEntryIdle ? (
                           <>
@@ -2379,7 +2475,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                         <p className="px-0.5 py-1 text-[10px] text-gray-500">該当するアーティストがありません。</p>
                       ) : null}
                       {libraryArtistIndexActive && browseArtistIndexRows.length > 0 ? (
-                        <div className="flex flex-col gap-1">
+                        <div className="mc-scrollbar-stable flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto">
                           <button
                             type="button"
                             onClick={() => {
@@ -2424,12 +2520,12 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                     !libraryError &&
                     librarySongSource === 'search' &&
                     searchArtistNameCandidates.length > 0 && (
-                      <div className="border-b border-lime-900/50 px-3 py-2">
-                        <p className="mb-2 text-[11px] text-gray-500">
+                      <div className="flex min-h-0 flex-1 flex-col px-3 py-2 lg:px-2.5">
+                        <p className="mb-2 shrink-0 text-[11px] text-gray-500">
                           検索結果のアーティストで絞り込み
                           {libraryArtistLetter ? `（${libraryArtistLetter}）` : ''}
                         </p>
-                        <div className="mc-scrollbar-stable flex max-h-40 flex-col gap-1 overflow-y-auto">
+                        <div className="mc-scrollbar-stable flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto">
                           <button
                             type="button"
                             onClick={() => setLibrarySelectedArtistName(null)}
@@ -2441,18 +2537,19 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                           >
                             <span className="min-w-0 truncate">全アーティスト</span>
                           </button>
-                          {searchArtistNameCandidates.map((name) => (
+                          {searchArtistRows.map((a) => (
                             <button
-                              key={name}
+                              key={a.main_artist}
                               type="button"
-                              onClick={() => setLibrarySelectedArtistName(name)}
-                              className={`flex w-full items-center rounded px-2 py-1.5 text-left text-[11px] ${
-                                librarySelectedArtistName === name
+                              onClick={() => setLibrarySelectedArtistName(a.main_artist)}
+                              className={`flex w-full items-center justify-between gap-1 rounded px-2 py-1.5 text-left text-[11px] ${
+                                librarySelectedArtistName === a.main_artist
                                   ? 'bg-lime-700 text-white'
                                   : 'border border-gray-700 bg-gray-900 text-gray-300 hover:bg-gray-800'
                               }`}
                             >
-                              <span className="min-w-0 truncate">{name}</span>
+                              <span className="min-w-0 flex-1 truncate">{a.main_artist}</span>
+                              <span className="shrink-0 tabular-nums opacity-90">({a.count})</span>
                             </button>
                           ))}
                         </div>
@@ -2468,24 +2565,20 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                 <div
                   className={`shrink-0 border-b border-lime-900/60 px-3 py-2 ${LIBRARY_MOBILE_PANEL.artistDetail.header}`}
                 >
-                  <div className="flex min-w-0 items-start gap-2 max-lg:items-center">
+                  <div className="flex min-w-0 flex-col gap-1.5">
                     <LibrarySectionTabImage section="artistDetail" active={libraryTabDActive} />
-                    <p
-                      className={`min-w-0 flex-1 truncate text-[11px] font-medium leading-snug text-gray-400 ${LIBRARY_MOBILE_PANEL.artistDetail.title}`}
-                    >
-                      {librarySelectedArtistName ? (
-                        <>
-                          <span className="font-medium text-lime-100/90 max-lg:text-sky-100/90">
-                            {librarySelectedArtistName}
+                    {selectedArtistForInfo ? (
+                      <p
+                        className={`min-w-0 break-words text-xs font-semibold leading-snug text-lime-100/95 max-lg:text-sky-100/95 ${LIBRARY_MOBILE_PANEL.artistDetail.title}`}
+                      >
+                        {selectedArtistForInfo}
+                        {selectedArtistSongCount != null ? (
+                          <span className="ml-1 font-normal tabular-nums text-gray-500 max-lg:text-sky-300/70">
+                            （{selectedArtistSongCount}曲）
                           </span>
-                          {selectedBrowseArtistRow?.count != null ? (
-                            <span className="font-normal tabular-nums text-gray-500 max-lg:text-sky-300/70">
-                              （{selectedBrowseArtistRow.count}曲）
-                            </span>
-                          ) : null}
-                        </>
-                      ) : null}
-                    </p>
+                        ) : null}
+                      </p>
+                    ) : null}
                   </div>
                 </div>
                 <div
@@ -3259,27 +3352,75 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                 送信
               </button>
             </div>
+          ) : showDualSongButtons ? (
+            <div className="hidden h-[3.75rem] shrink-0 flex-col justify-center gap-1 sm:flex">
+              <button
+                type="button"
+                onClick={() => submitVideoUrl('full')}
+                title="AI 解説・クイズ等付き（お試し 1 曲消費）"
+                className="box-border flex min-h-0 flex-1 items-center justify-center rounded bg-violet-700 px-3 text-xs font-semibold text-white hover:bg-violet-600 disabled:opacity-50"
+                disabled={roomInteractionLocked || !trimmedInput}
+              >
+                AI付きで選曲
+              </button>
+              <button
+                type="button"
+                onClick={() => submitVideoUrl('none')}
+                title="再生・チャットのみ（無料）"
+                className="box-border flex min-h-0 flex-1 items-center justify-center rounded border border-blue-500/70 bg-blue-900/30 px-3 text-xs font-medium text-blue-100 hover:bg-blue-900/50 disabled:opacity-50"
+                disabled={roomInteractionLocked || !trimmedInput}
+              >
+                AIなしで選曲
+              </button>
+            </div>
           ) : (
             <button
               type="button"
               onClick={handleSubmit}
-              title="YouTubeのURLならプレイヤーに反映。それ以外はチャットに表示"
+              title={
+                urlVideoIdInInput
+                  ? showDualSongButtons
+                    ? 'YouTubeのURLを選曲（AI付き・お試し1曲消費）。AIなしは下のボタン'
+                    : 'YouTubeのURLを選曲（AI付き）。登録ユーザーはお試し枠内で解説が付きます'
+                  : 'YouTubeのURLならプレイヤーに反映。それ以外はチャットに表示'
+              }
               className="box-border hidden h-[3.75rem] shrink-0 items-center justify-center rounded bg-blue-600 px-4 text-sm font-medium text-white hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50 sm:flex"
               disabled={roomInteractionLocked || !value.trim()}
             >
-              送信
+              {urlVideoIdInInput && !isGuest ? '選曲' : '送信'}
             </button>
           )}
           <div className="flex w-full items-center gap-2 sm:hidden">
-            <button
-              type="button"
-              onClick={handleSubmit}
-              title="YouTubeのURLならプレイヤーに反映。それ以外はチャットに表示"
-              className="box-border flex h-11 min-w-0 flex-1 basis-1/2 items-center justify-center rounded bg-blue-600 px-3 text-sm font-medium text-white hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50"
-              disabled={roomInteractionLocked || !value.trim()}
-            >
-              送信
-            </button>
+            {showDualSongButtons ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => submitVideoUrl('full')}
+                  className="box-border flex h-11 min-w-0 flex-1 basis-1/2 items-center justify-center rounded bg-violet-700 px-2 text-xs font-semibold text-white hover:bg-violet-600 disabled:opacity-50"
+                  disabled={roomInteractionLocked || !trimmedInput}
+                >
+                  AI付き選曲
+                </button>
+                <button
+                  type="button"
+                  onClick={() => submitVideoUrl('none')}
+                  className="box-border flex h-11 min-w-0 flex-1 basis-1/2 items-center justify-center rounded border border-blue-500/70 bg-blue-900/30 px-2 text-xs font-medium text-blue-100 disabled:opacity-50"
+                  disabled={roomInteractionLocked || !trimmedInput}
+                >
+                  AIなし選曲
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={handleSubmit}
+                title="YouTubeのURLならプレイヤーに反映。それ以外はチャットに表示"
+                className="box-border flex h-11 min-w-0 flex-1 basis-1/2 items-center justify-center rounded bg-blue-600 px-3 text-sm font-medium text-white hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50"
+                disabled={roomInteractionLocked || !value.trim()}
+              >
+                {urlVideoIdInInput && !isGuest ? '選曲' : '送信'}
+              </button>
+            )}
             {onVideoUrl ? (
               <button
                 type="button"

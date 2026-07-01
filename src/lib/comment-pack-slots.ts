@@ -71,6 +71,16 @@ export function isValidCommentPackSlotsPayload(slots: unknown): slots is Comment
   );
 }
 
+/** マイページ等で部屋の曲解説スロットを短文表示 */
+export function formatCommentPackSlotsSummary(slots: CommentPackSlotSelection): string {
+  const active = slots
+    .map((on, i) => (on ? String(i + 1) : null))
+    .filter((v): v is string => v !== null);
+  if (active.length === 0) return 'OFF（すべてオフ）';
+  if (active.length === 5) return 'ON（1〜5 すべて）';
+  return `ON（スロット ${active.join('・')}）`;
+}
+
 export function toggleCommentPackSlot(
   s: CommentPackSlotSelection,
   index: 0 | 1 | 2 | 3 | 4,

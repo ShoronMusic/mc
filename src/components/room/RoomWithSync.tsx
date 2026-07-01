@@ -17,7 +17,7 @@ import YouTubePlayer, {
 import { GuestRegisterPromptModal } from '@/components/auth/GuestRegisterPromptModal';
 import { PolicyDocsModal, type PolicyDocsTab } from '@/components/legal/PolicyDocsModal';
 import { GuideEnjoyModal } from '@/components/guide/GuideEnjoyModal';
-import MyPage from '@/components/mypage/MyPage';
+import MyPage, { type MyPageMainTab } from '@/components/mypage/MyPage';
 import RoomMainLayout from '@/components/room/RoomMainLayout';
 import RoomPlaybackHistory from '@/components/room/RoomPlaybackHistory';
 import ChatSummaryModalBody, {
@@ -25,6 +25,12 @@ import ChatSummaryModalBody, {
   type RoomSessionChatSummaryDisplay,
 } from '@/components/room/ChatSummaryModalBody';
 import { useThemePlaylistRoomSubmitMission } from '@/hooks/useThemePlaylistRoomSubmitMission';
+import { useAiTrialStatus } from '@/hooks/useAiTrialStatus';
+import { isGuestSoloSession, resolveGuestSoloPlaybackHistorySinceIso } from '@/lib/guest-solo-playback-history-since';
+import { scheduleGuestFirstSongInvite } from '@/lib/guest-first-song-invite';
+import { GUEST_AI_AT_QUESTION_UNAVAILABLE } from '@/lib/ai-usage-disclosure-copy';
+import { resolveAiSelectionMode, type AiSelectionMode } from '@/lib/ai-selection-mode';
+import { AI_TRIAL_STATUS_UPDATED_EVENT } from '@/lib/ai-trial-status';
 import { SiteFeedbackModal } from '@/components/room/SiteFeedbackModal';
 import UserBar from '@/components/room/UserBar';
 import ParticipantPublicProfileModal from '@/components/room/ParticipantPublicProfileModal';
@@ -119,6 +125,9 @@ import {
   OWNER_STATE_EVENT,
   TURN_STATE_EVENT,
   OWNER_5MIN_LIMIT_EVENT,
+  DEFAULT_OWNER_AI_CHARACTER_JOIN_ENABLED,
+  DEFAULT_OWNER_NEXT_SONG_RECOMMEND_ENABLED,
+  DEFAULT_OWNER_SONG_QUIZ_ENABLED,
   type OwnerForceExitPayload,
   type OwnerSetParticipantSelectionPayload,
   type OwnerAiFreeSpeechStopPayload,
@@ -142,6 +151,11 @@ import {
   isCommentPackFullyOff,
   normalizeCommentPackSlotsFromRequestBody,
 } from '@/lib/comment-pack-slots';
+import {
+  DEFAULT_USER_ROOM_AI_COMMENTARY_ENABLED,
+  DEFAULT_USER_ROOM_AI_NEXT_SONG_RECOMMEND_ENABLED,
+  DEFAULT_USER_ROOM_AI_SONG_QUIZ_ENABLED,
+} from '@/lib/user-room-ai-features';
 import { formatMusic8ModeratorIntroPrefix } from '@/lib/music8-moderator-chat-prefix';
 import {
   computeNextSelectionRound,
@@ -432,6 +446,20 @@ export default function RoomWithSync({
     rememberRoomForGuideReturn(roomId);
   }, [roomId]);
   const [myPageOpen, setMyPageOpen] = useState(false);
+  const [myPageInitialTab, setMyPageInitialTab] = useState<MyPageMainTab | undefined>(undefined);
+  const [aiTrialRefreshKey, setAiTrialRefreshKey] = useState(0);
+  const { status: aiTrialStatus, state: aiTrialState } = useAiTrialStatus(isGuest, aiTrialRefreshKey);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const onUpdate = () => setAiTrialRefreshKey((k) => k + 1);
+    window.addEventListener(AI_TRIAL_STATUS_UPDATED_EVENT, onUpdate);
+    return () => window.removeEventListener(AI_TRIAL_STATUS_UPDATED_EVENT, onUpdate);
+  }, []);
+  const lastSelectionAiModeRef = useRef<AiSelectionMode>('none');
+  const openMyPage = useCallback((tab: MyPageMainTab = 'user') => {
+    setMyPageInitialTab(tab);
+    setMyPageOpen(true);
+  }, []);
   const themePlaylistRoomSubmit = useThemePlaylistRoomSubmitMission(isGuest, myPageOpen);
   const [publicProfileVisible, setPublicProfileVisible] = useState(false);
   const [participantPublicProfileModal, setParticipantPublicProfileModal] = useState<{
@@ -590,12 +618,15 @@ export default function RoomWithSync({
   const currentSongPosterClientIdRef = useRef('');
   const characterManualSongPickInFlightRef = useRef(false);
   const joinPasteHintAiPickUsedRef = useRef(false);
+  const guestFirstSongInviteShownRef = useRef(false);
   const lastSendAtRef = useRef(0);
   const sendTimestampsRef = useRef<number[]>([]);
   const playbackHistoryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** 遅延入室の再生問い合わせを短時間に連打しない（presence 更新でタイマーが何度も張り直されるため） */
   const lastPlaybackSyncRequestAtRef = useRef(0);
   const [playbackHistoryRefreshKey, setPlaybackHistoryRefreshKey] = useState(0);
+  /** ゲスト単独時の視聴履歴フィルタ用（コンポーネントマウント＝入室時刻） */
+  const roomSessionEnteredAtMsRef = useRef(Date.now());
   /** スキップ押下後、その動画IDではボタンを出さない（選曲者・オーナー各自のクライアント） */
   const [skipUsedForVideoId, setSkipUsedForVideoId] = useState<string | null>(null);
   /** 5分制限キューで選曲予約中の参加者（参加者欄のステータス用・複数可） */
@@ -655,11 +686,15 @@ export default function RoomWithSync({
   /** videoId 変化検出用（render 中の videoIdRef 代入とは分離） */
   const previousVideoIdForQuizFlushRef = useRef<string | null>(null);
   const [aiFreeSpeechStopped, setAiFreeSpeechStopped] = useState(true);
-  const [ownerAiCharacterJoinEnabled, setOwnerAiCharacterJoinEnabled] = useState(true);
+  const [ownerAiCharacterJoinEnabled, setOwnerAiCharacterJoinEnabled] = useState(
+    DEFAULT_OWNER_AI_CHARACTER_JOIN_ENABLED,
+  );
   const [ownerAiCharacterName, setOwnerAiCharacterName] = useState(AI_CHARACTER_DEFAULT_NAME);
   const [ownerAiCharacterJoinedAtMs, setOwnerAiCharacterJoinedAtMs] = useState<number | null>(null);
-  const [ownerSongQuizEnabled, setOwnerSongQuizEnabled] = useState(true);
-  const [ownerNextSongRecommendEnabled, setOwnerNextSongRecommendEnabled] = useState(true);
+  const [ownerSongQuizEnabled, setOwnerSongQuizEnabled] = useState(DEFAULT_OWNER_SONG_QUIZ_ENABLED);
+  const [ownerNextSongRecommendEnabled, setOwnerNextSongRecommendEnabled] = useState(
+    DEFAULT_OWNER_NEXT_SONG_RECOMMEND_ENABLED,
+  );
   const [yellowCardByClientId, setYellowCardByClientId] = useState<Record<string, number>>({});
   const [ownerState, setOwnerState] = useState<{ ownerClientId: string; ownerLeftAt: number | null }>(() =>
     roomId ? getOwnerStateFromStorage(roomId) ?? { ownerClientId: '', ownerLeftAt: null } : { ownerClientId: '', ownerLeftAt: null }
@@ -728,9 +763,18 @@ export default function RoomWithSync({
     if (roomId) setSessionClaim(getOrCreateRoomSessionClaim(roomId));
   }, [roomId]);
   /** マイページ設定: このクライアントが曲解説 API を呼ぶか・最古入室者のクイズ API を呼ぶか */
-  const userRoomAiCommentaryEnabledRef = useRef(true);
-  const userRoomAiSongQuizEnabledRef = useRef(true);
-  const userRoomAiRecommendEnabledRef = useRef(true);
+  const userRoomAiCommentaryEnabledRef = useRef(DEFAULT_USER_ROOM_AI_COMMENTARY_ENABLED);
+  const userRoomAiSongQuizEnabledRef = useRef(DEFAULT_USER_ROOM_AI_SONG_QUIZ_ENABLED);
+  const userRoomAiRecommendEnabledRef = useRef(DEFAULT_USER_ROOM_AI_NEXT_SONG_RECOMMEND_ENABLED);
+  const [userRoomAiCommentaryEnabled, setUserRoomAiCommentaryEnabled] = useState(
+    DEFAULT_USER_ROOM_AI_COMMENTARY_ENABLED,
+  );
+  const [userRoomAiSongQuizEnabled, setUserRoomAiSongQuizEnabled] = useState(
+    DEFAULT_USER_ROOM_AI_SONG_QUIZ_ENABLED,
+  );
+  const [userRoomAiRecommendEnabled, setUserRoomAiRecommendEnabled] = useState(
+    DEFAULT_USER_ROOM_AI_NEXT_SONG_RECOMMEND_ENABLED,
+  );
 
   useEffect(() => {
     if (isGuest || !authUserId) {
@@ -755,9 +799,12 @@ export default function RoomWithSync({
 
   useEffect(() => {
     if (isGuest || !authUserId) {
-      userRoomAiCommentaryEnabledRef.current = true;
-      userRoomAiSongQuizEnabledRef.current = true;
-      userRoomAiRecommendEnabledRef.current = true;
+      userRoomAiCommentaryEnabledRef.current = false;
+      userRoomAiSongQuizEnabledRef.current = false;
+      userRoomAiRecommendEnabledRef.current = false;
+      setUserRoomAiCommentaryEnabled(false);
+      setUserRoomAiSongQuizEnabled(false);
+      setUserRoomAiRecommendEnabled(false);
       return;
     }
     let cancelled = false;
@@ -771,20 +818,32 @@ export default function RoomWithSync({
         } | null;
         if (cancelled) return;
         if (!r.ok || !d || typeof d !== 'object' || typeof d.error === 'string') {
-          userRoomAiCommentaryEnabledRef.current = true;
-          userRoomAiSongQuizEnabledRef.current = true;
-          userRoomAiRecommendEnabledRef.current = true;
+          userRoomAiCommentaryEnabledRef.current = DEFAULT_USER_ROOM_AI_COMMENTARY_ENABLED;
+          userRoomAiSongQuizEnabledRef.current = DEFAULT_USER_ROOM_AI_SONG_QUIZ_ENABLED;
+          userRoomAiRecommendEnabledRef.current = DEFAULT_USER_ROOM_AI_NEXT_SONG_RECOMMEND_ENABLED;
+          setUserRoomAiCommentaryEnabled(DEFAULT_USER_ROOM_AI_COMMENTARY_ENABLED);
+          setUserRoomAiSongQuizEnabled(DEFAULT_USER_ROOM_AI_SONG_QUIZ_ENABLED);
+          setUserRoomAiRecommendEnabled(DEFAULT_USER_ROOM_AI_NEXT_SONG_RECOMMEND_ENABLED);
           return;
         }
-        userRoomAiCommentaryEnabledRef.current = d.commentaryEnabled !== false;
-        userRoomAiSongQuizEnabledRef.current = d.songQuizEnabled !== false;
-        userRoomAiRecommendEnabledRef.current = d.nextSongRecommendEnabled !== false;
+        const commentaryOn = d.commentaryEnabled !== false;
+        const quizOn = d.songQuizEnabled !== false;
+        const recommendOn = d.nextSongRecommendEnabled !== false;
+        userRoomAiCommentaryEnabledRef.current = commentaryOn;
+        userRoomAiSongQuizEnabledRef.current = quizOn;
+        userRoomAiRecommendEnabledRef.current = recommendOn;
+        setUserRoomAiCommentaryEnabled(commentaryOn);
+        setUserRoomAiSongQuizEnabled(quizOn);
+        setUserRoomAiRecommendEnabled(recommendOn);
       })
       .catch(() => {
         if (!cancelled) {
-          userRoomAiCommentaryEnabledRef.current = true;
-          userRoomAiSongQuizEnabledRef.current = true;
-          userRoomAiRecommendEnabledRef.current = true;
+          userRoomAiCommentaryEnabledRef.current = DEFAULT_USER_ROOM_AI_COMMENTARY_ENABLED;
+          userRoomAiSongQuizEnabledRef.current = DEFAULT_USER_ROOM_AI_SONG_QUIZ_ENABLED;
+          userRoomAiRecommendEnabledRef.current = DEFAULT_USER_ROOM_AI_NEXT_SONG_RECOMMEND_ENABLED;
+          setUserRoomAiCommentaryEnabled(DEFAULT_USER_ROOM_AI_COMMENTARY_ENABLED);
+          setUserRoomAiSongQuizEnabled(DEFAULT_USER_ROOM_AI_SONG_QUIZ_ENABLED);
+          setUserRoomAiRecommendEnabled(DEFAULT_USER_ROOM_AI_NEXT_SONG_RECOMMEND_ENABLED);
         }
       });
     return () => {
@@ -822,9 +881,9 @@ export default function RoomWithSync({
   /** オーナーによる「邦楽AI解説の解禁」設定（デフォルトOFF） */
   const [jpAiUnlockEnabled, setJpAiUnlockEnabled] = useState(false);
   const jpAiUnlockEnabledRef = useRef(false);
-  const ownerSongQuizEnabledRef = useRef(true);
-  const ownerNextSongRecommendEnabledRef = useRef(true);
-  const ownerAiCharacterJoinEnabledRef = useRef(true);
+  const ownerSongQuizEnabledRef = useRef(DEFAULT_OWNER_SONG_QUIZ_ENABLED);
+  const ownerNextSongRecommendEnabledRef = useRef(DEFAULT_OWNER_NEXT_SONG_RECOMMEND_ENABLED);
+  const ownerAiCharacterJoinEnabledRef = useRef(DEFAULT_OWNER_AI_CHARACTER_JOIN_ENABLED);
   const ownerAiCharacterNameRef = useRef(AI_CHARACTER_DEFAULT_NAME);
   const ownerAiCharacterJoinedAtMsRef = useRef<number | null>(null);
   commentPackSlotsRef.current = commentPackSlots;
@@ -1175,6 +1234,22 @@ export default function RoomWithSync({
   ]);
   const participantsRef = useRef(participants);
   participantsRef.current = participants;
+  const roomHasRegisteredParticipant = useMemo(
+    () =>
+      participants.some(
+        (p) => typeof (p as { authUserId?: string }).authUserId === 'string',
+      ),
+    [participants],
+  );
+  const playbackHistorySinceIso = useMemo(
+    () =>
+      resolveGuestSoloPlaybackHistorySinceIso(
+        isGuest,
+        roomHasRegisteredParticipant,
+        roomSessionEnteredAtMsRef.current,
+      ),
+    [isGuest, roomHasRegisteredParticipant],
+  );
   /** 選曲に参加する人のみ・入室順（左から1,2,3...の番号に対応。一時退席枠を含む） */
   const participatingOrder = useMemo(
     () => participants.filter((p) => p.participatesInSelection),
@@ -3936,8 +4011,19 @@ export default function RoomWithSync({
       options?: {
         skipCommentPackCache?: boolean;
         adminPlaybackDisplayHint?: { title: string; artist_name: string | null };
+        aiMode?: AiSelectionMode;
       },
     ) => {
+      const selectionAiMode = options?.aiMode ?? lastSelectionAiModeRef.current;
+      if (selectionAiMode === 'none') {
+        pendingThemePlaylistBlurbRef.current = null;
+        if (freeCommentTimeoutsRef.current.length > 0) {
+          freeCommentTimeoutsRef.current.forEach((t) => clearTimeout(t));
+          freeCommentTimeoutsRef.current = [];
+        }
+        clearPendingSongQuizRoundState();
+        return;
+      }
       const slots = commentPackSlotsRef.current;
       if (isCommentPackFullyOff(slots)) {
         pendingThemePlaylistBlurbRef.current = null;
@@ -3967,6 +4053,8 @@ export default function RoomWithSync({
         slots,
         roomId,
         jpAiUnlockEnabled: jpAiUnlockEnabledRef.current,
+        aiMode: selectionAiMode,
+        isGuest,
         recentMessages: messages.slice(-18).map((m) => ({
           displayName: m.displayName,
           body: typeof m.body === 'string' ? m.body : '',
@@ -3988,8 +4076,22 @@ export default function RoomWithSync({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...packBody, packPhase: 'base' }),
       })
-        .then((r) => (r.ok ? r.json() : null))
+        .then(async (r) => {
+          if (!r.ok) {
+            const data = (await r.json().catch(() => null)) as { message?: string } | null;
+            const msg =
+              data && typeof data.message === 'string'
+                ? data.message
+                : 'AI 曲解説を開始できませんでした。';
+            addSystemMessage(msg);
+            return null;
+          }
+          return r.json();
+        })
         .then((pack) => {
+          if (pack && selectionAiMode === 'full' && typeof window !== 'undefined') {
+            window.dispatchEvent(new Event(AI_TRIAL_STATUS_UPDATED_EVENT));
+          }
           const skipQuizRecommendForTheme =
             pendingThemePlaylistBlurbRef.current?.videoId === vid &&
             Boolean(pendingThemePlaylistBlurbRef.current?.themeId);
@@ -4074,6 +4176,7 @@ export default function RoomWithSync({
                       songQuizDelayMs: 0,
                       preferFastAfterQuiz: true,
                       isGuest,
+                      aiMode: selectionAiMode,
                       videoIdRef,
                       registerTimer: (t) => {
                         freeCommentTimeoutsRef.current.push(t);
@@ -4091,6 +4194,8 @@ export default function RoomWithSync({
                     body: JSON.stringify({
                       videoId: vid,
                       roomId,
+                      aiMode: selectionAiMode,
+                      isGuest,
                       commentaryContext: baseOnlyCtx,
                     }),
                   })
@@ -4114,6 +4219,7 @@ export default function RoomWithSync({
                   roomId,
                   songQuizDelayMs: delayBaseOnly,
                   isGuest,
+                  aiMode: selectionAiMode,
                   videoIdRef,
                   registerTimer: (t) => {
                     freeCommentTimeoutsRef.current.push(t);
@@ -4298,6 +4404,7 @@ export default function RoomWithSync({
                             songQuizDelayMs: 0,
                             preferFastAfterQuiz: true,
                             isGuest,
+                            aiMode: selectionAiMode,
                             videoIdRef,
                             registerTimer: (t) => {
                               freeCommentTimeoutsRef.current.push(t);
@@ -4315,6 +4422,8 @@ export default function RoomWithSync({
                           body: JSON.stringify({
                             videoId: vid,
                             roomId,
+                            aiMode: selectionAiMode,
+                            isGuest,
                             commentaryContext,
                           }),
                         })
@@ -4338,6 +4447,7 @@ export default function RoomWithSync({
                         roomId,
                         songQuizDelayMs: delayMs,
                         isGuest,
+                        aiMode: selectionAiMode,
                         videoIdRef,
                         registerTimer: (t) => {
                           freeCommentTimeoutsRef.current.push(t);
@@ -4466,6 +4576,7 @@ export default function RoomWithSync({
                     songQuizDelayMs: 0,
                     preferFastAfterQuiz: true,
                     isGuest,
+                    aiMode: selectionAiMode,
                     videoIdRef,
                     registerTimer: (t) => {
                       freeCommentTimeoutsRef.current.push(t);
@@ -4483,6 +4594,8 @@ export default function RoomWithSync({
                   body: JSON.stringify({
                     videoId: vid,
                     roomId,
+                    aiMode: selectionAiMode,
+                    isGuest,
                     commentaryContext: commentaryContextSingle,
                   }),
                 })
@@ -4506,6 +4619,7 @@ export default function RoomWithSync({
                 roomId,
                 songQuizDelayMs: delayMsSingle,
                 isGuest,
+                aiMode: selectionAiMode,
                 videoIdRef,
                 registerTimer: (t) => {
                   freeCommentTimeoutsRef.current.push(t);
@@ -4595,6 +4709,7 @@ export default function RoomWithSync({
                           songQuizDelayMs: 0,
                           preferFastAfterQuiz: true,
                           isGuest,
+                          aiMode: selectionAiMode,
                           videoIdRef,
                           registerTimer: (t) => {
                             freeCommentTimeoutsRef.current.push(t);
@@ -4612,6 +4727,8 @@ export default function RoomWithSync({
                         body: JSON.stringify({
                           videoId: vid,
                           roomId,
+                          aiMode: selectionAiMode,
+                          isGuest,
                           commentaryContext: commentarySingle,
                         }),
                       })
@@ -4635,6 +4752,7 @@ export default function RoomWithSync({
                       roomId,
                       songQuizDelayMs: delayCommentary,
                       isGuest,
+                      aiMode: selectionAiMode,
                       videoIdRef,
                       registerTimer: (t) => {
                         freeCommentTimeoutsRef.current.push(t);
@@ -4882,9 +5000,12 @@ export default function RoomWithSync({
       options?: {
         preserveReservationQueue?: boolean;
         nextTurnClientIdOverride?: string;
+        aiMode?: AiSelectionMode;
       },
     ) => {
       playbackLog('applyImmediateChangeVideo', { id, publisherClientId });
+      const selectionAiMode = options?.aiMode ?? 'none';
+      lastSelectionAiModeRef.current = selectionAiMode;
       trackEndedGraceWindowUntilRef.current = 0;
       if (playbackQueueFallbackTimerRef.current) {
         clearTimeout(playbackQueueFallbackTimerRef.current);
@@ -4920,6 +5041,7 @@ export default function RoomWithSync({
         videoId: id,
         publisherClientId,
         nextTurnClientId: nextTurnId,
+        aiMode: selectionAiMode,
       } as PlaybackMessage);
       playerRef.current?.loadVideoById(id);
       scheduleAutoPlayAfterChangeVideo();
@@ -4930,7 +5052,9 @@ export default function RoomWithSync({
           ? { silent: true, displayNameOverride: publisherDisplayName }
           : { displayNameOverride: publisherDisplayName },
       );
-      if (!sameVideoReplay) fetchCommentaryAndPublish(id);
+      if (!sameVideoReplay && selectionAiMode === 'full') {
+        fetchCommentaryAndPublish(id, { aiMode: selectionAiMode });
+      }
       const roundAtPost = Math.max(1, Math.floor(selectionRoundNumberRef.current));
       if (publisherClientId === myClientId) saveSongHistory(id, roundAtPost);
       schedulePlaybackHistory(
@@ -4940,6 +5064,24 @@ export default function RoomWithSync({
         publisherIsGuestForHistory,
         roundAtPost,
       );
+      scheduleGuestFirstSongInvite({
+        videoId: id,
+        isGuest,
+        isOwnPick: publisherClientId === myClientId,
+        guestSolo: isGuestSoloSession({
+          isGuest,
+          roomHasRegisteredParticipant: participantsRef.current.some(
+            (p) => typeof (p as { authUserId?: string }).authUserId === 'string',
+          ),
+          humanParticipantCount: participantsRef.current.filter(
+            (p) => p.clientId !== AI_CHARACTER_CLIENT_ID,
+          ).length,
+        }),
+        alreadyShownRef: guestFirstSongInviteShownRef,
+        videoIdRef,
+        addAiMessage: (body) => addAiMessage(body, { allowWhenAiStopped: true }),
+        touchActivity,
+      });
     },
     [
       participants,
@@ -5656,10 +5798,18 @@ export default function RoomWithSync({
         themePlaylistThemeLabel?: string | null;
         /** 曲解説後の「次に聴くなら」からの選曲。再生中でも選曲予約キューへ入れる */
         fromNextSongRecommend?: boolean;
+        aiMode?: AiSelectionMode;
       },
     ) => {
       const id = extractVideoId(url);
       if (!id) return;
+
+      const aiMode = resolveAiSelectionMode({
+        explicitMode: opts?.aiMode,
+        isGuest,
+        participatesInSelection,
+        aiTrialStatus: aiTrialStatus ?? null,
+      });
 
       // 他の人の曲が再生中のときに、順番外の参加者が検索結果から上書き再生しないように制御
       const currentVid = videoIdRef.current;
@@ -5748,7 +5898,7 @@ export default function RoomWithSync({
         pendingThemePlaylistBlurbRef.current = null;
       }
 
-      applyImmediateChangeVideo(id, myClientId);
+      applyImmediateChangeVideo(id, myClientId, { aiMode });
     },
     [
       safePublish,
@@ -5759,12 +5909,22 @@ export default function RoomWithSync({
       shouldDeferMultiSongPost,
       syncSongReservationQueueHead,
       isGuest,
+      participatesInSelection,
+      aiTrialStatus,
     ]
   );
 
   const handleNextSongRecommendSelect = useCallback(
-    (watchUrl: string) => handleVideoUrlFromChat(watchUrl, { fromNextSongRecommend: true }),
-    [handleVideoUrlFromChat],
+    (watchUrl: string) => {
+      const aiMode = resolveAiSelectionMode({
+        explicitMode: 'full',
+        isGuest,
+        participatesInSelection,
+        aiTrialStatus: aiTrialStatus ?? null,
+      });
+      handleVideoUrlFromChat(watchUrl, { fromNextSongRecommend: true, aiMode });
+    },
+    [handleVideoUrlFromChat, isGuest, participatesInSelection, aiTrialStatus],
   );
 
   const handleAddCandidateFromSearch = useCallback(
@@ -5917,6 +6077,11 @@ export default function RoomWithSync({
           );
           addAiMessage(reply, { allowWhenAiStopped: true });
         }
+        touchActivity();
+        return;
+      }
+      if (isGuest && aiMentioned && aiPromptText) {
+        addSystemMessage(GUEST_AI_AT_QUESTION_UNAVAILABLE);
         touchActivity();
         return;
       }
@@ -6442,6 +6607,25 @@ export default function RoomWithSync({
               );
               return;
             }
+            if (r.status === 403 && data?.error === 'guest_ai_unavailable') {
+              addSystemMessage(
+                typeof data.message === 'string' && data.message.trim()
+                  ? data.message
+                  : GUEST_AI_AT_QUESTION_UNAVAILABLE,
+              );
+              return;
+            }
+            if (
+              r.status === 403 &&
+              typeof data?.message === 'string' &&
+              data.message.trim() &&
+              (data.error === 'at_trial_exhausted' ||
+                data.error === 'email_unconfirmed' ||
+                data.error === 'ai_trial_login_required')
+            ) {
+              addSystemMessage(data.message.trim());
+              return;
+            }
             if (!r.ok) {
               addSystemMessage(aiErrorMessage);
               return;
@@ -6451,6 +6635,9 @@ export default function RoomWithSync({
               const body = data.text.startsWith('【AI回答】') ? data.text : `【AI回答】 ${data.text}`;
               addAiMessage(body, { allowWhenAiStopped: true, aiSource: 'chat_reply' });
               touchActivity();
+              if (aiMentioned && typeof window !== 'undefined') {
+                window.dispatchEvent(new Event(AI_TRIAL_STATUS_UPDATED_EVENT));
+              }
             } else if (data?.skipped === true) {
               // 雑談時はサーバー側で意図的に無応答（エラー表示しない）
             } else {
@@ -6731,6 +6918,9 @@ export default function RoomWithSync({
       onVideoUrl={handleVideoUrlFromChat}
       themePlaylistRoomSubmit={themePlaylistRoomSubmit}
       isGuest={isGuest}
+      aiTrialStatus={aiTrialStatus}
+      participatesInSelection={participatesInSelection}
+      onGuestAiSelectionBlocked={() => setGuestRegisterModalOpen(true)}
       onSystemMessage={addSystemMessage}
       onOpenTerms={() => {
         setPolicyTab('terms');
@@ -7008,7 +7198,7 @@ export default function RoomWithSync({
           displayName={effectiveDisplayName}
           isGuest={isGuest}
           onGuestRegisterClick={isGuest ? () => setGuestRegisterModalOpen(true) : undefined}
-          onMyPageClick={isLg ? () => setMyPageOpen(true) : undefined}
+          onMyPageClick={isLg ? () => openMyPage('user') : undefined}
           onPlaybackHistoryClick={undefined}
           currentVideoId={videoId}
           favoritedVideoIds={favoritedVideoIds}
@@ -7140,7 +7330,11 @@ export default function RoomWithSync({
 
       {myPageOpen && (
             <MyPage
-              onClose={() => setMyPageOpen(false)}
+              onClose={() => {
+                setMyPageOpen(false);
+                setMyPageInitialTab(undefined);
+              }}
+              initialMainTab={myPageInitialTab}
               currentUserTextColor={userTextColor}
               onUserTextColorChange={(color) => {
                 setUserTextColor(color);
@@ -7177,6 +7371,15 @@ export default function RoomWithSync({
               isGuest={isGuest}
               guestDisplayName={effectiveDisplayName}
               onGuestDisplayNameChange={isGuest ? setGuestDisplayName : undefined}
+              onGuestRegisterClick={
+                isGuest
+                  ? () => {
+                      setMyPageOpen(false);
+                      setMyPageInitialTab(undefined);
+                      setGuestRegisterModalOpen(true);
+                    }
+                  : undefined
+              }
               participatesInSelection={participatesInSelection}
               onParticipatesInSelectionChange={setParticipatesInSelection}
               joinEntryChimeEnabled={joinEntryChimeEnabled}
@@ -7285,6 +7488,11 @@ export default function RoomWithSync({
               }
               roomId={roomId}
               onRoomProfileSaved={({ displayTitle }) => setRoomDisplayTitleCurrent(displayTitle)}
+              roomAiOwnerPolicy={{
+                commentaryOn: !isCommentPackFullyOff(commentPackSlots),
+                quizOn: ownerSongQuizEnabled,
+                recommendOn: ownerNextSongRecommendEnabled,
+              }}
               commentPackSlots={commentPackSlots}
               onCommentPackSlotsChange={
                 canUseOwnerControls
@@ -7421,6 +7629,14 @@ export default function RoomWithSync({
                 .map((p) => ({ displayName: p.displayName, textColor: p.textColor })),
               currentVideoId: videoId,
             }}
+            viewerIsGuest={isGuest}
+            roomHasRegisteredParticipant={roomHasRegisteredParticipant}
+            aiTrialStatus={aiTrialStatus}
+            aiTrialLoading={aiTrialState === 'loading'}
+            onAiSettingsClick={!isGuest ? () => openMyPage('user') : undefined}
+            personalAiCommentaryEnabled={userRoomAiCommentaryEnabled}
+            personalAiSongQuizEnabled={userRoomAiSongQuizEnabled}
+            personalAiRecommendEnabled={userRoomAiRecommendEnabled}
           />
         }
         rightTop={
@@ -7481,7 +7697,7 @@ export default function RoomWithSync({
               {!isGuest && (
                 <button
                   type="button"
-                  onClick={() => setMyPageOpen(true)}
+                  onClick={() => openMyPage('user')}
                   className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-600 bg-gray-900/90 text-gray-200 backdrop-blur-sm hover:bg-gray-800"
                   aria-label="マイページを開く"
                   title="マイページ"
@@ -7507,6 +7723,7 @@ export default function RoomWithSync({
             roomClientId={myClientId}
             currentVideoId={videoId}
             refreshKey={playbackHistoryRefreshKey}
+            playbackHistorySinceIso={playbackHistorySinceIso}
             participantsWithColor={participants
               .filter((p) => p.textColor)
               .map((p) => ({ displayName: p.displayName, textColor: p.textColor! }))}

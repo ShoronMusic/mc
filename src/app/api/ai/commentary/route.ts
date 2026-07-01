@@ -36,6 +36,8 @@ import {
 } from '@/lib/commentary-song-intro-only-mode';
 import { insertAiCommentaryUnavailableEntry } from '@/lib/ai-commentary-unavailable-log';
 import { buildSongQuizApiExtension } from '@/lib/song-quiz-after-commentary';
+import { getChatAiClientIp } from '@/lib/chat-ai-rate-limit';
+import { guardAiTrialSongSelection } from '@/lib/user-ai-trial-server';
 
 export const dynamic = 'force-dynamic';
 
@@ -50,10 +52,23 @@ export async function POST(request: Request) {
 
     const supabase = await createClient();
     let selectorUserId: string | null = null;
+    let authUser = null;
     if (supabase) {
       const { data: authData } = await supabase.auth.getUser();
-      selectorUserId = authData.user?.id ?? null;
+      authUser = authData.user ?? null;
+      selectorUserId = authUser?.id ?? null;
     }
+    const requestIsGuest = body?.isGuest === true;
+    const trialGuard = await guardAiTrialSongSelection({
+      user: authUser,
+      isGuest: requestIsGuest,
+      aiModeRaw: body?.aiMode,
+      clientIp: getChatAiClientIp(request),
+    });
+    if (!trialGuard.ok) {
+      return NextResponse.json(trialGuard.body, { status: trialGuard.status });
+    }
+
     const reader = createAdminClient() ?? supabase;
     const [oembed, snippet] = await Promise.all([fetchOEmbed(videoId), getVideoSnippet(videoId)]);
     const rawYouTubeTitle = oembed?.title ?? snippet?.title ?? videoId;

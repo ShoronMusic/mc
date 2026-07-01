@@ -8,6 +8,11 @@ import { upsertSongAndVideo } from '@/lib/song-entities';
 import { insertTidbit } from '../../../../lib/song-tidbits';
 import { checkChatAiRateLimit, getChatAiClientIp } from '@/lib/chat-ai-rate-limit';
 import { fetchUserTasteContextForChat } from '@/lib/user-ai-taste-context';
+import { GUEST_AI_AT_QUESTION_UNAVAILABLE } from '@/lib/ai-usage-disclosure-copy';
+import {
+  guardAndConsumeAiTrialAtQuestion,
+  userTextHasAiMention,
+} from '@/lib/user-ai-trial-server';
 
 export const dynamic = 'force-dynamic';
 
@@ -245,6 +250,40 @@ export async function POST(request: Request) {
     if (!forceReply && !shouldGenerateChatReply(newestUserText)) {
       console.log('[ai/chat] skipped_by_filter', { newestUserText });
       return NextResponse.json({ text: null, skipped: true, reason: 'non_question_chat' });
+    }
+
+    if (isGuest) {
+      console.log('[ai/chat] guest_blocked', { forceReply, newestUserText });
+      return NextResponse.json(
+        {
+          error: 'guest_ai_unavailable',
+          message: GUEST_AI_AT_QUESTION_UNAVAILABLE,
+        },
+        { status: 403 },
+      );
+    }
+
+    const supaAuthEarly = await createClient();
+    let requestUserEarly = null;
+    if (supaAuthEarly) {
+      const {
+        data: { user: u },
+      } = await supaAuthEarly.auth.getUser();
+      requestUserEarly = u ?? null;
+    }
+
+    const needsAtTrial =
+      forceReply ||
+      (userTextHasAiMention(newestUserText) && shouldGenerateChatReply(newestUserText));
+    if (needsAtTrial) {
+      const atGuard = await guardAndConsumeAiTrialAtQuestion({
+        user: requestUserEarly,
+        isGuest,
+        clientIp: getChatAiClientIp(request),
+      });
+      if (!atGuard.ok) {
+        return NextResponse.json(atGuard.body, { status: atGuard.status });
+      }
     }
 
     const rate = checkChatAiRateLimit(getChatAiClientIp(request), isGuest);

@@ -57,12 +57,14 @@ export function scheduleNextSongRecommendAfterCommentary(options: {
   preferFastAfterQuiz?: boolean;
   /** 曲が切り替わっても前曲のおすすめを遅延表示へ回して出す */
   allowAfterVideoChange?: boolean;
+  aiMode?: 'full' | 'none';
   /** 生成中カードを表示して messageId を返す */
   createPendingCard?: () => string | null;
   /** 生成中カードを消す */
   clearPendingCard?: (messageId: string) => void;
 }): void {
   if (options.isGuest) return;
+  if (options.aiMode === 'none') return;
   const pendingMessageId = options.createPendingCard?.() ?? null;
   const clearPending = () => {
     if (pendingMessageId) options.clearPendingCard?.(pendingMessageId);
@@ -81,6 +83,8 @@ export function scheduleNextSongRecommendAfterCommentary(options: {
       body: JSON.stringify({
         videoId: options.videoId,
         roomId: options.roomId ?? '',
+        aiMode: options.aiMode ?? 'full',
+        isGuest: options.isGuest === true,
       }),
     })
       .then((r) => (r.ok ? r.json() : null))

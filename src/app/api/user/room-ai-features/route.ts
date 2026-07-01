@@ -20,7 +20,7 @@ function needsUserRoomAiFeaturesSetup(errorMessage: string): boolean {
 }
 
 /**
- * GET: 自分の部屋向け AI 設定（行なしはデフォルト ON）
+ * GET: 自分の部屋向け AI 設定（行なしは曲解説 ON・クイズ/おすすめ OFF）
  * PUT: { commentaryEnabled, songQuizEnabled, nextSongRecommendEnabled } で upsert
  */
 export async function GET() {

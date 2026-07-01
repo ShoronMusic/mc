@@ -13,6 +13,17 @@ export const AI_USAGE_DISCLOSURE_CURRENT_FREE =
 export const AI_USAGE_DISCLOSURE_ROOM_SUMMARY =
   'クラウド AI 利用には原価が発生するため、試験運用のうちに利用量を記録しています。将来、利用枠や有料プランを導入する場合がありますが、現時点では請求は行いません。';
 
+/** 登録ユーザー向け: お試し枠の説明（ステータス行の補足） */
+export const AI_TRIAL_STATUS_GUEST_HINT =
+  'ゲストは AI お試し 10 曲の対象外です。登録（無料）すると AI 付き選曲を 10 曲までお試しいただけます。';
+
+/** ゲストが @ 質問したときのシステムメッセージ */
+export const GUEST_AI_AT_QUESTION_UNAVAILABLE =
+  'ゲストは @ による AI 質問は利用できません。無料登録後、お試し @ 5 回までご利用いただけます。';
+
+/** マイページ参加履歴: お試し枠見出し */
+export const AI_TRIAL_STATUS_MYPAGE_HEADING = 'AI お試し枠（登録ユーザー）';
+
 /** 3分類の比較説明（解説 / @ 質問 / その他） */
 export const AI_USAGE_CATEGORY_COMPARISON_INTRO =
   'AI 機能ごとに原価の目安が異なります。一般に「@ で会話を続ける」ほど回数・入力トークンが増えやすく、1曲の曲解説（基本のみ）より高くなりやすい傾向があります。';

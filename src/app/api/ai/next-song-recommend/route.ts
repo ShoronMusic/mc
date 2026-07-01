@@ -21,6 +21,8 @@ import {
   parseSeedLabelToArtistTitle,
 } from '@/lib/next-song-recommend-store';
 import { upsertSongAndVideo } from '@/lib/song-entities';
+import { getChatAiClientIp } from '@/lib/chat-ai-rate-limit';
+import { guardAiTrialSongSelection } from '@/lib/user-ai-trial-server';
 
 export const dynamic = 'force-dynamic';
 
@@ -62,6 +64,17 @@ export async function POST(request: Request): Promise<NextResponse<OkDisabled | 
     const uid = user?.id ?? null;
     if (!isNextSongRecommendAllowedForUser(uid)) {
       return NextResponse.json({ enabled: false }, { status: 200 });
+    }
+
+    const requestIsGuest = body?.isGuest === true;
+    const trialGuard = await guardAiTrialSongSelection({
+      user,
+      isGuest: requestIsGuest,
+      aiModeRaw: body?.aiMode,
+      clientIp: getChatAiClientIp(request),
+    });
+    if (!trialGuard.ok) {
+      return NextResponse.json({ enabled: false, reason: trialGuard.body.error }, { status: 200 });
     }
 
     const rl = checkNextSongRecommendRateLimit(uid!);

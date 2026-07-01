@@ -1,6 +1,10 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { getLibraryArtistIndexCached, type LibraryArtistIndexItem } from '@/lib/build-library-artist-index';
+import {
+  getLibraryArtistIndexCached,
+  type LibraryArtistIndexItem,
+} from '@/lib/build-library-artist-index';
+import { mergeLibraryArtistIndexItems } from '@/lib/library-search-query';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,7 +22,8 @@ export async function GET() {
 
   try {
     const { items, letters } = await getLibraryArtistIndexCached(admin);
-    const res = NextResponse.json({ items, letters });
+    const mergedItems = mergeLibraryArtistIndexItems(items);
+    const res = NextResponse.json({ items: mergedItems, letters });
     res.headers.set('Cache-Control', 'private, max-age=60, stale-while-revalidate=300');
     return res;
   } catch (e) {

@@ -10,6 +10,7 @@ import { clearGuestRoomPersistence } from '@/lib/guest-room-persistence';
 import {
   GoogleBrandIcon,
 } from './JoinChoice';
+import { GuestRegisterFeatureCompareTable } from './GuestRegisterFeatureCompareTable';
 
 export interface GuestRegisterPromptModalProps {
   open: boolean;
@@ -102,7 +103,7 @@ export function GuestRegisterPromptModal({ open, onClose, roomId = '' }: GuestRe
       onClick={onClose}
     >
       <div
-        className="max-h-[min(90vh,560px)] w-full max-w-md overflow-y-auto rounded-xl border border-gray-600 bg-gray-900 p-6 shadow-2xl"
+        className="max-h-[min(92vh,640px)] w-full max-w-md overflow-y-auto rounded-xl border border-gray-600 bg-gray-900 p-6 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         {showEmailForm && hasSupabase ? (
@@ -161,6 +162,7 @@ export function GuestRegisterPromptModal({ open, onClose, roomId = '' }: GuestRe
             <p className="mt-2 text-xs leading-relaxed text-gray-500">
               ご登録のメールアドレス等は、本サービスの提供・運営に必要な範囲でのみ利用し、無関係な目的には用いません。適切に管理します。
             </p>
+            <GuestRegisterFeatureCompareTable />
             {hasSupabase ? (
               <div className="mt-4 rounded-lg border border-gray-700 bg-gray-800/60 px-3 py-3">
                 <label className="flex cursor-pointer items-start gap-3 text-sm leading-snug text-gray-200">

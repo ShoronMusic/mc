@@ -21,6 +21,8 @@ import {
   COMMENT_PACK_SLOTS_FULL,
   COMMENT_PACK_SLOTS_NONE,
   DEFAULT_COMMENT_PACK_SLOTS,
+  formatCommentPackSlotsSummary,
+  isCommentPackFullyOff,
   toggleCommentPackSlot,
 } from '@/lib/comment-pack-slots';
 import { assignDefaultGuestDisplayName } from '@/lib/guest-display-name';
@@ -31,6 +33,7 @@ import {
 import { USER_SONG_HISTORY_UPDATED_EVENT } from '@/lib/user-song-history-events';
 import { suggestMyListArtistTitleFromYoutubeStyle } from '@/lib/my-list-youtube-title-suggest';
 import { MUSICAI_EXTENSION_SET_CHAT_TEXT_EVENT } from '@/lib/musicai-extension-events';
+import { GuestRegisterFeatureCompareTable } from '@/components/auth/GuestRegisterFeatureCompareTable';
 import MainArtistTabPanel from '@/components/room/MainArtistTabPanel';
 import { MyPageModalFrame, MyPageThreeColumnBody } from '@/components/mypage/MyPageModalFrame';
 import {
@@ -39,7 +42,17 @@ import {
 } from '@/components/mypage/MyPageMusicPreviewPanel';
 import { UserRoomAiFeaturesSqlHint } from '@/components/mypage/UserRoomAiFeaturesSqlHint';
 import ThemePlaylistMissionPanel from '@/components/mypage/ThemePlaylistMissionPanel';
-import { isUserRoomAiFeaturesSetupMessage } from '@/lib/user-room-ai-features';
+import {
+  DEFAULT_USER_ROOM_AI_COMMENTARY_ENABLED,
+  DEFAULT_USER_ROOM_AI_NEXT_SONG_RECOMMEND_ENABLED,
+  DEFAULT_USER_ROOM_AI_SONG_QUIZ_ENABLED,
+  isUserRoomAiFeaturesSetupMessage,
+} from '@/lib/user-room-ai-features';
+import {
+  DEFAULT_OWNER_AI_CHARACTER_JOIN_ENABLED,
+  DEFAULT_OWNER_NEXT_SONG_RECOMMEND_ENABLED,
+  DEFAULT_OWNER_SONG_QUIZ_ENABLED,
+} from '@/types/room-owner';
 import { SONG_STYLE_OPTIONS } from '@/lib/song-styles';
 import { SONG_ERA_OPTIONS } from '@/lib/song-era-options';
 import {
@@ -68,12 +81,16 @@ import {
 } from '@/lib/gemini-pricing';
 import { type GeminiUsageCategoryId } from '@/lib/gemini-usage-categories';
 import {
+  AI_TRIAL_STATUS_MYPAGE_HEADING,
   AI_USAGE_DISCLOSURE_MYPAGE_PARTICIPATION,
   AI_USAGE_DISCLOSURE_MYPAGE_ROOM_COMMON,
 } from '@/lib/ai-usage-disclosure-copy';
 import { GeminiUsageCategoryBreakdown } from '@/components/mypage/GeminiUsageCategoryBreakdown';
 import { SongSelectionCostGuide } from '@/components/shared/SongSelectionCostGuide';
+import { AiTrialStatusBadge } from '@/components/shared/AiTrialStatusBadge';
+import { useAiTrialStatus } from '@/hooks/useAiTrialStatus';
 import { ParticipationSongHistoryModal } from '@/components/mypage/ParticipationSongHistoryModal';
+import { UserAtQuestionHistory } from '@/components/mypage/UserAtQuestionHistory';
 import {
   MyPageSongHistoryList,
   type MyPageSongHistoryRow,
@@ -518,6 +535,8 @@ interface MyPageProps {
   /** ゲストの表示名（マイページで変更可能） */
   guestDisplayName?: string;
   onGuestDisplayNameChange?: (name: string) => void;
+  /** ゲスト向け: ユーザー登録モーダルを開く */
+  onGuestRegisterClick?: () => void;
   /** 選曲に参加するか。false なら視聴専用 */
   participatesInSelection?: boolean;
   onParticipatesInSelectionChange?: (value: boolean) => void;
@@ -563,7 +582,26 @@ interface MyPageProps {
   /** 参加者の入室・退室効果音（同期部屋）。未指定時はこの端末の localStorage のみ */
   joinEntryChimeEnabled?: boolean;
   onJoinEntryChimeEnabledChange?: (value: boolean) => void;
+  /** 開いたときに表示するメインタブ（例: チャットヘッダー「AI設定」から user） */
+  initialMainTab?: MyPageMainTab;
+  /** 同期部屋の部屋側 AI 上限（参加者のスイッチ無効化・説明用） */
+  roomAiOwnerPolicy?: RoomAiOwnerPolicy;
 }
+
+export type RoomAiOwnerPolicy = {
+  commentaryOn: boolean;
+  quizOn: boolean;
+  recommendOn: boolean;
+};
+
+export type MyPageMainTab =
+  | 'owner'
+  | 'user'
+  | 'music'
+  | 'participation'
+  | 'questionHistory'
+  | 'mylist'
+  | 'themeMission';
 
 /** 入室・退室の効果音トグル（チャット文言は常に表示） */
 function JoinEntryChimeToggle({
@@ -600,6 +638,128 @@ function JoinEntryChimeToggle({
   );
 }
 
+function PersonalAiOwnerCeilingNote({
+  roomEnabled,
+  featureLabel,
+}: {
+  roomEnabled: boolean;
+  featureLabel: string;
+}) {
+  return (
+    <p className="mt-1 text-[11px] leading-snug text-gray-500">
+      部屋の{featureLabel}:{' '}
+      <span className={roomEnabled ? 'text-emerald-400/90' : 'text-amber-300'}>
+        {roomEnabled ? 'ON' : 'OFF'}
+      </span>
+      {roomEnabled
+        ? ' — 下のスイッチで自分だけオフにできます'
+        : ' → 自分をオンにしても出ません'}
+    </p>
+  );
+}
+
+function PersonalAiSettingsPolicySummary() {
+  return (
+    <div className="mt-3 rounded border border-violet-800/50 bg-gray-900/60 px-2.5 py-2 text-[11px] leading-relaxed text-gray-400">
+      <p className="font-medium text-violet-200/90">ルール（自分の選曲時のみ）</p>
+      <ul className="mt-1 list-inside list-disc space-y-0.5">
+        <li>部屋が OFF → 自分 ON 不可</li>
+        <li>部屋が ON → 自分だけ OFF 可（枠節約）</li>
+        <li>曲クイズ → 部屋・自分の解説が ON のときだけ ON 可</li>
+      </ul>
+    </div>
+  );
+}
+
+function PersonalAiAgentOwnerNote({
+  agentJoinEnabled,
+  inSyncedRoom,
+  showOwnerTabLink,
+  onOpenOwnerTab,
+}: {
+  agentJoinEnabled: boolean;
+  inSyncedRoom: boolean;
+  showOwnerTabLink: boolean;
+  onOpenOwnerTab: () => void;
+}) {
+  return (
+    <div className="mt-5 rounded border border-amber-800/45 bg-amber-950/25 px-2.5 py-2.5">
+      <p className="text-xs font-medium text-amber-200/95">AI エージェント（オーナー権限・部屋全体）</p>
+      <p className="mt-1 text-[11px] leading-relaxed text-gray-400">
+        チャットヘッダーの「AI参加」と連動します。上の解説・クイズ・おすすめは
+        <strong className="font-normal text-gray-300">自分の選曲</strong>
+        だけの設定ですが、エージェントは
+        <strong className="font-normal text-gray-300">オーナーが部屋設定で決める全員共通</strong>
+        の機能です。この欄では ON/OFF できません。
+      </p>
+      {inSyncedRoom ? (
+        <p className="mt-1.5 text-[11px] text-gray-500">
+          この部屋の状態:{' '}
+          <span className={agentJoinEnabled ? 'text-emerald-400/90' : 'text-gray-400'}>
+            {agentJoinEnabled ? '参加オン' : '参加オフ'}
+          </span>
+        </p>
+      ) : null}
+      {showOwnerTabLink ? (
+        <button
+          type="button"
+          onClick={onOpenOwnerTab}
+          className="mt-2 text-[11px] text-violet-300 underline decoration-dotted underline-offset-2 hover:text-violet-200"
+        >
+          部屋設定（オーナー）タブで AI エージェントを変更
+        </button>
+      ) : (
+        <p className="mt-1.5 text-[11px] text-gray-500">変更はチャットオーナーにお願いしてください。</p>
+      )}
+    </div>
+  );
+}
+
+function PersonalAiUserOnOffButtons({
+  enabled,
+  saving,
+  onEnable,
+  onDisable,
+  disableEnable = false,
+  disableEnableTitle,
+  hideWhenUnavailable = false,
+}: {
+  enabled: boolean;
+  saving: boolean;
+  onEnable: () => void;
+  onDisable: () => void;
+  disableEnable?: boolean;
+  disableEnableTitle?: string;
+  hideWhenUnavailable?: boolean;
+}) {
+  if (hideWhenUnavailable) return null;
+  return (
+    <div className="mt-1 flex flex-wrap items-center gap-2">
+      <button
+        type="button"
+        disabled={saving || disableEnable}
+        title={disableEnable ? disableEnableTitle : undefined}
+        onClick={onEnable}
+        className={`rounded px-3 py-1.5 text-sm ${
+          enabled ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+        } disabled:cursor-not-allowed disabled:opacity-45`}
+      >
+        オン
+      </button>
+      <button
+        type="button"
+        disabled={saving}
+        onClick={onDisable}
+        className={`rounded px-3 py-1.5 text-sm ${
+          !enabled ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+        } disabled:opacity-50`}
+      >
+        オフ
+      </button>
+    </div>
+  );
+}
+
 /** マイページで選べるステータス（参加者名横に表示） */
 const USER_STATUS_OPTIONS = [
   { value: '', label: 'なし' },
@@ -623,6 +783,7 @@ export default function MyPage({
   isGuest = false,
   guestDisplayName = 'ゲスト',
   onGuestDisplayNameChange,
+  onGuestRegisterClick,
   participatesInSelection = true,
   onParticipatesInSelectionChange,
   userStatus = '',
@@ -631,11 +792,11 @@ export default function MyPage({
   onSongLimit5MinToggle,
   aiFreeSpeechStopped = true,
   onAiFreeSpeechStopToggle,
-  ownerSongQuizEnabled = true,
+  ownerSongQuizEnabled = DEFAULT_OWNER_SONG_QUIZ_ENABLED,
   onOwnerSongQuizToggle,
-  ownerNextSongRecommendEnabled = true,
+  ownerNextSongRecommendEnabled = DEFAULT_OWNER_NEXT_SONG_RECOMMEND_ENABLED,
   onOwnerNextSongRecommendToggle,
-  ownerAiCharacterJoinEnabled = true,
+  ownerAiCharacterJoinEnabled = DEFAULT_OWNER_AI_CHARACTER_JOIN_ENABLED,
   onOwnerAiCharacterJoinToggle,
   ownerAiCharacterName = 'エージェント1号',
   onOwnerAiCharacterNameChange,
@@ -649,6 +810,8 @@ export default function MyPage({
   onRoomProfileSaved,
   joinEntryChimeEnabled,
   onJoinEntryChimeEnabledChange,
+  initialMainTab,
+  roomAiOwnerPolicy,
 }: MyPageProps) {
   const routeParams = useParams();
   const roomIdFromRoute = useMemo(() => {
@@ -798,18 +961,27 @@ export default function MyPage({
   );
   const [publicListening, setPublicListening] = useState('');
   const [publicProfileMessage, setPublicProfileMessage] = useState<string | null>(null);
-  const [roomAiCommentaryEnabled, setRoomAiCommentaryEnabled] = useState(true);
-  const [roomAiSongQuizEnabled, setRoomAiSongQuizEnabled] = useState(true);
-  const [roomAiNextSongRecommendEnabled, setRoomAiNextSongRecommendEnabled] = useState(true);
+  const [roomAiCommentaryEnabled, setRoomAiCommentaryEnabled] = useState(
+    DEFAULT_USER_ROOM_AI_COMMENTARY_ENABLED,
+  );
+  const [roomAiSongQuizEnabled, setRoomAiSongQuizEnabled] = useState(
+    DEFAULT_USER_ROOM_AI_SONG_QUIZ_ENABLED,
+  );
+  const [roomAiNextSongRecommendEnabled, setRoomAiNextSongRecommendEnabled] = useState(
+    DEFAULT_USER_ROOM_AI_NEXT_SONG_RECOMMEND_ENABLED,
+  );
   const [roomAiFeaturesLoading, setRoomAiFeaturesLoading] = useState(false);
   const [roomAiFeaturesSaving, setRoomAiFeaturesSaving] = useState(false);
   const [roomAiFeaturesMessage, setRoomAiFeaturesMessage] = useState<string | null>(null);
-  const [mainTab, setMainTab] = useState<
-    'owner' | 'user' | 'music' | 'participation' | 'mylist' | 'themeMission'
-  >('user');
+  const [mainTab, setMainTab] = useState<MyPageMainTab>(initialMainTab ?? 'user');
+
+  useEffect(() => {
+    if (initialMainTab) setMainTab(initialMainTab);
+  }, [initialMainTab]);
 
   const supabase = createClient();
   const router = useRouter();
+  const { status: aiTrialStatus, state: aiTrialState } = useAiTrialStatus(isGuest);
 
   const aiTastePromptPreview = useMemo(() => {
     const auto = userTasteAutoProfileForUse(aiTasteAutoProfileText);
@@ -936,9 +1108,9 @@ export default function MyPage({
 
   useEffect(() => {
     if (isGuest || !user?.id) {
-      setRoomAiCommentaryEnabled(true);
-      setRoomAiSongQuizEnabled(true);
-      setRoomAiNextSongRecommendEnabled(true);
+      setRoomAiCommentaryEnabled(DEFAULT_USER_ROOM_AI_COMMENTARY_ENABLED);
+      setRoomAiSongQuizEnabled(DEFAULT_USER_ROOM_AI_SONG_QUIZ_ENABLED);
+      setRoomAiNextSongRecommendEnabled(DEFAULT_USER_ROOM_AI_NEXT_SONG_RECOMMEND_ENABLED);
       setRoomAiFeaturesLoading(false);
       setRoomAiFeaturesMessage(null);
       return;
@@ -957,9 +1129,9 @@ export default function MyPage({
         } | null;
         if (cancelled) return;
         if (!r.ok || !data || typeof data.error === 'string') {
-          setRoomAiCommentaryEnabled(true);
-          setRoomAiSongQuizEnabled(true);
-          setRoomAiNextSongRecommendEnabled(true);
+          setRoomAiCommentaryEnabled(DEFAULT_USER_ROOM_AI_COMMENTARY_ENABLED);
+          setRoomAiSongQuizEnabled(DEFAULT_USER_ROOM_AI_SONG_QUIZ_ENABLED);
+          setRoomAiNextSongRecommendEnabled(DEFAULT_USER_ROOM_AI_NEXT_SONG_RECOMMEND_ENABLED);
           if (typeof data?.error === 'string' && data.error.includes('user_room_ai_features')) {
             setRoomAiFeaturesMessage(data.error);
           }
@@ -974,9 +1146,9 @@ export default function MyPage({
       })
       .catch(() => {
         if (!cancelled) {
-          setRoomAiCommentaryEnabled(true);
-          setRoomAiSongQuizEnabled(true);
-          setRoomAiNextSongRecommendEnabled(true);
+          setRoomAiCommentaryEnabled(DEFAULT_USER_ROOM_AI_COMMENTARY_ENABLED);
+          setRoomAiSongQuizEnabled(DEFAULT_USER_ROOM_AI_SONG_QUIZ_ENABLED);
+          setRoomAiNextSongRecommendEnabled(DEFAULT_USER_ROOM_AI_NEXT_SONG_RECOMMEND_ENABLED);
         }
       })
       .finally(() => {
@@ -994,6 +1166,11 @@ export default function MyPage({
       nextSongRecommendEnabled: boolean;
     }) => {
       if (isGuest || !user?.id) return;
+      const normalized = {
+        commentaryEnabled: next.commentaryEnabled,
+        songQuizEnabled: next.commentaryEnabled ? next.songQuizEnabled : false,
+        nextSongRecommendEnabled: next.nextSongRecommendEnabled,
+      };
       setRoomAiFeaturesSaving(true);
       setRoomAiFeaturesMessage(null);
       try {
@@ -1001,16 +1178,16 @@ export default function MyPage({
           method: 'PUT',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(next),
+          body: JSON.stringify(normalized),
         });
         const data = (await r.json().catch(() => null)) as { error?: string } | null;
         if (!r.ok) {
           setRoomAiFeaturesMessage(typeof data?.error === 'string' ? data.error : '保存に失敗しました。');
           return;
         }
-        setRoomAiCommentaryEnabled(next.commentaryEnabled);
-        setRoomAiSongQuizEnabled(next.songQuizEnabled);
-        setRoomAiNextSongRecommendEnabled(next.nextSongRecommendEnabled);
+        setRoomAiCommentaryEnabled(normalized.commentaryEnabled);
+        setRoomAiSongQuizEnabled(normalized.songQuizEnabled);
+        setRoomAiNextSongRecommendEnabled(normalized.nextSongRecommendEnabled);
         setRoomAiFeaturesMessage('保存しました。');
       } catch {
         setRoomAiFeaturesMessage('保存に失敗しました。');
@@ -1020,6 +1197,13 @@ export default function MyPage({
     },
     [isGuest, user?.id],
   );
+
+  const roomCommentaryOn = roomAiOwnerPolicy?.commentaryOn ?? true;
+  const roomQuizOn = roomAiOwnerPolicy?.quizOn ?? true;
+  const roomRecommendOn = roomAiOwnerPolicy?.recommendOn ?? true;
+  const canPersonalCommentaryOn = roomCommentaryOn;
+  const canPersonalQuizOn = roomCommentaryOn && roomQuizOn && roomAiCommentaryEnabled;
+  const canPersonalRecommendOn = roomRecommendOn;
 
   const handleSavePublicProfile = useCallback(async () => {
     setPublicProfileSaving(true);
@@ -1964,19 +2148,19 @@ export default function MyPage({
             <>
         <div className="rounded border border-blue-700/40 bg-blue-900/20 p-3">
           <h3 className="mb-1 text-sm font-medium text-blue-200">無料登録で使える機能</h3>
-          <p className="text-xs text-gray-300">
-            お気に入り保存・貼った曲履歴の永続化・設定の引き継ぎが使えます。ゲストのままでも参加できますが、
-            よく使う方は登録すると便利です。
+          <p className="text-xs leading-relaxed text-gray-300">
+            ゲストのままでも選曲・同時視聴はできます。無料登録すると下のとおり機能が増えます。
           </p>
-          <div className="mt-2">
-            <a
-              href="/"
-              className="inline-flex items-center rounded border border-blue-600 bg-blue-800/40 px-3 py-1.5 text-xs text-blue-100 hover:bg-blue-700/50"
-              title="トップページで参加方法を選ぶ"
+          <GuestRegisterFeatureCompareTable className="mt-3" />
+          {onGuestRegisterClick ? (
+            <button
+              type="button"
+              onClick={onGuestRegisterClick}
+              className="mt-3 w-full rounded-lg border border-blue-600 bg-blue-700/50 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-600/60"
             >
-              参加方法を選ぶ（ログイン/登録）
-            </a>
-          </div>
+              ユーザー登録
+            </button>
+          ) : null}
         </div>
 
         {showOrganizerRoomEditor ? (
@@ -2117,10 +2301,19 @@ export default function MyPage({
   return (
     <MyPageModalFrame
       title="マイページ"
-      subtitle="登録情報の確認と変更。オーナー向け・ユーザー向け・参加履歴・曲管理・マイリスト・お題プレイリストをタブで切り替えます。"
+      subtitle="ユーザー設定＝自分の選曲時の AI（opt-out）。部屋設定（オーナー）＝全員の上限と AI エージェント。"
       onClose={onClose}
     >
       <div className="mb-3 flex shrink-0 flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => setMainTab('user')}
+          className={`rounded px-3 py-1.5 text-sm font-medium ${
+            mainTab === 'user' ? 'bg-gray-700 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'
+          }`}
+        >
+          ユーザー設定
+        </button>
         {showOwnerTab ? (
           <button
             type="button"
@@ -2129,18 +2322,9 @@ export default function MyPage({
               mainTab === 'owner' ? 'bg-gray-700 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'
             }`}
           >
-            オーナー機能
+            部屋設定（オーナー）
           </button>
         ) : null}
-        <button
-          type="button"
-          onClick={() => setMainTab('user')}
-          className={`rounded px-3 py-1.5 text-sm font-medium ${
-            mainTab === 'user' ? 'bg-gray-700 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'
-          }`}
-        >
-          ユーザー機能
-        </button>
         <button
           type="button"
           onClick={() => setMainTab('participation')}
@@ -2152,6 +2336,19 @@ export default function MyPage({
         >
           参加履歴
         </button>
+        {!isGuest ? (
+          <button
+            type="button"
+            onClick={() => setMainTab('questionHistory')}
+            className={`rounded px-3 py-1.5 text-sm font-medium ${
+              mainTab === 'questionHistory'
+                ? 'bg-gray-700 text-white'
+                : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'
+            }`}
+          >
+            質問履歴
+          </button>
+        ) : null}
         <button
           type="button"
           onClick={() => setMainTab('music')}
@@ -2221,11 +2418,24 @@ export default function MyPage({
                 </div>
               ) : null}
 
+            </>
+          }
+          col2={
+            <>
+              <div className="rounded border border-amber-700/50 bg-amber-900/20 p-3">
+                <h3 className="text-sm font-medium text-amber-200">部屋全体の AI（全員に効く）</h3>
+                <p className="mt-1 text-xs leading-relaxed text-gray-400">
+                  参加者全員のチャットヘッダーと AI の上限（天井）です。ここを OFF にすると、ユーザー設定で ON にしていても無効です。選曲者個人の
+                  opt-out はユーザー設定タブ。AI エージェントはこのタブのみ（個人 ON/OFF なし）。
+                </p>
+              </div>
+
               {onOwnerAiCharacterJoinToggle ? (
                 <div className="rounded border border-amber-700/50 bg-amber-900/20 p-3">
-                  <h4 className="mb-2 text-xs font-medium text-gray-300">AIキャラクター参加（オーナー設定）</h4>
+                  <h4 className="mb-2 text-xs font-medium text-gray-300">AIエージェント参加</h4>
                   <p className="mb-2 text-xs text-gray-400">
-                    部屋全体の AI キャラクター参加 ON/OFF の準備設定です。既存の進行・解説AI（@応答/曲解説/曲クイズ/おすすめ曲）には影響しません。
+                    チャットヘッダーの「AI参加」ピルと連動します。曲解説・曲クイズ・おすすめの部屋上限や、参加者各自の ON/OFF
+                    とは別の設定です。
                   </p>
                   <div className="flex items-center gap-2">
                     <button
@@ -2245,8 +2455,8 @@ export default function MyPage({
                   </div>
                   {onOwnerAiCharacterNameChange ? (
                     <div className="mt-3 space-y-2">
-                      <label className="block text-xs text-gray-300">AIキャラクター名</label>
-                      <div className="flex items-center gap-2">
+                      <label className="block text-xs text-gray-300">AIエージェント名（部屋に表示）</label>
+                      <div className="flex flex-wrap items-center gap-2">
                         <input
                           type="text"
                           value={ownerAiCharacterNameInput}
@@ -2270,13 +2480,10 @@ export default function MyPage({
                   ) : null}
                 </div>
               ) : null}
-            </>
-          }
-          col2={
-            <>
+
               {onCommentPackSlotsChange ? (
                 <div className="rounded border border-amber-700/50 bg-amber-900/20 p-3">
-                  <h4 className="mb-2 text-xs font-medium text-gray-300">曲紹介コメント</h4>
+                  <h4 className="mb-2 text-xs font-medium text-gray-300">曲紹介コメント（曲解説の種類）</h4>
                   <p className="mb-2 text-xs text-gray-400">
                     選曲後に出す AI 解説の種類です。すべてオフにすると解説は出ません。好きな組み合わせ（例: 1 と 4
                     だけ）が選べます。
@@ -2333,9 +2540,10 @@ export default function MyPage({
 
               {onOwnerSongQuizToggle ? (
                 <div className="rounded border border-amber-700/50 bg-amber-900/20 p-3">
-                  <h4 className="mb-2 text-xs font-medium text-gray-300">曲クイズ（オーナー設定）</h4>
+                  <h4 className="mb-2 text-xs font-medium text-gray-300">曲クイズ</h4>
                   <p className="mb-2 text-xs text-gray-400">
-                    部屋全体の曲クイズON/OFFです。オーナーがOFFの場合、ユーザー側がONでもクイズは出ません。
+                    部屋全体の曲クイズ ON/OFF です。曲解説が部屋で OFF のときはクイズも出ません。OFF のときは参加者がユーザー設定で
+                    ON にしていてもクイズは出ません。
                   </p>
                   <div className="flex items-center gap-2">
                     <button
@@ -2358,9 +2566,9 @@ export default function MyPage({
 
               {onOwnerNextSongRecommendToggle ? (
                 <div className="rounded border border-amber-700/50 bg-amber-900/20 p-3">
-                  <h4 className="mb-2 text-xs font-medium text-gray-300">おすすめ曲（オーナー設定）</h4>
+                  <h4 className="mb-2 text-xs font-medium text-gray-300">おすすめ曲</h4>
                   <p className="mb-2 text-xs text-gray-400">
-                    部屋全体のおすすめ曲ON/OFFです。オーナーがOFFの場合、ユーザー側がONでもおすすめは出ません。
+                    部屋全体のおすすめ曲 ON/OFF です。OFF のときは参加者がユーザー設定で ON にしていてもおすすめは出ません。
                   </p>
                   <div className="flex items-center gap-2">
                     <button
@@ -2732,129 +2940,163 @@ export default function MyPage({
           }
           col2={
             <>
-        {/* 部屋の AI 曲解説・曲クイズ（登録ユーザーのみ） */}
+        {/* 自分の AI 設定（登録ユーザーのみ） */}
         {!isGuest ? (
-          <div className="rounded border border-gray-700 bg-gray-800/50 p-3">
-            <label className="block text-xs text-gray-500">部屋の AI 機能（曲解説・曲クイズ・おすすめ曲）</label>
-            <p className="mt-1 text-xs text-gray-400">
-              同期チャットの部屋で選曲したあと、このアカウントのブラウザから AI 曲解説（豆知識）や三択クイズの生成 API
-              やおすすめ曲の生成 API を呼ぶかを切り替えられます。オフにした端末では該当リクエストを送りません。ゲストは常にオン扱いです。
+          <div className="rounded border border-violet-700/45 bg-violet-950/25 p-3">
+            <h3 className="text-sm font-medium text-violet-100">自分の AI 設定（選曲時）</h3>
+            <p className="mt-1 text-xs leading-relaxed text-gray-400">
+              自分が選曲した 1 回について、この端末から AI を呼ぶかを決めます。部屋が OFF の機能はオンにできません。部屋が
+              ON なら、自分だけオフにできます。
             </p>
+            <PersonalAiSettingsPolicySummary />
+            <div className="mt-3">
+              <AiTrialStatusBadge
+                status={aiTrialStatus}
+                loading={aiTrialState === 'loading'}
+                variant="compact"
+              />
+            </div>
+            {showOwnerTab ? (
+              <p className="mt-2 text-[11px] leading-snug text-gray-500">
+                部屋の上限（曲解説の種類・クイズ／おすすめ・邦楽解禁）は{' '}
+                <button
+                  type="button"
+                  onClick={() => setMainTab('owner')}
+                  className="text-violet-300 underline decoration-dotted underline-offset-2 hover:text-violet-200"
+                >
+                  部屋設定（オーナー）タブ
+                </button>
+                で変更します。
+              </p>
+            ) : roomAiOwnerPolicy ? (
+              <p className="mt-2 text-[11px] leading-snug text-gray-500">
+                部屋の上限はオーナーが決めます。オーナー OFF の機能は自分 ON 不可です。
+              </p>
+            ) : null}
             {roomAiFeaturesLoading ? (
-              <p className="mt-2 text-sm text-gray-500">読み込み中…</p>
+              <p className="mt-3 text-sm text-gray-500">読み込み中…</p>
             ) : (
               <>
-                <p className="mt-3 text-sm text-gray-300">AI曲解説</p>
-                <div className="mt-1 flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    disabled={roomAiFeaturesSaving}
-                    onClick={() =>
-                      void saveRoomAiFeatures({
-                        commentaryEnabled: true,
-                        songQuizEnabled: roomAiSongQuizEnabled,
-                        nextSongRecommendEnabled: roomAiNextSongRecommendEnabled,
-                      })
-                    }
-                    className={`rounded px-3 py-1.5 text-sm ${
-                      roomAiCommentaryEnabled ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                    } disabled:opacity-50`}
-                  >
-                    オン
-                  </button>
-                  <button
-                    type="button"
-                    disabled={roomAiFeaturesSaving}
-                    onClick={() =>
-                      void saveRoomAiFeatures({
-                        commentaryEnabled: false,
-                        songQuizEnabled: roomAiSongQuizEnabled,
-                        nextSongRecommendEnabled: roomAiNextSongRecommendEnabled,
-                      })
-                    }
-                    className={`rounded px-3 py-1.5 text-sm ${
-                      !roomAiCommentaryEnabled ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                    } disabled:opacity-50`}
-                  >
-                    オフ
-                  </button>
-                </div>
-                <p className="mt-4 text-sm text-gray-300">AI曲クイズ</p>
-                <div className="mt-1 flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    disabled={roomAiFeaturesSaving}
-                    onClick={() =>
-                      void saveRoomAiFeatures({
-                        commentaryEnabled: roomAiCommentaryEnabled,
-                        songQuizEnabled: true,
-                        nextSongRecommendEnabled: roomAiNextSongRecommendEnabled,
-                      })
-                    }
-                    className={`rounded px-3 py-1.5 text-sm ${
-                      roomAiSongQuizEnabled ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                    } disabled:opacity-50`}
-                  >
-                    オン
-                  </button>
-                  <button
-                    type="button"
-                    disabled={roomAiFeaturesSaving}
-                    onClick={() =>
-                      void saveRoomAiFeatures({
-                        commentaryEnabled: roomAiCommentaryEnabled,
-                        songQuizEnabled: false,
-                        nextSongRecommendEnabled: roomAiNextSongRecommendEnabled,
-                      })
-                    }
-                    className={`rounded px-3 py-1.5 text-sm ${
-                      !roomAiSongQuizEnabled ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                    } disabled:opacity-50`}
-                  >
-                    オフ
-                  </button>
-                </div>
-                <p className="mt-4 text-sm text-gray-300">AIおすすめ曲</p>
-                <div className="mt-1 flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    disabled={roomAiFeaturesSaving}
-                    onClick={() =>
-                      void saveRoomAiFeatures({
-                        commentaryEnabled: roomAiCommentaryEnabled,
-                        songQuizEnabled: roomAiSongQuizEnabled,
-                        nextSongRecommendEnabled: true,
-                      })
-                    }
-                    className={`rounded px-3 py-1.5 text-sm ${
-                      roomAiNextSongRecommendEnabled
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                    } disabled:opacity-50`}
-                  >
-                    オン
-                  </button>
-                  <button
-                    type="button"
-                    disabled={roomAiFeaturesSaving}
-                    onClick={() =>
-                      void saveRoomAiFeatures({
-                        commentaryEnabled: roomAiCommentaryEnabled,
-                        songQuizEnabled: roomAiSongQuizEnabled,
-                        nextSongRecommendEnabled: false,
-                      })
-                    }
-                    className={`rounded px-3 py-1.5 text-sm ${
-                      !roomAiNextSongRecommendEnabled
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                    } disabled:opacity-50`}
-                  >
-                    オフ
-                  </button>
-                </div>
+                <p className="mt-4 text-sm text-gray-300">
+                  AI曲解説（自分）
+                  {!roomAiCommentaryEnabled && roomCommentaryOn ? (
+                    <span className="ml-1.5 align-middle text-[10px] font-medium text-gray-400">自分OFF</span>
+                  ) : null}
+                </p>
+                {roomAiOwnerPolicy ? (
+                  <PersonalAiOwnerCeilingNote roomEnabled={roomCommentaryOn} featureLabel="曲解説" />
+                ) : (
+                  <p className="mt-1 text-[11px] text-gray-500">
+                    種類（基本・歌詞など）は部屋オーナーが決めます。
+                  </p>
+                )}
+                {isChatOwner && onCommentPackSlotsChange ? (
+                  <p className="mt-0.5 text-[11px] text-gray-500">
+                    種類: {formatCommentPackSlotsSummary(commentPackSlots)}
+                  </p>
+                ) : null}
+                <PersonalAiUserOnOffButtons
+                  enabled={roomAiCommentaryEnabled}
+                  saving={roomAiFeaturesSaving}
+                  disableEnable={!canPersonalCommentaryOn}
+                  disableEnableTitle="部屋で曲解説が OFF のためオンにできません"
+                  onEnable={() =>
+                    void saveRoomAiFeatures({
+                      commentaryEnabled: true,
+                      songQuizEnabled: roomAiSongQuizEnabled,
+                      nextSongRecommendEnabled: roomAiNextSongRecommendEnabled,
+                    })
+                  }
+                  onDisable={() =>
+                    void saveRoomAiFeatures({
+                      commentaryEnabled: false,
+                      songQuizEnabled: false,
+                      nextSongRecommendEnabled: roomAiNextSongRecommendEnabled,
+                    })
+                  }
+                />
+
+                <p className="mt-4 text-sm text-gray-300">
+                  AI曲クイズ（自分）
+                  {!roomAiSongQuizEnabled && roomCommentaryOn && roomQuizOn ? (
+                    <span className="ml-1.5 align-middle text-[10px] font-medium text-gray-400">自分OFF</span>
+                  ) : null}
+                </p>
+                {!roomCommentaryOn ? (
+                  <p className="mt-1 text-[11px] text-amber-300/90">
+                    部屋で曲解説が OFF のため、曲クイズは利用できません。
+                  </p>
+                ) : roomAiOwnerPolicy ? (
+                  <PersonalAiOwnerCeilingNote roomEnabled={roomQuizOn} featureLabel="曲クイズ" />
+                ) : null}
+                {!roomAiCommentaryEnabled && roomCommentaryOn && roomQuizOn ? (
+                  <p className="mt-1 text-[11px] text-amber-300/90">
+                    自分の解説が OFF のため、クイズをオンにできません。
+                  </p>
+                ) : null}
+                <PersonalAiUserOnOffButtons
+                  enabled={roomAiSongQuizEnabled}
+                  saving={roomAiFeaturesSaving}
+                  hideWhenUnavailable={!roomCommentaryOn}
+                  disableEnable={!canPersonalQuizOn}
+                  disableEnableTitle={
+                    !roomQuizOn
+                      ? '部屋で曲クイズが OFF のためオンにできません'
+                      : '自分の解説をオンにするとクイズもオンにできます'
+                  }
+                  onEnable={() =>
+                    void saveRoomAiFeatures({
+                      commentaryEnabled: roomAiCommentaryEnabled,
+                      songQuizEnabled: true,
+                      nextSongRecommendEnabled: roomAiNextSongRecommendEnabled,
+                    })
+                  }
+                  onDisable={() =>
+                    void saveRoomAiFeatures({
+                      commentaryEnabled: roomAiCommentaryEnabled,
+                      songQuizEnabled: false,
+                      nextSongRecommendEnabled: roomAiNextSongRecommendEnabled,
+                    })
+                  }
+                />
+
+                <p className="mt-4 text-sm text-gray-300">
+                  AIおすすめ曲（自分）
+                  {!roomAiNextSongRecommendEnabled && roomRecommendOn ? (
+                    <span className="ml-1.5 align-middle text-[10px] font-medium text-gray-400">自分OFF</span>
+                  ) : null}
+                </p>
+                {roomAiOwnerPolicy ? (
+                  <PersonalAiOwnerCeilingNote roomEnabled={roomRecommendOn} featureLabel="おすすめ曲" />
+                ) : null}
+                <PersonalAiUserOnOffButtons
+                  enabled={roomAiNextSongRecommendEnabled}
+                  saving={roomAiFeaturesSaving}
+                  disableEnable={!canPersonalRecommendOn}
+                  disableEnableTitle="部屋でおすすめ曲が OFF のためオンにできません"
+                  onEnable={() =>
+                    void saveRoomAiFeatures({
+                      commentaryEnabled: roomAiCommentaryEnabled,
+                      songQuizEnabled: roomAiSongQuizEnabled,
+                      nextSongRecommendEnabled: true,
+                    })
+                  }
+                  onDisable={() =>
+                    void saveRoomAiFeatures({
+                      commentaryEnabled: roomAiCommentaryEnabled,
+                      songQuizEnabled: roomAiSongQuizEnabled,
+                      nextSongRecommendEnabled: false,
+                    })
+                  }
+                />
               </>
             )}
+            <PersonalAiAgentOwnerNote
+              agentJoinEnabled={ownerAiCharacterJoinEnabled}
+              inSyncedRoom={Boolean(roomAiOwnerPolicy)}
+              showOwnerTabLink={showOwnerTab}
+              onOpenOwnerTab={() => setMainTab('owner')}
+            />
             {roomAiFeaturesMessage ? (
               <div className="mt-2">
                 <p
@@ -2872,12 +3114,13 @@ export default function MyPage({
           </div>
         ) : null}
 
-        {/* AI向けの趣向メモ（「@」応答のパーソナライズ・登録ユーザーのみ） */}
+        {/* @ 質問向けの趣向メモ（登録ユーザーのみ） */}
         {!isGuest ? (
-        <div className="rounded border border-gray-700 bg-gray-800/50 p-3">
-          <label className="block text-xs text-gray-500">AI向けの趣向メモ（任意）</label>
+        <div className="rounded border border-violet-700/35 bg-violet-950/15 p-3">
+          <label className="block text-xs text-gray-500">@ 質問向け（自分の AI）</label>
           <p className="mt-1 text-xs text-gray-400">
             部屋で「@」から AI に話しかけたときの参考になります（通常の雑談には載りません）。他の参加者には表示されません。
+            選曲時の AI 機能の ON/OFF は上の「自分の AI 設定」で変更します。
             自動要約は<strong className="font-normal text-gray-300">選曲履歴・お気に入り・マイリスト・チャット（DB保存分）・公開プロフィール</strong>
             をまとめて Gemini が短文化します（選曲履歴だけではありません）。保存済みの自動要約が無い／薄いときは、左の公開プロフィールをプレビューに仮表示します。
           </p>
@@ -3897,6 +4140,16 @@ export default function MyPage({
               </span>
             </p>
             <SongSelectionCostGuide variant="mypage" className="mb-4" />
+            {!isGuest ? (
+              <div className="mb-4">
+                <p className="mb-2 text-xs font-medium text-gray-300">{AI_TRIAL_STATUS_MYPAGE_HEADING}</p>
+                <AiTrialStatusBadge
+                  status={aiTrialStatus}
+                  loading={aiTrialState === 'loading'}
+                  variant="mypage"
+                />
+              </div>
+            ) : null}
             {geminiUsageLoading ? (
               <p className="mb-3 text-xs text-gray-500">AI 利用量を読み込み中…</p>
             ) : geminiUsageSummary?.enabled === false && geminiUsageSummary.hint ? (
@@ -4097,6 +4350,25 @@ export default function MyPage({
                 ) : null}
               </>
             )}
+          </div>
+        ) : null}
+
+        {mainTab === 'questionHistory' ? (
+          <div className="mc-scrollbar-stable min-h-0 flex-1 overflow-y-auto border-t border-gray-800 pt-4">
+            <p className="mb-3 text-xs leading-relaxed text-gray-400">
+              部屋で送った <span className="text-gray-300">@ 質問</span> と AI の回答です。お試し枠の{' '}
+              <span className="text-gray-300">@質問 残数</span> は参加履歴タブでも確認できます。
+            </p>
+            {!isGuest ? (
+              <div className="mb-4">
+                <AiTrialStatusBadge
+                  status={aiTrialStatus}
+                  loading={aiTrialState === 'loading'}
+                  variant="compact"
+                />
+              </div>
+            ) : null}
+            <UserAtQuestionHistory isGuest={isGuest} />
           </div>
         ) : null}
       </div>

@@ -3,8 +3,8 @@
 > **重要**: 有料化 Phase 4 の**正本**。方針・進捗・API/DB/UI の実装チェックリストは**本ファイルを更新**する。  
 > 収益モデル全般・収支試算は `docs/monetization-options.md`、原価帰属・管理集計は `docs/room-gathering-history-and-ai-billing-project.md` を参照。
 
-最終更新: **2026-06-30**  
-ステータス: **方針確定 / Phase A 前（メール確認フローはアプリ実装済）**
+最終更新: **2026-07-01**  
+ステータス: **Phase B 実装済み・ローカル実機 OK / 本番デプロイ＋10曲検証待ち** / ゲスト UX 完了 / 登録ユーザー UX 追補完了 / Phase C 一部着手
 
 ---
 
@@ -79,7 +79,7 @@
 | ID | 状態 | 条件 | AI 付き選曲 | 選曲のみ | @ 質問 |
 |:--:|------|------|-------------|----------|--------|
 | **B0** | **スイッチ前（現状）** | 本プラン未 ON | ○ 全員 | ○ | ○ |
-| **B1** | **お試し残あり** | メール確認済 & `songs_remaining > 0` & 日次 cap 内 | ○（1 曲消費） | ○ | ○（`at` 残） |
+| **B1** | **お試し残あり** | メール確認済 & `songs_remaining > 0` | ○（1 曲消費） | ○ | ○（`at` 残） |
 | **B2** | **お試し枯渇** | `songs_remaining = 0` | × | ○ **無料継続** | × |
 | **B3** | **有料枠あり**（Phase D） | クレジット / 月額残 | ○（課金消費） | ○ | ○（プラン次第） |
 | **B4** | **メール未確認** | A1 だが確認前 | × | ○ | × |
@@ -105,7 +105,7 @@ C2・C3 は **同一人物が C0 と兼ねる**ことが多い。課金設計上
 | タイプ | 合成 | 部屋での見え方 | AI 付き選曲 | 選曲のみ | @ |
 |--------|------|----------------|-------------|----------|---|
 | **U1 ゲスト** | A0 | ゲスト名 | × → 登録誘導 | ○ | × |
-| **U2 登録・お試し中** | A1 + B1 | 残り N/10 表示 | ○ | ○ | ○（@ 残） |
+| **U2 登録・お試し中** | A1 + B1 | 残り N/10 表示 | ○ | ○ | ○（@質問 残） |
 | **U3 登録・選曲のみ派** | A1 + B2 | 「AI なしで選曲」が主 | × | ○ **ずっと無料** | × |
 | **U4 登録・有料** | A1 + B3 | 残クレジット / 月額 | ○ | ○ | ○ |
 | **U5 登録・未確認** | A1 + B4 | 確認メール案内 | × | ○ | × |
@@ -135,8 +135,7 @@ C2・C3 は **同一人物が C0 と兼ねる**ことが多い。課金設計上
 | ログイン可否 | Supabase セッション |
 | ゲストか | `sessionStorage` / API の `isGuest` |
 | お試し残 | `user_ai_trial.songs_remaining`（Phase B） |
-| @ 残 | `user_ai_trial.at_questions_remaining` |
-| 日次 cap | `songs_used_today` + `trial_day_key`（JST） |
+| @質問 残 | `user_ai_trial.at_questions_remaining` |
 | 選曲 AI 可否 | 上記 → **`aiMode`: `full` \| `none`** |
 | 主催者か | `room-live-status` · `room_gatherings.created_by` |
 | 原価帰属 | `resolveGeminiUsageAttribution()` 等 |
@@ -153,6 +152,44 @@ C2・C3 は **同一人物が C0 と兼ねる**ことが多い。課金設計上
 ```
 
 ゲスト **U1** → 登録 → **B4 or B1**（確認済みなら即 B1）。
+
+---
+
+## AI 機能: 部屋設定（オーナー）とユーザー設定（確定案）
+
+**2 層**: 部屋＝天井（禁止）、ユーザー＝自分の選曲 1 回だけ opt-out。  
+**AI エージェント**は部屋設定のみ（オーナー専用・個人スイッチなし）。
+
+### 選曲付随 AI（解説・クイズ・おすすめ）
+
+| 機能 | 部屋 OFF | 部屋 ON + 自分 OFF | 部屋 ON + 自分 ON |
+|------|----------|-------------------|-------------------|
+| **曲解説** | 全員出ない。自分 ON 不可 | 自分の選曲だけ出ない | 出る |
+| **曲クイズ** | 出ない（解説 OFF も同様）。自分 ON 不可 | 自分の選曲だけ出ない | 解説のあと出る |
+| **おすすめ曲** | 全員出ない。自分 ON 不可 | 自分の選曲だけ出ない | 出る |
+
+**曲クイズ追加ルール**
+
+- 部屋・自分の **解説が ON** のときだけ、自分のクイズを ON にできる（解説 OFF ならクイズ ON 不可）。
+- 部屋クイズ OFF → 自分 ON 不可。
+- 部屋 ON + 解説 ON + クイズ ON → 自分だけクイズ OFF 可。
+
+**おすすめ曲**: 解説 ON/OFF に**依存しない**（部屋・自分の 2 段のみ）。
+
+### AI エージェント
+
+| 項目 | 扱い |
+|------|------|
+| 誰が決める | オーナーのみ |
+| UI | **部屋設定（オーナー）タブのみ** |
+| ユーザー個人 | ON/OFF なし（全員同じ体験） |
+| お試し 10 曲 | 選曲者枠とは別（部屋共通 AI） |
+
+### 実装メモ
+
+- ユーザー側: `user_room_ai_features`（`PUT /api/user/room-ai-features`）。解説 OFF 保存時はクイズも false に正規化。
+- 部屋側: Ably 同期（comment-pack スロット・`ownerSongQuiz`・`ownerNextSongRecommend`・エージェント参加）。
+- マイページ: `roomAiOwnerPolicy` で参加者 UI の無効化。`MyPage.tsx` の早見表参照。
 
 ---
 
@@ -264,9 +301,10 @@ authUserId?: string;           // 既存
 | 付与量 | **10 曲** | 対外は「10 曲」固定（クレジット表示は使わない） |
 | 消費単位 | **AI 付き選曲 1 回 = 1 曲** | NEW/DB の差はお試し中は**数えない**（分かりやすさ優先） |
 | 生涯 | **1 アカウント 1 回** | 使い切り後は再付与しない（キャンペーンは別フラグ） |
-| 日次上限 | **3 曲 / 日**（AI 付き） | 一晩使い切り・複垢抑制 |
 | @ 上限 | **5 回**（お試し中・生涯） | 10 曲に含めない |
 | メール | **確認済みのみ** お試し開始 | 捨てアカウント対策 |
+
+> **日次 3 曲 cap は廃止**（2026-06 確定）。10 曲は **生涯合計のみ** でカウント。一晩使い切りは許容し、複垢抑制はメール確認・`user_id`・IP 補助・レート制限で行う。
 
 ### 含まれる AI（1 曲消費時）
 
@@ -297,7 +335,7 @@ authUserId?: string;           // 既存
 2. U1 ゲスト（A0）→ aiMode = none（AI 付きボタン非表示 or 登録誘導）
 3. U5 メール未確認（B4）→ aiMode = none
 4. ユーザーが「AI なしで選曲」明示 → none
-5. U2 お試し残 & 日次上限内（B1）→ full（1 曲消費）
+5. U2 お試し残あり（B1）→ full（1 曲消費）
 6. U4 有料枠あり（B3・将来）→ full
 7. U3 お試し枯渇（B2）等 → none（UI で課金案内。選曲のみは可）
 ```
@@ -324,11 +362,10 @@ authUserId?: string;           // 既存
 | 1 | **登録必須**で 10 曲 | Phase B | ゲストは AI 0 |
 | 2 | **`user_id` 生涯 10 曲**（DB） | Phase B | 再ログインでリセットしない |
 | 3 | **メール確認済み**のみ付与 | Phase B（判定は **`supabase-email-auth.ts`** 実装済） | Supabase Auth **Confirm email ON** |
-| 4 | **日次 3 曲** cap | Phase B | `trial_songs_used_today` |
-| 5 | **IP 記録 + ソフト上限** | Phase C | 同一 /24 で新規お試し **3 アカウント/日** 等。家族・学校は誤爆に注意 |
-| 6 | **レート制限** | 既存拡張 | `src/lib/chat-ai-rate-limit.ts`・YouTube 検索系。サーバーレスはインスタンス単位 → **Vercel Pro + WAF 併用** |
-| 7 | **異常フラグ** | Phase C | 短時間に同一 IP から大量 signup → STYLE_ADMIN 通知 |
-| 8 | VPN/プロキシ API | **将来** | コスト・誤検知あり。初期は必須にしない |
+| 4 | **IP 記録 + ソフト上限** | Phase C | 同一 /24 で新規お試し **3 アカウント/日** 等。家族・学校は誤爆に注意 |
+| 5 | **レート制限** | 既存拡張 | `src/lib/chat-ai-rate-limit.ts`・YouTube 検索系。サーバーレスはインスタンス単位 → **Vercel Pro + WAF 併用** |
+| 6 | **異常フラグ** | Phase C | 短時間に同一 IP から大量 signup → STYLE_ADMIN 通知 |
+| 7 | VPN/プロキシ API | **将来** | コスト・誤検知あり。初期は必須にしない |
 
 IP 取得: 既存 `getChatAiClientIp()`（`x-forwarded-for`）を trial 消費・signup 時に記録。
 
@@ -370,9 +407,7 @@ SQL 確定後は **`docs/supabase-user-ai-trial-table.md`** を新設（未作�
 | `songs_granted` | int | 既定 **10** |
 | `songs_remaining` | int | 残数 |
 | `at_questions_granted` | int | 既定 **5** |
-| `at_questions_remaining` | int | @ 残 |
-| `songs_used_today` | int | 日次 cap 用 |
-| `trial_day_key` | text | `YYYY-MM-DD`（JST）で日次リセット |
+| `at_questions_remaining` | int | @質問 残 |
 | `first_ip` | text | 監査 |
 | `last_ip` | text | 監査 |
 | `email_verified_at_grant` | timestamptz | 付与時の確認状態 |
@@ -393,7 +428,7 @@ SQL 確定後は **`docs/supabase-user-ai-trial-table.md`** を新設（未作�
 
 ### 消費 API（案）
 
-- `GET /api/user/ai-trial` — 残数・日次・@ 残
+- `GET /api/user/ai-trial` — 残数・@質問 残
 - 内部: `consumeAiTrialSong(userId)` / `consumeAiTrialAtQuestion(userId)` — トランザクションで decrement
 
 ---
@@ -402,27 +437,80 @@ SQL 確定後は **`docs/supabase-user-ai-trial-table.md`** を新設（未作�
 
 ### Phase A — UX 準備（**全員 AI 無料のまま**）
 
-- [ ] 部屋 UI: **残り N/10 曲** 表示（ダミーでも可）
-- [ ] 送信 UI: **「AI 付きで選曲」** / **「AI なしで選曲（無料）」** の二段（後者は残 0 でも常時）
-- [ ] `AiUsageBillingNotice` / マイページ: お試し説明文（`ai-usage-disclosure-copy.ts`）
-- [ ] ゲスト: AI 付きボタン非表示 + 登録誘導
+- [x] 部屋 UI: **残り N/10 曲** 表示（`GET /api/user/ai-trial` · `AiTrialStatusBadge` · `AiUsageBillingNotice`。Phase B 前は **preview** で枠非消費）
+- [x] マイページ参加履歴: **AI お試し 残 N/10** · @質問 残（同上）
+- [x] 送信 UI: **「AI 付きで選曲」** / **「AI なしで選曲（無料）」** の二段（enforcement ON + お試し残あり時）
+- [x] `AiUsageBillingNotice` / マイページ: お試し説明文（`ai-usage-disclosure-copy.ts` · ステータス行）
+- [x] ゲスト: AI 付きボタン非表示 + 登録誘導（`onGuestAiSelectionBlocked`）
+
+### ゲスト UX（U1）— 2026-07 実装
+
+同期部屋を中心に **ゲストは選曲・同時視聴のみ**、AI・お試し枠は登録後、という体験をコードと文言で揃えた。
+
+- [x] `@` 質問: クライアント早期 return + `/api/ai/chat` でゲスト拒否（`guest_ai_unavailable` · enforcement 無関係）
+- [x] 選曲: `aiMode=none`（ゲストは AI 付きボタン非表示）
+- [x] ヘッダー: ゲスト単独かつ登録参加者なし時、AI 曲解説・クイズ・おすすめピルを OFF 表示（`roomHasRegisteredParticipant`）
+- [x] `AiUsageBillingNotice`: ゲストは非表示
+- [x] 視聴履歴: ゲスト単独時は入室以降のみ（`isGuestSoloSession` · API `since`）
+- [x] 初回選曲後ヒント: ゲスト単独・自分の 1 曲目のみ 1 回（`guest-first-song-invite.ts`）
+- [x] 登録導線: 機能比較表（`guest-register-feature-compare.ts`）— 登録モーダル · マイページ（ゲスト）表下に「ユーザー登録」
+- [x] 文言: 同時視聴はゲスト可、AI・AI参加は登録後（ヒント文・比較表で統一）
+
+| ファイル | 内容 |
+|----------|------|
+| `src/lib/guest-first-song-invite.ts` | 初回選曲後メッセージ |
+| `src/lib/guest-solo-playback-history-since.ts` | ゲスト単独判定 |
+| `src/lib/guest-register-feature-compare.ts` | 登録モーダル・マイページ比較表 |
+| `src/components/auth/GuestRegisterFeatureCompareTable.tsx` | 表 UI |
+| `src/app/api/ai/chat/route.ts` | ゲスト `@` ブロック |
+| `src/components/mypage/MyPage.tsx` | ゲスト比較表 + 登録ボタン |
 
 ### Phase B — コア（お試し消費 + `aiMode`）
 
-- [ ] Supabase: `user_ai_trial` SQL 実行
-- [ ] 新規登録フック: **メール確認後** に `songs_remaining=10` 付与
-- [ ] 選曲パイプライン: イベントに `aiMode` 付与（`RoomWithSync` / `RoomWithoutSync`）
-- [ ] comment-pack / commentary / song-quiz / chat: **サーバー側ガード**
-- [ ] 1 曲消費 = AI 付き選曲成功時（comment-pack 開始前 or 成功後 — **一度だけ**消費の設計を固定）
-- [ ] 日次 3 曲 cap
-- [ ] `@` 5 回 cap（`/api/ai/chat` 等）
-- [ ] 残 2 曲で課金準備バナー（Phase D まで「準備中」でも可）
+- [x] Supabase: `user_ai_trial` SQL（`docs/supabase-user-ai-trial-table.md` · `supabase-setup.md` 第 23 章）
+- [x] 新規/既存: **メール確認済み**初回 `GET /api/user/ai-trial` で `songs_remaining=10` 付与
+- [x] 選曲パイプライン: イベントに `aiMode` 付与（`RoomWithSync` / `RoomWithoutSync` · `PlaybackMessage`）
+- [x] comment-pack / commentary / song-quiz / next-song-recommend / chat: **サーバー側ガード**
+- [x] 1 曲消費 = `comment-pack` · `packPhase=base` · `aiMode=full` 成功時（1 回のみ）
+- [x] `@` 5 回 cap（`/api/ai/chat` · AI メンション時）
+- [x] 残 2 曲で secondary 案内（`formatAiTrialStatusSecondaryLine` 既存）
+- [ ] **本番 ON**: Supabase SQL 実行 + `AI_TRIAL_ENFORCEMENT_ENABLED=1`（`.env.local` / **Vercel**）— ローカルでは実機確認済み、**デプロイ後 10 曲検証**が次
+
+### 登録ユーザー UX 追補（U2）— 2026-07-01 実装
+
+ローカルで **メール登録ユーザー** のお試しフローを実機確認し、抜け・表示を追補した。
+
+| # | 項目 | 状態 |
+|---|------|------|
+| 1 | **AI 曲解説が出ない** — `resolveAiSelectionMode` が通常選曲で `none` になりすぎる | [x] 修正（お試し残ありは既定 `full` · 明示 `none` のみ AI なし） |
+| 2 | **@ 質問が枠消費されない** — `forceReply` 時に `!forceReply` でガードスキップ | [x] 修正（`POST /api/ai/chat`） |
+| 3 | 送信欄上 **お試しバナー** — 残数 1 行 + ▲▼ 開閉（詳細は展開時のみ） | [x] `AiUsageBillingNotice` |
+| 4 | お試し残数の **UI 再取得** — 選曲・@ 消費後にヘッダー／バナー同期 | [x] `useAiTrialStatus` + `AI_TRIAL_STATUS_UPDATED_EVENT` |
+| 5 | 表示文言 **@質問 残**（`@ 残` → `@質問 残`） | [x] `formatAiTrialStatusPrimaryLine` |
+| 6 | マイページ **質問履歴** タブ（参加履歴の隣・単独） | [x] `MyPageMainTab: questionHistory` |
+| 7 | **@ 質問と AI 回答** 一覧（`room_chat_log` · 最大 30 件） | [x] `GET /api/user/at-question-history` · `UserAtQuestionHistory` |
+| 8 | 質問履歴に **料金目安**（ガイド + `gemini_usage_logs` 突合） | [x] `at-question-cost-guide.ts` · `AtQuestionCostGuide` |
+
+**単体テスト**: `src/lib/ai-selection-mode.unit-test.ts`（選曲 `aiMode` 既定）
+
+**無課金（お試し）ユーザーとしての判定（2026-07-01）**: コアは **実用 OK**。抜けは主に **本番 env**・**consumption_log SQL 任意**・**枯渇後課金導線（Phase D）**・**運用・不正対策（Phase C 残）**。
+
+| ファイル | 内容 |
+|----------|------|
+| `src/lib/ai-selection-mode.ts` | 選曲 `aiMode` 解決 |
+| `src/components/room/AiUsageBillingNotice.tsx` | 部屋・折りたたみバナー |
+| `src/hooks/useAiTrialStatus.ts` | 残数フェッチ + 消費イベント |
+| `src/lib/user-at-question-history.ts` | 質問履歴取得・コスト突合 |
+| `src/app/api/user/at-question-history/route.ts` | 質問履歴 API |
+| `src/components/mypage/UserAtQuestionHistory.tsx` | 質問履歴 UI |
+| `src/lib/at-question-cost-guide.ts` | @ 1 回料金目安 |
+| `src/components/shared/AtQuestionCostGuide.tsx` | 料金ガイド UI |
 
 ### Phase C — 不正・運用
 
-- [ ] IP 記録（`first_ip` / `last_ip`）
+- [x] IP 記録（`first_ip` / `last_ip` — 付与・消費時に `user_ai_trial` 更新）
 - [ ] 同一 IP 新規アカウントソフト上限 + 管理通知
-- [ ] `user_ai_trial_consumption_log`
+- [x] `user_ai_trial_consumption_log`（SQL + 消費時 INSERT。テーブル未作成時はログのみ失敗）
 - [ ] 管理画面: ユーザー別 trial 残数・消費ログ（`/admin/` 課金タブ）
 - [ ] レート制限の env チューニング（`CHAT_AI_RATE_LIMIT_*`）
 
@@ -442,6 +530,12 @@ SQL 確定後は **`docs/supabase-user-ai-trial-table.md`** を新設（未作�
 | 選曲 / comment-pack | `src/app/api/ai/comment-pack/route.ts` · `commentary` · `song-quiz` |
 | @ | `src/app/api/ai/chat/route.ts` · `src/lib/chat-ai-rate-limit.ts` |
 | 参加者文言 | `src/lib/ai-usage-disclosure-copy.ts` |
+| **お試し残数 UI** | `src/lib/ai-trial-status.ts` · `GET /api/user/ai-trial` · `AiTrialStatusBadge.tsx` · `useAiTrialStatus.ts` · `AiUsageBillingNotice.tsx` |
+| **お試し消費・ガード** | `src/lib/user-ai-trial-server.ts` |
+| **選曲 aiMode** | `src/lib/ai-selection-mode.ts` |
+| **質問履歴** | `src/lib/user-at-question-history.ts` · `GET /api/user/at-question-history` · `UserAtQuestionHistory.tsx` |
+| **@ 料金目安** | `src/lib/at-question-cost-guide.ts` · `AtQuestionCostGuide.tsx` |
+| **ゲスト UX** | `guest-first-song-invite.ts` · `guest-solo-playback-history-since.ts` · `guest-register-feature-compare.ts` |
 | **メール確認** | `src/lib/supabase-email-auth.ts` · `SimpleAuthForm.tsx` · `/auth/callback` |
 | 帰属 | `src/lib/gemini-usage-attribution.ts` · `gemini-usage-log.ts` |
 | 管理 | `src/config/admin-sections.ts` |
@@ -452,7 +546,7 @@ SQL 確定後は **`docs/supabase-user-ai-trial-table.md`** を新設（未作�
 ## 参加者向け文言（案・`ai-usage-disclosure-copy.ts` へ移植）
 
 ```
-【お試し】登録ユーザーは AI 付き選曲を 10 曲まで無料でお試しいただけます（1 日 3 曲まで）。
+【お試し】登録ユーザーは AI 付き選曲を **生涯 10 曲**まで無料でお試しいただけます（1 日の上限はありません）。
 10 曲を超えたあとも、選曲・再生・通常チャットは無料です。
 AI 解説・曲クイズ・@ による質問は、今後クレジットまたは月額プランでご利用いただく予定です。
 【現在】上記の前に、AI 機能はすべてサイト管理者負担で無料提供中です。
@@ -469,6 +563,51 @@ AI 解説・曲クイズ・@ による質問は、今後クレジットまたは
 | 2026-06-30 | **3種類大枠** + **表示名・バッジ判別ルール** 追加 |
 | 2026-06-30 | **確定**: 10 曲お試しは Google/メール **登録ユーザーのみ**（ゲスト 0 曲） |
 | 2026-06-30 | **メール登録 Confirm email ON**: `emailRedirectTo` · 未確認ログイン拒否 · 再送信 · コールバック案内（Supabase ダッシュボードで Confirm email ON が必要） |
+| 2026-06-30 | **日次 3 曲 cap 廃止**: お試しは **生涯 10 曲のみ**。`songs_used_today` / `trial_day_key` はデータモデルから除外 |
+| 2026-06-29 | **Phase B**: `user_ai_trial` · `aiMode` · API ガード · 二段選曲 UI · `AI_TRIAL_ENFORCEMENT_ENABLED` |
+| 2026-07-01 | **ゲスト UX（U1）**: `@` ブロック · 単独時視聴履歴セッション限定 · 初回選曲ヒント · 登録比較表（モーダル・マイページ） |
+| 2026-07-01 | **Phase C 着手**: `user_ai_trial_consumption_log` SQL + 消費時 INSERT |
+| 2026-07-01 | **登録ユーザー UX 追補**: `aiMode` 既定 `full` 修正 · `@` 枠消費修正 · バナー折りたたみ · 質問履歴タブ · 料金目安 · `@質問 残` 表示 |
+| 2026-07-01 | **ローカル実機**: ハチアカウントで 8/10 曲・@質問 4/5 消費・質問履歴表示を確認 |
+
+---
+
+## 次のステップ（優先順・Todo）
+
+### いま（運用・検証）
+
+- [ ] **Vercel デプロイ** — 最新 main（登録ユーザー UX 追補込み）
+- [ ] **本番 env** — `AI_TRIAL_ENFORCEMENT_ENABLED=1` · `GEMINI_API_KEY` · `SUPABASE_SERVICE_ROLE_KEY`
+- [ ] **Supabase** — `user_ai_trial` 作成済み確認（済ならスキップ）
+- [ ] **10 曲 + @5 回の実機検証**（本番 URL · 登録アカウント）— 残数減少・曲解説・質問履歴・料金目安
+- [ ] **任意** — `user_ai_trial_consumption_log` SQL 実行（`docs/supabase-user-ai-trial-table.md` 末尾）
+
+### Phase B 残・UX 任意
+
+- [ ] 選曲行 **`aiMode` + ✦** 表示（チャット上で AI 付き選曲だった印）
+- [ ] **`participantTier`** バッジ（ゲスト chip 統一）
+- [ ] **10 曲 / @5 回 使い切り後**の案内強化（専用バナー・マイページ文言。課金導線は Phase D まで簡易で可）
+
+### Phase C — 不正・運用
+
+- [ ] 同一 IP 新規アカウント **ソフト上限** + 管理通知
+- [ ] 管理画面: **ユーザー別 trial 残数・消費ログ**（`/admin/`）
+- [ ] `CHAT_AI_RATE_LIMIT_*` 本番チューニング
+
+### Phase D — 課金
+
+- [ ] Stripe プリペイド / 月額
+- [ ] クレジット残高テーブル + trial 枯渇後の `full` 判定
+- [ ] 利用規約・FAQ（お試し 10 曲・選曲のみ無料の明記）
+
+---
+
+## 次のステップ（要約・1 行）
+
+1. **デプロイ → 本番 10 曲検証**（最優先）
+2. **Phase C** — IP 上限・管理画面 trial 一覧
+3. **Phase A 任意** — ✦ · participantTier
+4. **Phase D** — 課金接続
 
 ---
 
@@ -481,12 +620,14 @@ AI 解説・曲クイズ・@ による質問は、今後クレジットまたは
 | `docs/ai-paid-service-reference-examples.md` | 他社 AI 有料事例 |
 | `docs/email-registration-spec.md` | メール登録・Confirm email |
 | `src/lib/song-selection-cost-guide.ts` | 1 曲参考料金（表示用） |
+| `src/lib/at-question-cost-guide.ts` | @ 1 回参考料金（表示用） |
+| `docs/supabase-user-ai-trial-table.md` | `user_ai_trial` · `consumption_log` SQL |
 
 ---
 
 ## 更新ルール（コーディング AI・運用者向け）
 
-1. **方針変更**（曲数・日次 cap・ゲストルール）→ 本 MD の表 + **実装ログ** + 必要なら `ai-usage-disclosure-copy.ts`
+1. **方針変更**（曲数・ゲストルール）→ 本 MD の表 + **実装ログ** + 必要なら `ai-usage-disclosure-copy.ts`
 2. **Phase 完了** → チェックリストを `[x]` + ステータス行更新
 3. **SQL 追加** → `docs/supabase-user-ai-trial-table.md` を作成し本 MD からリンク
 4. **課金商品確定** → `monetization-options.md` と本 MD の Phase D を同期

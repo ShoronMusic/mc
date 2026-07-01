@@ -9,6 +9,8 @@ import {
 import { getVideoSnippet } from '@/lib/youtube-search';
 import type { SongQuizPayload } from '@/lib/song-quiz-types';
 import { insertSongQuizLog } from '@/lib/song-quiz-log';
+import { getChatAiClientIp } from '@/lib/chat-ai-rate-limit';
+import { guardAiTrialSongSelection } from '@/lib/user-ai-trial-server';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,6 +30,23 @@ export async function POST(request: Request) {
 
     if (!videoId) {
       return NextResponse.json({ error: 'videoId is required' }, { status: 400 });
+    }
+
+    const supabase = await createClient();
+    let authUser = null;
+    if (supabase) {
+      const { data: authData } = await supabase.auth.getUser();
+      authUser = authData.user ?? null;
+    }
+    const requestIsGuest = body?.isGuest === true;
+    const trialGuard = await guardAiTrialSongSelection({
+      user: authUser,
+      isGuest: requestIsGuest,
+      aiModeRaw: body?.aiMode,
+      clientIp: getChatAiClientIp(request),
+    });
+    if (!trialGuard.ok) {
+      return NextResponse.json(trialGuard.body, { status: trialGuard.status });
     }
 
     const [oembed, snippet] = await Promise.all([
@@ -63,14 +82,7 @@ export async function POST(request: Request) {
       });
     }
 
-    let selectorUserId: string | null = null;
-    const supabase = await createClient();
-    if (supabase) {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      selectorUserId = user?.id ?? null;
-    }
+    let selectorUserId: string | null = authUser?.id ?? null;
 
     const quiz = await generateSongQuizFromCommentary(commentaryContext, {
       roomId: roomId || null,

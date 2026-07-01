@@ -1,26 +1,26 @@
-/** マイページ未設定・行なし時はどちらも ON */
+/** マイページ未設定・行なし時: 曲解説 ON、クイズ・おすすめ OFF（初回は AI解説1 のみ想定） */
 export const DEFAULT_USER_ROOM_AI_COMMENTARY_ENABLED = true;
-export const DEFAULT_USER_ROOM_AI_SONG_QUIZ_ENABLED = true;
-export const DEFAULT_USER_ROOM_AI_NEXT_SONG_RECOMMEND_ENABLED = true;
+export const DEFAULT_USER_ROOM_AI_SONG_QUIZ_ENABLED = false;
+export const DEFAULT_USER_ROOM_AI_NEXT_SONG_RECOMMEND_ENABLED = false;
 
 export const USER_ROOM_AI_FEATURES_PERSIST_HINT =
   '部屋AI設定の保存用テーブル（user_room_ai_features）がありません。下の SQL を Supabase の SQL Editor で実行すると保存できます。';
 
 /** テーブルはあるが列だけ足りないとき（policy already exists で止まった場合など） */
 export const USER_ROOM_AI_FEATURES_ADD_COLUMN_SQL = `alter table public.user_room_ai_features
-  add column if not exists ai_next_song_recommend_enabled boolean not null default true;`;
+  add column if not exists ai_next_song_recommend_enabled boolean not null default false;`;
 
 /** 初回セットアップ・再実行可（docs/supabase-setup.md 第 17 章と同期） */
 export const USER_ROOM_AI_FEATURES_FULL_SETUP_SQL = `create table if not exists public.user_room_ai_features (
   user_id uuid primary key references auth.users (id) on delete cascade,
   ai_commentary_enabled boolean not null default true,
-  ai_song_quiz_enabled boolean not null default true,
-  ai_next_song_recommend_enabled boolean not null default true,
+  ai_song_quiz_enabled boolean not null default false,
+  ai_next_song_recommend_enabled boolean not null default false,
   updated_at timestamptz not null default now()
 );
 
 alter table public.user_room_ai_features
-  add column if not exists ai_next_song_recommend_enabled boolean not null default true;
+  add column if not exists ai_next_song_recommend_enabled boolean not null default false;
 
 create index if not exists user_room_ai_features_updated_idx
   on public.user_room_ai_features (updated_at desc);

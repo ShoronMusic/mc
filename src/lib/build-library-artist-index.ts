@@ -9,7 +9,7 @@ import {
   stripLeadingArticleForSort,
 } from '@/lib/admin-library-index';
 import { songRowLooksJapaneseDomesticForAdminLibrary } from '@/lib/admin-library-jp-exclude';
-import { primaryArtistForLibraryIndex } from '@/lib/library-search-query';
+import { primaryArtistForLibraryIndex, mergeLibraryArtistIndexItems } from '@/lib/library-search-query';
 
 export type LibraryArtistIndexItem = {
   main_artist: string;
@@ -36,14 +36,22 @@ export function clearLibraryArtistIndexCache(): void {
 }
 
 function artistIndexKey(name: string): string {
-  return name.trim().toLowerCase();
+  return stripLeadingArticleForSort(name).trim().toLowerCase();
 }
 
 function mergeArtistDisplayName(existing: string, candidate: string): string {
+  const e = existing.trim();
   const c = candidate.trim();
-  if (!existing) return c;
-  if (existing.includes(',') && !c.includes(',')) return c;
-  return existing;
+  if (!e) return c;
+  if (e.includes(',') && !c.includes(',')) return c;
+  if (
+    /^the\s+/i.test(c) &&
+    !/^the\s+/i.test(e) &&
+    artistIndexKey(e) === artistIndexKey(c)
+  ) {
+    return c;
+  }
+  return e;
 }
 
 /** `songs` 全行を走査してアーティスト索引を構築（邦楽寄り除外あり） */
@@ -95,13 +103,15 @@ export async function buildLibraryArtistIndex(
     counts.set(bucket.display, bucket.songIds.size);
   }
 
-  const items: LibraryArtistIndexItem[] = Array.from(counts.entries())
-    .filter(([, count]) => count > 0)
-    .map(([main_artist, count]) => ({
-      main_artist,
-      count,
-      indexLetter: indexLetterForArtist(main_artist === '(表示なし)' ? '' : main_artist),
-    }));
+  const items: LibraryArtistIndexItem[] = mergeLibraryArtistIndexItems(
+    Array.from(counts.entries())
+      .filter(([, count]) => count > 0)
+      .map(([main_artist, count]) => ({
+        main_artist,
+        count,
+        indexLetter: indexLetterForArtist(main_artist === '(表示なし)' ? '' : main_artist),
+      })),
+  );
 
   items.sort((x, y) =>
     compareDisplayTitleCaseInsensitive(

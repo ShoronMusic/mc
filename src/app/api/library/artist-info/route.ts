@@ -90,8 +90,8 @@ export async function GET(request: Request) {
 
   const q = normalizeArtistNameLoose(artist);
   const picked =
-    rows.find((r) => normalizeArtistNameLoose(r.name ?? '') === q) ??
     rows.find((r) => typeof r.name === 'string' && r.name.toLowerCase() === artist.toLowerCase()) ??
+    rows.find((r) => normalizeArtistNameLoose(r.name ?? '') === q) ??
     rows[0] ??
     null;
 

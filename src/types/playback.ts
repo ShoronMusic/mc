@@ -29,6 +29,8 @@ export interface PlaybackMessage {
   trackStartedAtMs?: number;
   /** 遅延入室 sync 用・選曲ラウンド */
   selectionRoundNumber?: number;
+  /** 選曲者の AI モード（full = 解説等あり / none = 選曲のみ） */
+  aiMode?: 'full' | 'none';
 }
 
 /** 後から入室したクライアントが再生状態を問い合わせ */

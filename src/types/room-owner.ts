@@ -87,6 +87,11 @@ export interface OwnerJpAiUnlockPayload {
   enabled: boolean;
 }
 
+/** 初入室（部屋セッション）のオーナー向け AI 機能デフォルト。AI解説1本のみ ON */
+export const DEFAULT_OWNER_SONG_QUIZ_ENABLED = false;
+export const DEFAULT_OWNER_NEXT_SONG_RECOMMEND_ENABLED = false;
+export const DEFAULT_OWNER_AI_CHARACTER_JOIN_ENABLED = false;
+
 /** @ 付きAI質問のガード警告・カード同期 */
 export const OWNER_AI_QUESTION_GUARD_EVENT = 'owner:aiQuestionGuard';
 
