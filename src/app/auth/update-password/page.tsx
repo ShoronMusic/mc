@@ -4,8 +4,12 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
-
-const PASSWORD_MIN_LENGTH = 6;
+import {
+  isPasswordLongEnough,
+  PASSWORD_MIN_LENGTH,
+  PASSWORD_POLICY_HINT,
+  passwordTooShortMessage,
+} from '@/lib/auth-password-policy';
 
 function mapUpdatePasswordError(raw: string): string {
   const t = raw.trim();
@@ -14,7 +18,7 @@ function mapUpdatePasswordError(raw: string): string {
     return '新しいパスワードは、現在のパスワードと別のものにしてください。';
   }
   if (lower.includes('at least') && lower.includes('character')) {
-    return `パスワードは${PASSWORD_MIN_LENGTH}文字以上にしてください。`;
+    return passwordTooShortMessage();
   }
   if (lower.includes('password') && lower.includes('weak')) {
     return 'パスワードが簡単すぎます。文字の種類や長さを増やしてください。';
@@ -65,8 +69,8 @@ export default function UpdatePasswordPage() {
     e.preventDefault();
     setError(null);
     if (!supabase) return;
-    if (password.length < PASSWORD_MIN_LENGTH) {
-      setError(`パスワードは${PASSWORD_MIN_LENGTH}文字以上にしてください。`);
+    if (!isPasswordLongEnough(password)) {
+      setError(passwordTooShortMessage());
       return;
     }
     if (password !== passwordConfirm) {
@@ -134,7 +138,7 @@ export default function UpdatePasswordPage() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder={`${PASSWORD_MIN_LENGTH}文字以上`}
+              placeholder={PASSWORD_POLICY_HINT}
               minLength={PASSWORD_MIN_LENGTH}
               className="rounded border border-gray-600 bg-gray-800 px-3 py-2 text-white placeholder-gray-500"
               autoComplete="new-password"

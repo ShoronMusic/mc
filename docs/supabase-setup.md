@@ -108,6 +108,7 @@ Google認証で参加できるようにするには、Supabase 側で Google を
 アプリ側（`SimpleAuthForm`）は登録時に `emailRedirectTo` を `/auth/callback?next=部屋パス&flow=email_confirm` に設定済みです。確認完了後、部屋またはトップに戻り「メールアドレスの確認が完了しました」と表示されます。
 
 - 確認前はログインできません（未確認でセッションが付いた場合もアプリ側でサインアウト）。
+- **パスワード最低 8 文字**（アプリは `src/lib/auth-password-policy.ts`）。Supabase の **Authentication** 設定に最低文字数がある場合は **8** に揃える。
 - 確認メールが届かない場合: 登録画面の **確認メールを再送信**、または Supabase の **Authentication → Email Templates** を確認。
 
 ---

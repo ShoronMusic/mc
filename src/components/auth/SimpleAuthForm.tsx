@@ -7,6 +7,12 @@ import {
   isUserEmailConfirmed,
   requiresEmailConfirmation,
 } from '@/lib/supabase-email-auth';
+import {
+  isPasswordLongEnough,
+  PASSWORD_MIN_LENGTH,
+  PASSWORD_POLICY_HINT,
+  passwordTooShortMessage,
+} from '@/lib/auth-password-policy';
 import { createClient } from '@/lib/supabase/client';
 
 interface SimpleAuthFormProps {
@@ -43,8 +49,6 @@ export function SimpleAuthForm({
 
   const supabase = createClient();
   if (!supabase) return null;
-
-  const PASSWORD_MIN_LENGTH = 6;
 
   const resolveEmailConfirmRedirectPath = (): string => {
     if (emailConfirmRedirectPath) return emailConfirmRedirectPath;
@@ -140,8 +144,8 @@ export function SimpleAuthForm({
         onError('表示名を入力してください。');
         return;
       }
-      if (password.length < PASSWORD_MIN_LENGTH) {
-        onError('パスワードは6文字以上にしてください。');
+      if (!isPasswordLongEnough(password)) {
+        onError(passwordTooShortMessage());
         return;
       }
     }
@@ -204,7 +208,7 @@ export function SimpleAuthForm({
       if (msg.includes('already registered') || msg.includes('User already registered')) {
         msg = 'このメールアドレスはすでに登録されています。ログインしてください。';
       } else if (msg.includes('Password') && msg.toLowerCase().includes('length')) {
-        msg = 'パスワードは6文字以上にしてください。';
+        msg = passwordTooShortMessage();
       } else if (msg.includes('Invalid login credentials') || msg.includes('invalid_credentials')) {
         msg =
           'ログインできませんでした。パスワードを確認するか、まだ登録していない場合は下の「アカウントを持っていない方は新規登録」から登録してください（未登録のメールでも同じ表示になることがあります）。メール確認を有効にしている場合は、確認メールのリンクを開いてからログインしてください。';
@@ -270,13 +274,13 @@ export function SimpleAuthForm({
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            placeholder="6文字以上"
+            placeholder={PASSWORD_POLICY_HINT}
             minLength={isLogin ? undefined : PASSWORD_MIN_LENGTH}
             className="rounded border border-gray-600 bg-gray-800 px-3 py-2 text-white placeholder-gray-500"
             autoComplete={isLogin ? 'current-password' : 'new-password'}
           />
           {!isLogin && (
-            <span className="text-xs text-gray-500">6文字以上で設定してください</span>
+            <span className="text-xs text-gray-500">{PASSWORD_POLICY_HINT}</span>
           )}
         </label>
       )}
