@@ -29,7 +29,7 @@ export interface PlaybackMessage {
   trackStartedAtMs?: number;
   /** 遅延入室 sync 用・選曲ラウンド */
   selectionRoundNumber?: number;
-  /** 選曲者の AI モード（full = 解説等あり / none = 選曲のみ） */
+  /** 選曲者の AI モード（full = 解説等あり / none = 選曲のみ）。changeVideo・queueSong で引き継ぐ */
   aiMode?: 'full' | 'none';
 }
 

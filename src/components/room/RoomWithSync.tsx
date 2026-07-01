@@ -29,7 +29,7 @@ import { useAiTrialStatus } from '@/hooks/useAiTrialStatus';
 import { isGuestSoloSession, resolveGuestSoloPlaybackHistorySinceIso } from '@/lib/guest-solo-playback-history-since';
 import { scheduleGuestFirstSongInvite } from '@/lib/guest-first-song-invite';
 import { GUEST_AI_AT_QUESTION_UNAVAILABLE } from '@/lib/ai-usage-disclosure-copy';
-import { resolveAiSelectionMode, type AiSelectionMode } from '@/lib/ai-selection-mode';
+import { resolveAiSelectionMode, parseAiSelectionMode, type AiSelectionMode } from '@/lib/ai-selection-mode';
 import { AI_TRIAL_STATUS_UPDATED_EVENT } from '@/lib/ai-trial-status';
 import { SiteFeedbackModal } from '@/components/room/SiteFeedbackModal';
 import UserBar from '@/components/room/UserBar';
@@ -601,7 +601,9 @@ export default function RoomWithSync({
   const pendingQueuedVideoIdRef = useRef<string | null>(null);
   const pendingQueuedPublisherRef = useRef('');
   /** 5分待ち中の選曲予約（FIFO）。各 publisherClientId は同時に1件まで */
-  const songReservationQueueRef = useRef<{ videoId: string; publisherClientId: string }[]>([]);
+  const songReservationQueueRef = useRef<
+    { videoId: string; publisherClientId: string; aiMode: AiSelectionMode }[]
+  >([]);
   const playbackEndedApplyRef = useRef<() => void>(() => {});
   /** 選曲キュー: 投稿者の ended が来ないとき最古参加者が遅延で適用するタイマー */
   const playbackQueueFallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -2080,7 +2082,14 @@ export default function RoomWithSync({
         clearTimeout(playbackQueueFallbackTimerRef.current);
         playbackQueueFallbackTimerRef.current = null;
       }
-      q.push({ videoId: data.videoId, publisherClientId: queuedPublisherClientId });
+      const queuedAiMode: AiSelectionMode =
+        parseAiSelectionMode(data.aiMode) ??
+        (queuedPublisherClientId === AI_CHARACTER_CLIENT_ID ? 'none' : 'full');
+      q.push({
+        videoId: data.videoId,
+        publisherClientId: queuedPublisherClientId,
+        aiMode: queuedAiMode,
+      });
       syncSongReservationQueueHead();
       const publisherDisplayName =
         participants.find((p) => p.clientId === queuedPublisherClientId)?.displayName?.trim() ||
@@ -2160,11 +2169,13 @@ export default function RoomWithSync({
           return;
         }
         const qSkip = songReservationQueueRef.current;
+        let queuedAiMode: AiSelectionMode = 'none';
         if (
           qSkip.length > 0 &&
           qSkip[0].videoId === pv &&
           qSkip[0].publisherClientId === (pp || '')
         ) {
+          queuedAiMode = qSkip[0].aiMode;
           qSkip.shift();
           syncSongReservationQueueHead();
         } else if (qSkip.length > 0) {
@@ -2172,6 +2183,7 @@ export default function RoomWithSync({
             (e) => e.videoId === pv && e.publisherClientId === (pp || ''),
           );
           if (idx >= 0) {
+            queuedAiMode = qSkip[idx].aiMode;
             qSkip.splice(idx, 1);
             syncSongReservationQueueHead();
           }
@@ -2182,7 +2194,10 @@ export default function RoomWithSync({
         }
         applyingRemoteRef.current = true;
         try {
-          applyImmediateChangeVideo(pv, pp || myClientId, { preserveReservationQueue: true });
+          applyImmediateChangeVideo(pv, pp || myClientId, {
+            preserveReservationQueue: true,
+            aiMode: queuedAiMode,
+          });
         } finally {
           setTimeout(() => {
             applyingRemoteRef.current = false;
@@ -5245,6 +5260,7 @@ export default function RoomWithSync({
               type: 'queueSong',
               videoId: pickedVid,
               publisherClientId: AI_CHARACTER_CLIENT_ID,
+              aiMode: 'none',
             } as PlaybackMessage);
           } else {
             applyImmediateChangeVideo(pickedVid, AI_CHARACTER_CLIENT_ID, {
@@ -5553,6 +5569,7 @@ export default function RoomWithSync({
                 type: 'queueSong',
                 videoId: pickedVid,
                 publisherClientId: AI_CHARACTER_CLIENT_ID,
+                aiMode: 'none',
               } as PlaybackMessage);
             } else {
               ctx.applyImmediateChangeVideo(pickedVid, AI_CHARACTER_CLIENT_ID, {
@@ -5749,6 +5766,7 @@ export default function RoomWithSync({
         if (!head?.videoId) return;
         const pv = head.videoId;
         const pp = head.publisherClientId;
+        const queuedAiMode = head.aiMode;
         qApply.shift();
         syncSongReservationQueueHead();
         if (playbackQueueFallbackTimerRef.current) {
@@ -5757,7 +5775,10 @@ export default function RoomWithSync({
         }
         applyingRemoteRef.current = true;
         try {
-          applyImmediateChangeVideo(pv, pp || myClientId, { preserveReservationQueue: true });
+          applyImmediateChangeVideo(pv, pp || myClientId, {
+            preserveReservationQueue: true,
+            aiMode: queuedAiMode,
+          });
         } finally {
           setTimeout(() => {
             applyingRemoteRef.current = false;
@@ -5863,6 +5884,7 @@ export default function RoomWithSync({
           type: 'queueSong',
           videoId: id,
           publisherClientId: myClientId,
+          aiMode,
         } as PlaybackMessage);
         if (fromRecommend) {
           addSystemMessage(
@@ -6317,6 +6339,7 @@ export default function RoomWithSync({
                   type: 'queueSong',
                   videoId: pickedVid,
                   publisherClientId: AI_CHARACTER_CLIENT_ID,
+                  aiMode: 'none',
                 } as PlaybackMessage);
               } else {
                 applyImmediateChangeVideo(pickedVid, AI_CHARACTER_CLIENT_ID, {
@@ -6486,6 +6509,7 @@ export default function RoomWithSync({
                     type: 'queueSong',
                     videoId: pickedVid,
                     publisherClientId: AI_CHARACTER_CLIENT_ID,
+                    aiMode: 'none',
                   } as PlaybackMessage);
                 } else {
                   applyImmediateChangeVideo(pickedVid, AI_CHARACTER_CLIENT_ID, {
@@ -6691,6 +6715,11 @@ export default function RoomWithSync({
               return;
             }
             if (data2?.ok && data2?.videoId && data2?.artistTitle) {
+              const pasteAiMode = resolveAiSelectionMode({
+                isGuest,
+                participatesInSelection,
+                aiTrialStatus: aiTrialStatus ?? null,
+              });
               if (shouldDeferMultiSongPost()) {
                 const posterLive = lastChangeVideoPublisherRef.current;
                 if (myClientId && posterLive && myClientId === posterLive) {
@@ -6712,11 +6741,12 @@ export default function RoomWithSync({
                   type: 'queueSong',
                   videoId: data2.videoId,
                   publisherClientId: myClientId,
+                  aiMode: pasteAiMode,
                 } as PlaybackMessage);
                 touchActivity();
                 return;
               }
-              applyImmediateChangeVideo(data2.videoId, myClientId);
+              applyImmediateChangeVideo(data2.videoId, myClientId, { aiMode: pasteAiMode });
               addAiMessage(`${data2.artistTitle} を貼りました！`);
               touchActivity();
             } else {
@@ -6908,6 +6938,8 @@ export default function RoomWithSync({
       buildAiCharacterYoutubeWatchUrl,
       rememberAiCharacterPickReason,
       currentSongPosterClientId,
+      participatesInSelection,
+      aiTrialStatus,
     ]
   );
 
