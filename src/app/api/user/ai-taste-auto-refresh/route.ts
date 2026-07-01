@@ -86,7 +86,11 @@ export async function POST() {
       });
     }
 
-    const profile = await generateUserTasteAutoProfile(signals, { roomId: null, videoId: null });
+    const profile = await generateUserTasteAutoProfile(signals, {
+      roomId: null,
+      videoId: null,
+      userId,
+    });
     let text = profile?.trim() ?? '';
     if (!isSubstantiveUserTasteAutoProfile(text)) {
       const fallback = buildFallbackTasteProfileFromSignals(signals);

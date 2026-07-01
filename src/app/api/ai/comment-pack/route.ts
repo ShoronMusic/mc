@@ -32,7 +32,7 @@ import {
 } from '@/lib/gemini-gemma-host';
 import { getGeminiModel, logGeminiUsage } from '@/lib/gemini';
 import { resolveGenerationModelId } from '@/lib/gemini-model-routing';
-import { persistGeminiUsageLog } from '@/lib/gemini-usage-log';
+import { persistGeminiUsageLog, buildGeminiUsagePersistMeta } from '@/lib/gemini-usage-log';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { attachMusic8SongDataIfFetched, upsertSongAndVideo } from '@/lib/song-entities';
 import { isDevMinimalSongAi } from '@/lib/dev-minimal-song-ai';
@@ -176,6 +176,8 @@ async function prependLibrarySessionBridge(
     songLabel: string;
     videoId: string;
     roomId: string;
+    userId?: string | null;
+    isGuestTrigger?: boolean;
   },
 ): Promise<string> {
   const trimmed = baseComment.trim();
@@ -190,7 +192,7 @@ async function prependLibrarySessionBridge(
       songLabel: ctx.songLabel,
       fixedCommentary: trimmed,
     },
-    { videoId: ctx.videoId, roomId: ctx.roomId || null },
+    { videoId: ctx.videoId, roomId: ctx.roomId || null, userId: ctx.userId ?? null, isGuestTrigger: ctx.isGuestTrigger },
   );
   if (!br?.trim()) return baseComment;
   const joined = `${br.trim()}\n\n${trimmed}`;
@@ -314,6 +316,13 @@ export async function POST(request: Request) {
       const { data: authData } = await supabase.auth.getUser();
       selectorUserId = authData.user?.id ?? null;
     }
+    const requestIsGuest = body?.isGuest === true;
+    const selectorGeminiLogMeta = buildGeminiUsagePersistMeta({
+      roomId,
+      videoId,
+      userId: selectorUserId,
+      isGuest: requestIsGuest,
+    });
     if (skipCommentPackCacheRequested) {
       const allowed = await sessionMayEditRoomPlaybackHistoryFields(supabase);
       if (!allowed) {
@@ -567,6 +576,8 @@ export async function POST(request: Request) {
                 songLabel: songLabelForAiPrompt,
                 videoId,
                 roomId,
+                userId: selectorUserId,
+                isGuestTrigger: requestIsGuest || !selectorUserId,
               });
             }
             return NextResponse.json({
@@ -612,6 +623,8 @@ export async function POST(request: Request) {
                 songLabel: songLabelForAiPrompt,
                 videoId,
                 roomId,
+                userId: selectorUserId,
+                isGuestTrigger: requestIsGuest || !selectorUserId,
               });
             }
             const tidbitIdsFull = cached.tidbitIds ?? [];
@@ -795,7 +808,7 @@ ${basePromptTail}`;
       }
       const baseResult = await model.generateContent(basePrompt);
       logGeminiUsage('comment_pack_base', baseResult.response);
-      await persistGeminiUsageLog('comment_pack_base', baseResult.response.usageMetadata, { videoId });
+      await persistGeminiUsageLog('comment_pack_base', baseResult.response.usageMetadata, selectorGeminiLogMeta);
       baseText = extractTextFromGenerateContentResponse(baseResult.response, commentPackModelId);
       if (isNewRelease) {
         baseText = (baseText + COMMENT_PACK_NEW_RELEASE_DISCLAIMER).trim();
@@ -1033,9 +1046,7 @@ ${isRemixFocusTopic ? banBlockRemixFocus : isCoverFocusTopic ? banBlockCoverFocu
               const p0 = buildFreePrompt(i, usedParallel, parallelRoleLines);
               const res = await model.generateContent(p0);
               logGeminiUsage(`comment_pack_free_${i + 1}`, res.response);
-              await persistGeminiUsageLog(`comment_pack_free_${i + 1}`, res.response.usageMetadata, {
-                videoId,
-              });
+              await persistGeminiUsageLog(`comment_pack_free_${i + 1}`, res.response.usageMetadata, selectorGeminiLogMeta);
               draftTexts[i] = extractTextFromGenerateContentResponse(res.response, commentPackModelId);
             } catch (e) {
               console.error('[api/ai/comment-pack] parallel free slot', i + 1, e);
@@ -1077,9 +1088,7 @@ ${isRemixFocusTopic ? banBlockRemixFocus : isCoverFocusTopic ? banBlockCoverFocu
             attempt += 1;
             const res = await model.generateContent(prompt);
             logGeminiUsage(`comment_pack_free_${i + 1}`, res.response);
-            await persistGeminiUsageLog(`comment_pack_free_${i + 1}`, res.response.usageMetadata, {
-              videoId,
-            });
+            await persistGeminiUsageLog(`comment_pack_free_${i + 1}`, res.response.usageMetadata, selectorGeminiLogMeta);
             const txt = extractTextFromGenerateContentResponse(res.response, commentPackModelId);
             /** 3回目は栄誉枠でもチャート数字を避けるフォールバック → 歌詞・サウンド枠と同じ厳しさで通す */
             const policyHonors = isHonorsTopic && attempt < maxAttempts;

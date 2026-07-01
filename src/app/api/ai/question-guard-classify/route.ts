@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { createClient } from '@/lib/supabase/server';
 import { classifyMusicRelatedAiQuestionGemini } from '@/lib/gemini-question-guard-classify';
 import {
   checkQuestionGuardClassifyRateLimit,
@@ -68,6 +69,15 @@ export async function POST(request: Request) {
     const isGuest = body.isGuest === true;
     const roomId = typeof body.roomId === 'string' ? body.roomId.trim().slice(0, 120) : '';
 
+    let requestUserId: string | null = null;
+    const supabase = await createClient();
+    if (supabase) {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      requestUserId = user?.id ?? null;
+    }
+
     const rate = checkQuestionGuardClassifyRateLimit(getQuestionGuardClassifyClientIp(request), isGuest);
     if (!rate.ok) {
       return NextResponse.json(
@@ -86,6 +96,8 @@ export async function POST(request: Request) {
 
     const musicRelated = await classifyMusicRelatedAiQuestionGemini(question, recent, {
       roomId: roomId || null,
+      userId: requestUserId,
+      isGuest: isGuest && !requestUserId,
     });
 
     if (musicRelated === null) {

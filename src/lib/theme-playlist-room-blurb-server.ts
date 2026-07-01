@@ -244,7 +244,7 @@ export async function appendThemePlaylistRoomEntry(
     theme,
     artist ?? '',
     title ?? '',
-    { videoId: vid },
+    { videoId: vid, roomId: roomIdSafe || null, userId },
     { commentaryExcerpt: ctx || null },
   );
 

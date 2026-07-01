@@ -243,6 +243,16 @@ assert.equal(isSupergroupByManualHints('Traveling Wilburys'), true);
   assert.equal(r.song, 'Maneater');
 }
 
+// 「George Clinton - The Big Pump」: 右の The 始まりをバンド名と誤認して逆順スワップしない（Q9RLe1IiotE）
+{
+  const r = getArtistAndSong('George Clinton - The Big Pump', 'rugrycl68');
+  assert.equal(r.artistDisplay, 'George Clinton');
+  assert.equal(r.song, 'The Big Pump');
+  const pack = resolveArtistSongForPack('George Clinton - The Big Pump', 'rugrycl68', null, 'Q9RLe1IiotE');
+  assert.equal(pack.artistDisplay, 'George Clinton');
+  assert.equal(pack.song, 'The Big Pump');
+}
+
 // 「Mr.」等の省略形のピリオドで曲名が切れない（概要の performing 行）
 {
   const desc = 'Music video by Styx performing Mr. Roboto.\n\nMore';

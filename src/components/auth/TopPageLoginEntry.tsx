@@ -272,6 +272,7 @@ export function TopPageLoginEntry({
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4">
           <div className="w-full max-w-sm rounded-lg border border-gray-700 bg-gray-900 p-6">
             <SimpleAuthForm
+              emailConfirmRedirectPath="/"
               onSuccess={() => {
                 setShowSimpleForm(false);
                 window.location.reload();

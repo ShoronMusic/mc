@@ -4,6 +4,7 @@ import Image from 'next/image';
 import { ClockIcon, EnvelopeIcon, HeartIcon, UserCircleIcon } from '@heroicons/react/24/outline';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Chat from '@/components/chat/Chat';
+import { AiUsageBillingNotice } from '@/components/room/AiUsageBillingNotice';
 import ChatInput, { type ChatInputHandle } from '@/components/chat/ChatInput';
 import YouTubePlayer, {
   type YouTubePlayerHandle,
@@ -2332,6 +2333,7 @@ export default function RoomWithoutSync({
       </div>
 
       <section className="mt-2 shrink-0 space-y-2">
+        <AiUsageBillingNotice isGuest={isGuest} />
         {chatInputNode}
       </section>
     </main>

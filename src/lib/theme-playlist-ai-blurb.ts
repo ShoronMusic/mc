@@ -125,6 +125,7 @@ ${excerptBlock}
     await persistGeminiUsageLog(CONTEXT, result.response.usageMetadata, {
       roomId: usageMeta?.roomId ?? null,
       videoId: usageMeta?.videoId ?? null,
+      userId: usageMeta?.userId ?? null,
     });
     let text = readGeneratedText(result.response).trim();
     text = text.replace(/\r\n/g, '\n').replace(/\n+/g, ' ');
@@ -152,6 +153,7 @@ ${excerptBlock}
       await persistGeminiUsageLog(CONTEXT, repaired.response.usageMetadata, {
         roomId: usageMeta?.roomId ?? null,
         videoId: usageMeta?.videoId ?? null,
+        userId: usageMeta?.userId ?? null,
       });
       text = readGeneratedText(repaired.response).trim().replace(/\r\n/g, '\n').replace(/\n+/g, ' ');
     }

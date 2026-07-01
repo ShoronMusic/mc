@@ -15,6 +15,12 @@ create table if not exists public.gemini_usage_logs (
   cached_token_count integer,
   room_id text,
   video_id text,
+  user_id uuid references auth.users(id) on delete set null,
+  gathering_id uuid references public.room_gatherings(id) on delete set null,
+  billing_kind text,
+  billing_user_id uuid references auth.users(id) on delete set null,
+  trigger_user_id uuid references auth.users(id) on delete set null,
+  is_guest_trigger boolean not null default false,
   created_at timestamptz not null default now()
 );
 
@@ -24,11 +30,62 @@ create index if not exists idx_gemini_usage_logs_created
 create index if not exists idx_gemini_usage_logs_context
   on public.gemini_usage_logs (context);
 
+create index if not exists idx_gemini_usage_logs_user_created
+  on public.gemini_usage_logs (user_id, created_at desc);
+
+create index if not exists idx_gemini_usage_logs_gathering
+  on public.gemini_usage_logs (gathering_id, created_at desc);
+
+create index if not exists idx_gemini_usage_logs_billing_user
+  on public.gemini_usage_logs (billing_user_id, created_at desc);
+
 -- クライアントからは読まない（API が service_role で読む）
 alter table public.gemini_usage_logs enable row level security;
 
 -- ポリシーなし = anon からはアクセス不可（service_role のみ）
 ```
+
+## 既存テーブルへの追記
+
+### マイページ・ユーザー別集計（user_id）
+
+```sql
+alter table public.gemini_usage_logs
+  add column if not exists user_id uuid references auth.users(id) on delete set null;
+
+create index if not exists idx_gemini_usage_logs_user_created
+  on public.gemini_usage_logs (user_id, created_at desc);
+```
+
+### 開催履歴・課金帰属（Phase 1）
+
+`docs/room-gathering-history-and-ai-billing-project.md` 参照。
+
+```sql
+alter table public.gemini_usage_logs
+  add column if not exists gathering_id uuid references public.room_gatherings(id) on delete set null,
+  add column if not exists billing_kind text,
+  add column if not exists billing_user_id uuid references auth.users(id) on delete set null,
+  add column if not exists trigger_user_id uuid references auth.users(id) on delete set null,
+  add column if not exists is_guest_trigger boolean not null default false;
+
+create index if not exists idx_gemini_usage_logs_gathering
+  on public.gemini_usage_logs (gathering_id, created_at desc);
+
+create index if not exists idx_gemini_usage_logs_billing_user
+  on public.gemini_usage_logs (billing_user_id, created_at desc);
+```
+
+| 列 | 意味 |
+|----|------|
+| `user_id` | 操作者（選曲者・質問者）。ゲストは null |
+| `gathering_id` | 開催中会 ID（room_id から live を解決して付与） |
+| `billing_kind` | `participant_user` / `guest_enjoy_owner_paid` / `room_owner` / `ai_agent` |
+| `billing_user_id` | 試算上の請求先ユーザー（参加者本人 or 主催者） |
+| `trigger_user_id` | 操作者（`user_id` と同値のことが多い） |
+| `is_guest_trigger` | ゲスト操作で AI が走ったとき true |
+
+- マイページ「参加履歴」は `billing_user_id = 自分`（未設定行は `user_id = 自分`）で集計。`personal` / `roomCommon` に分割。
 
 ## 保存の条件
 

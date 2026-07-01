@@ -1,91 +1,44 @@
 import Link from 'next/link';
 import { AdminMenuBar } from '@/components/admin/AdminMenuBar';
+import {
+  MONETIZATION_FIXED_COST_PRESETS,
+  MONETIZATION_PAYMENT_NET_MULTIPLIER,
+  MONETIZATION_PRICING_PLAN_CANDIDATES,
+  MONETIZATION_R_BASELINE,
+  MONETIZATION_R_STRESS,
+  MONETIZATION_SCENARIO_A_LEGACY_ROWS,
+  MONETIZATION_SCENARIO_A_REVISED_ROWS,
+  MONETIZATION_SONGS_PER_USER_MONTH,
+  MONETIZATION_VARIABLE_DB_SONG_JPY,
+  MONETIZATION_VARIABLE_NEW_SONG_JPY,
+  buildMonetizationSimulationRows,
+  monetizationBreakEvenPaidUu,
+  monetizationMarginalProfitPerUserJpy,
+  monetizationVariablePerUserMonthJpy,
+  sumMonetizationSimulationRows,
+} from '@/lib/monetization-simulation-assumptions';
 
-/** docs/monetization-options.md「シナリオA 想定シミュレーション表（5〜10月）」と同一前提（r=0.30） */
-const SCENARIO_A_ROWS = [
-  {
-    month: '05',
-    monthLabel: '2026年5月',
-    uu: 50,
-    revenue: 50_000,
-    netAfterFee: 48_200,
-    variable: 11_400,
-    fixed: 45_000,
-    monthlyProfit: -8_200,
-    cumFromMay: -8_200,
-    cumFromApr: -53_200,
-  },
-  {
-    month: '06',
-    monthLabel: '2026年6月',
-    uu: 100,
-    revenue: 100_000,
-    netAfterFee: 96_400,
-    variable: 22_800,
-    fixed: 45_000,
-    monthlyProfit: 28_600,
-    cumFromMay: 20_400,
-    cumFromApr: -24_600,
-  },
-  {
-    month: '07',
-    monthLabel: '2026年7月',
-    uu: 150,
-    revenue: 150_000,
-    netAfterFee: 144_600,
-    variable: 34_200,
-    fixed: 45_000,
-    monthlyProfit: 65_400,
-    cumFromMay: 85_800,
-    cumFromApr: 40_800,
-  },
-  {
-    month: '08',
-    monthLabel: '2026年8月',
-    uu: 200,
-    revenue: 200_000,
-    netAfterFee: 192_800,
-    variable: 45_600,
-    fixed: 45_000,
-    monthlyProfit: 102_200,
-    cumFromMay: 188_000,
-    cumFromApr: 143_000,
-  },
-  {
-    month: '09',
-    monthLabel: '2026年9月',
-    uu: 250,
-    revenue: 250_000,
-    netAfterFee: 241_000,
-    variable: 57_000,
-    fixed: 45_000,
-    monthlyProfit: 139_000,
-    cumFromMay: 327_000,
-    cumFromApr: 282_000,
-  },
-  {
-    month: '10',
-    monthLabel: '2026年10月',
-    uu: 300,
-    revenue: 300_000,
-    netAfterFee: 289_200,
-    variable: 68_400,
-    fixed: 45_000,
-    monthlyProfit: 175_800,
-    cumFromMay: 502_800,
-    cumFromApr: 457_800,
-  },
-] as const;
+const MONTHLY_PRICE_JPY = 1000;
+const VAR_PER_USER = monetizationVariablePerUserMonthJpy(MONETIZATION_R_BASELINE);
+const MARGINAL_PER_USER = monetizationMarginalProfitPerUserJpy(MONTHLY_PRICE_JPY, MONETIZATION_R_BASELINE);
 
-const TOTALS = {
-  revenue: 1_050_000,
-  netAfterFee: 1_012_200,
-  variable: 239_400,
-  fixed: 270_000,
-  monthlyProfit: 502_800,
-};
+const LEGACY_ROWS = buildMonetizationSimulationRows({
+  growthRows: MONETIZATION_SCENARIO_A_LEGACY_ROWS,
+  fixedMonthlyJpy: 45_000,
+  monthlyPriceJpy: MONTHLY_PRICE_JPY,
+  r: MONETIZATION_R_BASELINE,
+});
+const LEGACY_TOTALS = sumMonetizationSimulationRows(LEGACY_ROWS);
 
-/** 損益列用（正は先頭に +） */
+const REVISED_PRESET = MONETIZATION_FIXED_COST_PRESETS.find((p) => p.id === 'C')!;
+const REVISED_ROWS = buildMonetizationSimulationRows({
+  growthRows: MONETIZATION_SCENARIO_A_REVISED_ROWS,
+  fixedMonthlyJpy: REVISED_PRESET.monthlyJpy,
+  monthlyPriceJpy: MONTHLY_PRICE_JPY,
+  r: MONETIZATION_R_BASELINE,
+});
+const REVISED_TOTALS = sumMonetizationSimulationRows(REVISED_ROWS);
+
 function formatSignedYen(n: number): string {
   if (n > 0) return `+${n.toLocaleString('ja-JP')}円`;
   if (n < 0) return `−${Math.abs(n).toLocaleString('ja-JP')}円`;
@@ -96,175 +49,328 @@ function formatYenPlain(n: number): string {
   return `${n.toLocaleString('ja-JP')}円`;
 }
 
+function SimulationTable({
+  rows,
+  totals,
+  varPerUser,
+  caption,
+}: {
+  rows: ReturnType<typeof buildMonetizationSimulationRows>;
+  totals: ReturnType<typeof sumMonetizationSimulationRows>;
+  varPerUser: number;
+  caption: string;
+}) {
+  return (
+    <figure>
+      <figcaption className="mb-2 text-xs text-gray-500">{caption}</figcaption>
+      <div className="overflow-x-auto rounded-xl border border-gray-800">
+        <table className="min-w-[52rem] w-full border-collapse text-left text-sm">
+          <thead>
+            <tr className="border-b border-gray-800 bg-gray-950/80">
+              <th scope="col" className="px-3 py-3 font-medium text-gray-300">
+                月
+              </th>
+              <th scope="col" className="px-3 py-3 font-medium text-gray-300">
+                期末有料UU
+              </th>
+              <th scope="col" className="px-3 py-3 font-medium text-gray-300">
+                MRR
+              </th>
+              <th scope="col" className="px-3 py-3 font-medium text-gray-300">
+                手取り
+              </th>
+              <th scope="col" className="px-3 py-3 font-medium text-gray-300">
+                変動（×{varPerUser}）
+              </th>
+              <th scope="col" className="px-3 py-3 font-medium text-gray-300">
+                固定費
+              </th>
+              <th scope="col" className="px-3 py-3 font-medium text-gray-300">
+                月次損益
+              </th>
+              <th scope="col" className="px-3 py-3 font-medium text-gray-300">
+                累積
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.monthKey} className="border-b border-gray-800/90 odd:bg-gray-900/30 even:bg-gray-900/10">
+                <th scope="row" className="whitespace-nowrap px-3 py-2.5 font-medium text-gray-200">
+                  <span className="text-amber-200/90">{row.monthKey}</span>
+                  <span className="ml-2 hidden font-normal text-gray-500 sm:inline">({row.monthLabel})</span>
+                </th>
+                <td className="px-3 py-2.5 tabular-nums">{row.paidUu}人</td>
+                <td className="px-3 py-2.5 tabular-nums text-gray-300">{formatYenPlain(row.revenue)}</td>
+                <td className="px-3 py-2.5 tabular-nums text-gray-300">{formatYenPlain(row.netAfterFee)}</td>
+                <td className="px-3 py-2.5 tabular-nums text-gray-400">{formatYenPlain(row.variable)}</td>
+                <td className="px-3 py-2.5 tabular-nums text-gray-400">{formatYenPlain(row.fixed)}</td>
+                <td
+                  className={`px-3 py-2.5 tabular-nums font-medium ${
+                    row.monthlyProfit >= 0 ? 'text-emerald-300/95' : 'text-rose-300/95'
+                  }`}
+                >
+                  {formatSignedYen(row.monthlyProfit)}
+                </td>
+                <td
+                  className={`px-3 py-2.5 tabular-nums ${
+                    row.cumProfit >= 0 ? 'text-emerald-200/90' : 'text-rose-200/90'
+                  }`}
+                >
+                  {formatSignedYen(row.cumProfit)}
+                </td>
+              </tr>
+            ))}
+            <tr className="border-t-2 border-gray-700 bg-gray-950/70 font-medium">
+              <th scope="row" className="px-3 py-3 text-amber-200/90">
+                計
+              </th>
+              <td className="px-3 py-3 text-gray-500">—</td>
+              <td className="px-3 py-3 tabular-nums">{formatYenPlain(totals.revenue)}</td>
+              <td className="px-3 py-3 tabular-nums">{formatYenPlain(totals.netAfterFee)}</td>
+              <td className="px-3 py-3 tabular-nums text-gray-400">{formatYenPlain(totals.variable)}</td>
+              <td className="px-3 py-3 tabular-nums text-gray-400">{formatYenPlain(totals.fixed)}</td>
+              <td className="px-3 py-3 tabular-nums text-emerald-300/95">{formatSignedYen(totals.monthlyProfit)}</td>
+              <td className="px-3 py-3 text-gray-500">—</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </figure>
+  );
+}
+
 export default function AdminMonetizationSimulationPage() {
+  const breakEvenRows = MONETIZATION_FIXED_COST_PRESETS.map((preset) => ({
+    preset,
+    breakEvenUu: monetizationBreakEvenPaidUu(preset.monthlyJpy, MONTHLY_PRICE_JPY, MONETIZATION_R_BASELINE),
+    breakEvenStress: monetizationBreakEvenPaidUu(preset.monthlyJpy, MONTHLY_PRICE_JPY, MONETIZATION_R_STRESS),
+  }));
+
+  const planCompareRows = [
+    { label: '月1,000円・300曲', price: 1000, songs: 300 },
+    { label: '月1,500円・200曲', price: 1500, songs: 200 },
+  ].map((plan) => ({
+    ...plan,
+    varPerUser: monetizationVariablePerUserMonthJpy(MONETIZATION_R_BASELINE, plan.songs),
+    marginal: monetizationMarginalProfitPerUserJpy(plan.price, MONETIZATION_R_BASELINE, plan.songs),
+    breakEvenC: monetizationBreakEvenPaidUu(REVISED_PRESET.monthlyJpy, plan.price, MONETIZATION_R_BASELINE, plan.songs),
+  }));
+
   return (
     <main className="mx-auto min-h-screen w-full max-w-6xl px-4 py-8 text-gray-100 sm:px-6">
       <AdminMenuBar />
 
       <h1 className="text-2xl font-semibold tracking-tight text-white sm:text-3xl">
-        収支シミュレーション（案）— シナリオA
+        収支シミュレーション（案）
       </h1>
       <p className="mt-2 max-w-3xl text-sm leading-relaxed text-gray-400">
-        有料化・収益モデル整理メモ（リポジトリ{' '}
+        正本:{' '}
         <code className="rounded bg-gray-800 px-1.5 py-0.5 text-xs text-amber-100/90">
           docs/monetization-options.md
         </code>
-        ）の<strong className="text-gray-200">半期シミュレーション</strong>
-        から、<strong className="text-gray-200">2026年5月〜10月・シナリオA</strong>
-        の表と諸条件を表示します。実績に合わせ数値・前提はドキュメント側を正として更新してください。
+        ・計算:{' '}
+        <code className="rounded bg-gray-800 px-1.5 py-0.5 text-xs text-amber-100/90">
+          src/lib/monetization-simulation-assumptions.ts
+        </code>
+        。2026-06 時点で <strong className="text-gray-200">Vercel Pro 移行</strong>と{' '}
+        <strong className="text-gray-200">有料化未開始</strong>を踏まえ見直し。
       </p>
 
-      <section className="mt-8 rounded-xl border border-gray-800 bg-gray-900/50 p-5 sm:p-6" aria-labelledby="conditions-heading">
-        <h2 id="conditions-heading" className="text-lg font-semibold text-amber-200/95">
-          諸条件（この表の前提）
+      <section
+        className="mt-8 rounded-xl border border-sky-900/50 bg-sky-950/20 p-5 sm:p-6"
+        aria-labelledby="review-heading"
+      >
+        <h2 id="review-heading" className="text-lg font-semibold text-sky-200/95">
+          2026-06 見直しサマリー
         </h2>
-        <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
-          <div className="rounded-lg border border-gray-800/80 bg-gray-950/40 p-3">
-            <dt className="font-medium text-gray-300">シナリオ</dt>
-            <dd className="mt-1 text-gray-400">
-              <strong className="text-gray-200">A</strong>：4月末有料{' '}
-              <strong className="text-gray-200">0人</strong> → 10月末{' '}
-              <strong className="text-gray-200">300人</strong>（毎月 <strong className="text-gray-200">+50人</strong>）
-            </dd>
-          </div>
-          <div className="rounded-lg border border-gray-800/80 bg-gray-950/40 p-3">
-            <dt className="font-medium text-gray-300">プラン想定</dt>
-            <dd className="mt-1 text-gray-400">
-              月額 <strong className="text-gray-200">1,000円/人</strong>、利用上限{' '}
-              <strong className="text-gray-200">300曲/月</strong>（上限まで使い切るストレス試算）
-            </dd>
-          </div>
-          <div className="rounded-lg border border-gray-800/80 bg-gray-950/40 p-3">
-            <dt className="font-medium text-gray-300">原価ブレンド（NEW級の割合）</dt>
-            <dd className="mt-1 text-gray-400">
-              <strong className="text-gray-200">r = 0.30</strong>（基準）。2クレジット級（NEW極）1.60円/曲、1クレジット級（DB極）0.40円/曲で加重 → 1人あたり月次変動費{' '}
-              <strong className="text-gray-200">228円</strong>、限界利益（固定前）{' '}
-              <strong className="text-gray-200">736円</strong>
-            </dd>
-          </div>
-          <div className="rounded-lg border border-gray-800/80 bg-gray-950/40 p-3">
-            <dt className="font-medium text-gray-300">決済・固定費</dt>
-            <dd className="mt-1 text-gray-400">
-              手数料 <strong className="text-gray-200">3.6%</strong>（手取り ×0.964）。月次固定費{' '}
-              <strong className="text-gray-200">45,000円</strong>
-            </dd>
-          </div>
-          <div className="rounded-lg border border-gray-800/80 bg-gray-950/40 p-3 sm:col-span-2">
-            <dt className="font-medium text-gray-300">月次損益の簡式</dt>
-            <dd className="mt-1 font-mono text-xs text-gray-400 sm:text-sm">
-              期末有料UU × 736 − 45,000（＝手取り − 変動費 − 固定費 と同値）
-            </dd>
-          </div>
-        </dl>
-        <p className="mt-4 text-xs leading-relaxed text-gray-500">
-          課金売上は各月末UU × 1,000円（全員フル課金）。単位は税別参考。累積（4月含む）は4月のみ固定費{' '}
-          <span className="text-gray-400">−45,000円</span>（有料0人）を先に計上した通期イメージ。
-        </p>
-      </section>
-
-      <section className="mt-8" aria-labelledby="table-heading">
-        <h2 id="table-heading" className="text-lg font-semibold text-amber-200/95">
-          想定シミュレーション表（5〜10月）
-        </h2>
-        <div className="mt-4 overflow-x-auto rounded-xl border border-gray-800">
-          <table className="min-w-[56rem] w-full border-collapse text-left text-sm">
-            <thead>
-              <tr className="border-b border-gray-800 bg-gray-950/80">
-                <th scope="col" className="sticky left-0 z-10 bg-gray-950/95 px-3 py-3 font-medium text-gray-300">
-                  月
-                </th>
-                <th scope="col" className="px-3 py-3 font-medium text-gray-300">
-                  期末有料UU
-                </th>
-                <th scope="col" className="px-3 py-3 font-medium text-gray-300">
-                  課金売上（MRR）
-                </th>
-                <th scope="col" className="px-3 py-3 font-medium text-gray-300">
-                  決済手取り
-                </th>
-                <th scope="col" className="px-3 py-3 font-medium text-gray-300">
-                  変動費（×228）
-                </th>
-                <th scope="col" className="px-3 py-3 font-medium text-gray-300">
-                  固定費
-                </th>
-                <th scope="col" className="px-3 py-3 font-medium text-gray-300">
-                  月次損益
-                </th>
-                <th scope="col" className="px-3 py-3 font-medium text-gray-300">
-                  累積（5月〜）
-                </th>
-                <th scope="col" className="px-3 py-3 font-medium text-gray-300">
-                  累積（4月〜）
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {SCENARIO_A_ROWS.map((row) => (
-                <tr key={row.month} className="border-b border-gray-800/90 odd:bg-gray-900/30 even:bg-gray-900/10">
-                  <th
-                    scope="row"
-                    className="sticky left-0 z-10 whitespace-nowrap bg-gray-900/95 px-3 py-2.5 font-medium text-gray-200"
-                  >
-                    <span className="text-amber-200/90">{row.month}</span>
-                    <span className="ml-2 hidden font-normal text-gray-500 sm:inline">({row.monthLabel})</span>
-                  </th>
-                  <td className="px-3 py-2.5 tabular-nums text-gray-200">{row.uu.toLocaleString('ja-JP')}人</td>
-                  <td className="px-3 py-2.5 tabular-nums text-gray-300">{formatYenPlain(row.revenue)}</td>
-                  <td className="px-3 py-2.5 tabular-nums text-gray-300">{formatYenPlain(row.netAfterFee)}</td>
-                  <td className="px-3 py-2.5 tabular-nums text-gray-400">{formatYenPlain(row.variable)}</td>
-                  <td className="px-3 py-2.5 tabular-nums text-gray-400">{formatYenPlain(row.fixed)}</td>
-                  <td
-                    className={`px-3 py-2.5 tabular-nums font-medium ${
-                      row.monthlyProfit >= 0 ? 'text-emerald-300/95' : 'text-rose-300/95'
-                    }`}
-                  >
-                    {formatSignedYen(row.monthlyProfit)}
-                  </td>
-                  <td
-                    className={`px-3 py-2.5 tabular-nums ${
-                      row.cumFromMay >= 0 ? 'text-emerald-200/90' : 'text-rose-200/90'
-                    }`}
-                  >
-                    {formatSignedYen(row.cumFromMay)}
-                  </td>
-                  <td
-                    className={`px-3 py-2.5 tabular-nums ${
-                      row.cumFromApr >= 0 ? 'text-emerald-200/90' : 'text-rose-200/90'
-                    }`}
-                  >
-                    {formatSignedYen(row.cumFromApr)}
-                  </td>
-                </tr>
-              ))}
-              <tr className="border-t-2 border-gray-700 bg-gray-950/70 font-medium">
-                <th scope="row" className="sticky left-0 z-10 bg-gray-950/95 px-3 py-3 text-amber-200/90">
-                  計（5〜10月）
-                </th>
-                <td className="px-3 py-3 text-gray-500">—</td>
-                <td className="px-3 py-3 tabular-nums text-gray-200">{formatYenPlain(TOTALS.revenue)}</td>
-                <td className="px-3 py-3 tabular-nums text-gray-200">{formatYenPlain(TOTALS.netAfterFee)}</td>
-                <td className="px-3 py-3 tabular-nums text-gray-400">{formatYenPlain(TOTALS.variable)}</td>
-                <td className="px-3 py-3 tabular-nums text-gray-400">{formatYenPlain(TOTALS.fixed)}</td>
-                <td className="px-3 py-3 tabular-nums text-emerald-300/95">{formatSignedYen(TOTALS.monthlyProfit)}</td>
-                <td className="px-3 py-3 text-gray-500">—</td>
-                <td className="px-3 py-3 text-gray-500">—</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <ul className="mt-4 list-inside list-disc space-y-1 text-xs text-gray-500">
-          <li>5〜10月の月次損益の合算は {formatSignedYen(TOTALS.monthlyProfit)}（手取り合計 − 変動合計 − 固定6か月）。</li>
+        <ul className="mt-4 list-inside list-disc space-y-2 text-sm leading-relaxed text-gray-300">
           <li>
-            累積黒字に転じる月（4月含む）: <strong className="text-gray-400">7月末</strong>（累積 +40,800円）。赤字ピークは{' '}
-            <strong className="text-gray-400">6月末</strong>（−24,600円）。
+            旧シナリオAは固定費 <strong className="text-gray-100">¥45,000/月</strong>（運用バッファ込み）と{' '}
+            <strong className="text-gray-100">2026-05 有料開始</strong>が前提。現時点では有料化未実装のためタイムラインは実績とずれている。
+          </li>
+          <li>
+            <strong className="text-gray-100">Vercel Pro 移行</strong>後のインフラ下限はパターン{' '}
+            <strong className="text-gray-100">B 約¥7,500</strong> または Ably 基準込み{' '}
+            <strong className="text-gray-100">C 約¥12,100</strong>（超過従量は別）。損益分岐 UU は{' '}
+            <strong className="text-gray-100">約11〜17人</strong>（月1,000円・r=0.30）まで下がる。
+          </li>
+          <li>
+            変動費 <strong className="text-gray-100">228円/人・月</strong>（300曲フル・r=0.30）は Phase 3 原価試算と整合。参加者向け表示の「1曲約¥1.4」は{' '}
+            <strong className="text-gray-100">Gemini バンドルの参考料金（+2割）</strong>であり、請求単価ではない。
+          </li>
+          <li>
+            料金形態は <strong className="text-gray-100">月額サブスク</strong>・{' '}
+            <strong className="text-gray-100">プリペイドクレジット</strong>・{' '}
+            <strong className="text-gray-100">上限タイトなサブスク</strong>を並行検討。実装前に管理画面の原価集計（
+            <Link href="/admin/room-cost-summary" className="text-sky-400 hover:underline">
+              部屋原価
+            </Link>
+            ・
+            <Link href="/admin/user-billing-usage" className="text-sky-400 hover:underline">
+              ユーザー別
+            </Link>
+            ）で <code className="text-xs">r</code> を実測更新すること。
           </li>
         </ul>
       </section>
 
+      <section className="mt-8" aria-labelledby="fixed-tier-heading">
+        <h2 id="fixed-tier-heading" className="text-lg font-semibold text-amber-200/95">
+          固定費ティアと損益分岐（月1,000円・300曲・r=0.30）
+        </h2>
+        <div className="mt-4 overflow-x-auto rounded-xl border border-gray-800">
+          <table className="min-w-[40rem] w-full border-collapse text-left text-sm">
+            <thead>
+              <tr className="border-b border-gray-800 bg-gray-950/80">
+                <th className="px-3 py-3 font-medium text-gray-300">パターン</th>
+                <th className="px-3 py-3 font-medium text-gray-300">月次固定</th>
+                <th className="px-3 py-3 font-medium text-gray-300">分岐 UU（r=0.30）</th>
+                <th className="px-3 py-3 font-medium text-gray-300">分岐 UU（r=1.0 最重）</th>
+                <th className="px-3 py-3 font-medium text-gray-300">メモ</th>
+              </tr>
+            </thead>
+            <tbody>
+              {breakEvenRows.map(({ preset, breakEvenUu, breakEvenStress }) => (
+                <tr key={preset.id} className="border-b border-gray-800/90 odd:bg-gray-900/30">
+                  <td className="px-3 py-2.5 font-medium text-gray-200">
+                    {preset.id}: {preset.labelJa}
+                  </td>
+                  <td className="px-3 py-2.5 tabular-nums">{formatYenPlain(preset.monthlyJpy)}</td>
+                  <td className="px-3 py-2.5 tabular-nums text-emerald-200/90">
+                    {Number.isFinite(breakEvenUu) ? `${breakEvenUu}人` : '—'}
+                  </td>
+                  <td className="px-3 py-2.5 tabular-nums text-amber-200/90">
+                    {Number.isFinite(breakEvenStress) ? `${breakEvenStress}人` : '—'}
+                  </td>
+                  <td className="px-3 py-2.5 text-xs text-gray-500">{preset.descriptionJa}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="mt-8" aria-labelledby="plan-heading">
+        <h2 id="plan-heading" className="text-lg font-semibold text-amber-200/95">
+          料金形態候補（比較）
+        </h2>
+        <ul className="mt-3 space-y-2 text-sm text-gray-400">
+          {MONETIZATION_PRICING_PLAN_CANDIDATES.map((c) => (
+            <li key={c.id} className="rounded-lg border border-gray-800/80 bg-gray-950/40 p-3">
+              <span className="font-medium text-gray-200">{c.labelJa}</span>
+              {c.monthlyPriceJpy > 0 ? (
+                <span className="ml-2 text-gray-500">
+                  {formatYenPlain(c.monthlyPriceJpy)}/月 · 上限 {c.songsPerMonth}曲
+                </span>
+              ) : null}
+              <p className="mt-1 text-xs leading-relaxed text-gray-500">{c.noteJa}</p>
+            </li>
+          ))}
+        </ul>
+        <div className="mt-4 overflow-x-auto rounded-xl border border-gray-800">
+          <table className="min-w-[36rem] w-full border-collapse text-left text-sm">
+            <thead>
+              <tr className="border-b border-gray-800 bg-gray-950/80">
+                <th className="px-3 py-3 font-medium text-gray-300">案</th>
+                <th className="px-3 py-3 font-medium text-gray-300">1人・月 変動費</th>
+                <th className="px-3 py-3 font-medium text-gray-300">限界利益</th>
+                <th className="px-3 py-3 font-medium text-gray-300">分岐 UU（固定C）</th>
+              </tr>
+            </thead>
+            <tbody>
+              {planCompareRows.map((row) => (
+                <tr key={row.label} className="border-b border-gray-800/90 odd:bg-gray-900/30">
+                  <td className="px-3 py-2.5 text-gray-200">{row.label}</td>
+                  <td className="px-3 py-2.5 tabular-nums">{formatYenPlain(row.varPerUser)}</td>
+                  <td className="px-3 py-2.5 tabular-nums text-emerald-200/90">{formatYenPlain(row.marginal)}</td>
+                  <td className="px-3 py-2.5 tabular-nums">{row.breakEvenC}人</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="mt-10" aria-labelledby="revised-heading">
+        <h2 id="revised-heading" className="text-lg font-semibold text-emerald-200/95">
+          改訂シナリオ A&apos;（推奨試算）
+        </h2>
+        <p className="mt-2 text-sm text-gray-400">
+          有料化開始を <strong className="text-gray-200">2026-07</strong>（Vercel Pro 移行後）とし、固定費は{' '}
+          <strong className="text-gray-200">{REVISED_PRESET.labelJa}</strong>（{formatYenPlain(REVISED_PRESET.monthlyJpy)}
+          ）。毎月 +50人で 12 月末 300 人。プランは月1,000円・300曲・r=0.30。
+        </p>
+        <div className="mt-4">
+          <SimulationTable
+            rows={REVISED_ROWS}
+            totals={REVISED_TOTALS}
+            varPerUser={VAR_PER_USER}
+            caption="改訂 A' — 7〜12月"
+          />
+        </div>
+        <p className="mt-3 text-xs text-gray-500">
+          6か月合計損益 {formatSignedYen(REVISED_TOTALS.monthlyProfit)}。固定Cでは{' '}
+          <strong className="text-gray-400">初月（UU 50）から月次黒字</strong>（旧 A は固定 ¥45,000 のため 5 月は赤字）。
+        </p>
+      </section>
+
+      <section className="mt-10" aria-labelledby="legacy-heading">
+        <h2 id="legacy-heading" className="text-lg font-semibold text-gray-400">
+          旧シナリオ A（アーカイブ・2026-05〜10）
+        </h2>
+        <p className="mt-2 text-sm text-gray-500">
+          固定 ¥45,000・5月開始の当初案。数値は lib から再計算（旧管理画面と一致）。
+        </p>
+        <div className="mt-4 opacity-90">
+          <SimulationTable
+            rows={LEGACY_ROWS}
+            totals={LEGACY_TOTALS}
+            varPerUser={VAR_PER_USER}
+            caption="旧 A — 参考保管"
+          />
+        </div>
+      </section>
+
+      <section className="mt-8 rounded-xl border border-gray-800 bg-gray-900/50 p-5" aria-labelledby="conditions-heading">
+        <h2 id="conditions-heading" className="text-lg font-semibold text-amber-200/95">
+          共通の諸条件
+        </h2>
+        <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+          <div className="rounded-lg border border-gray-800/80 bg-gray-950/40 p-3">
+            <dt className="font-medium text-gray-300">変動費（1曲）</dt>
+            <dd className="mt-1 text-gray-400">
+              NEW極 {MONETIZATION_VARIABLE_NEW_SONG_JPY}円 / DB極 {MONETIZATION_VARIABLE_DB_SONG_JPY}円
+            </dd>
+          </div>
+          <div className="rounded-lg border border-gray-800/80 bg-gray-950/40 p-3">
+            <dt className="font-medium text-gray-300">r=0.30 時</dt>
+            <dd className="mt-1 text-gray-400">
+              1人・月 変動 {formatYenPlain(VAR_PER_USER)} · 限界利益 {formatYenPlain(MARGINAL_PER_USER)}
+            </dd>
+          </div>
+          <div className="rounded-lg border border-gray-800/80 bg-gray-950/40 p-3">
+            <dt className="font-medium text-gray-300">決済</dt>
+            <dd className="mt-1 text-gray-400">
+              手数料 3.6%（×{MONETIZATION_PAYMENT_NET_MULTIPLIER}）· 上限 {MONETIZATION_SONGS_PER_USER_MONTH}曲/月フル利用
+            </dd>
+          </div>
+          <div className="rounded-lg border border-gray-800/80 bg-gray-950/40 p-3 sm:col-span-2">
+            <dt className="font-medium text-gray-300">簡式</dt>
+            <dd className="mt-1 font-mono text-xs text-gray-400">
+              月次損益 ≈ 期末UU × {MARGINAL_PER_USER} − 固定費
+            </dd>
+          </div>
+        </dl>
+      </section>
+
       <p className="mt-8 text-center text-xs text-gray-600">
+        <Link href="/admin/room-cost-summary" className="text-sky-500/90 hover:underline">
+          部屋原価サマリー
+        </Link>
+        {' · '}
         <Link href="/admin" className="text-sky-500/90 hover:underline">
-          管理ダッシュボードへ
+          管理ダッシュボード
         </Link>
       </p>
     </main>

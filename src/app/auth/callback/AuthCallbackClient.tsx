@@ -2,6 +2,7 @@
 
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect } from 'react';
+import { safeAuthNextPath } from '@/lib/supabase-email-auth';
 import { createClient } from '@/lib/supabase/client';
 
 function safeNext(raw: string | null): string {
@@ -18,6 +19,14 @@ export interface AuthCallbackClientProps {
   forcedNext?: string | null;
 }
 
+function appendAuthNotice(path: string, notice: string): string {
+  const [base, query = ''] = path.split('?');
+  const params = new URLSearchParams(query);
+  params.set('auth_notice', notice);
+  const qs = params.toString();
+  return qs ? `${base}?${qs}` : base;
+}
+
 export function AuthCallbackClient({ forcedNext }: AuthCallbackClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -28,6 +37,9 @@ export function AuthCallbackClient({ forcedNext }: AuthCallbackClientProps) {
       const errorDescription = searchParams.get('error_description') ?? '';
       const queryNext = safeNext(searchParams.get('next'));
       const next = forcedNext != null && forcedNext !== '' ? safeNext(forcedNext) : queryNext;
+      const flow = searchParams.get('flow');
+      const destination =
+        flow === 'email_confirm' ? appendAuthNotice(safeAuthNextPath(next), 'email_confirmed') : next;
 
       try {
         document.cookie = 'mc_oauth_next=; Path=/; Max-Age=0';
@@ -52,7 +64,7 @@ export function AuthCallbackClient({ forcedNext }: AuthCallbackClientProps) {
       }
 
       if (!code) {
-        router.replace(next);
+        router.replace(destination);
         return;
       }
 
@@ -60,14 +72,14 @@ export function AuthCallbackClient({ forcedNext }: AuthCallbackClientProps) {
       if (error) {
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
-          router.replace(next);
+          router.replace(destination);
           return;
         }
         router.replace(`/?auth_error=${encodeURIComponent(error.message)}`);
         return;
       }
 
-      router.replace(next);
+      router.replace(destination);
     };
 
     void run();

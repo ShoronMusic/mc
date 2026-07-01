@@ -9,6 +9,7 @@ import { rememberGuestRoom, readGuestDisplayNameHint } from '@/lib/guest-room-pe
 import { setOAuthReturnPathCookie } from '@/lib/oauth-return-path';
 import { getBrowserAppOrigin } from '@/lib/app-origin';
 import { SimpleAuthForm } from './SimpleAuthForm';
+import { AuthErrorBanner } from './AuthErrorBanner';
 
 export const GUEST_STORAGE_KEY = 'mc:guest';
 export const GUEST_NAME_STORAGE_KEY = 'mc:guest_name';
@@ -103,7 +104,9 @@ export function JoinChoice({ onJoin, roomId, joinVerifying = false }: JoinChoice
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-gray-950 p-4">
         <div className="w-full max-w-sm rounded-lg border border-gray-700 bg-gray-900 p-6">
+          <AuthErrorBanner />
           <SimpleAuthForm
+            emailConfirmRedirectPath={`/${roomId}`}
             onSuccess={(dn) => {
               void handleSimpleAuthSuccess(dn);
             }}

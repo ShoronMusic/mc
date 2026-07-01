@@ -94,6 +94,24 @@ Google認証で参加できるようにするには、Supabase 側で Google を
 
 ---
 
+## 5.1 メール登録：Confirm email（必須）
+
+メールアドレス＋パスワード登録では **Confirm email を ON** にしてください（捨てメール対策・10 曲お試し付与の前提）。
+
+1. Supabase ダッシュボード **Authentication** → **Providers** → **Email** を開く。
+2. **Confirm email** を **ON** にして **Save**。
+3. **Authentication** → **URL Configuration** → **Redirect URLs** に次を追加（未登録だと確認リンクが失敗します）:
+   - 開発: `http://localhost:3002/auth/callback`
+   - 本番: `https://（あなたのドメイン）/auth/callback`
+4. **Site URL** が本番ドメインの場合、ローカルで確認メールを試すときも上記 localhost の Redirect URL が必要です。
+
+アプリ側（`SimpleAuthForm`）は登録時に `emailRedirectTo` を `/auth/callback?next=部屋パス&flow=email_confirm` に設定済みです。確認完了後、部屋またはトップに戻り「メールアドレスの確認が完了しました」と表示されます。
+
+- 確認前はログインできません（未確認でセッションが付いた場合もアプリ側でサインアウト）。
+- 確認メールが届かない場合: 登録画面の **確認メールを再送信**、または Supabase の **Authentication → Email Templates** を確認。
+
+---
+
 ## 6. うまく動かないとき
 
 - **「ゲストで参加」しか出ない**  
@@ -101,14 +119,15 @@ Google認証で参加できるようにするには、Supabase 側で Google を
   - 開発サーバーを再起動したか確認。
 - **初回登録したアカウントでログインできない（Invalid login credentials）**  
   - Supabase の **Authentication** → **Providers** → **Email** を開く。
-  - **「Confirm email」** がオンだと、登録後は**確認メールのリンクをクリックするまでログインできない**。
-  - **開発中**は「Confirm email」を**オフ**にすると、登録後すぐにログインできる。
+  - **「Confirm email」** がオンだと、登録後は**確認メールのリンクをクリックするまでログインできない**（**本番・開発とも ON 推奨**）。
   - 確認メールを有効にしたまま使う場合は、登録後に届くメール内のリンクをクリックしてからログインする。
   - パスワードの打ち間違いがないかもあわせて確認する。
 - **簡易登録で「User already registered」**  
   - そのメールは既に登録済み。同じメール・パスワードでログインを試す。
 - **メールが届かない（確認メールを有効にしている場合）**  
-  - Supabase の **Authentication** → **Providers** → **Email** で確認メールの設定を確認。開発時は「Confirm email」をオフにすると確認なしでログインできる。
+  - Supabase の **Authentication** → **Providers** → **Email** で確認メールの設定を確認。
+  - アプリの登録画面から **確認メールを再送信** を試す。
+  - **Redirect URLs** に `…/auth/callback` が登録されているか確認する。
 
 ---
 

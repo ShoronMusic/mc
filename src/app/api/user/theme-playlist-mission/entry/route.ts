@@ -135,6 +135,7 @@ export async function POST(request: Request) {
 
   const aiComment = await generateThemePlaylistAiBlurb(theme, artist ?? '', title ?? '', {
     videoId,
+    userId: user.id,
   });
 
   const slotIndex = current + 1;

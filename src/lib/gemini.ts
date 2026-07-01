@@ -12,7 +12,7 @@ import {
   buildGoogleGenerativeModelParams,
   extractTextFromGenerateContentResponse,
 } from '@/lib/gemini-gemma-host';
-import { persistGeminiUsageLog } from '@/lib/gemini-usage-log';
+import { persistGeminiUsageLog, buildGeminiUsagePersistMeta } from '@/lib/gemini-usage-log';
 import { resolveGenerationModelId } from '@/lib/gemini-model-routing';
 import { SONG_ERA_OPTIONS, type SongEraOption } from '@/lib/song-era-options';
 import { looksTruncatedUserTasteAutoProfile } from '@/lib/user-ai-taste-auto-profile';
@@ -84,7 +84,9 @@ export function getGeminiModel(usageContext: string) {
 export type GeminiUsageLogMeta = {
   roomId?: string | null;
   videoId?: string | null;
-  /** 曲解説で「タイトル原文」と解析済み名の整合を取らせる用 */
+  userId?: string | null;
+  gatheringId?: string | null;
+  isGuestTrigger?: boolean;
   rawYouTubeTitle?: string | null;
   /** MusicBrainz 検索で得た事実のみアルバム名・年を述べてよいときの箇条書き本文 */
   groundedFactsBlock?: string | null;
@@ -95,6 +97,16 @@ export type GeminiUsageLogMeta = {
   /** スーパーグループ文脈（手動マスタ + 外部データ補完） */
   supergroupHintText?: string | null;
 };
+
+function geminiUsagePersistMeta(meta?: GeminiUsageLogMeta) {
+  return buildGeminiUsagePersistMeta({
+    roomId: meta?.roomId,
+    videoId: meta?.videoId,
+    userId: meta?.userId,
+    gatheringId: meta?.gatheringId,
+    isGuest: meta?.isGuestTrigger,
+  });
+}
 
 /** チャット文脈の上限（長い会話・長文貼り付けでのトークン膨張を抑える） */
 const CHAT_CONTEXT_MAX_MESSAGES = 8;
@@ -293,7 +305,7 @@ ${lines || '(まだ発言なし)'}
       attempt += 1;
       const result = await model.generateContent(prompt2);
       logGeminiUsage('chat_reply', result.response);
-      await persistGeminiUsageLog('chat_reply', result.response.usageMetadata, usageMeta);
+      await persistGeminiUsageLog('chat_reply', result.response.usageMetadata, geminiUsagePersistMeta(usageMeta));
       const text = readGeneratedText(result.response, 'chat_reply');
       const discographyPolicyOk = forceReply || !containsUnreliableCommentaryDiscographyClaim(text);
       if (text && !isRejectedChatOrTidbitOutput(text) && discographyPolicyOk) {
@@ -394,7 +406,7 @@ export async function extractSongSearchQuery(
   try {
     const result = await model.generateContent(prompt);
     logGeminiUsage('extract_song_search', result.response);
-    await persistGeminiUsageLog('extract_song_search', result.response.usageMetadata, usageMeta);
+    await persistGeminiUsageLog('extract_song_search', result.response.usageMetadata, geminiUsagePersistMeta(usageMeta));
     const out = readGeneratedText(result.response, 'extract_song_search');
     if (!out || out.toLowerCase() === 'null') return null;
     const lines = out.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
@@ -483,7 +495,7 @@ ${recentUserHint}
 
     const result = await model.generateContent(prompt);
     logGeminiUsage('character_song_pick', result.response);
-    await persistGeminiUsageLog('character_song_pick', result.response.usageMetadata, usageMeta);
+    await persistGeminiUsageLog('character_song_pick', result.response.usageMetadata, geminiUsagePersistMeta(usageMeta));
     let out = readGeneratedText(result.response, 'character_song_pick');
     let outLines = out.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
     let query = outLines[0] ?? '';
@@ -491,7 +503,7 @@ ${recentUserHint}
       const retryPrompt = `${prompt}\n\n（最終指示）nullは禁止。必ず3行で1曲だけ出力してください。`;
       const retry = await model.generateContent(retryPrompt);
       logGeminiUsage('character_song_pick', retry.response);
-      await persistGeminiUsageLog('character_song_pick', retry.response.usageMetadata, usageMeta);
+      await persistGeminiUsageLog('character_song_pick', retry.response.usageMetadata, geminiUsagePersistMeta(usageMeta));
       out = readGeneratedText(retry.response, 'character_song_pick');
       outLines = out.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
       query = outLines[0] ?? '';
@@ -601,10 +613,7 @@ ${mainArtistInstruction}${generalInstruction}・曲名・アーティスト名�
       attempt += 1;
       const result = await model.generateContent(prompt2);
       logGeminiUsage('tidbit', result.response);
-      await persistGeminiUsageLog('tidbit', result.response.usageMetadata, {
-        ...usageMeta,
-        videoId: usageMeta?.videoId ?? undefined,
-      });
+      await persistGeminiUsageLog('tidbit', result.response.usageMetadata, geminiUsagePersistMeta(usageMeta));
       const text = readGeneratedText(result.response, 'tidbit');
       if (
         text &&
@@ -726,7 +735,7 @@ ${factFirstRules}
       attempt += 1;
       const result = await model.generateContent(promptUse);
       logGeminiUsage('commentary', result.response);
-      await persistGeminiUsageLog('commentary', result.response.usageMetadata, usageMeta);
+      await persistGeminiUsageLog('commentary', result.response.usageMetadata, geminiUsagePersistMeta(usageMeta));
       const text = readGeneratedText(result.response, 'commentary');
       if (!text) return null;
       if (hasReferenceFacts || !containsUnreliableCommentaryDiscographyClaim(text)) return text;
@@ -792,7 +801,7 @@ ${input}
   try {
     const result = await model.generateContent(prompt);
     logGeminiUsage('get_song_style', result.response);
-    await persistGeminiUsageLog('get_song_style', result.response.usageMetadata, usageMeta);
+    await persistGeminiUsageLog('get_song_style', result.response.usageMetadata, geminiUsagePersistMeta(usageMeta));
     const text = readGeneratedText(result.response, 'get_song_style');
     // 全文がリストに含まれるか（Alternative rock など2語スタイル用）
     if (SONG_STYLES.includes(text as SongStyle)) return text as SongStyle;
@@ -860,7 +869,7 @@ ${input}
   try {
     const result = await model.generateContent(prompt);
     logGeminiUsage('get_song_era', result.response);
-    await persistGeminiUsageLog('get_song_era', result.response.usageMetadata, usageMeta);
+    await persistGeminiUsageLog('get_song_era', result.response.usageMetadata, geminiUsagePersistMeta(usageMeta));
     const text = readGeneratedText(result.response, 'get_song_era');
     return extractSongEraOptionFromModelText(text) ?? 'Other';
   } catch (e) {
@@ -910,6 +919,7 @@ ${input}
     await persistGeminiUsageLog('user_taste_auto_profile', result.response.usageMetadata, {
       roomId: usageMeta?.roomId ?? null,
       videoId: usageMeta?.videoId ?? null,
+      userId: usageMeta?.userId ?? null,
     });
     const raw = readGeneratedText(result.response, 'user_taste_auto_profile');
     if (!raw) return null;

@@ -264,6 +264,8 @@ export async function POST(request: Request) {
       ? introOnlyText
       : await generateCommentary(commentarySongLabel, artistLabel, {
           videoId,
+          roomId: roomId || null,
+          userId: selectorUserId,
           rawYouTubeTitle,
           supergroupHintText: supergroupHint || null,
           music8FactsBlock: music8FactsBlock.length > 0 ? music8FactsBlock : null,

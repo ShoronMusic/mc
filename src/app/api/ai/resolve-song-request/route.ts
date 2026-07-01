@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { createClient } from '@/lib/supabase/server';
 import { shouldShortCircuitSongRequestForAtPrompt } from '@/lib/ai-question-about-detail-heuristic';
 import { extractSongSearchQuery } from '@/lib/gemini';
 
@@ -25,8 +26,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false }, { status: 200 });
     }
 
+    let requestUserId: string | null = null;
+    const supabase = await createClient();
+    if (supabase) {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      requestUserId = user?.id ?? null;
+    }
+
     const intent = await extractSongSearchQuery(userMessage, recentMessages.length ? recentMessages : undefined, {
       roomId: roomId || undefined,
+      userId: requestUserId ?? undefined,
     });
     if (!intent) {
       console.log('[resolve-song-request] no intent for:', userMessage.slice(0, 50));

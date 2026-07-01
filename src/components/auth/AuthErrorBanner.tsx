@@ -8,6 +8,11 @@ const MESSAGE_MAP: Record<string, string> = {
     'Google認証の有効期限が切れました。時間がかかった場合に起こります。もう一度部屋を選び、Google認証で参加を押し直してください。',
 };
 
+const NOTICE_MAP: Record<string, string> = {
+  email_confirmed:
+    'メールアドレスの確認が完了しました。ログインしてご利用ください。',
+};
+
 const PKCE_HINT =
   'Google 認証は「ボタンを押したページと同じドメイン」で戻る必要があります。いまのアドレスが本番（Vercel）なら、localhost で開き直してからやり直してください。ローカルで試すなら、Supabase の Authentication → URL Configuration の Redirect URLs に、そのときのアドレスに合わせた「…/auth/callback」（例: http://localhost:3002/auth/callback）を必ず追加してください。';
 
@@ -32,8 +37,25 @@ function isRecoveryLinkError(text: string): boolean {
 export function AuthErrorBanner() {
   const searchParams = useSearchParams();
   const [message, setMessage] = useState<string | null>(null);
+  const [variant, setVariant] = useState<'error' | 'notice'>('error');
 
   useEffect(() => {
+    const authNotice = searchParams.get('auth_notice');
+    if (authNotice) {
+      const noticeText = NOTICE_MAP[authNotice] ?? null;
+      if (noticeText) {
+        setVariant('notice');
+        setMessage(noticeText);
+        try {
+          const url = new URL(window.location.href);
+          url.searchParams.delete('auth_notice');
+          window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+        } catch {}
+        return;
+      }
+    }
+
+    setVariant('error');
     const authError = searchParams.get('auth_error');
     const error = searchParams.get('error');
     const errorDescription = searchParams.get('error_description') ?? '';
@@ -71,6 +93,14 @@ export function AuthErrorBanner() {
   }, [searchParams]);
 
   if (!message) return null;
+
+  if (variant === 'notice') {
+    return (
+      <div className="mb-4 rounded-lg border border-emerald-700 bg-emerald-900/40 px-4 py-3 text-sm text-emerald-200">
+        <p>{message}</p>
+      </div>
+    );
+  }
 
   return (
     <div className="mb-4 rounded-lg border border-amber-700 bg-amber-900/40 px-4 py-3 text-sm text-amber-200">

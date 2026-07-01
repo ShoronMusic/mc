@@ -109,6 +109,13 @@ export function GuestRegisterPromptModal({ open, onClose, roomId = '' }: GuestRe
           <>
             <SimpleAuthForm
               startWithRegister
+              emailConfirmRedirectPath={
+                roomId
+                  ? `/${roomId}`
+                  : typeof window !== 'undefined'
+                    ? window.location.pathname || '/'
+                    : '/'
+              }
               onSuccess={handleEmailAuthSuccess}
               onCancel={() => {
                 setShowEmailForm(false);

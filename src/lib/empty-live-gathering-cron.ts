@@ -1,6 +1,7 @@
 import Ably from 'ably';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { fetchRoomPresenceMembers } from '@/lib/room-owner-resolve-server';
+import { persistRoomGatheringSnapshots } from '@/lib/room-gathering-snapshot';
 
 /** 既定: 在室が一度でもあり、その後 0 が続いた時間がこの値を超えたら live を終了 */
 const DEFAULT_EMPTY_MS = 30 * 60 * 1000;
@@ -162,6 +163,18 @@ export async function sweepEmptyLiveGatherings(admin: SupabaseClient): Promise<C
       continue;
     }
     if (!ended?.length) continue;
+
+    const gatheringIds = ended.map((row) => String((row as { id?: string }).id ?? '').trim()).filter(Boolean);
+    if (gatheringIds.length > 0) {
+      const snapResults = await persistRoomGatheringSnapshots(admin, gatheringIds, {
+        endReason: 'empty_presence_auto',
+      });
+      for (const r of snapResults) {
+        if (!r.ok && !('skipped' in r && r.skipped)) {
+          console.error('[empty-live-gathering-cron] snapshot', r);
+        }
+      }
+    }
 
     result.endedRooms.push(roomId);
     const { error: delErr } = await admin.from('room_live_presence_watch').delete().eq('room_id', roomId);

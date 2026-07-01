@@ -55,6 +55,30 @@ import {
   USER_PUBLIC_PROFILE_LISTENING_MAX,
   USER_PUBLIC_PROFILE_TAGLINE_MAX,
 } from '@/lib/user-public-profile';
+import {
+  buildParticipationSummaryRows,
+  participationSummaryKey,
+  type ParticipationHistoryRow,
+  type ParticipationSummaryRow,
+} from '@/lib/participation-summary';
+import {
+  formatGeminiCostJpyApprox,
+  geminiUsageMonthKeyJst,
+  type GeminiUsageTokenSummary,
+} from '@/lib/gemini-pricing';
+import { type GeminiUsageCategoryId } from '@/lib/gemini-usage-categories';
+import {
+  AI_USAGE_DISCLOSURE_MYPAGE_PARTICIPATION,
+  AI_USAGE_DISCLOSURE_MYPAGE_ROOM_COMMON,
+} from '@/lib/ai-usage-disclosure-copy';
+import { GeminiUsageCategoryBreakdown } from '@/components/mypage/GeminiUsageCategoryBreakdown';
+import { SongSelectionCostGuide } from '@/components/shared/SongSelectionCostGuide';
+import { ParticipationSongHistoryModal } from '@/components/mypage/ParticipationSongHistoryModal';
+import {
+  MyPageSongHistoryList,
+  type MyPageSongHistoryRow,
+} from '@/components/mypage/MyPageSongHistoryList';
+import { filterSongHistoryForParticipationSlot } from '@/lib/participation-song-history-filter';
 
 const MY_LIST_LIB_INDEX_HASH = '#';
 const MY_LIST_LIB_INDEX_OTHER = 'その他';
@@ -96,31 +120,32 @@ function getMyPageEraTextColor(era: string | null | undefined): string | undefin
   return MY_PAGE_ERA_TEXT_COLORS[era] ?? '#b0bec5';
 }
 
-function participationSlotStartMs(t: Date): number {
-  const y = t.getFullYear();
-  const m = t.getMonth();
-  const d = t.getDate();
-  const h = t.getHours();
-  if (h >= 6 && h < 18) return new Date(y, m, d, 6, 0, 0, 0).getTime();
-  if (h >= 18) return new Date(y, m, d, 18, 0, 0, 0).getTime();
-  return new Date(y, m, d - 1, 18, 0, 0, 0).getTime();
-}
+type GeminiUsageMonthlyRow = GeminiUsageTokenSummary & {
+  monthKey: string;
+  monthLabel: string;
+};
 
-function formatParticipationSlotLabel(startMs: number, endMs: number): string {
-  const s = new Date(startMs);
-  const e = new Date(endMs);
-  const y = s.getFullYear();
-  const m = String(s.getMonth() + 1).padStart(2, '0');
-  const d = String(s.getDate()).padStart(2, '0');
-  const sh = String(s.getHours()).padStart(2, '0');
-  const eh = String(e.getHours()).padStart(2, '0');
-  if (s.getHours() === 18) {
-    const ny = e.getFullYear();
-    const nm = String(e.getMonth() + 1).padStart(2, '0');
-    const nd = String(e.getDate()).padStart(2, '0');
-    return `${y}/${m}/${d} ${sh}:00 - ${ny}/${nm}/${nd} ${eh}:00`;
-  }
-  return `${y}/${m}/${d} ${sh}:00 - ${eh}:00`;
+type UserGeminiUsageSlicePayload = {
+  bySlot?: Record<string, GeminiUsageTokenSummary>;
+  bySlotCategory?: Record<string, Record<GeminiUsageCategoryId, GeminiUsageTokenSummary>>;
+  byCategory?: Record<GeminiUsageCategoryId, GeminiUsageTokenSummary>;
+  monthly?: GeminiUsageMonthlyRow[];
+  monthlyByCategory?: Record<string, Record<GeminiUsageCategoryId, GeminiUsageTokenSummary>>;
+  totals?: GeminiUsageTokenSummary;
+};
+
+type UserGeminiUsageSummaryPayload = UserGeminiUsageSlicePayload & {
+  enabled?: boolean;
+  hint?: string;
+  billingMode?: string;
+  personal?: UserGeminiUsageSlicePayload;
+  roomCommon?: UserGeminiUsageSlicePayload;
+};
+
+function formatTokenCount(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 10_000) return `${Math.round(n / 1000)}k`;
+  return String(n);
 }
 
 function formatDurationJa(totalMs: number): string {
@@ -223,41 +248,7 @@ function downloadUtf8TextFile(filename: string, text: string) {
   URL.revokeObjectURL(url);
 }
 
-interface SongHistoryRow {
-  id: string;
-  room_id: string;
-  video_id: string;
-  url: string;
-  title: string | null;
-  artist: string | null;
-  posted_at: string;
-  /** 同期部屋の選曲ラウンド（列未追加のDBでは undefined） */
-  selection_round?: number | null;
-  style?: string | null;
-  era?: string | null;
-}
-interface ParticipationHistoryRow {
-  id: string;
-  room_id: string;
-  gathering_id: string | null;
-  gathering_title: string | null;
-  display_name: string | null;
-  joined_at: string;
-  left_at: string | null;
-}
-
-interface ParticipationSummaryRow {
-  slotStartMs: number;
-  slotEndMs: number;
-  slotLabel: string;
-  room_id: string;
-  gathering_title: string | null;
-  display_name: string | null;
-  first_joined_ms: number;
-  last_left_ms: number | null;
-  hasOpenSession: boolean;
-  total_stay_ms: number;
-}
+interface SongHistoryRow extends MyPageSongHistoryRow {}
 
 interface FavoriteRow {
   id: string;
@@ -756,14 +747,20 @@ export default function MyPage({
   const [songHistory, setSongHistory] = useState<SongHistoryRow[]>([]);
   const [songHistoryLoading, setSongHistoryLoading] = useState(false);
   const [songHistoryPage, setSongHistoryPage] = useState(1);
-  const [historyTab, setHistoryTab] = useState<'songs' | 'favorites' | 'participation' | 'mylist'>('songs');
+  const [historyTab, setHistoryTab] = useState<'songs' | 'favorites' | 'mylist'>('songs');
   const [musicPreview, setMusicPreview] = useState<MyPageMusicPreviewSelection | null>(null);
   const [favorites, setFavorites] = useState<FavoriteRow[]>([]);
   const [favoritesLoading, setFavoritesLoading] = useState(false);
   const [favoritesPage, setFavoritesPage] = useState(1);
   const [participationHistory, setParticipationHistory] = useState<ParticipationHistoryRow[]>([]);
   const [participationLoading, setParticipationLoading] = useState(false);
+  const [participationSongModalSlot, setParticipationSongModalSlot] =
+    useState<ParticipationSummaryRow | null>(null);
   const [participationPage, setParticipationPage] = useState(1);
+  const [geminiUsageSummary, setGeminiUsageSummary] = useState<UserGeminiUsageSummaryPayload | null>(
+    null,
+  );
+  const [geminiUsageLoading, setGeminiUsageLoading] = useState(false);
   const [myListItems, setMyListItems] = useState<MyListItemRow[]>([]);
   const [myListLoading, setMyListLoading] = useState(false);
   const [myListAddUrl, setMyListAddUrl] = useState('');
@@ -807,9 +804,9 @@ export default function MyPage({
   const [roomAiFeaturesLoading, setRoomAiFeaturesLoading] = useState(false);
   const [roomAiFeaturesSaving, setRoomAiFeaturesSaving] = useState(false);
   const [roomAiFeaturesMessage, setRoomAiFeaturesMessage] = useState<string | null>(null);
-  const [mainTab, setMainTab] = useState<'owner' | 'user' | 'music' | 'mylist' | 'themeMission'>(
-    'user',
-  );
+  const [mainTab, setMainTab] = useState<
+    'owner' | 'user' | 'music' | 'participation' | 'mylist' | 'themeMission'
+  >('user');
 
   const supabase = createClient();
   const router = useRouter();
@@ -1221,6 +1218,11 @@ export default function MyPage({
   }, [user, historyTab, loadSongHistory]);
 
   useEffect(() => {
+    if (!user || mainTab !== 'participation') return;
+    loadSongHistory();
+  }, [user, mainTab, loadSongHistory]);
+
+  useEffect(() => {
     if (!user || historyTab !== 'songs') return;
     const onVis = () => {
       if (document.visibilityState === 'visible') loadSongHistory();
@@ -1320,6 +1322,19 @@ export default function MyPage({
       )
       .catch(() => setParticipationHistory([]))
       .finally(() => setParticipationLoading(false));
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    setGeminiUsageLoading(true);
+    fetch('/api/user/gemini-usage-summary', { credentials: 'include' })
+      .then(async (r) => {
+        if (!r.ok) return null;
+        return r.json();
+      })
+      .then((data) => setGeminiUsageSummary((data ?? null) as UserGeminiUsageSummaryPayload | null))
+      .catch(() => setGeminiUsageSummary(null))
+      .finally(() => setGeminiUsageLoading(false));
   }, [user]);
 
   const loadMyList = useCallback(async () => {
@@ -1622,60 +1637,29 @@ export default function MyPage({
       ),
     [favoritesPage, favoritesTotalPages],
   );
-  const participationSummaryRows = useMemo<ParticipationSummaryRow[]>(() => {
-    if (participationHistory.length === 0) return [];
-    const nowMs = Date.now();
-    const merged = new Map<string, ParticipationSummaryRow>();
-
-    for (const row of participationHistory) {
-      const joinedMs = new Date(row.joined_at).getTime();
-      if (!Number.isFinite(joinedMs)) continue;
-      const rawLeftMs = row.left_at ? new Date(row.left_at).getTime() : nowMs;
-      const leftMs = Number.isFinite(rawLeftMs) ? Math.max(joinedMs, rawLeftMs) : joinedMs;
-      let cursor = joinedMs;
-      while (cursor < leftMs) {
-        const slotStartMs = participationSlotStartMs(new Date(cursor));
-        const slotEndMs = slotStartMs + 12 * 60 * 60 * 1000;
-        const segStart = Math.max(cursor, slotStartMs);
-        const segEnd = Math.min(leftMs, slotEndMs);
-        if (segEnd > segStart) {
-          const roomKey = row.room_id || '—';
-          const key = `${slotStartMs}::${roomKey}`;
-          const prev = merged.get(key);
-          const openInsideSlot = !row.left_at || (new Date(row.left_at).getTime() > slotEndMs);
-          if (!prev) {
-            merged.set(key, {
-              slotStartMs,
-              slotEndMs,
-              slotLabel: formatParticipationSlotLabel(slotStartMs, slotEndMs),
-              room_id: roomKey,
-              gathering_title: row.gathering_title,
-              display_name: row.display_name,
-              first_joined_ms: segStart,
-              last_left_ms: openInsideSlot ? null : segEnd,
-              hasOpenSession: openInsideSlot,
-              total_stay_ms: segEnd - segStart,
-            });
-          } else {
-            prev.first_joined_ms = Math.min(prev.first_joined_ms, segStart);
-            prev.total_stay_ms += segEnd - segStart;
-            if (openInsideSlot) {
-              prev.hasOpenSession = true;
-              prev.last_left_ms = null;
-            } else if (!prev.hasOpenSession) {
-              prev.last_left_ms = Math.max(prev.last_left_ms ?? 0, segEnd);
-            }
-          }
-        }
-        cursor = slotEndMs;
-      }
-    }
-
-    return Array.from(merged.values()).sort((a, b) => {
-      if (b.slotStartMs !== a.slotStartMs) return b.slotStartMs - a.slotStartMs;
-      return b.first_joined_ms - a.first_joined_ms;
-    });
-  }, [participationHistory]);
+  const participationSummaryRows = useMemo<ParticipationSummaryRow[]>(
+    () => buildParticipationSummaryRows(participationHistory),
+    [participationHistory],
+  );
+  const currentMonthGeminiUsage = useMemo(() => {
+    const monthly = geminiUsageSummary?.monthly ?? [];
+    if (monthly.length === 0) return null;
+    const key = geminiUsageMonthKeyJst(new Date().toISOString());
+    return monthly.find((m) => m.monthKey === key) ?? null;
+  }, [geminiUsageSummary?.monthly]);
+  const currentMonthGeminiByCategory = useMemo(() => {
+    const key = geminiUsageMonthKeyJst(new Date().toISOString());
+    return geminiUsageSummary?.monthlyByCategory?.[key] ?? null;
+  }, [geminiUsageSummary?.monthlyByCategory]);
+  const currentMonthPersonalByCategory = useMemo(() => {
+    const key = geminiUsageMonthKeyJst(new Date().toISOString());
+    return geminiUsageSummary?.personal?.monthlyByCategory?.[key] ?? null;
+  }, [geminiUsageSummary?.personal?.monthlyByCategory]);
+  const currentMonthRoomCommonByCategory = useMemo(() => {
+    const key = geminiUsageMonthKeyJst(new Date().toISOString());
+    return geminiUsageSummary?.roomCommon?.monthlyByCategory?.[key] ?? null;
+  }, [geminiUsageSummary?.roomCommon?.monthlyByCategory]);
+  const roomCommonGeminiHasData = (geminiUsageSummary?.roomCommon?.totals?.calls ?? 0) > 0;
   const participationTotalPages = useMemo(
     () => Math.max(1, Math.ceil(participationSummaryRows.length / MUSIC_HISTORY_PAGE_SIZE)),
     [participationSummaryRows.length],
@@ -1696,6 +1680,20 @@ export default function MyPage({
       ),
     [participationPage, participationTotalPages],
   );
+  const participationSongCountByKey = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const row of participationSummaryRows) {
+      map.set(
+        participationSummaryKey(row),
+        filterSongHistoryForParticipationSlot(songHistory, row).length,
+      );
+    }
+    return map;
+  }, [participationSummaryRows, songHistory]);
+  const participationModalSongs = useMemo(() => {
+    if (!participationSongModalSlot) return [];
+    return filterSongHistoryForParticipationSlot(songHistory, participationSongModalSlot);
+  }, [participationSongModalSlot, songHistory]);
 
   const openMyListArtistProfile = useCallback((displayName: string, artistSlug: string | null) => {
     setMyListArtistProfileName(displayName);
@@ -1706,6 +1704,20 @@ export default function MyPage({
   const openMusicPreview = useCallback((item: MyPageMusicPreviewSelection) => {
     setMusicPreview(item);
   }, []);
+
+  const openSongHistoryPreview = useCallback(
+    (row: MyPageSongHistoryRow) => {
+      openMusicPreview({
+        videoId: row.video_id,
+        url: row.url,
+        title: row.title,
+        artist: row.artist,
+        style: row.style ?? null,
+        era: row.era ?? null,
+      });
+    },
+    [openMusicPreview],
+  );
 
   const pickSongFromMyList = useCallback((url: string) => {
     const text = url.trim();
@@ -1742,6 +1754,19 @@ export default function MyPage({
     [postMyListItem],
   );
 
+  const addSongHistoryToMyList = useCallback(
+    (row: MyPageSongHistoryRow) => {
+      void addToMyListWithAlert({
+        videoId: row.video_id,
+        url: row.url,
+        title: row.title,
+        artist: row.artist,
+        source: 'song_history',
+      });
+    },
+    [addToMyListWithAlert],
+  );
+
   const addToMyListFromPreview = useCallback(
     async (
       payload: {
@@ -1766,11 +1791,12 @@ export default function MyPage({
   useEffect(() => {
     if (historyTab === 'songs') setSongHistoryPage(1);
     if (historyTab === 'favorites') setFavoritesPage(1);
-    if (historyTab === 'participation') setParticipationPage(1);
     setMusicPreview(null);
   }, [historyTab]);
 
   useEffect(() => {
+    if (mainTab === 'participation') setParticipationPage(1);
+    if (mainTab !== 'participation') setParticipationSongModalSlot(null);
     setMusicPreview(null);
   }, [mainTab, myListTab]);
 
@@ -2091,7 +2117,7 @@ export default function MyPage({
   return (
     <MyPageModalFrame
       title="マイページ"
-      subtitle="登録情報の確認と変更。オーナー向け・ユーザー向け・曲履歴・マイリスト・お題プレイリストをタブで切り替えます。"
+      subtitle="登録情報の確認と変更。オーナー向け・ユーザー向け・参加履歴・曲管理・マイリスト・お題プレイリストをタブで切り替えます。"
       onClose={onClose}
     >
       <div className="mb-3 flex shrink-0 flex-wrap gap-2">
@@ -2114,6 +2140,17 @@ export default function MyPage({
           }`}
         >
           ユーザー機能
+        </button>
+        <button
+          type="button"
+          onClick={() => setMainTab('participation')}
+          className={`rounded px-3 py-1.5 text-sm font-medium ${
+            mainTab === 'participation'
+              ? 'bg-gray-700 text-white'
+              : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'
+          }`}
+        >
+          参加履歴
         </button>
         <button
           type="button"
@@ -3125,13 +3162,6 @@ export default function MyPage({
                   >
                     お気に入り
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => setHistoryTab('participation')}
-                    className={`rounded px-3 py-1.5 text-sm font-medium ${historyTab === 'participation' ? 'bg-gray-700 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'}`}
-                  >
-                    参加履歴
-                  </button>
                 </>
               ) : null}
             </div>
@@ -3141,7 +3171,6 @@ export default function MyPage({
               disabled={
                 mainTab === 'themeMission' ||
                 mainTab === 'mylist' ||
-                historyTab === 'participation' ||
                 historyTab === 'mylist'
                   ? true
                   : historyTab === 'songs'
@@ -3152,7 +3181,6 @@ export default function MyPage({
               title={
                 mainTab === 'themeMission' ||
                 mainTab === 'mylist' ||
-                historyTab === 'participation' ||
                 historyTab === 'mylist'
                   ? 'このタブのTEXT保存は後続対応です'
                   : historyTab === 'songs'
@@ -3172,145 +3200,15 @@ export default function MyPage({
             <p className="text-sm text-gray-500">まだ履歴がありません。部屋でYouTubeのURLを貼ると保存されます。</p>
           ) : (
             <>
-              <div className="space-y-4">
-                {(() => {
-                  const byDate = new Map<string, SongHistoryRow[]>();
-                  for (const row of songHistoryPageRows) {
-                    const d = new Date(row.posted_at);
-                    const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-                    if (!byDate.has(dateKey)) byDate.set(dateKey, []);
-                    byDate.get(dateKey)!.push(row);
-                  }
-                  const sortedDates = Array.from(byDate.keys()).sort((a, b) => b.localeCompare(a));
-                  Array.from(byDate.values()).forEach((rows) => {
-                    rows.sort(
-                      (a: SongHistoryRow, b: SongHistoryRow) =>
-                        new Date(b.posted_at).getTime() - new Date(a.posted_at).getTime(),
-                    );
-                  });
-                  return sortedDates.map((dateKey) => {
-                    const [y, m, d] = dateKey.split('-');
-                    const label = `${y}年${m}月${d}日`;
-                    const rows = byDate.get(dateKey)!;
-                    return (
-                      <div key={dateKey} className="rounded border border-gray-700 bg-gray-800/50 p-2">
-                        <p className="mb-2 text-xs font-medium text-gray-400">{label}</p>
-                        <ul className="space-y-2">
-                          {rows.map((row) => {
-                            const at = new Date(row.posted_at);
-                            const timeStr = `${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`;
-                            const roundSuffix =
-                              typeof row.selection_round === 'number' &&
-                              Number.isFinite(row.selection_round) &&
-                              row.selection_round >= 1
-                                ? ` R${Math.floor(row.selection_round)}`
-                                : '';
-                            const title = row.title || row.video_id;
-                            const artist = row.artist ? `（${row.artist}）` : '';
-                            return (
-                              <li
-                                key={row.id}
-                                className={`border-b border-gray-700/50 pb-2 last:border-0 last:pb-0 ${
-                                  musicPreview?.videoId === row.video_id
-                                    ? 'rounded bg-lime-950/20 px-1 ring-1 ring-lime-700/40'
-                                    : ''
-                                }`}
-                              >
-                                <p className="text-xs text-gray-500">
-                                  部屋 {row.room_id || '—'} · {timeStr}
-                                  {roundSuffix}
-                                </p>
-                                <p className="text-sm text-gray-200">
-                                  {title}
-                                  {artist}
-                                </p>
-                              <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px]">
-                                {row.style?.trim() ? (
-                                  <span
-                                    className="rounded border border-gray-700/70 bg-gray-900/40 px-1.5 py-0.5"
-                                    style={{ color: getMyPageStyleTextColor(row.style) }}
-                                    title={`スタイル: ${row.style}`}
-                                  >
-                                    {row.style}
-                                  </span>
-                                ) : null}
-                                {row.era?.trim() ? (
-                                  <span
-                                    className="rounded border border-gray-700/70 bg-gray-900/40 px-1.5 py-0.5"
-                                    style={{ color: getMyPageEraTextColor(row.era) }}
-                                    title={`年代: ${row.era}`}
-                                  >
-                                    {row.era}
-                                  </span>
-                                ) : null}
-                                {!row.style?.trim() && !row.era?.trim() ? (
-                                  <span className="text-gray-500">—</span>
-                                ) : null}
-                              </div>
-                                <div className="mt-1 flex flex-wrap items-center gap-2">
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      openMusicPreview({
-                                        videoId: row.video_id,
-                                        url: row.url,
-                                        title: row.title,
-                                        artist: row.artist,
-                                        style: row.style ?? null,
-                                        era: row.era ?? null,
-                                      })
-                                    }
-                                    className={`shrink-0 rounded border px-2 py-1 text-xs font-medium ${
-                                      musicPreview?.videoId === row.video_id
-                                        ? 'border-lime-500 bg-lime-800 text-white'
-                                        : 'border-lime-700/60 bg-lime-900/30 text-lime-200 hover:bg-lime-900/50'
-                                    }`}
-                                    title="右のプレイヤーで再生"
-                                  >
-                                    再生
-                                  </button>
-                                  <a
-                                    href={row.url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="break-all text-xs text-blue-400 hover:underline"
-                                  >
-                                    {row.url}
-                                  </a>
-                                  <button
-                                    type="button"
-                                    onClick={() => pickSongFromMyList(row.url)}
-                                    className="shrink-0 rounded border border-emerald-700/60 bg-emerald-900/30 px-2 py-1 text-xs text-emerald-200 hover:bg-emerald-900/50"
-                                    title="この曲を選曲欄にセット"
-                                  >
-                                    選曲
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      void addToMyListWithAlert({
-                                        videoId: row.video_id,
-                                        url: row.url,
-                                        title: row.title,
-                                        artist: row.artist,
-                                        source: 'song_history',
-                                      })
-                                    }
-                                    className="shrink-0 rounded border border-violet-600/60 bg-violet-900/40 px-2 py-1 text-xs text-violet-100 hover:bg-violet-900/60"
-                                    title="自分のライブラリ（マイリスト）に追加"
-                                  >
-                                    マイリストに追加
-                                  </button>
-                                </div>
-                              </li>
-                            );
-                          })}
-                        </ul>
-                      </div>
-                    );
-                  });
-                })()}
-              </div>
+              <MyPageSongHistoryList
+                rows={songHistoryPageRows}
+                groupByDate
+                activePreviewVideoId={musicPreview?.videoId ?? null}
+                onPlayPreview={openSongHistoryPreview}
+                onPickSong={pickSongFromMyList}
+                onAddToMyList={addSongHistoryToMyList}
+                emptyMessage="まだ履歴がありません。部屋でYouTubeのURLを貼ると保存されます。"
+              />
               {songHistoryTotalPages > 1 ? (
                 <nav className="mt-3 flex flex-wrap items-center justify-center gap-1 border-t border-gray-700/50 pt-2 text-xs" aria-label="貼った曲の履歴のページ送り">
                   <button
@@ -3538,81 +3436,6 @@ export default function MyPage({
                 />
               </div>
             </div>
-          )}
-          {mainTab === 'music' && historyTab === 'participation' && (
-            <>
-              <p className="mb-3 text-xs text-gray-500">
-                ログイン状態で入室した会の参加履歴です。入室時刻と退出時刻（取得できた場合）を表示します。
-              </p>
-              {participationLoading ? (
-                <p className="text-sm text-gray-500">読み込み中…</p>
-              ) : participationSummaryRows.length === 0 ? (
-                <p className="text-sm text-gray-500">参加履歴はまだありません。</p>
-              ) : (
-                <>
-                  <div className="space-y-3">
-                    {participationPageRows.map((row) => {
-                      const joinedStr = new Date(row.first_joined_ms).toLocaleString('ja-JP');
-                      const leftStr = row.last_left_ms ? new Date(row.last_left_ms).toLocaleString('ja-JP') : '在室中 / 未取得';
-                      return (
-                        <div key={`${row.slotStartMs}-${row.room_id}`} className="rounded border border-gray-700 bg-gray-800/50 p-2">
-                          <p className="text-xs text-amber-200">{row.slotLabel}</p>
-                          <p className="text-xs text-gray-500">
-                            部屋 {row.room_id || '—'} · {row.gathering_title || '部屋の名前未設定'}
-                          </p>
-                          {row.display_name ? (
-                            <p className="text-xs text-gray-400">表示名（入室時）: {row.display_name}</p>
-                          ) : null}
-                          <p className="text-sm text-gray-200">最初の入室: {joinedStr}</p>
-                          <p className="text-xs text-gray-400">最後の退出: {leftStr}</p>
-                          <p className="text-xs text-emerald-300">滞在合計: {formatDurationJa(row.total_stay_ms)}</p>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  {participationTotalPages > 1 ? (
-                    <nav className="mt-3 flex flex-wrap items-center justify-center gap-1 border-t border-gray-700/50 pt-2 text-xs" aria-label="参加履歴のページ送り">
-                      <button
-                        type="button"
-                        disabled={Math.min(participationPage, participationTotalPages) <= 1}
-                        onClick={() => setParticipationPage((p) => Math.max(1, p - 1))}
-                        className="rounded border border-gray-600 px-2 py-1 text-gray-300 hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-40"
-                      >
-                        ←
-                      </button>
-                      {participationPaginationSlots.map((slot, si) =>
-                        slot === 'ellipsis' ? (
-                          <span key={`participation-page-ellipsis-${si}`} className="px-1 text-gray-500">
-                            …
-                          </span>
-                        ) : (
-                          <button
-                            key={slot}
-                            type="button"
-                            onClick={() => setParticipationPage(slot)}
-                            className={`min-w-[1.75rem] rounded border px-1.5 py-1 ${
-                              Math.min(participationPage, participationTotalPages) === slot
-                                ? 'border-violet-600/70 bg-violet-900/40 text-violet-100'
-                                : 'border-gray-600 text-gray-300 hover:bg-gray-700'
-                            }`}
-                          >
-                            {slot}
-                          </button>
-                        ),
-                      )}
-                      <button
-                        type="button"
-                        disabled={Math.min(participationPage, participationTotalPages) >= participationTotalPages}
-                        onClick={() => setParticipationPage((p) => Math.min(participationTotalPages, p + 1))}
-                        className="rounded border border-gray-600 px-2 py-1 text-gray-300 hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-40"
-                      >
-                        →
-                      </button>
-                    </nav>
-                  ) : null}
-                </>
-              )}
-            </>
           )}
           {mainTab === 'themeMission' && (
             <div className="mb-6">
@@ -4064,7 +3887,237 @@ export default function MyPage({
           )}
         </div>
         ) : null}
+
+        {mainTab === 'participation' ? (
+          <div className="mc-scrollbar-stable min-h-0 flex-1 overflow-y-auto border-t border-gray-800 pt-4">
+            <p className="mb-3 text-xs leading-relaxed text-gray-400">
+              ログイン状態で入室した会の参加履歴です。入室時刻・退出時刻に加え、AI 利用量の目安を表示します。
+              <span className="mt-1 block text-emerald-300/90">
+                【現在無料】AI 機能はサイト管理者負担で提供されており、参加者への請求はありません。
+              </span>
+            </p>
+            <SongSelectionCostGuide variant="mypage" className="mb-4" />
+            {geminiUsageLoading ? (
+              <p className="mb-3 text-xs text-gray-500">AI 利用量を読み込み中…</p>
+            ) : geminiUsageSummary?.enabled === false && geminiUsageSummary.hint ? (
+              <p className="mb-3 rounded border border-amber-900/50 bg-amber-950/30 px-2 py-1.5 text-xs text-amber-200/90">
+                AI 利用量: {geminiUsageSummary.hint}
+              </p>
+            ) : null}
+            {!geminiUsageLoading && geminiUsageSummary?.enabled && (
+              <div className="mb-4 rounded border border-violet-800/50 bg-violet-950/20 p-3">
+                <p className="text-xs font-medium text-violet-200">
+                  月次 AI 利用（請求先としてあなたに帰属）
+                </p>
+                {currentMonthGeminiUsage && currentMonthGeminiUsage.calls > 0 ? (
+                  <p className="mt-1 text-sm text-gray-100">
+                    今月: {currentMonthGeminiUsage.calls} 回 · 入力{' '}
+                    {formatTokenCount(currentMonthGeminiUsage.promptTokens)} · 出力{' '}
+                    {formatTokenCount(currentMonthGeminiUsage.outputTokens)} ·{' '}
+                    <span className="text-emerald-300">
+                      {formatGeminiCostJpyApprox(currentMonthGeminiUsage.costJpyApprox)}
+                    </span>
+                  </p>
+                ) : (
+                  <p className="mt-1 text-xs text-gray-400">今月の記録はまだありません。</p>
+                )}
+                {currentMonthPersonalByCategory &&
+                Object.values(currentMonthPersonalByCategory).some((c) => c.calls > 0) ? (
+                  <GeminiUsageCategoryBreakdown
+                    byCategory={currentMonthPersonalByCategory}
+                    title="今月 · あなたの操作"
+                    showTypicalHints
+                    className="mt-3 border-t border-violet-900/40 pt-3"
+                  />
+                ) : currentMonthGeminiByCategory &&
+                  Object.values(currentMonthGeminiByCategory).some((c) => c.calls > 0) ? (
+                  <GeminiUsageCategoryBreakdown
+                    byCategory={currentMonthGeminiByCategory}
+                    title="今月の種別内訳（料金目安の割合）"
+                    showTypicalHints
+                    className="mt-3 border-t border-violet-900/40 pt-3"
+                  />
+                ) : geminiUsageSummary.byCategory &&
+                  Object.values(geminiUsageSummary.byCategory).some((c) => c.calls > 0) ? (
+                  <GeminiUsageCategoryBreakdown
+                    byCategory={geminiUsageSummary.byCategory}
+                    title="種別内訳（直近120日・料金目安の割合）"
+                    showTypicalHints
+                    className="mt-3 border-t border-violet-900/40 pt-3"
+                  />
+                ) : null}
+                {roomCommonGeminiHasData &&
+                currentMonthRoomCommonByCategory &&
+                Object.values(currentMonthRoomCommonByCategory).some((c) => c.calls > 0) ? (
+                  <div className="mt-3 border-t border-amber-900/40 pt-3">
+                    <p className="text-xs font-medium text-amber-200/90">
+                      {AI_USAGE_DISCLOSURE_MYPAGE_ROOM_COMMON}
+                    </p>
+                    <GeminiUsageCategoryBreakdown
+                      byCategory={currentMonthRoomCommonByCategory}
+                      title="今月 · 部屋共通"
+                      compact
+                      className="mt-2"
+                    />
+                  </div>
+                ) : null}
+                {(geminiUsageSummary.monthly?.length ?? 0) > 1 ? (
+                  <ul className="mt-2 space-y-1 border-t border-violet-900/40 pt-2 text-xs text-gray-400">
+                    {(geminiUsageSummary.monthly ?? [])
+                      .filter((m) => m.monthKey !== currentMonthGeminiUsage?.monthKey)
+                      .slice(0, 5)
+                      .map((m) => (
+                        <li key={m.monthKey}>
+                          {m.monthLabel}: {m.calls} 回 · 入力 {formatTokenCount(m.promptTokens)} · 出力{' '}
+                          {formatTokenCount(m.outputTokens)} · {formatGeminiCostJpyApprox(m.costJpyApprox)}
+                        </li>
+                      ))}
+                  </ul>
+                ) : null}
+                <p className="mt-2 text-xs leading-relaxed text-gray-400">{AI_USAGE_DISCLOSURE_MYPAGE_PARTICIPATION}</p>
+              </div>
+            )}
+            {participationLoading ? (
+              <p className="text-sm text-gray-500">読み込み中…</p>
+            ) : participationSummaryRows.length === 0 ? (
+              <p className="text-sm text-gray-500">参加履歴はまだありません。</p>
+            ) : (
+              <>
+                <div className="space-y-3">
+                  {participationPageRows.map((row) => {
+                    const joinedStr = new Date(row.first_joined_ms).toLocaleString('ja-JP');
+                    const leftStr = row.last_left_ms
+                      ? new Date(row.last_left_ms).toLocaleString('ja-JP')
+                      : '在室中 / 未取得';
+                    const slotKey = participationSummaryKey(row);
+                    const slotUsage = geminiUsageSummary?.bySlot?.[slotKey] ?? null;
+                    const slotCategoryUsage = geminiUsageSummary?.bySlotCategory?.[slotKey] ?? null;
+                    const slotPersonalUsage = geminiUsageSummary?.personal?.bySlot?.[slotKey] ?? null;
+                    const slotRoomCommonUsage = geminiUsageSummary?.roomCommon?.bySlot?.[slotKey] ?? null;
+                    const slotSongCount = participationSongCountByKey.get(slotKey) ?? 0;
+                    return (
+                      <div
+                        key={`${row.slotStartMs}-${row.room_id}`}
+                        className="rounded border border-gray-700 bg-gray-800/50 p-2"
+                      >
+                        <p className="text-xs text-amber-200">{row.slotLabel}</p>
+                        <p className="text-xs text-gray-500">
+                          部屋 {row.room_id || '—'} · {row.gathering_title || '部屋の名前未設定'}
+                        </p>
+                        {row.display_name ? (
+                          <p className="text-xs text-gray-400">表示名（入室時）: {row.display_name}</p>
+                        ) : null}
+                        <p className="text-sm text-gray-200">最初の入室: {joinedStr}</p>
+                        <p className="text-xs text-gray-400">最後の退出: {leftStr}</p>
+                        <p className="text-xs text-emerald-300">滞在合計: {formatDurationJa(row.total_stay_ms)}</p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMusicPreview(null);
+                            setParticipationSongModalSlot(row);
+                          }}
+                          className="mt-2 rounded border border-sky-700/60 bg-sky-900/30 px-2.5 py-1 text-xs font-medium text-sky-200 hover:bg-sky-900/50"
+                        >
+                          選曲リスト（{slotSongCount} 曲）
+                        </button>
+                        {geminiUsageSummary?.enabled ? (
+                          slotUsage && slotUsage.calls > 0 ? (
+                            <>
+                              <p className="mt-1 text-xs text-violet-200">
+                                AI 利用: {slotUsage.calls} 回 · 入力 {formatTokenCount(slotUsage.promptTokens)} · 出力{' '}
+                                {formatTokenCount(slotUsage.outputTokens)} ·{' '}
+                                {formatGeminiCostJpyApprox(slotUsage.costJpyApprox)}
+                              </p>
+                              {slotPersonalUsage && slotPersonalUsage.calls > 0 && slotRoomCommonUsage &&
+                              slotRoomCommonUsage.calls > 0 ? (
+                                <p className="mt-0.5 text-xs text-gray-400">
+                                  内訳: あなたの操作 {slotPersonalUsage.calls} 回 · 部屋共通{' '}
+                                  {slotRoomCommonUsage.calls} 回
+                                </p>
+                              ) : null}
+                              {slotCategoryUsage ? (
+                                <GeminiUsageCategoryBreakdown
+                                  byCategory={slotCategoryUsage}
+                                  title=""
+                                  compact
+                                  className="mt-1"
+                                />
+                              ) : null}
+                            </>
+                          ) : (
+                            <p className="mt-1 text-xs text-gray-600">AI 利用: 記録なし</p>
+                          )
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+                {participationTotalPages > 1 ? (
+                  <nav
+                    className="mt-3 flex flex-wrap items-center justify-center gap-1 border-t border-gray-700/50 pt-2 text-xs"
+                    aria-label="参加履歴のページ送り"
+                  >
+                    <button
+                      type="button"
+                      disabled={Math.min(participationPage, participationTotalPages) <= 1}
+                      onClick={() => setParticipationPage((p) => Math.max(1, p - 1))}
+                      className="rounded border border-gray-600 px-2 py-1 text-gray-300 hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      ←
+                    </button>
+                    {participationPaginationSlots.map((slot, si) =>
+                      slot === 'ellipsis' ? (
+                        <span key={`participation-page-ellipsis-${si}`} className="px-1 text-gray-500">
+                          …
+                        </span>
+                      ) : (
+                        <button
+                          key={slot}
+                          type="button"
+                          onClick={() => setParticipationPage(slot)}
+                          className={`min-w-[1.75rem] rounded border px-1.5 py-1 ${
+                            Math.min(participationPage, participationTotalPages) === slot
+                              ? 'border-violet-600/70 bg-violet-900/40 text-violet-100'
+                              : 'border-gray-600 text-gray-300 hover:bg-gray-700'
+                          }`}
+                        >
+                          {slot}
+                        </button>
+                      ),
+                    )}
+                    <button
+                      type="button"
+                      disabled={Math.min(participationPage, participationTotalPages) >= participationTotalPages}
+                      onClick={() => setParticipationPage((p) => Math.min(participationTotalPages, p + 1))}
+                      className="rounded border border-gray-600 px-2 py-1 text-gray-300 hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      →
+                    </button>
+                  </nav>
+                ) : null}
+              </>
+            )}
+          </div>
+        ) : null}
       </div>
+
+      {participationSongModalSlot ? (
+        <ParticipationSongHistoryModal
+          slot={participationSongModalSlot}
+          songs={participationModalSongs}
+          loading={songHistoryLoading}
+          musicPreview={musicPreview}
+          onPlayPreview={openSongHistoryPreview}
+          onPickSong={pickSongFromMyList}
+          onAddToMyList={addSongHistoryToMyList}
+          onAddToMyListFromPreview={(payload) => void addToMyListFromPreview(payload, 'song_history')}
+          myListAddBusy={myListAddBusy}
+          onClose={() => {
+            setParticipationSongModalSlot(null);
+            setMusicPreview(null);
+          }}
+        />
+      ) : null}
 
       {myListArtistProfileOpen && (
         <div

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { createClient } from '@/lib/supabase/server';
 import { fetchOEmbed } from '@/lib/youtube-oembed';
 import { generateSongQuizFromCommentary } from '@/lib/song-quiz-generate';
 import {
@@ -62,9 +63,19 @@ export async function POST(request: Request) {
       });
     }
 
+    let selectorUserId: string | null = null;
+    const supabase = await createClient();
+    if (supabase) {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      selectorUserId = user?.id ?? null;
+    }
+
     const quiz = await generateSongQuizFromCommentary(commentaryContext, {
       roomId: roomId || null,
       videoId,
+      userId: selectorUserId,
     });
     if (quiz) {
       void insertSongQuizLog({

@@ -179,7 +179,7 @@ export async function POST(request: Request): Promise<NextResponse<OkDisabled | 
       commentarySnippet: commentarySnippet || null,
       seedPublishedAtIso: snippet?.publishedAt ?? null,
       excludeSongLabels,
-      usageMeta: { roomId: roomId || null, videoId },
+      usageMeta: { roomId: roomId || null, videoId, userId: uid },
     });
 
     if (!generated || generated.length === 0) {

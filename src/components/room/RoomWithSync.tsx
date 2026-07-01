@@ -7,6 +7,7 @@ import { useRoomAblyPresence } from '@/hooks/useRoomAblyPresence';
 import type { RealtimeChannel } from 'ably';
 import Chat from '@/components/chat/Chat';
 import ChatInput, { type ChatInputHandle } from '@/components/chat/ChatInput';
+import { AiUsageBillingNotice } from '@/components/room/AiUsageBillingNotice';
 import YouTubePlayer, {
   type YouTubePlayerHandle,
   YT_PLAYER_STATE_BUFFERING,
@@ -7525,6 +7526,7 @@ export default function RoomWithSync({
       </div>
 
       <section className="mt-2 shrink-0 space-y-2">
+        <AiUsageBillingNotice isGuest={isGuest} />
         {chatInputNode}
       </section>
 

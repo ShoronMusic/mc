@@ -308,13 +308,15 @@ export async function POST(request: Request) {
     }
 
     let userTasteSummary: string | null = null;
-    if (forceReply) {
-      const supaAuth = await createClient();
-      if (supaAuth) {
-        const {
-          data: { user },
-        } = await supaAuth.auth.getUser();
-        if (user?.id) {
+    let requestUserId: string | null = null;
+    const supaAuth = await createClient();
+    if (supaAuth) {
+      const {
+        data: { user },
+      } = await supaAuth.auth.getUser();
+      if (user?.id) {
+        requestUserId = user.id;
+        if (forceReply) {
           userTasteSummary = await fetchUserTasteContextForChat(supaAuth, user.id);
         }
       }
@@ -327,6 +329,8 @@ export async function POST(request: Request) {
       {
         roomId: roomId || undefined,
         videoId: videoId || undefined,
+        userId: requestUserId ?? undefined,
+        isGuestTrigger: isGuest && !requestUserId,
       },
       { forceReply, userTasteSummary },
     );

@@ -77,6 +77,7 @@ const MIN_CONTEXT_CHARS = 60;
 export type SongQuizGenerateMeta = {
   roomId?: string | null;
   videoId?: string | null;
+  userId?: string | null;
 };
 
 /**
@@ -150,6 +151,7 @@ ${ctx}`;
   await persistGeminiUsageLog('song_quiz', result.response.usageMetadata, {
     roomId: meta?.roomId?.trim() || null,
     videoId: meta?.videoId?.trim() || null,
+    userId: meta?.userId?.trim() || null,
   });
 
   const text = extractTextFromGenerateContentResponse(result.response, modelId).trim();

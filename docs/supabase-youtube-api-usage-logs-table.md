@@ -47,3 +47,13 @@ alter table public.youtube_api_usage_logs enable row level security;
 - `ok`: 呼び出し成功可否
 - `result_count`: 返却件数（検索結果件数など）
 
+## 管理画面での集計
+
+`youtube_api_usage_logs` は次の lib/API から **room_id × 期間** で集計される（クォータ単位→¥ 試算は `src/lib/infra-cost-estimates.ts`）:
+
+- 12h スロット: `room-daily-slot-aggregate.ts` · `/api/admin/daily-slot-history`
+- 部屋原価: `room-cost-aggregate.ts` · `/api/admin/room-cost-summary`
+- ユーザー別（主催部屋）: `admin-user-billing-aggregate.ts` · `/api/admin/user-billing-usage`（`room_gatherings.created_by` × 時刻でオーナー帰属）
+
+詳細: `docs/room-gathering-history-and-ai-billing-project.md`「インフラ原価試算」
+

@@ -2,6 +2,11 @@
 
 import { useState } from 'react';
 import { getBrowserAppOrigin } from '@/lib/app-origin';
+import {
+  buildEmailConfirmRedirectUrl,
+  isUserEmailConfirmed,
+  requiresEmailConfirmation,
+} from '@/lib/supabase-email-auth';
 import { createClient } from '@/lib/supabase/client';
 
 interface SimpleAuthFormProps {
@@ -14,6 +19,8 @@ interface SimpleAuthFormProps {
   onResetEmailSent?: (email: string) => void;
   /** true のとき初回表示を新規登録にする（ゲスト向け「メールで登録」導線など） */
   startWithRegister?: boolean;
+  /** 確認メールリンク完了後の戻り先（例: `/01`）。未指定時は現在のパス */
+  emailConfirmRedirectPath?: string;
 }
 
 export function SimpleAuthForm({
@@ -23,6 +30,7 @@ export function SimpleAuthForm({
   onAwaitingEmailConfirmation,
   onResetEmailSent,
   startWithRegister = false,
+  emailConfirmRedirectPath,
 }: SimpleAuthFormProps) {
   const [isLogin, setIsLogin] = useState(!startWithRegister);
   const [forgotPassword, setForgotPassword] = useState(false);
@@ -30,11 +38,59 @@ export function SimpleAuthForm({
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [loading, setLoading] = useState(false);
+  const [awaitingEmailConfirmation, setAwaitingEmailConfirmation] = useState(false);
+  const [resendNotice, setResendNotice] = useState<string | null>(null);
 
   const supabase = createClient();
   if (!supabase) return null;
 
   const PASSWORD_MIN_LENGTH = 6;
+
+  const resolveEmailConfirmRedirectPath = (): string => {
+    if (emailConfirmRedirectPath) return emailConfirmRedirectPath;
+    if (typeof window !== 'undefined') return window.location.pathname || '/';
+    return '/';
+  };
+
+  const notifyAwaitingEmailConfirmation = (address: string) => {
+    setAwaitingEmailConfirmation(true);
+    setResendNotice(null);
+    onAwaitingEmailConfirmation?.(address);
+  };
+
+  const handleResendConfirmation = async () => {
+    onError('');
+    setResendNotice(null);
+    if (!email.trim()) {
+      onError('メールアドレスを入力してください。');
+      return;
+    }
+    const origin = getBrowserAppOrigin();
+    if (!origin) {
+      onError('ブラウザで再度お試しください。');
+      return;
+    }
+    setLoading(true);
+    try {
+      const emailRedirectTo = buildEmailConfirmRedirectUrl(resolveEmailConfirmRedirectPath(), origin);
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email: email.trim(),
+        options: { emailRedirectTo },
+      });
+      if (error) throw error;
+      setResendNotice('確認メールを再送信しました。迷惑メールフォルダもご確認ください。');
+    } catch (err: unknown) {
+      let msg =
+        err instanceof Error ? err.message : '確認メールの再送信に失敗しました。しばらくしてから再度お試しください。';
+      if (msg.toLowerCase().includes('rate limit') || msg.includes('429')) {
+        msg = '送信が多すぎます。しばらく時間をおいてから再度お試しください。';
+      }
+      onError(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleForgotSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -97,6 +153,10 @@ export function SimpleAuthForm({
           password,
         });
         if (error) throw error;
+        if (data.user && requiresEmailConfirmation(data.user)) {
+          await supabase.auth.signOut();
+          throw new Error('Email not confirmed');
+        }
         const name =
           data.user?.user_metadata?.display_name ??
           data.user?.user_metadata?.name ??
@@ -104,11 +164,18 @@ export function SimpleAuthForm({
           'ユーザー';
         onSuccess(name);
       } else {
+        const origin = getBrowserAppOrigin();
+        if (!origin) {
+          onError('ブラウザで再度お試しください。');
+          return;
+        }
+        const emailRedirectTo = buildEmailConfirmRedirectUrl(resolveEmailConfirmRedirectPath(), origin);
         const { data, error } = await supabase.auth.signUp({
           email: email.trim(),
           password,
           options: {
             data: { display_name: displayName.trim() || email.split('@')[0] },
+            emailRedirectTo,
           },
         });
         if (error) throw error;
@@ -117,10 +184,13 @@ export function SimpleAuthForm({
           data.user?.user_metadata?.name ??
           data.user?.email?.split('@')[0] ??
           'ユーザー';
-        if (data.session) {
+        if (data.session && data.user && isUserEmailConfirmed(data.user)) {
           onSuccess(name);
+        } else if (data.session && data.user) {
+          await supabase.auth.signOut();
+          notifyAwaitingEmailConfirmation(email.trim());
         } else if (data.user && onAwaitingEmailConfirmation) {
-          onAwaitingEmailConfirmation(email.trim());
+          notifyAwaitingEmailConfirmation(email.trim());
         } else if (data.user) {
           onError(
             '登録は完了しましたが、まだログインできません。Supabase でメール確認が有効な場合、届いたメールのリンクを開いてからログインしてください。'
@@ -162,6 +232,11 @@ export function SimpleAuthForm({
       {forgotPassword && (
         <p className="text-sm text-gray-400">
           登録したメールアドレスに、パスワード再設定用のリンクを送ります（届かない場合は迷惑メールフォルダもご確認ください）。
+        </p>
+      )}
+      {!isLogin && !forgotPassword && (
+        <p className="text-xs leading-relaxed text-gray-500">
+          登録後、入力したメールアドレス宛に確認メールを送ります。リンクを開いて確認が完了してからログインしてください。
         </p>
       )}
       {!isLogin && !forgotPassword && (
@@ -251,6 +326,24 @@ export function SimpleAuthForm({
           ログイン画面に戻る
         </button>
       )}
+      {awaitingEmailConfirmation && (
+        <div className="rounded-lg border border-emerald-800/60 bg-emerald-950/40 px-3 py-2 text-sm text-emerald-200">
+          <p>確認メールを送信しました。リンクを開いたあと「すでに登録済みの方はログイン」からログインしてください。</p>
+          <button
+            type="button"
+            disabled={loading}
+            onClick={() => void handleResendConfirmation()}
+            className="mt-2 text-sm text-emerald-300 underline underline-offset-2 hover:text-emerald-200 disabled:opacity-50"
+          >
+            確認メールを再送信
+          </button>
+          {resendNotice && (
+            <p className="mt-2 text-xs text-emerald-300/90" role="status">
+              {resendNotice}
+            </p>
+          )}
+        </div>
+      )}
       {!forgotPassword && (
         <>
           <div className="border-t border-gray-600 pt-3" role="separator" />
@@ -258,6 +351,8 @@ export function SimpleAuthForm({
             type="button"
             onClick={() => {
               onError('');
+              setAwaitingEmailConfirmation(false);
+              setResendNotice(null);
               setIsLogin((v) => !v);
             }}
             className="text-center text-sm text-blue-400 underline underline-offset-2 hover:text-blue-300"

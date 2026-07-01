@@ -1491,7 +1491,8 @@ export function getArtistAndSong(
       looksLikeArtistName(right) &&
       looksLikeSongTitle(left) &&
       rightLooksLikeTheBandName &&
-      !/^The\s+/i.test(left.trim());
+      !/^The\s+/i.test(left.trim()) &&
+      !leftLooksLikeStrongArtistCandidate;
 
     /**
      * 「L.A. GUNS - Magdalaine」のように左が頭字語略記＋バンド名で、右が1語の曲名のとき、

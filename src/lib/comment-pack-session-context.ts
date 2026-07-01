@@ -78,7 +78,7 @@ export type CommentPackSessionBridgeParams = {
 export async function generateCommentPackSessionBridge(
   model: GenerativeModel,
   params: CommentPackSessionBridgeParams,
-  usageMeta: { videoId: string; roomId?: string | null },
+  usageMeta: { videoId: string; roomId?: string | null; userId?: string | null; isGuestTrigger?: boolean },
 ): Promise<string | null> {
   const { sessionBlock, artistLabel, songLabel, fixedCommentary } = params;
   const fixed = fixedCommentary.trim();
@@ -115,6 +115,8 @@ ${fixed.slice(0, 1200)}
     await persistGeminiUsageLog('comment_pack_session_bridge', result.response.usageMetadata, {
       videoId: usageMeta.videoId,
       roomId: usageMeta.roomId ?? null,
+      userId: usageMeta.userId ?? null,
+      isGuestTrigger: usageMeta.isGuestTrigger,
     });
     const text = extractTextFromGenerateContentResponse(result.response, bridgeModelId);
     if (!text) return null;

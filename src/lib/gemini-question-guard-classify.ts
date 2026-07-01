@@ -9,7 +9,7 @@ import {
 import { extractTextFromGenerateContentResponse } from '@/lib/gemini-gemma-host';
 import { getGeminiModel, logGeminiUsage } from '@/lib/gemini';
 import { resolveGenerationModelId } from '@/lib/gemini-model-routing';
-import { persistGeminiUsageLog } from '@/lib/gemini-usage-log';
+import { persistGeminiUsageLog, buildGeminiUsagePersistMeta } from '@/lib/gemini-usage-log';
 
 export type RecentGuardMessage = {
   displayName?: string;
@@ -46,7 +46,7 @@ export function parseQuestionGuardModelJson(raw: string): boolean | null {
 export async function classifyMusicRelatedAiQuestionGemini(
   question: string,
   recentMessages: RecentGuardMessage[],
-  meta?: { roomId?: string | null }
+  meta?: { roomId?: string | null; userId?: string | null; isGuest?: boolean },
 ): Promise<boolean | null> {
   if (process.env.AI_QUESTION_GUARD_GEMINI === '0') {
     return null;
@@ -68,10 +68,15 @@ export async function classifyMusicRelatedAiQuestionGemini(
       },
     });
     logGeminiUsage('question_guard_classify', result.response);
-    await persistGeminiUsageLog('question_guard_classify', result.response.usageMetadata, {
-      roomId: meta?.roomId ?? null,
-      videoId: null,
-    });
+    await persistGeminiUsageLog(
+      'question_guard_classify',
+      result.response.usageMetadata,
+      buildGeminiUsagePersistMeta({
+        roomId: meta?.roomId,
+        userId: meta?.userId,
+        isGuest: meta?.isGuest,
+      }),
+    );
     const text = extractTextFromGenerateContentResponse(result.response, guardModelId);
     const parsed = parseQuestionGuardModelJson(text);
     return parsed;

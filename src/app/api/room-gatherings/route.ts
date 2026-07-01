@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { clearRoomLivePresenceWatch } from '@/lib/empty-live-gathering-cron';
+import { persistRoomGatheringSnapshots } from '@/lib/room-gathering-snapshot';
 import { ROOM_DISPLAY_TITLE_MAX_CHARS } from '@/lib/room-lobby-message';
 
 export const dynamic = 'force-dynamic';
@@ -243,6 +244,12 @@ export async function POST(request: Request) {
     const adminWatchEnd = createAdminClient();
     if (adminWatchEnd) {
       await clearRoomLivePresenceWatch(adminWatchEnd, roomId);
+      const gatheringIds = (updated ?? [])
+        .map((row) => String((row as { id?: string }).id ?? '').trim())
+        .filter(Boolean);
+      if (gatheringIds.length > 0) {
+        await persistRoomGatheringSnapshots(adminWatchEnd, gatheringIds, { endReason: 'manual_end' });
+      }
     }
 
     return NextResponse.json({ ok: true, endedCount: updated.length });
