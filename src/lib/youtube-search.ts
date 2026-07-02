@@ -6,7 +6,15 @@ import {
   getArtistAndSong,
 } from '@/lib/format-song-display';
 import type { UserSongPickExclude } from '@/lib/character-song-pick-exclude';
-import { matchesExcludedUserSongPick } from '@/lib/character-song-pick-exclude';
+import {
+  matchesExcludedAiSongPick,
+  matchesExcludedArtist,
+  matchesExcludedUserSongPick,
+} from '@/lib/character-song-pick-exclude';
+import {
+  isAiOperationsHaltedSync,
+  touchAiMonthlyBudgetRefresh,
+} from '@/lib/ai-monthly-budget';
 import { persistYouTubeApiUsageLog } from '@/lib/youtube-api-usage-log';
 
 export interface YouTubeSearchResult {
@@ -31,6 +39,8 @@ function getApiKey(): string | null {
 
 /** API キーが設定されているか（サーバー専用） */
 export function isYouTubeConfigured(): boolean {
+  touchAiMonthlyBudgetRefresh();
+  if (isAiOperationsHaltedSync()) return false;
   return getApiKey() != null;
 }
 
@@ -39,6 +49,10 @@ export type SearchYouTubeOptions = {
   excludeVideoIds?: readonly string[];
   /** 参加者が直近選曲した曲（別 videoId でも同一曲なら除外） */
   excludeUserSongPicks?: readonly UserSongPickExclude[];
+  /** AI 自身が直近選曲した曲（ライブ版等の別動画も除外） */
+  excludeAiSongPicks?: readonly UserSongPickExclude[];
+  /** AI 自身が直近かけたアーティスト */
+  excludeArtists?: readonly string[];
 };
 
 export async function searchYouTube(
@@ -47,6 +61,11 @@ export async function searchYouTube(
   meta?: YouTubeApiLogMeta,
   options?: SearchYouTubeOptions
 ): Promise<YouTubeSearchResult | null> {
+  touchAiMonthlyBudgetRefresh();
+  if (isAiOperationsHaltedSync()) {
+    console.log('[youtube-search] skipped: monthly variable budget halted');
+    return null;
+  }
   const key = getApiKey();
   if (!key) {
     console.log('[youtube-search] YOUTUBE_API_KEY not set');
@@ -134,6 +153,19 @@ export async function searchYouTube(
         if (artist || song) {
           if (matchesExcludedUserSongPick(artist, song, options.excludeUserSongPicks)) continue;
         }
+      }
+      if (options?.excludeAiSongPicks && options.excludeAiSongPicks.length > 0) {
+        const parsed = getArtistAndSong(sn.title ?? '', sn.channelTitle ?? null);
+        const artist = (parsed.artist ?? '').trim();
+        const song = (parsed.song ?? '').trim();
+        if (artist || song) {
+          if (matchesExcludedAiSongPick(artist, song, options.excludeAiSongPicks)) continue;
+        }
+      }
+      if (options?.excludeArtists && options.excludeArtists.length > 0) {
+        const parsed = getArtistAndSong(sn.title ?? '', sn.channelTitle ?? null);
+        const artist = (parsed.artist ?? '').trim();
+        if (artist && matchesExcludedArtist(artist, options.excludeArtists)) continue;
       }
       const thumbs = sn.thumbnails;
       const thumbUrl =

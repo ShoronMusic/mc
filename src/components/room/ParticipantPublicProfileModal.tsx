@@ -23,6 +23,7 @@ type LoadState =
       listeningNote: string;
       hasRow: boolean;
       isSelf: boolean;
+      coAttendanceCount: number | null;
     };
 
 export default function ParticipantPublicProfileModal({
@@ -63,6 +64,9 @@ export default function ParticipantPublicProfileModal({
         const artists = Array.isArray(json?.favoriteArtists)
           ? (json!.favoriteArtists as unknown[]).filter((x): x is string => typeof x === 'string')
           : [];
+        const coRaw = json?.coAttendanceCount;
+        const coAttendanceCount =
+          typeof coRaw === 'number' && Number.isFinite(coRaw) && coRaw >= 0 ? coRaw : null;
         setState({
           status: 'ok',
           visibleInRooms: Boolean(json?.visibleInRooms),
@@ -71,6 +75,7 @@ export default function ParticipantPublicProfileModal({
           listeningNote: typeof json?.listeningNote === 'string' ? json.listeningNote : '',
           hasRow: Boolean(json?.hasRow),
           isSelf: Boolean(json?.isSelf),
+          coAttendanceCount,
         });
       })
       .catch(() => {
@@ -165,6 +170,13 @@ export default function ParticipantPublicProfileModal({
                 !state.listeningNote.trim() && (
                   <p className="text-gray-400">まだ未入力です。マイページの「他ユーザー向けプロフィール」から登録できます。</p>
                 )}
+              {!state.isSelf && state.coAttendanceCount != null ? (
+                <p className="mt-4 border-t border-gray-700 pt-3 text-sm text-gray-300">
+                  <span className="text-gray-400">{displayName}さんとの同席回数</span>
+                  <span className="mx-1.5 text-gray-500">×</span>
+                  <span className="font-semibold tabular-nums text-gray-100">{state.coAttendanceCount}</span>
+                </p>
+              ) : null}
             </>
           )}
         </div>

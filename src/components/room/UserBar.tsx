@@ -108,9 +108,10 @@ function ParticipantProfileIconButton({
   onAfterClick?: () => void;
 }) {
   const uid = participant.authUserId?.trim();
-  if (!uid || participant.publicProfileVisible !== true || viewerIsGuest || !onParticipantPublicProfileClick) {
+  if (!uid || viewerIsGuest || !onParticipantPublicProfileClick) {
     return null;
   }
+  const hasVisibleProfile = participant.publicProfileVisible === true;
   return (
     <button
       type="button"
@@ -120,11 +121,23 @@ function ParticipantProfileIconButton({
         onParticipantPublicProfileClick({ authUserId: uid, displayName: participant.displayName });
         onAfterClick?.();
       }}
-      className="inline-flex shrink-0 items-center justify-center rounded border border-emerald-800/60 bg-emerald-950/35 p-0.5 text-emerald-200/90 hover:bg-emerald-900/45"
-      title={`${participant.displayName}さんのプロフィール`}
+      className={
+        hasVisibleProfile
+          ? 'inline-flex shrink-0 items-center justify-center rounded border border-emerald-800/60 bg-emerald-950/35 p-0.5 text-emerald-200/90 hover:bg-emerald-900/45'
+          : 'inline-flex shrink-0 items-center justify-center rounded border border-gray-600/70 bg-gray-800/50 p-0.5 text-gray-400 hover:bg-gray-700/60 hover:text-gray-300'
+      }
+      title={
+        hasVisibleProfile
+          ? `${participant.displayName}さんのプロフィール`
+          : `${participant.displayName}さん（プロフィール未公開）`
+      }
       aria-label={`${participant.displayName}さんのプロフィール`}
     >
-      <IdentificationIcon className="h-3.5 w-3.5" aria-hidden />
+      {hasVisibleProfile ? (
+        <IdentificationIcon className="h-3.5 w-3.5" aria-hidden />
+      ) : (
+        <UserCircleIcon className="h-3.5 w-3.5" aria-hidden />
+      )}
     </button>
   );
 }

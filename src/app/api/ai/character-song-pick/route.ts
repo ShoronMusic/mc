@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { checkCharacterSongPickRateLimit } from '@/lib/character-song-pick-rate-limit';
 import {
   buildCharacterSongPickExcludes,
+  matchesExcludedAiSongArtistTitle,
   matchesExcludedUserSongArtistTitle,
 } from '@/lib/character-song-pick-exclude';
 import { getChatAiClientIp } from '@/lib/chat-ai-rate-limit';
@@ -35,6 +36,8 @@ export async function POST(request: Request) {
     const aiCharacterDisplayName =
       typeof body?.aiCharacterDisplayName === 'string' ? body.aiCharacterDisplayName.trim() : '';
     const isGuest = body?.isGuest === true;
+    const historySinceIso =
+      typeof body?.historySinceIso === 'string' ? body.historySinceIso.trim() : '';
 
     const rl = checkCharacterSongPickRateLimit(roomId);
     if (!rl.ok) {
@@ -55,12 +58,16 @@ export async function POST(request: Request) {
       excludeVideoIds: videoId ? [videoId] : [] as string[],
       recentUserPicks: [] as { artist: string; song: string }[],
       recentUserSongLabels: [] as string[],
+      recentAiPicks: [] as { artist: string; song: string }[],
+      recentAiArtists: [] as string[],
+      recentAiSongLabels: [] as string[],
     };
     if (roomId && supabase) {
       excludeBundle = await buildCharacterSongPickExcludes(supabase, roomId, {
         aiCharacterDisplayName,
         nowPlayingVideoId: videoId || undefined,
         maxUserPicks: USER_PICK_EXCLUDE_MAX,
+        aiHistorySinceIso: historySinceIso || undefined,
       });
     }
 
@@ -76,9 +83,14 @@ export async function POST(request: Request) {
     const pick = await generateCharacterSongPick(messages, currentSong, currentSongStyle, {
       roomId: roomId || undefined,
       videoId: videoId || undefined,
-    }, excludeBundle.recentUserSongLabels.length > 0
-      ? { recentUserSongLabels: excludeBundle.recentUserSongLabels }
-      : undefined);
+    }, {
+      recentUserSongLabels:
+        excludeBundle.recentUserSongLabels.length > 0 ? excludeBundle.recentUserSongLabels : undefined,
+      recentAiSongLabels:
+        excludeBundle.recentAiSongLabels.length > 0 ? excludeBundle.recentAiSongLabels : undefined,
+      recentAiArtists:
+        excludeBundle.recentAiArtists.length > 0 ? excludeBundle.recentAiArtists : undefined,
+    });
     if (!pick) {
       console.log('[ai/character-song-pick] no_pick', {
         roomId: roomId || '',
@@ -122,12 +134,15 @@ export async function POST(request: Request) {
           apiSource: 'api/ai/character-song-pick',
           excludeVideoIds: excludeBundle.excludeVideoIds,
           excludeUserSongPicks: excludeBundle.recentUserPicks,
+          excludeAiSongPicks: excludeBundle.recentAiPicks,
+          excludeArtists: excludeBundle.recentAiArtists,
         });
         if (
           resolved.ok &&
-          matchesExcludedUserSongArtistTitle(resolved.artistTitle, excludeBundle.recentUserPicks)
+          (matchesExcludedUserSongArtistTitle(resolved.artistTitle, excludeBundle.recentUserPicks) ||
+            matchesExcludedAiSongArtistTitle(resolved.artistTitle, excludeBundle.recentAiPicks))
         ) {
-          console.log('[ai/character-song-pick] youtube_hit_matched_excluded_user_song', {
+          console.log('[ai/character-song-pick] youtube_hit_matched_excluded_song', {
             roomId: roomId || '',
             resolvedArtistTitle: resolved.artistTitle,
             resolvedVideoId: resolved.videoId,
@@ -157,6 +172,8 @@ export async function POST(request: Request) {
             excludedVideoIds:
               excludeBundle.excludeVideoIds.length > 0 ? excludeBundle.excludeVideoIds : undefined,
             excludedUserSongPickCount: excludeBundle.recentUserPicks.length || undefined,
+            excludedAiSongPickCount: excludeBundle.recentAiPicks.length || undefined,
+            excludedAiArtistCount: excludeBundle.recentAiArtists.length || undefined,
           });
         } else {
           youtube = { ok: false, reason: 'no_hit' };

@@ -41,15 +41,22 @@ export async function POST(request: Request) {
           .map((x: string) => x.trim())
       : [];
     let excludeUserSongPicks: { artist: string; song: string }[] = [];
+    let excludeAiSongPicks: { artist: string; song: string }[] = [];
+    let excludeArtists: string[] = [];
+    const historySinceIso =
+      typeof body?.historySinceIso === 'string' ? body.historySinceIso.trim() : '';
     if (pasteIntent.startsWith('ai_character') && roomId) {
       const supabase = await createClient();
       if (supabase) {
         const bundle = await buildCharacterSongPickExcludes(supabase, roomId, {
           aiCharacterDisplayName,
           maxUserPicks: 120,
+          aiHistorySinceIso: historySinceIso || undefined,
         });
         excludeVideoIds = [...new Set([...excludeVideoIds, ...bundle.excludeVideoIds])];
         excludeUserSongPicks = bundle.recentUserPicks;
+        excludeAiSongPicks = bundle.recentAiPicks;
+        excludeArtists = bundle.recentAiArtists;
       }
     }
     if (!query) {
@@ -83,6 +90,8 @@ export async function POST(request: Request) {
       apiSource: 'api/ai/paste-by-query',
       excludeVideoIds,
       excludeUserSongPicks,
+      excludeAiSongPicks,
+      excludeArtists,
     });
     if (!resolved.ok) {
       console.log('[paste-by-query] no hit for query:', query);

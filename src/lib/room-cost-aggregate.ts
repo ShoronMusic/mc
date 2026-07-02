@@ -137,10 +137,21 @@ function roomHasActivity(b: RoomBucket): boolean {
 
 export async function aggregateRoomCostSummaries(
   admin: SupabaseClient,
-  options: { lookbackDays?: number; roomId?: string | null; ownerUserId?: string | null; nowMs?: number } = {},
+  options: {
+    lookbackDays?: number;
+    /** 指定時は lookbackDays より優先（月次予算など） */
+    fromIso?: string | null;
+    roomId?: string | null;
+    ownerUserId?: string | null;
+    nowMs?: number;
+  } = {},
 ): Promise<{ rooms: RoomCostSummaryRow[]; owners: OwnerCostSummaryRow[] }> {
+  const nowMs = options.nowMs ?? Date.now();
   const lookbackDays = Math.min(90, Math.max(1, options.lookbackDays ?? 30));
-  const fromIso = new Date((options.nowMs ?? Date.now()) - lookbackDays * 86400000).toISOString();
+  const fromIsoExplicit = options.fromIso?.trim() || '';
+  const fromIso = fromIsoExplicit
+    ? fromIsoExplicit
+    : new Date(nowMs - lookbackDays * 86400000).toISOString();
   const roomFilter = options.roomId?.trim() || '';
   const ownerFilter = options.ownerUserId?.trim() || '';
 

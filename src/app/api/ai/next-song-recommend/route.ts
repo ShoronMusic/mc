@@ -23,6 +23,7 @@ import {
 import { upsertSongAndVideo } from '@/lib/song-entities';
 import { getChatAiClientIp } from '@/lib/chat-ai-rate-limit';
 import { guardAiTrialSongSelection } from '@/lib/user-ai-trial-server';
+import { isDeveloperAiUnlimitedUserId } from '@/lib/ai-developer-unlimited-user-ids';
 
 export const dynamic = 'force-dynamic';
 
@@ -78,7 +79,7 @@ export async function POST(request: Request): Promise<NextResponse<OkDisabled | 
     }
 
     const rl = checkNextSongRecommendRateLimit(uid!);
-    if (!rl.ok) {
+    if (!rl.ok && !isDeveloperAiUnlimitedUserId(uid)) {
       return NextResponse.json({ enabled: false, reason: 'rate_limited' }, { status: 200 });
     }
 

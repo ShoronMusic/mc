@@ -29,6 +29,15 @@ const exhausted: AiTrialStatus = {
   enforcementEnabled: true,
 };
 
+const developerUnlimited: AiTrialStatus = {
+  phase: 'developer_unlimited',
+  songsGranted: 10,
+  songsRemaining: 10,
+  atQuestionsGranted: 5,
+  atQuestionsRemaining: 5,
+  enforcementEnabled: true,
+};
+
 assert.equal(
   resolveAiSelectionMode({
     isGuest: false,
@@ -78,6 +87,16 @@ assert.equal(
   }),
   'none',
   'exhausted: no AI',
+);
+
+assert.equal(
+  resolveAiSelectionMode({
+    isGuest: false,
+    participatesInSelection: true,
+    aiTrialStatus: developerUnlimited,
+  }),
+  'full',
+  'developer unlimited: full AI',
 );
 
 assert.equal(

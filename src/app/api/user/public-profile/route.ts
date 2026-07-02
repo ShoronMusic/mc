@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
+import { countCoAttendanceGatherings } from '@/lib/user-co-attendance-count';
 import { normalizeUserPublicProfileBody } from '@/lib/user-public-profile';
 
 export const dynamic = 'force-dynamic';
@@ -58,6 +60,19 @@ export async function GET(request: Request) {
       ? (data!.favorite_artists as unknown[]).filter((x): x is string => typeof x === 'string')
       : [];
 
+    const isSelf = targetUserId === user.id;
+    let coAttendanceCount: number | null = null;
+    if (!isSelf) {
+      const admin = createAdminClient();
+      if (admin) {
+        try {
+          coAttendanceCount = await countCoAttendanceGatherings(admin, user.id, targetUserId);
+        } catch (e) {
+          console.error('[api/user/public-profile GET] co-attendance', e);
+        }
+      }
+    }
+
     return NextResponse.json({
       visibleInRooms: Boolean(data?.visible_in_rooms),
       tagline: typeof data?.tagline === 'string' ? data.tagline : '',
@@ -65,7 +80,9 @@ export async function GET(request: Request) {
       listeningNote: typeof data?.listening_note === 'string' ? data.listening_note : '',
       /** 他人照会時、行が無い＝非公開または未登録 */
       hasRow: data != null,
-      isSelf: targetUserId === user.id,
+      isSelf,
+      /** 本人同士の同席「会」数（本人照会時は null） */
+      coAttendanceCount,
     });
   } catch (e) {
     console.error('[api/user/public-profile GET]', e);

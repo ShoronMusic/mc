@@ -9,6 +9,8 @@ export type ResolveYoutubeQueryForPasteInput = {
   apiSource: string;
   excludeVideoIds?: string[];
   excludeUserSongPicks?: UserSongPickExclude[];
+  excludeAiSongPicks?: UserSongPickExclude[];
+  excludeArtists?: string[];
 };
 
 export type ResolveYoutubeQueryForPasteOk = {
@@ -39,10 +41,15 @@ export async function resolveYoutubeQueryForPaste(
       roomId: input.roomId,
       source: input.apiSource,
     },
-    input.excludeVideoIds?.length || input.excludeUserSongPicks?.length
+    input.excludeVideoIds?.length ||
+      input.excludeUserSongPicks?.length ||
+      input.excludeAiSongPicks?.length ||
+      input.excludeArtists?.length
       ? {
           excludeVideoIds: input.excludeVideoIds,
           excludeUserSongPicks: input.excludeUserSongPicks,
+          excludeAiSongPicks: input.excludeAiSongPicks,
+          excludeArtists: input.excludeArtists,
         }
       : undefined,
   );

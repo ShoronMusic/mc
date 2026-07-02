@@ -29,6 +29,10 @@ export function resolveAiSelectionMode(params: {
     return 'none';
   }
 
+  if (status.phase === 'developer_unlimited') {
+    return 'full';
+  }
+
   if (
     !status.enforcementEnabled ||
     status.phase === 'preview' ||
@@ -49,5 +53,6 @@ export function shouldShowAiDualSelectionButtons(params: {
   const { isGuest, participatesInSelection, aiTrialStatus } = params;
   if (isGuest || !participatesInSelection || !aiTrialStatus) return false;
   if (!aiTrialStatus.enforcementEnabled) return false;
+  if (aiTrialStatus.phase === 'developer_unlimited') return false;
   return aiTrialStatus.phase === 'trial_active' && aiTrialStatus.songsRemaining > 0;
 }

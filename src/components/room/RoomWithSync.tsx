@@ -28,6 +28,7 @@ import { useThemePlaylistRoomSubmitMission } from '@/hooks/useThemePlaylistRoomS
 import { useAiTrialStatus } from '@/hooks/useAiTrialStatus';
 import { isGuestSoloSession, resolveGuestSoloPlaybackHistorySinceIso } from '@/lib/guest-solo-playback-history-since';
 import { scheduleGuestFirstSongInvite } from '@/lib/guest-first-song-invite';
+import { MUSICAICHAT_ROOM_TAGLINE } from '@/lib/musicaichat-room-tagline';
 import { GUEST_AI_AT_QUESTION_UNAVAILABLE } from '@/lib/ai-usage-disclosure-copy';
 import { resolveAiSelectionMode, parseAiSelectionMode, type AiSelectionMode } from '@/lib/ai-selection-mode';
 import { AI_TRIAL_STATUS_UPDATED_EVENT } from '@/lib/ai-trial-status';
@@ -210,6 +211,7 @@ import { rememberLastRoomEnter } from '@/lib/room-enter-resume';
 import { listenShareTargetDelivery, SHARE_SET_CHAT_TEXT_EVENT } from '@/lib/share-target-delivery';
 import { useSupabaseAuthUserId } from '@/hooks/useSupabaseAuthUserId';
 import { isAiQuestionGuardKickExemptUserId } from '@/lib/ai-question-guard-exempt-user-ids';
+import { isAiDeveloperUnlimitedTrialStatus } from '@/lib/ai-trial-status';
 import { lineFromJoinGreetingApi } from '@/lib/join-greeting-logic';
 import {
   buildCommentaryUiLabel,
@@ -1568,14 +1570,14 @@ export default function RoomWithSync({
         payload.action === 'ban' &&
         payload.targetClientId === myClientId &&
         roomId &&
-        !isAiQuestionGuardKickExemptUserId(authUserId)
+        !isAiQuestionGuardKickExemptUserId(authUserId, aiTrialStatus)
       ) {
         setKicked(roomId, myClientId);
         setKickedSitewide();
         onLeave?.();
       }
     },
-    [myClientId, onLeave, roomId, authUserId],
+    [myClientId, onLeave, roomId, authUserId, aiTrialStatus],
   );
 
   const { publish, channel } = useChannel(channelName, (message) => {
@@ -5175,6 +5177,7 @@ export default function RoomWithSync({
           roomTitle: roomDisplayTitleCurrent || roomTitle || undefined,
           aiCharacterDisplayName: ownerAiCharacterNameRef.current || AI_CHARACTER_DEFAULT_NAME,
           isGuest,
+          historySinceIso: new Date(roomSessionEnteredAtMsRef.current).toISOString(),
         }),
       });
       const pick = r0.ok ? await r0.json().catch(() => null) : null;
@@ -5321,6 +5324,8 @@ export default function RoomWithSync({
           roomId: roomId ?? undefined,
           pasteIntent: 'ai_character_manual_song_pick',
           pickConfirmationText: String(pick.query),
+          aiCharacterDisplayName: ownerAiCharacterNameRef.current || AI_CHARACTER_DEFAULT_NAME,
+          historySinceIso: new Date(roomSessionEnteredAtMsRef.current).toISOString(),
           excludeVideoIds: (() => {
             const v = (videoIdRef.current ?? '').trim();
             return v ? [v] : [];
@@ -5475,6 +5480,7 @@ export default function RoomWithSync({
         roomTitle: roomDisplayTitleCurrent || roomTitle || undefined,
         aiCharacterDisplayName: ownerAiCharacterNameRef.current || AI_CHARACTER_DEFAULT_NAME,
         isGuest: charAutoPickCtxRef.current.isGuest,
+        historySinceIso: new Date(roomSessionEnteredAtMsRef.current).toISOString(),
       }),
     })
       .then(async (r0) => (r0.ok ? r0.json() : null))
@@ -5638,6 +5644,7 @@ export default function RoomWithSync({
             pickConfirmationText:
               typeof pick.confirmationText === 'string' ? pick.confirmationText : undefined,
             aiCharacterDisplayName: ownerAiCharacterNameRef.current || AI_CHARACTER_DEFAULT_NAME,
+            historySinceIso: new Date(roomSessionEnteredAtMsRef.current).toISOString(),
             excludeVideoIds: (() => {
               const v = (videoIdRef.current ?? '').trim();
               return v ? [v] : [];
@@ -6121,29 +6128,31 @@ export default function RoomWithSync({
             messageType: 'user',
           },
         ].slice(-12);
-        const guardRes = await resolveAiQuestionMusicRelated(promptForGuard, recentForGuard, {
-          isGuest,
-          roomId: roomId ?? undefined,
-        });
-        if (guardRes.outcome === 'defer') {
-          addSystemMessage(guardRes.message);
-          touchActivity();
-          return;
-        }
-        if (guardRes.outcome === 'block') {
-          const message = buildAiQuestionGuardSoftDeclineMessage(effectiveDisplayName);
-          const guardPayload: OwnerAiQuestionGuardPayload = {
-            targetClientId: myClientId || 'unknown-client',
-            targetDisplayName: effectiveDisplayName,
-            warningCount: 1,
-            yellowCards: 0,
-            action: 'warn',
-            message,
-          };
-          applyAiQuestionGuardEvent(guardPayload);
-          safePublish(OWNER_AI_QUESTION_GUARD_EVENT, guardPayload);
-          touchActivity();
-          return;
+        if (!isAiDeveloperUnlimitedTrialStatus(aiTrialStatus)) {
+          const guardRes = await resolveAiQuestionMusicRelated(promptForGuard, recentForGuard, {
+            isGuest,
+            roomId: roomId ?? undefined,
+          });
+          if (guardRes.outcome === 'defer') {
+            addSystemMessage(guardRes.message);
+            touchActivity();
+            return;
+          }
+          if (guardRes.outcome === 'block') {
+            const message = buildAiQuestionGuardSoftDeclineMessage(effectiveDisplayName);
+            const guardPayload: OwnerAiQuestionGuardPayload = {
+              targetClientId: myClientId || 'unknown-client',
+              targetDisplayName: effectiveDisplayName,
+              warningCount: 1,
+              yellowCards: 0,
+              action: 'warn',
+              message,
+            };
+            applyAiQuestionGuardEvent(guardPayload);
+            safePublish(OWNER_AI_QUESTION_GUARD_EVENT, guardPayload);
+            touchActivity();
+            return;
+          }
         }
       }
 
@@ -6425,6 +6434,7 @@ export default function RoomWithSync({
             roomTitle: roomDisplayTitleCurrent || roomTitle || undefined,
             aiCharacterDisplayName: ownerAiCharacterNameRef.current || AI_CHARACTER_DEFAULT_NAME,
             isGuest,
+            historySinceIso: new Date(roomSessionEnteredAtMsRef.current).toISOString(),
           }),
         })
           .then(async (r0) => (r0.ok ? r0.json() : null))
@@ -6570,6 +6580,8 @@ export default function RoomWithSync({
                 pasteIntent: 'ai_character_manual_song_pick',
                 pickConfirmationText:
                   typeof pick.confirmationText === 'string' ? pick.confirmationText : undefined,
+                aiCharacterDisplayName: ownerAiCharacterNameRef.current || AI_CHARACTER_DEFAULT_NAME,
+                historySinceIso: new Date(roomSessionEnteredAtMsRef.current).toISOString(),
                 excludeVideoIds: (() => {
                   const v = (videoIdRef.current ?? '').trim();
                   return v ? [v] : [];
@@ -7005,16 +7017,19 @@ export default function RoomWithSync({
             <span>（β）版</span>
           </span>
           <h1
-            className="min-w-0 flex-1 text-xs font-semibold leading-tight text-white sm:truncate sm:text-lg sm:leading-none"
+            className="min-w-0 flex-1 text-xs font-semibold leading-tight text-white sm:text-lg sm:leading-none"
             title={`部屋 ${headerRoomId}${headerRoomSub ? ` - ${headerRoomSub}` : ''}`}
           >
-            <span className="inline-flex min-w-0 items-center gap-1">
+            <span className="inline-flex min-w-0 items-center gap-1 sm:gap-2">
               <span className="inline-flex h-10 w-10 shrink-0 flex-col items-center justify-center rounded border border-sky-500/60 bg-sky-500/10 px-0 py-0 leading-none text-sky-200 sm:w-auto sm:px-1 sm:py-0.5">
                 <span className="text-[8px] font-medium sm:text-[9px]">部屋</span>
                 <span className="text-[11px] font-semibold sm:text-xs">{headerRoomId}</span>
               </span>
               <span className="min-w-0 truncate text-base font-semibold leading-none text-white">
                 {headerRoomSub || ''}
+              </span>
+              <span className="hidden shrink-0 whitespace-nowrap text-xs font-normal text-amber-200/75 md:inline md:text-sm">
+                {MUSICAICHAT_ROOM_TAGLINE}
               </span>
             </span>
           </h1>

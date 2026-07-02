@@ -22,6 +22,7 @@ import ChatSummaryModalBody, {
 import { useThemePlaylistRoomSubmitMission } from '@/hooks/useThemePlaylistRoomSubmitMission';
 import { useAiTrialStatus } from '@/hooks/useAiTrialStatus';
 import { scheduleGuestFirstSongInvite } from '@/lib/guest-first-song-invite';
+import { MUSICAICHAT_ROOM_TAGLINE } from '@/lib/musicaichat-room-tagline';
 import { isGuestSoloSession, resolveGuestSoloPlaybackHistorySinceIso } from '@/lib/guest-solo-playback-history-since';
 import { GUEST_AI_AT_QUESTION_UNAVAILABLE } from '@/lib/ai-usage-disclosure-copy';
 import { resolveAiSelectionMode, type AiSelectionMode } from '@/lib/ai-selection-mode';
@@ -48,6 +49,7 @@ import type { SongQuizPayload } from '@/lib/song-quiz-types';
 import { getSongQuizRevealDelayMs } from '@/lib/song-quiz-result-announcement';
 import { shouldShortCircuitSongRequestForAtPrompt } from '@/lib/ai-question-about-detail-heuristic';
 import { resolveAiQuestionMusicRelated } from '@/lib/client-ai-question-guard-resolve';
+import { isAiDeveloperUnlimitedTrialStatus } from '@/lib/ai-trial-status';
 import { isDevMinimalSongAi } from '@/lib/dev-minimal-song-ai';
 import { formatMusic8ModeratorIntroPrefix } from '@/lib/music8-moderator-chat-prefix';
 import {
@@ -1684,29 +1686,31 @@ export default function RoomWithoutSync({
             messageType: 'user',
           },
         ].slice(-12);
-        const guardRes = await resolveAiQuestionMusicRelated(promptForGuard, recentForGuard, {
-          isGuest,
-          roomId: roomId ?? undefined,
-        });
-        if (guardRes.outcome === 'defer') {
-          addSystemMessage(guardRes.message);
-          touchActivity();
-          return;
-        }
-        if (guardRes.outcome === 'block') {
-          setYellowCards(0);
-          const message = buildAiQuestionGuardSoftDeclineMessage(displayNameProp);
-          addSystemMessage(message, {
-            systemKind: 'ai_question_guard',
-            aiGuardMeta: {
-              targetClientId: 'local-client',
-              warningCount: 1,
-              yellowCards: 0,
-              action: 'warn',
-            },
+        if (!isAiDeveloperUnlimitedTrialStatus(aiTrialStatus)) {
+          const guardRes = await resolveAiQuestionMusicRelated(promptForGuard, recentForGuard, {
+            isGuest,
+            roomId: roomId ?? undefined,
           });
-          touchActivity();
-          return;
+          if (guardRes.outcome === 'defer') {
+            addSystemMessage(guardRes.message);
+            touchActivity();
+            return;
+          }
+          if (guardRes.outcome === 'block') {
+            setYellowCards(0);
+            const message = buildAiQuestionGuardSoftDeclineMessage(displayNameProp);
+            addSystemMessage(message, {
+              systemKind: 'ai_question_guard',
+              aiGuardMeta: {
+                targetClientId: 'local-client',
+                warningCount: 1,
+                yellowCards: 0,
+                action: 'warn',
+              },
+            });
+            touchActivity();
+            return;
+          }
         }
       }
 
@@ -1790,6 +1794,7 @@ export default function RoomWithoutSync({
             roomTitle: roomDisplayTitleCurrent || roomTitle || undefined,
             aiCharacterDisplayName: AI_CHARACTER_DEFAULT_NAME,
             isGuest,
+            historySinceIso: new Date(roomSessionEnteredAtMsRef.current).toISOString(),
           }),
         })
           .then(async (r0) => (r0.ok ? r0.json() : null))
@@ -1874,6 +1879,8 @@ export default function RoomWithoutSync({
                 pasteIntent: 'ai_character_manual_song_pick',
                 pickConfirmationText:
                   typeof pick.confirmationText === 'string' ? pick.confirmationText : undefined,
+                aiCharacterDisplayName: AI_CHARACTER_DEFAULT_NAME,
+                historySinceIso: new Date(roomSessionEnteredAtMsRef.current).toISOString(),
                 excludeVideoIds: (() => {
                   const v = (videoIdRef.current ?? '').trim();
                   return v ? [v] : [];
@@ -2161,16 +2168,19 @@ export default function RoomWithoutSync({
             <span>（β）版</span>
           </span>
           <h1
-            className="min-w-0 flex-1 text-xs font-semibold leading-tight text-white sm:truncate sm:text-lg sm:leading-none"
+            className="min-w-0 flex-1 text-xs font-semibold leading-tight text-white sm:text-lg sm:leading-none"
             title={`部屋 ${headerRoomId}${headerRoomSub ? ` - ${headerRoomSub}` : ''}`}
           >
-            <span className="inline-flex min-w-0 items-center gap-1">
+            <span className="inline-flex min-w-0 items-center gap-1 sm:gap-2">
               <span className="inline-flex h-10 w-10 shrink-0 flex-col items-center justify-center rounded border border-sky-500/60 bg-sky-500/10 px-0 py-0 leading-none text-sky-200 sm:w-auto sm:px-1 sm:py-0.5">
                 <span className="text-[8px] font-medium sm:text-[9px]">部屋</span>
                 <span className="text-[11px] font-semibold sm:text-xs">{headerRoomId}</span>
               </span>
               <span className="min-w-0 truncate text-base font-semibold leading-none text-white">
                 {headerRoomSub || ''}
+              </span>
+              <span className="hidden shrink-0 whitespace-nowrap text-xs font-normal text-amber-200/75 md:inline md:text-sm">
+                {MUSICAICHAT_ROOM_TAGLINE}
               </span>
             </span>
           </h1>

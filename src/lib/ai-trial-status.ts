@@ -11,7 +11,8 @@ export type AiTrialPhase =
   | 'email_unconfirmed'
   | 'preview'
   | 'trial_active'
-  | 'trial_exhausted';
+  | 'trial_exhausted'
+  | 'developer_unlimited';
 
 export type AiTrialStatus = {
   phase: AiTrialPhase;
@@ -22,6 +23,13 @@ export type AiTrialStatus = {
   /** Phase B 以降 true。false の間は UI 表示のみで枠は消費しない */
   enforcementEnabled: boolean;
 };
+
+/** クライアント: env を持たず API 応答だけで開発者無制限か判定 */
+export function isAiDeveloperUnlimitedTrialStatus(
+  status: AiTrialStatus | null | undefined,
+): boolean {
+  return status?.phase === 'developer_unlimited';
+}
 
 /** `AI_TRIAL_ENFORCEMENT_ENABLED=1` のときのみ消費・API ガードを有効化 */
 export function isAiTrialEnforcementEnabled(): boolean {
@@ -51,7 +59,22 @@ export function buildEmailUnconfirmedAiTrialStatus(): AiTrialStatus {
   };
 }
 
+/** 開発者アカウント: お試し枠・@ 枠の消費・API ガードを適用しない */
+export function buildDeveloperUnlimitedAiTrialStatus(): AiTrialStatus {
+  return {
+    phase: 'developer_unlimited',
+    songsGranted: AI_TRIAL_SONGS_GRANTED,
+    songsRemaining: AI_TRIAL_SONGS_GRANTED,
+    atQuestionsGranted: AI_TRIAL_AT_QUESTIONS_GRANTED,
+    atQuestionsRemaining: AI_TRIAL_AT_QUESTIONS_GRANTED,
+    enforcementEnabled: isAiTrialEnforcementEnabled(),
+  };
+}
+
 export function formatAiTrialStatusPrimaryLine(status: AiTrialStatus): string {
+  if (status.phase === 'developer_unlimited') {
+    return '開発者アカウント（AI 制限なし）';
+  }
   if (status.phase === 'email_unconfirmed') {
     return 'メール確認後に AI お試し 10 曲が使えます（今は選曲のみ）';
   }
@@ -65,6 +88,7 @@ export function formatAiTrialStatusPrimaryLine(status: AiTrialStatus): string {
 
 /** チャットヘッダー用の短いラベル（例: AIお試し残 7/10） */
 export function formatAiTrialStatusHeaderLabel(status: AiTrialStatus): string {
+  if (status.phase === 'developer_unlimited') return 'AI制限なし（開発者）';
   if (status.phase === 'email_unconfirmed') return 'AIお試し: 確認待ち';
   if (status.phase === 'trial_exhausted') return `AIお試し残 0/${status.songsGranted}`;
   return `AIお試し残 ${status.songsRemaining}/${status.songsGranted}`;

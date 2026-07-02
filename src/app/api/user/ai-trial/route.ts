@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import {
+  buildDeveloperUnlimitedAiTrialStatus,
   buildEmailUnconfirmedAiTrialStatus,
   buildPreviewAiTrialStatus,
   isAiTrialEnforcementEnabled,
@@ -13,6 +14,7 @@ import {
   rowToAiTrialStatus,
 } from '@/lib/user-ai-trial-server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { isDeveloperAiUnlimitedUserId } from '@/lib/ai-developer-unlimited-user-ids';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,6 +31,10 @@ export async function GET(request: Request) {
     } = await supabase.auth.getUser();
     if (authErr || !user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    if (isDeveloperAiUnlimitedUserId(user.id)) {
+      return NextResponse.json(buildDeveloperUnlimitedAiTrialStatus());
     }
 
     if (requiresEmailConfirmation(user)) {

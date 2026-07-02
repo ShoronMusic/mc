@@ -40,10 +40,35 @@ function defaultGatheringTitleFromUser(user: {
   return 'ゲストの部屋';
 }
 
+function GatheringsLoadingCard() {
+  return (
+    <div
+      className="rounded-xl border border-dashed border-slate-600/90 bg-slate-900/60 p-4 sm:p-5"
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
+    >
+      <p className="text-center text-sm font-medium text-slate-100">
+        開催実績のある部屋を読み込んでいます…
+      </p>
+      <p className="mt-1.5 text-center text-[11px] leading-relaxed text-slate-400">
+        過去に主催した部屋がある場合、ここに主催者メニューが表示されます。しばらくお待ちください。
+      </p>
+      <div className="relative mt-4 h-1.5 w-full overflow-hidden rounded-full bg-slate-700/90">
+        <div
+          className="absolute inset-y-0 left-0 w-2/5 rounded-full bg-sky-500/90 motion-safe:animate-[gatherings-load-bar_1.4s_ease-in-out_infinite]"
+          aria-hidden
+        />
+      </div>
+    </div>
+  );
+}
+
 /**
  * ログイン済みユーザー向け: 部屋での開催の開始・終了（運用・検証用の最小UI）
  */
 export function MeetingStartPanel() {
+  const [authChecked, setAuthChecked] = useState(false);
   const [visible, setVisible] = useState(false);
   const [joinRoomId, setJoinRoomId] = useState<string>(DEFAULT_ROOM_IDS[0]);
   const [joinTitle, setJoinTitle] = useState('');
@@ -59,57 +84,64 @@ export function MeetingStartPanel() {
     if (typeof window === 'undefined') return;
     if (hasGuestRoomPersistence()) {
       setVisible(false);
+      setAuthChecked(true);
       return;
     }
     const supabase = createClient();
     if (!isSupabaseConfigured() || !supabase) {
       setVisible(false);
+      setAuthChecked(true);
       return;
     }
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      const loggedIn = !!user;
-      if (user) {
-        const defaultTitle = defaultGatheringTitleFromUser(user);
-        setNewTitle('');
-        setJoinTitle(defaultTitle);
-      }
-      setVisible(loggedIn);
-      if (!loggedIn) return;
-      fetch('/api/room-gatherings', { credentials: 'include' })
-        .then(async (res) => {
-          if (!res.ok) return;
-          const data = (await res.json().catch(() => ({}))) as { rooms?: OrganizerRoom[] };
-          const rooms = Array.isArray(data.rooms) ? data.rooms.filter((r) => !!r?.roomId) : [];
-          setMyRooms(rooms);
-          if (rooms.length > 0) {
-            setJoinRoomId(rooms[0].roomId);
-            if (rooms[0].title?.trim()) {
-              setJoinTitle(rooms[0].title.trim());
+    supabase.auth
+      .getUser()
+      .then(({ data: { user } }) => {
+        const loggedIn = !!user;
+        if (user) {
+          const defaultTitle = defaultGatheringTitleFromUser(user);
+          setNewTitle('');
+          setJoinTitle(defaultTitle);
+        }
+        setVisible(loggedIn);
+        if (!loggedIn) return;
+        fetch('/api/room-gatherings', { credentials: 'include' })
+          .then(async (res) => {
+            if (!res.ok) return;
+            const data = (await res.json().catch(() => ({}))) as { rooms?: OrganizerRoom[] };
+            const rooms = Array.isArray(data.rooms) ? data.rooms.filter((r) => !!r?.roomId) : [];
+            setMyRooms(rooms);
+            if (rooms.length > 0) {
+              setJoinRoomId(rooms[0].roomId);
+              if (rooms[0].title?.trim()) {
+                setJoinTitle(rooms[0].title.trim());
+              }
             }
-          }
-        })
-        .catch(() => {
-          // 選択肢取得失敗時は myRooms 空のまま（第1枠は非表示、新規作成のみ）
-        })
-        .finally(() => {
-          setGatheringsLoaded(true);
-        });
+          })
+          .catch(() => {
+            // 選択肢取得失敗時は myRooms 空のまま（第1枠は非表示、新規作成のみ）
+          })
+          .finally(() => {
+            setGatheringsLoaded(true);
+          });
 
-      fetch('/api/room-live-status', { credentials: 'include' })
-        .then(async (res) => {
-          if (!res.ok) return;
-          const data = (await res.json().catch(() => ({}))) as LiveStatusResponse;
-          const ids = Array.isArray(data.rooms)
-            ? data.rooms
-                .map((r) => (typeof r.roomId === 'string' ? r.roomId : ''))
-                .filter((id): id is string => !!id)
-            : [];
-          setLiveRoomIds(ids);
-        })
-        .catch(() => {
-          // 失敗時は既定値のまま
-        });
-    });
+        fetch('/api/room-live-status', { credentials: 'include' })
+          .then(async (res) => {
+            if (!res.ok) return;
+            const data = (await res.json().catch(() => ({}))) as LiveStatusResponse;
+            const ids = Array.isArray(data.rooms)
+              ? data.rooms
+                  .map((r) => (typeof r.roomId === 'string' ? r.roomId : ''))
+                  .filter((id): id is string => !!id)
+              : [];
+            setLiveRoomIds(ids);
+          })
+          .catch(() => {
+            // 失敗時は既定値のまま
+          });
+      })
+      .finally(() => {
+        setAuthChecked(true);
+      });
   }, []);
 
   const selectedRoom = myRooms.find((r) => r.roomId === joinRoomId);
@@ -214,13 +246,23 @@ export function MeetingStartPanel() {
     window.location.href = `/${encodeURIComponent(joinRoomId)}`;
   }, [joinRoomId, joinTitle, myRooms]);
 
+  if (!authChecked) {
+    return (
+      <div className="mt-4">
+        <GatheringsLoadingCard />
+      </div>
+    );
+  }
+
   if (!visible) return null;
 
   /** 主催履歴があるときだけ「再入室・終了」枠を出す（履歴ゼロ時は全室プルダウンになるが、入室は開催中の会が必要で誤解を招く） */
   const showReturningOrganizerBlock = gatheringsLoaded && myRooms.length > 0;
+  const showGatheringsLoading = !gatheringsLoaded;
 
   return (
     <div className="mt-4 flex flex-col gap-3">
+      {showGatheringsLoading ? <GatheringsLoadingCard /> : null}
       {showReturningOrganizerBlock ? (
         <div className="rounded-xl border border-dashed border-slate-600/90 bg-slate-900/60 p-3 sm:p-4">
           <div className="mb-3 space-y-1 text-center">

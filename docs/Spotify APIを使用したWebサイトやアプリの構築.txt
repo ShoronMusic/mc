@@ -1,0 +1,133 @@
+Spotify APIを使用したWebサイトやアプリの構築において、ビジネス契約を結んで一般公開することは、現在の開発者規約上 個人開発者には事実上不可能な仕組み になっています。 [1, 2] 
+単に自分が使うため、あるいはごく少数の知人でテストするためであれば、ビジネス契約は不要です。しかし、不特定多数のユーザーがアクセスできる形で一般公開・サービス展開を計画している場合は、個人では規約の壁を突破できません。 [1, 2, 3, 4] 
+現在のSpotify APIのルール（Developer Policy）を基に、知っておくべき制限と開発プランを解説します。 [5] 
+------------------------------
+## 1. 2つの利用モードと「一般公開」の壁
+Spotify APIには「開発モード」と、制限を解除した「拡張アクセス（Extended Access）」の2つが存在します。 [4, 6] 
+## 開発モード（Development Mode）
+
+* 必要条件：開発者自身の「Spotify Premium」アカウントが必須です。
+* 対象：個人の学習、実験、自分用ツールの作成のみ。
+* 制限：APIで認証・接続できるテストユーザーは最大5人までに制限されています。 [3, 7] 
+
+## 拡張アクセス（Extended Access / 商用・一般公開）
+5人以上の一般ユーザーにアプリを使ってもらうためには、Spotify側へクォータ（割当）の拡張申請を行い、審査を通過する必要があります。しかし、この申請条件が極めて厳格化されています。 [1, 2, 8, 9] 
+
+* 法人の限定：「法的に登録された企業・組織」のみが申請可能で、個人開発者（Individuals）の申請は受け付けていません。
+* 実績の壁：すでに稼働しているサービスであり、月間アクティブユーザー（MAU）が25万人以上いることが求められます。 [1, 10] 
+
+------------------------------
+## 2. 禁止されている「商用利用」の定義
+もし法人化して25万人以上のユーザーを集めたとしても、Spotify APIのポリシー上、以下のマネタイズや用途は全面的に禁止されています。 [5, 9, 10, 11] 
+
+* 直接的な収益化：アプリの有料販売、アプリ内課金、サブスクリプション機能。
+* 広告収益：Webサイトやアプリ内への広告掲載（Google AdSense等）。
+* データ利用：Spotifyから取得したアルバムアートや楽曲メタデータ（情報）を自社の利益のために利用・販売すること。
+* 店舗利用：飲食店、店舗、オフィスなどの商業スペースでBGMとして流すためのアプリ開発。 [5, 11, 12] 
+
+------------------------------
+## 3. 今後の計画をどう進めるべきか？
+現在の厳しい規約を前提に、プロジェクトを形にするための現実的なアプローチは以下の3つです。
+## 選択肢1：完全な「自分専用ツール」として開発する
+公開を諦め、自分のPremiumアカウントと最大5人までの知人間のためだけのクローズドなWebサイト・アプリとして構築します。これであれば、規約違反にならずに高度な音楽アプリを自作して楽しめます。 [3, 7] 
+## 選択肢2：ポートフォリオ（実績）としてソースコードのみ公開する [10] 
+作成したWebサイトやアプリのシステムを一般公開するのではなく、プログラムのソースコード（GitHubなど）や、動いている様子の動画をポートフォリオとして公開します。他の開発者が「自分のAPIキーを入れたら動かせる状態」にしておく形です。
+## 選択肢3：他社の音楽APIを検討する
+もし「不特定多数に広く使われる音楽サービス」を個人で立ち上げたい場合、Spotify APIは適していません。比較的個人でも一般公開のアプリが作りやすい YouTube Data API（規約の範囲内での動画再生やプレイリスト作成）など、別のプラットフォームへの切り替えを検討してください。 [1, 2] 
+------------------------------
+現在の計画されているWebサイトやアプリは、どのような機能（再生、プレイリスト同期、楽曲分析など）を想定していますか？
+また、どのようなユーザー層に使ってもらうことを目的としていますか？詳細を教えていただければ、規約を回避できる代替案や他社APIの活用法をご提案できます。
+
+[1] [https://community.spotify.com](https://community.spotify.com/t5/Spotify-for-Developers/General-Inquiry-Regarding-Commercial-Use-of-Spotify-Web-API/td-p/7347501)
+[2] [https://www.reddit.com](https://www.reddit.com/r/truespotify/comments/1l2am4i/spotify_just_killed_indie_development_with_their/?tl=ja)
+[3] [https://developer.spotify.com](https://developer.spotify.com/blog/2026-02-06-update-on-developer-access-and-platform-security)
+[4] [https://qiita.com](https://qiita.com/tamanoyu/items/e5261fda8eabdd88d625)
+[5] [https://developer.spotify.com](https://developer.spotify.com/policy)
+[6] [https://www.reddit.com](https://www.reddit.com/r/truespotify/comments/1l2am4i/spotify_just_killed_indie_development_with_their/)
+[7] [https://www.techzine.eu](https://www.techzine.eu/news/devops/138608/spotify-puts-the-brakes-on-developer-mode-with-stricter-api-rules/)
+[8] [https://techgenyz.com](https://techgenyz.com/spotify-api-crackdown-brings-major-developer-limits/)
+[9] [https://techcrunch.com](https://techcrunch.com/2026/02/06/spotify-changes-developer-mode-api-to-require-premium-accounts-limits-test-users/)
+[10] [https://developer.spotify.com](https://developer.spotify.com/documentation/web-api/concepts/quota-modes)
+[11] [https://www.reddit.com](https://www.reddit.com/r/androiddev/comments/3np14g/is_it_legal_to_use_spotifys_apis_and_play_their/)
+[12] [https://support.spotify.com](https://support.spotify.com/us/article/spotify-public-commercial-use/)
+
+Spotify音源や曲情報、アーティスト情報を使ったアプリビジネス（収益化）は新規では実質不可能ですね？
+
+はい、その認識の通りです。Spotifyの音源やデータを使った新規の個人アプリビジネス（収益化）は、現在「実質不可能」となっています。
+厳密には、Spotifyは「個人開発者のビジネス利用」の門戸を閉じています。かつては個人がAPIを利用してユニークなWebサービスを作り、広告や課金で収益化する事例もありましたが、現在は規約（Developer Policy）が非常に厳格化されています。
+新規参入が不可能な主な理由は以下の3点です。
+## 1. マネタイズの完全禁止
+Spotify APIを利用するアプリでは、いかなる方法であってもユーザーから直接お金を取ること、および広告による収益化が禁止されています。
+
+* アプリの有料販売・アプリ内課金：NG
+* サブスクリプション（月額課金）：NG
+* 画面内への広告掲載（AdSense等）：NG
+
+## 2. 「法人限定」かつ「高すぎる審査基準」
+5人以上の一般ユーザーにアプリを使ってもらうための申請（Extended Access）は、「法的に登録された企業（法人）」しか行えません。さらに「すでに別の手段で月間アクティブユーザー（MAU）を25万人以上集めていること」が申請の前提条件となるため、新規のスタートアップや個人がここを突破することは不可能です。
+## 3. 音源再生の制限（Premium縛り）
+仮にアプリ内で音楽を再生させる場合、利用するユーザー自身が「Spotify Premium（有料会員）」にログインしている必要があります。無料会員のユーザーに対して音源を再生させるようなアプリは作れません。
+------------------------------
+## それでも「音楽ビジネス」を形にしたい場合の代替案
+Spotifyの枠組みを超えて、個人や新規クローズドで収益化を目指せる現実的なルートは以下のようなものです。
+
+* YouTube Data API の活用：YouTubeの動画や音源データを引っ張ってくる形であれば、規約の範囲内で一般公開や（YouTube側の規約に準じた）限定的なマネタイズ、連携サービスを展開しやすいです。
+* Apple Music API の検討：こちらも審査やApple Developer Program（有料）への加入が必要ですが、Spotifyほど「法人限定・MAU25万人」といった絶望的な初期ハードルはありません（※ただし商用利用の制限は厳しいため事前確認が必要です）。
+* アフィリエイトへの転換（仲介ビジネス）：アプリ自体でデータをこねくり回すのではなく、音楽メディア（ブログやSNS）を構築し、Amazon MusicやApple Musicの「紹介報酬（アフィリエイト）」で収益化するモデルです。
+
+------------------------------
+もしよろしければ、当初考えていたアプリの具体的な機能やアイデアを教えていただけますか？
+「Spotify APIを使う」という手段にこだわらなければ、別のAPIや座組みを使って同じようなビジネスモデルを実現できる方法を一緒に考えられるかもしれません。
+
+
+仮にYouTube音源で月間アクティブユーザー（MAU）を25万人以上集めた場合、Spotifyユーザー専用のSpotify音源を使った有料サービスは許可される？
+
+結論から申し上げますと、仮にYouTube音源でMAU 25万人を達成し、法人化して審査に申し込んだとしても、Spotify音源を使った有料サービスは100%許可されません。
+どれだけユーザー数を集めても、「有料（マネタイズ）」の時点でSpotifyの基本規約に一発で抵触するためです。 [1, 2] 
+審査に通らない理由と、Spotifyが求める条件の厳しさを詳しく解説します。
+------------------------------
+## 1. 25万人を集めても「有料化」は一発アウト
+Spotifyの[Developer Policy](https://developer.spotify.com/policy)では、APIの利用モードに関わらず、「Spotifyの音源やデータを使ったサービスを直接マネタイズすること」を厳格に禁止しています。 [1, 2] 
+以下のビジネスモデルは、MAUが何万人いようと審査で即却下されます。 [2] 
+
+* 有料アプリ・有料Webサイトとしての販売
+* アプリ内課金（プレミアム機能の解放など）
+* サブスクリプション（月額課金）
+* 画面内への広告掲載（AdSenseなどによる間接的な収益化） [1, 3] 
+
+[Spotify](https://support.spotify.com/us/article/spotify-public-commercial-use/)の音源を再生・利用できるのは、あくまで「完全無料のサービス」かつ「ユーザー自身がSpotify Premium（有料プラン）に加入している場合のみ」という鉄のルールがあります。 [1] 
+## 2. パートナー審査（Extended Access）の厳しい現実
+仮に「完全無料（収益ゼロ）」の状態で、YouTubeを使ってMAU 25万人を集めた実績を引っ提げて申請したとしても、まだ高い壁があります。
+Spotifyのパートナー申請フォーム（審査）では、過去12ヶ月間の「実績データ」の提出が求められます。 [4] 
+
+* App StoreやAnalyticsツールの生データ（MAU 25万人以上の証明）
+* Spotify市場でのシェアデータ
+* 直近12ヶ月間の収益証明（Commercial Viability） [4] 
+
+YouTube音源の別サービスで実績を作った場合、「それはYouTubeのデータであり、我々の提供するSpotifyエコシステム（アーティストやクリエイターの発見・貢献）にどう繋がるのか？」を厳しく突かれます。Spotifyの規約変更は、まさにこうした他社プラットフォームからのデータの流用や、音楽ビジネスのただ乗りを防ぐ目的（AI対策やIP保護）で強化された経緯があります。 [5, 6, 7, 8] 
+------------------------------
+## 現実的な着地点：どうしても収益化したい場合の構築案
+音楽データを扱いながら個人・新規開発でマネタイズ（ビジネス）を成立させるには、Spotify APIから完全に離れる必要があります。
+## 案1：YouTube Data API ＋ 独自課金
+YouTubeの音源・動画データは、規約の範囲内（埋め込みプレイヤーのルール遵守、バックグラウンド再生禁止など）であれば、独自の有料機能（例えば、独自のプレイリスト整理ツールや音楽コミュニティ機能）を付加してマネタイズすることが比較的可能です。
+## 案2：Apple Music API の活用
+Apple Music APIも規約は厳しいですが、Spotifyのような「法人限定・MAU 25万人」という理不尽なスタートラインはありません。Apple Developer Program（年額約1万円強）に登録すれば、個人でもAPIの利用・一般公開の申請が可能です。 [9] 
+## 案3：音楽メディア ＋ アフィリエイト
+自社アプリの中に直接音源を引っ張ってくるのではなく、音楽のレビュー、独自のレコメンドWebサイトなどを構築し、楽曲の購入・サブスク登録のリンクを「Amazon Music」や「Apple Music」のアフィリエイト（紹介報酬）にするモデルです。これであればAPIの規約に縛られず、合法的に収益化が可能です。 [10] 
+------------------------------
+もしよろしければ、このアプリで「ユーザーに提供したかった最大の価値（例：新しい曲との出会い、プレイリストの自動生成、音楽を通じた交流など）」を教えていただけますか？
+音源を直接流すこと以外の価値であれば、Spotify APIの「無料かつログイン不要な範囲（一般公開されているアーティスト情報の検索など）」を部分的に組み合わせることで、規約を回避してビジネス化できる境界線が見つかるかもしれません。 [9] 
+
+[1] [https://developer.spotify.com](https://developer.spotify.com/policy)
+[2] [https://www.reddit.com](https://www.reddit.com/r/truespotify/comments/1l2am4i/spotify_just_killed_indie_development_with_their/)
+[3] [https://community.spotify.com](https://community.spotify.com/t5/Spotify-for-Developers/Is-this-use-case-a-non-streaming-SDA/td-p/6683100)
+[4] [https://community.spotify.com](https://community.spotify.com/t5/Spotify-for-Developers/Partner-Application-Form/td-p/7329000)
+[5] [https://developer.spotify.com](https://developer.spotify.com/blog/2025-04-15-updating-the-criteria-for-web-api-extended-access)
+[6] [https://www.youtube.com](https://www.youtube.com/watch?v=GA1z2AMoTb4&t=32)
+[7] [https://developer.spotify.com](https://developer.spotify.com/blog/2026-02-06-update-on-developer-access-and-platform-security)
+[8] [https://medium.com](https://medium.com/@apollinereymond/spotifys-api-lock-down-the-end-of-open-data-for-the-music-business-0a9bf07dba27)
+[9] [https://www.reddit.com](https://www.reddit.com/r/spotifyapi/comments/1pfymee/i_didnt_know_about_the_restrictions_on_requesting/)
+[10] [https://apidog.com](https://apidog.com/blog/spotify-web-api/)
+
+
+

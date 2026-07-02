@@ -2,6 +2,15 @@
 @tailwind components;
 @tailwind utilities;
 
+@keyframes gatherings-load-bar {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(320%);
+  }
+}
+
 :root {
   /* 最背面（body）。純黒に近いグレーではなく濃いグレーにして奥行きを出す */
   --background: #222222;

@@ -86,7 +86,8 @@ API: `src/app/api/my-list/route.ts`
 | `left_at` | 退出時刻（取れない場合は null） |
 
 記録 API: `POST /api/user-room-participation`  
-SQL: `docs/supabase-setup.md` 第 10 章
+SQL: `docs/supabase-setup.md` 第 10 章  
+同席回数（UI・将来 DB 化）: `docs/user-co-attendance-count-db-plan.md`
 
 ### `user_ai_taste_summary`（AI向け趣向メモ・1 ユーザー 1 行）
 
