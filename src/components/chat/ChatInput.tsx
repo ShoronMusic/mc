@@ -610,6 +610,8 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
   const previewWatchedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const librarySongListScrollRef = useRef<HTMLDivElement | null>(null);
+  /** モーダルを閉じる前の曲一覧スクロール位置（閉じて開き直しても維持） */
+  const librarySongListScrollTopRef = useRef(0);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const libraryPreviewActiveRef = useRef(false);
   const aiQuestionExamples = [
@@ -1402,6 +1404,11 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
     setLibrarySelectedSongId((prev) => (prev && filteredLibraryRows.some((r) => r.id === prev) ? prev : null));
   }, [libraryOpen, filteredLibraryRows]);
 
+  const resetLibrarySongListScroll = useCallback(() => {
+    librarySongListScrollTopRef.current = 0;
+    if (librarySongListScrollRef.current) librarySongListScrollRef.current.scrollTop = 0;
+  }, []);
+
   const resetLibraryExpanded = useCallback(() => {
     setLibraryLetterModalOpen(false);
     setLibraryCopyState('idle');
@@ -1417,7 +1424,15 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
     setLibrarySongListSort('release_new');
     setLibraryJaMainArtistMatches([]);
     setLibraryDetailMusic8Artist(null);
-    if (librarySongListScrollRef.current) librarySongListScrollRef.current.scrollTop = 0;
+    resetLibrarySongListScroll();
+  }, [resetLibrarySongListScroll]);
+
+  const clearLibrarySongSelection = useCallback(() => {
+    setLibrarySelectedSongId(null);
+    setLibrarySongVideos([]);
+    setLibrarySelectedVideoId(null);
+    setLibraryVideoError(null);
+    setLibraryCopyState('idle');
   }, []);
 
   const libraryHasExpandedContent =
@@ -1433,10 +1448,27 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
 
   const openLibraryModal = useCallback(() => {
     if (roomInteractionLocked) return;
-    resetLibraryExpanded();
     setLibraryOpen(true);
     void loadLibraryArtists();
-  }, [resetLibraryExpanded, roomInteractionLocked, loadLibraryArtists]);
+  }, [roomInteractionLocked, loadLibraryArtists]);
+
+  const closeLibraryModal = useCallback(() => {
+    if (librarySongListScrollRef.current) {
+      librarySongListScrollTopRef.current = librarySongListScrollRef.current.scrollTop;
+    }
+    setLibraryOpen(false);
+  }, []);
+
+  const submitLibrarySongSelection = useCallback(() => {
+    if (!onVideoUrl || !selectedLibraryUrl) return;
+    onVideoUrl(selectedLibraryUrl);
+    setValue('');
+    if (librarySongListScrollRef.current) {
+      librarySongListScrollTopRef.current = librarySongListScrollRef.current.scrollTop;
+    }
+    clearLibrarySongSelection();
+    setLibraryOpen(false);
+  }, [onVideoUrl, selectedLibraryUrl, clearLibrarySongSelection]);
 
   useEffect(() => {
     if (!libraryOpen || libraryArtistsReady || libraryArtistsLoading) return;
@@ -1459,11 +1491,11 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
       setLibrarySongSource('browse');
       setLibraryArtistIndexActive(true);
       setLibraryArtistLetter(libraryModalArtistIndexKey(name));
-      if (librarySongListScrollRef.current) librarySongListScrollRef.current.scrollTop = 0;
+      resetLibrarySongListScroll();
       void loadLibrarySongsForArtist(name);
       void loadLibraryArtistInfo(name);
     },
-    [libraryArtistItems, loadLibrarySongsForArtist, loadLibraryArtistInfo],
+    [libraryArtistItems, loadLibrarySongsForArtist, loadLibraryArtistInfo, resetLibrarySongListScroll],
   );
 
   const openLibraryModalForArtist = useCallback(
@@ -1485,13 +1517,13 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
       setLibraryDetailMusic8Artist(options?.music8Artist ?? null);
       setLibrarySongSource('browse');
       setLibraryOpen(true);
-      if (librarySongListScrollRef.current) librarySongListScrollRef.current.scrollTop = 0;
+      resetLibrarySongListScroll();
       void loadLibraryArtistInfo(name);
       await loadLibraryArtists();
       if (roomInteractionLocked) return;
       void loadLibrarySongsForArtist(name);
     },
-    [roomInteractionLocked, loadLibraryArtists, loadLibrarySongsForArtist, loadLibraryArtistInfo],
+    [roomInteractionLocked, loadLibraryArtists, loadLibrarySongsForArtist, loadLibraryArtistInfo, resetLibrarySongListScroll],
   );
 
   useImperativeHandle(
@@ -1526,9 +1558,9 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
     setLibrarySelectedVideoId(null);
     setLibraryVideoError(null);
     setLibrarySongSource('search');
-    if (librarySongListScrollRef.current) librarySongListScrollRef.current.scrollTop = 0;
+    resetLibrarySongListScroll();
     void loadLibraryRows(libraryQuery);
-  }, [libraryQuery, loadLibraryRows]);
+  }, [libraryQuery, loadLibraryRows, resetLibrarySongListScroll]);
 
   const copyLibraryUrl = useCallback(async () => {
     if (!selectedLibraryUrl) return;
@@ -1586,17 +1618,34 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
       : 'mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2';
 
   useEffect(() => {
-    if (!libraryOpen || !librarySelectedSongId) {
+    if (!librarySelectedSongId) {
       setLibrarySongVideos([]);
       setLibrarySelectedVideoId(null);
       setLibraryVideoError(null);
       return;
     }
+    if (!libraryOpen) return;
     void loadLibrarySongVideos(librarySelectedSongId);
   }, [libraryOpen, librarySelectedSongId, loadLibrarySongVideos]);
+
   useEffect(() => {
-    if (librarySongListScrollRef.current) librarySongListScrollRef.current.scrollTop = 0;
-  }, [librarySelectedArtistName, libraryArtistLetter, librarySongSource]);
+    if (!libraryOpen) {
+      if (librarySongListScrollRef.current) {
+        librarySongListScrollTopRef.current = librarySongListScrollRef.current.scrollTop;
+      }
+      return;
+    }
+    const saved = librarySongListScrollTopRef.current;
+    if (saved <= 0) return;
+    requestAnimationFrame(() => {
+      if (librarySongListScrollRef.current) {
+        librarySongListScrollRef.current.scrollTop = saved;
+      }
+    });
+  }, [libraryOpen]);
+  useEffect(() => {
+    resetLibrarySongListScroll();
+  }, [librarySelectedArtistName, libraryArtistLetter, librarySongSource, resetLibrarySongListScroll]);
 
   const selectedArtistForInfo = librarySelectedArtistName ?? selectedLibraryRow?.main_artist ?? null;
 
@@ -1612,12 +1661,13 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
   const libraryTabFActive = Boolean(selectedLibraryRow);
 
   useEffect(() => {
-    if (!libraryOpen || !selectedArtistForInfo) {
+    if (!selectedArtistForInfo) {
       setLibraryArtistInfo(null);
       setLibraryArtistInfoError(null);
       setLibraryArtistInfoLoading(false);
       return;
     }
+    if (!libraryOpen) return;
     void loadLibraryArtistInfo(selectedArtistForInfo);
   }, [libraryOpen, selectedArtistForInfo, loadLibraryArtistInfo]);
 
@@ -2286,7 +2336,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                   className={`inline-flex shrink-0 items-center justify-center rounded border border-lime-700/60 bg-gray-800 text-xs text-lime-100 hover:bg-gray-700 ${
                     isMobileLandscape ? 'h-8 px-2.5' : 'h-9 px-3'
                   }`}
-                  onClick={() => setLibraryOpen(false)}
+                  onClick={closeLibraryModal}
                 >
                   閉じる
                 </button>
@@ -2844,12 +2894,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                       type="button"
                       disabled={!onVideoUrl || !selectedLibraryUrl}
                       className="h-11 rounded border border-lime-500/70 bg-lime-900/40 px-2 text-sm font-semibold text-lime-100 hover:bg-lime-900/70 disabled:opacity-50"
-                      onClick={() => {
-                        if (!onVideoUrl) return;
-                        onVideoUrl(selectedLibraryUrl);
-                        setValue('');
-                        setLibraryOpen(false);
-                      }}
+                      onClick={submitLibrarySongSelection}
                     >
                       この曲を選曲
                     </button>
@@ -2878,13 +2923,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                     ) : null}
                     <button
                       type="button"
-                      onClick={() => {
-                        setLibrarySelectedSongId(null);
-                        setLibrarySongVideos([]);
-                        setLibrarySelectedVideoId(null);
-                        setLibraryVideoError(null);
-                        setLibraryCopyState('idle');
-                      }}
+                      onClick={clearLibrarySongSelection}
                       className="h-9 rounded border border-amber-500/60 bg-amber-950/60 px-2 text-xs font-medium text-amber-100 hover:bg-amber-900/70"
                       aria-label="選択した曲を解除"
                       title="選択した曲を解除"
@@ -2976,12 +3015,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                           type="button"
                           disabled={!onVideoUrl || !selectedLibraryUrl}
                           className="h-11 rounded border border-lime-500/70 bg-lime-900/40 px-3 text-sm font-semibold text-lime-100 hover:bg-lime-900/70 disabled:opacity-50"
-                          onClick={() => {
-                            if (!onVideoUrl) return;
-                            onVideoUrl(selectedLibraryUrl);
-                            setValue('');
-                            setLibraryOpen(false);
-                          }}
+                          onClick={submitLibrarySongSelection}
                         >
                           この曲を選曲
                         </button>
@@ -3082,13 +3116,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                 </div>
                 <button
                   type="button"
-                  onClick={() => {
-                    setLibrarySelectedSongId(null);
-                    setLibrarySongVideos([]);
-                    setLibrarySelectedVideoId(null);
-                    setLibraryVideoError(null);
-                    setLibraryCopyState('idle');
-                  }}
+                  onClick={clearLibrarySongSelection}
                   className="shrink-0 rounded border border-amber-500/60 bg-amber-950/60 px-2 py-0.5 text-[11px] font-medium text-amber-100 hover:bg-amber-900/70"
                   aria-label="選択した曲を解除"
                   title="選択した曲を解除"
@@ -3159,12 +3187,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                         type="button"
                         disabled={!onVideoUrl || !selectedLibraryUrl}
                         className="h-11 rounded border border-lime-500/70 bg-lime-900/40 px-3 text-sm font-semibold text-lime-100 hover:bg-lime-900/70 disabled:opacity-50"
-                        onClick={() => {
-                          if (!onVideoUrl) return;
-                          onVideoUrl(selectedLibraryUrl);
-                          setValue('');
-                          setLibraryOpen(false);
-                        }}
+                        onClick={submitLibrarySongSelection}
                       >
                         この曲を選曲
                       </button>
