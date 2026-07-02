@@ -17,6 +17,7 @@
 - 開催スナップショット SQL（Phase 2）: `docs/supabase-room-gathering-snapshots-table.md`
 - 有料化の型: `docs/monetization-options.md`
 - **⭐ AI お試し10曲・実装マスタ**: `docs/00-ai-trial-and-billing-implementation.md`
+- **⭐ プリペイド価格・損益**: `docs/00-prepaid-pricing-summary.md`
 - 他業界 AI 有料事例: `docs/ai-paid-service-reference-examples.md`
 - 会（live session）仕様: `docs/room-live-session-spec.md`
 
@@ -34,6 +35,7 @@
 | 管理ダッシュボード 5 カテゴリタブ | ✅ 完了 | `admin-sections.ts` · `AdminDashboardTabs` |
 | 管理 `/admin/gathering-history`（12h スロット） | ✅ 完了 | Gemini + YT クォータ¥ + Ably 推定 + 合計 |
 | 管理 `/admin/user-billing-usage` | ✅ 完了 | `billing_user_id` · 主催部屋 YT/Ably 帰属 |
+| 管理 `/admin/user-ai-trial` | ✅ 完了 | お試し残数・状態・IP・消費ログ（`user_ai_trial`） |
 | 管理 `/admin/room-cost-summary` | ✅ 完了 | 部屋別・主催者別原価サマリー |
 | 会終了時スナップショット集計 | ✅ コード完了 | **補助**（live のままの会が多い環境では行が増えない） |
 | 過去会の遡及スナップショット | ❌ 未実装 | 終了**後**の会のみ |

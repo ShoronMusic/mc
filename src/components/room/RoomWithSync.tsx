@@ -6656,6 +6656,8 @@ export default function RoomWithSync({
               typeof data?.message === 'string' &&
               data.message.trim() &&
               (data.error === 'at_trial_exhausted' ||
+                data.error === 'trial_exhausted' ||
+                data.error === 'credits_exhausted' ||
                 data.error === 'email_unconfirmed' ||
                 data.error === 'ai_trial_login_required')
             ) {

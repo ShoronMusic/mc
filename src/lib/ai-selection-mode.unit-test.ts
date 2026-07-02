@@ -9,6 +9,8 @@ const trialActive: AiTrialStatus = {
   atQuestionsGranted: 5,
   atQuestionsRemaining: 5,
   enforcementEnabled: true,
+  creditsEnabled: false,
+  creditsRemaining: 0,
 };
 
 const preview: AiTrialStatus = {
@@ -18,6 +20,8 @@ const preview: AiTrialStatus = {
   atQuestionsGranted: 5,
   atQuestionsRemaining: 5,
   enforcementEnabled: false,
+  creditsEnabled: false,
+  creditsRemaining: 0,
 };
 
 const exhausted: AiTrialStatus = {
@@ -27,6 +31,19 @@ const exhausted: AiTrialStatus = {
   atQuestionsGranted: 5,
   atQuestionsRemaining: 0,
   enforcementEnabled: true,
+  creditsEnabled: false,
+  creditsRemaining: 0,
+};
+
+const creditsActive: AiTrialStatus = {
+  phase: 'credits_active',
+  songsGranted: 10,
+  songsRemaining: 0,
+  atQuestionsGranted: 5,
+  atQuestionsRemaining: 0,
+  enforcementEnabled: true,
+  creditsEnabled: true,
+  creditsRemaining: 40,
 };
 
 const developerUnlimited: AiTrialStatus = {
@@ -36,6 +53,8 @@ const developerUnlimited: AiTrialStatus = {
   atQuestionsGranted: 5,
   atQuestionsRemaining: 5,
   enforcementEnabled: true,
+  creditsEnabled: false,
+  creditsRemaining: 0,
 };
 
 assert.equal(
@@ -116,6 +135,26 @@ assert.equal(
     aiTrialStatus: trialActive,
   }),
   true,
+);
+
+assert.equal(
+  resolveAiSelectionMode({
+    isGuest: false,
+    participatesInSelection: true,
+    aiTrialStatus: creditsActive,
+  }),
+  'full',
+  'credits active: full AI',
+);
+
+assert.equal(
+  shouldShowAiDualSelectionButtons({
+    isGuest: false,
+    participatesInSelection: true,
+    aiTrialStatus: creditsActive,
+  }),
+  true,
+  'credits active: dual buttons',
 );
 
 console.log('ai-selection-mode.unit-test: ok');

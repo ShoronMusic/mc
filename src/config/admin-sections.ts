@@ -55,6 +55,13 @@ export const ADMIN_SECTIONS: AdminSection[] = [
     category: 'billing',
   },
   {
+    href: '/admin/user-ai-trial',
+    title: 'AI お試しユーザー',
+    description:
+      'user_ai_trial の残数・使い切り状態・IP・消費ログの監視。enforcement ON/OFF の確認',
+    category: 'billing',
+  },
+  {
     href: '/admin/user-billing-usage',
     title: 'ユーザー別 AI 利用（課金帰属）',
     description:

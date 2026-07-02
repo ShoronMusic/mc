@@ -383,15 +383,15 @@ IP 取得: 既存 `getChatAiClientIp()`（`x-forwarded-for`）を trial 消費�
 
 ---
 
-## 将来の課金（Phase D 以降・参照のみ）
+## 将来の課金（Phase D 以降）
 
-当面は **10 曲 + 選曲のみ無料** のみ実装。課金商品は以下を `monetization-options.md` と整合:
+当面は **10 曲 + 選曲のみ無料** のみ実装済み。**商品・価格の確定目安**は **`docs/00-prepaid-pricing-summary.md`**（2026-07-02）。
 
-| 商品 | 概要 |
-|------|------|
-| プリペイド | ¥500 / ¥1,000 チャージ。AI 付き選曲は **2 クレジット**（NEW）/ **1**（DB）— お試し終了後 |
-| 月額ライト | 例: ¥980 / 40 クレジット + @ 20 回 |
-| 表示参考 | 参加者向け **約 ¥1.4/曲**（`src/lib/song-selection-cost-guide.ts`）は請求単価ではない |
+| 商品 | 概要（v1 確定目安） |
+|------|---------------------|
+| **プリペイド** | **¥500＝20曲** · **¥1,000＝40曲**（1曲＝1クレジット）。Stripe チャージ。NEW/DB 差は v1 では付けない |
+| 月額ライト | **第2段**（実績後）。例: ¥980 / 40 クレジット — 未採用 |
+| 表示参考 | 参加者向け **約 ¥1.4/曲**（`song-selection-cost-guide.ts`）は**請求単価ではない**（実請求は約 ¥25/曲相当） |
 
 ---
 
@@ -511,14 +511,18 @@ SQL 確定後は **`docs/supabase-user-ai-trial-table.md`** を新設（未作�
 - [x] IP 記録（`first_ip` / `last_ip` — 付与・消費時に `user_ai_trial` 更新）
 - [ ] 同一 IP 新規アカウントソフト上限 + 管理通知
 - [x] `user_ai_trial_consumption_log`（SQL + 消費時 INSERT。テーブル未作成時はログのみ失敗）
-- [ ] 管理画面: ユーザー別 trial 残数・消費ログ（`/admin/` 課金タブ）
+- [x] 管理画面: ユーザー別 trial 残数・消費ログ（`/admin/user-ai-trial`）
 - [ ] レート制限の env チューニング（`CHAT_AI_RATE_LIMIT_*`）
 
-### Phase D — 課金接続
+### Phase D — 課金接続（プリペイド中心 · `docs/00-prepaid-pricing-summary.md`）
 
-- [ ] Stripe プリペイド / 月額
-- [ ] クレジット残高テーブルと trial 枯渇後の `full` 判定
+- [ ] `user_ai_credits` + 取引ログ SQL
+- [ ] Stripe Checkout（¥500 / ¥1,000）+ Webhook でクレジット加算
+- [ ] trial 枯渇後のクレジット残による `full` 判定
+- [ ] 選曲・@ 成功時のクレジット消費（1回＝1）
+- [ ] UI: 残クレジット・枯渇時チャージ導線
 - [ ] 利用規約・FAQ 固定化
+- [ ] （後回し）月額サブスク · NEW/DB 差別消費
 
 ---
 
@@ -569,6 +573,7 @@ AI 解説・曲クイズ・@ による質問は、今後クレジットまたは
 | 2026-07-01 | **Phase C 着手**: `user_ai_trial_consumption_log` SQL + 消費時 INSERT |
 | 2026-07-01 | **登録ユーザー UX 追補**: `aiMode` 既定 `full` 修正 · `@` 枠消費修正 · バナー折りたたみ · 質問履歴タブ · 料金目安 · `@質問 残` 表示 |
 | 2026-07-01 | **ローカル実機**: ハチアカウントで 8/10 曲・@質問 4/5 消費・質問履歴表示を確認 |
+| 2026-07-02 | **プリペイド方針確定目安**: プリペイド中心 · ¥500＝20曲 · ¥1,000＝40曲 · 1曲＝1クレジット · `docs/00-prepaid-pricing-summary.md` |
 
 ---
 
@@ -591,14 +596,14 @@ AI 解説・曲クイズ・@ による質問は、今後クレジットまたは
 ### Phase C — 不正・運用
 
 - [ ] 同一 IP 新規アカウント **ソフト上限** + 管理通知
-- [ ] 管理画面: **ユーザー別 trial 残数・消費ログ**（`/admin/`）
+- [x] 管理画面: **ユーザー別 trial 残数・消費ログ**（`/admin/user-ai-trial`）
 - [ ] `CHAT_AI_RATE_LIMIT_*` 本番チューニング
 
-### Phase D — 課金
+### Phase D — 課金（`docs/00-prepaid-pricing-summary.md`）
 
-- [ ] Stripe プリペイド / 月額
+- [ ] Stripe プリペイド（¥500＝20 · ¥1,000＝40）
 - [ ] クレジット残高テーブル + trial 枯渇後の `full` 判定
-- [ ] 利用規約・FAQ（お試し 10 曲・選曲のみ無料の明記）
+- [ ] 利用規約・FAQ（お試し 10 曲・選曲のみ無料・プリペイド残高）
 
 ---
 
@@ -615,6 +620,7 @@ AI 解説・曲クイズ・@ による質問は、今後クレジットまたは
 
 | ファイル | 内容 |
 |----------|------|
+| **`docs/00-prepaid-pricing-summary.md`** | **プリペイド商品・¥1,000＝40曲・損益（Phase D 価格正本）** |
 | `docs/monetization-options.md` | 収益モデル・収支シミュ・クレジット詳細 |
 | `docs/room-gathering-history-and-ai-billing-project.md` | 原価帰属・管理画面 Phase 1–3 |
 | `docs/ai-paid-service-reference-examples.md` | 他社 AI 有料事例 |

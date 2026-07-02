@@ -11,6 +11,13 @@ import { isUserEmailConfirmed, requiresEmailConfirmation } from '@/lib/supabase-
 import type { AiSelectionMode } from '@/lib/ai-selection-mode';
 import { parseAiSelectionMode } from '@/lib/ai-selection-mode';
 import { isDeveloperAiUnlimitedUserId } from '@/lib/ai-developer-unlimited-user-ids';
+import { isAiCreditsEnabled } from '@/lib/ai-credits-config';
+import {
+  fetchUserAiCreditsRow,
+  guardConsumeAiCreditAtQuestion,
+  guardConsumeAiCreditSong,
+  type AiCreditGuardDeny,
+} from '@/lib/user-ai-credits-server';
 
 export type UserAiTrialRow = {
   user_id: string;
@@ -39,6 +46,8 @@ export function rowToAiTrialStatus(row: {
     atQuestionsGranted: Number(row.at_questions_granted) || AI_TRIAL_AT_QUESTIONS_GRANTED,
     atQuestionsRemaining: Math.max(0, Number(row.at_questions_remaining) || 0),
     enforcementEnabled: isAiTrialEnforcementEnabled(),
+    creditsEnabled: false,
+    creditsRemaining: 0,
   };
 }
 
@@ -161,20 +170,88 @@ export type AiTrialGuardDeny = {
     message: string;
     songsRemaining?: number;
     atQuestionsRemaining?: number;
+    creditsRemaining?: number;
   };
 };
 
 export type AiTrialGuardAllow = {
   ok: true;
   consumedSong?: boolean;
+  consumedCredit?: boolean;
   songsRemaining?: number;
+  creditsRemaining?: number;
+  source?: 'trial' | 'credits';
 };
+
+function creditDenyToTrialDeny(deny: AiCreditGuardDeny): AiTrialGuardDeny {
+  return { ok: false, status: deny.status, body: deny.body };
+}
+
+async function consumeSongFromCreditsOrDeny(params: {
+  user: User;
+  clientIp?: string;
+  packPhase?: 'base' | 'frees' | null;
+  roomId?: string;
+  videoId?: string;
+}): Promise<AiTrialGuardAllow | AiTrialGuardDeny> {
+  if (!isAiCreditsEnabled()) {
+    return trialDenied(
+      'trial_exhausted',
+      'AI お試し 10 曲を使い切りました。選曲・再生・チャットは無料のままご利用いただけます。',
+      403,
+      { songsRemaining: 0 },
+    );
+  }
+
+  if (params.packPhase === 'base') {
+    const credit = await guardConsumeAiCreditSong({
+      user: params.user,
+      clientIp: params.clientIp,
+      roomId: params.roomId,
+      videoId: params.videoId,
+    });
+    if (credit.ok) {
+      return {
+        ok: true,
+        consumedSong: true,
+        consumedCredit: true,
+        creditsRemaining: credit.creditsRemaining,
+        source: 'credits',
+      };
+    }
+    return creditDenyToTrialDeny(credit);
+  }
+
+  const admin = createAdminClient();
+  if (!admin) {
+    return trialDenied('trial_unavailable', 'AI お試しの確認に失敗しました。', 503);
+  }
+  const credits = await fetchUserAiCreditsRow(admin, params.user.id);
+  if (credits.missingTable) {
+    return trialDenied(
+      'trial_exhausted',
+      'AI お試し 10 曲を使い切りました。選曲・再生・チャットは無料のままご利用いただけます。',
+      403,
+      { songsRemaining: 0 },
+    );
+  }
+  const remaining = Math.max(0, credits.row?.credits_remaining ?? 0);
+  if (remaining <= 0) {
+    return trialDenied(
+      'credits_exhausted',
+      'AI クレジットが不足しています。チャージ後に AI 付き選曲がご利用いただけます。',
+      403,
+      { creditsRemaining: 0, songsRemaining: 0 },
+    );
+  }
+  return { ok: true, creditsRemaining: remaining, source: 'credits' };
+}
 
 function trialDenied(
   error: string,
   message: string,
   status = 403,
-  extra?: { songsRemaining?: number; atQuestionsRemaining?: number },
+  extra?: { songsRemaining?: number; atQuestionsRemaining?: number; creditsRemaining?: number },
 ): AiTrialGuardDeny {
   return { ok: false, status, body: { error, message, ...extra } };
 }
@@ -230,12 +307,11 @@ export async function guardAiTrialSongSelection(params: {
       return trialDenied('trial_not_granted', 'AI お試し枠が付与されていません。', 403);
     }
     if (grant.row.songs_remaining <= 0) {
-      return trialDenied(
-        'trial_exhausted',
-        'AI お試し 10 曲を使い切りました。選曲・再生・チャットは無料のままご利用いただけます。',
-        403,
-        { songsRemaining: 0 },
-      );
+      return consumeSongFromCreditsOrDeny({
+        user: params.user,
+        clientIp: params.clientIp,
+        packPhase: params.packPhase,
+      });
     }
     if (params.packPhase === 'base') {
       return consumeAiTrialSong(admin, params.user.id, params.clientIp);
@@ -245,17 +321,24 @@ export async function guardAiTrialSongSelection(params: {
 
   if (params.packPhase === 'base') {
     if (row.songs_remaining <= 0) {
-      return trialDenied(
-        'trial_exhausted',
-        'AI お試し 10 曲を使い切りました。選曲・再生・チャットは無料のままご利用いただけます。',
-        403,
-        { songsRemaining: 0 },
-      );
+      return consumeSongFromCreditsOrDeny({
+        user: params.user,
+        clientIp: params.clientIp,
+        packPhase: params.packPhase,
+      });
     }
     return consumeAiTrialSong(admin, params.user.id, params.clientIp);
   }
 
-  return { ok: true, songsRemaining: row.songs_remaining };
+  if (row.songs_remaining <= 0) {
+    return consumeSongFromCreditsOrDeny({
+      user: params.user,
+      clientIp: params.clientIp,
+      packPhase: params.packPhase,
+    });
+  }
+
+  return { ok: true, songsRemaining: row.songs_remaining, source: 'trial' };
 }
 
 async function consumeAiTrialSong(
@@ -315,6 +398,7 @@ async function consumeAiTrialSong(
     ok: true,
     consumedSong: true,
     songsRemaining: Math.max(0, Number(updated.songs_remaining) || 0),
+    source: 'trial',
   };
 }
 
@@ -364,6 +448,21 @@ export async function guardAndConsumeAiTrialAtQuestion(params: {
   }
 
   if (row.at_questions_remaining <= 0) {
+    if (isAiCreditsEnabled()) {
+      const credit = await guardConsumeAiCreditAtQuestion({
+        user: params.user,
+        clientIp: params.clientIp,
+      });
+      if (credit.ok) {
+        return {
+          ok: true,
+          consumedCredit: true,
+          creditsRemaining: credit.creditsRemaining,
+          source: 'credits',
+        };
+      }
+      return creditDenyToTrialDeny(credit);
+    }
     return trialDenied(
       'at_trial_exhausted',
       'お試し @ 質問 5 回を使い切りました。',
@@ -401,6 +500,7 @@ export async function guardAndConsumeAiTrialAtQuestion(params: {
     ok: true,
     consumedSong: false,
     songsRemaining: row.songs_remaining,
+    source: 'trial',
   };
 }
 

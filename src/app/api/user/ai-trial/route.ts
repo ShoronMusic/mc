@@ -13,6 +13,7 @@ import {
   fetchUserAiTrialRow,
   rowToAiTrialStatus,
 } from '@/lib/user-ai-trial-server';
+import { loadComposedAiTrialStatus } from '@/lib/user-ai-credits-server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { isDeveloperAiUnlimitedUserId } from '@/lib/ai-developer-unlimited-user-ids';
 
@@ -70,7 +71,12 @@ export async function GET(request: Request) {
       row = grant.row;
     }
 
-    return NextResponse.json(rowToAiTrialStatus(row));
+    if (!admin) {
+      return NextResponse.json(rowToAiTrialStatus(row));
+    }
+
+    const status = await loadComposedAiTrialStatus(admin, row, user.id);
+    return NextResponse.json(status);
   } catch (e) {
     console.error('[api/user/ai-trial GET]', e);
     return NextResponse.json({ error: 'Server error' }, { status: 500 });

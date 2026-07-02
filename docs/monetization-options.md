@@ -160,8 +160,26 @@
 
 ---
 
+## プリペイド商品（確定目安 · 2026-07-02）
+
+Phase D の価格・損益の**正本**は `docs/00-prepaid-pricing-summary.md`。要点のみ:
+
+| 項目 | 内容 |
+|------|------|
+| 方針 | **プリペイド中心**（月額は第2段） |
+| パック | **¥500＝20曲** · **¥1,000＝40曲** |
+| 消費 | **1曲＝1クレジット**（@ も同じ。v1 は NEW/DB 差なし） |
+| 実効単価 | **¥25/曲** |
+| 1パック赤字 | 原価が **約¥24/曲** 超えない限りほぼなし（手取り964円÷40曲） |
+| 月次分岐 | 固定費 B: **9パック** / C: **13パック**（¥1,000・r=0.3・フル消費） |
+
+旧案（NEW=2/DB=1 クレジット・45クレジット/¥1,000）は **v1 では採用しない**。収支シミュの `r`・変動費単価は引き続き `src/lib/monetization-simulation-assumptions.ts` を参照。
+
+---
+
 ## 関連（コード・運用）
 
+- **⭐ プリペイド価格・損益まとめ**: `docs/00-prepaid-pricing-summary.md`
 - **⭐ AI お試し10曲・実装マスタ（継続更新）**: `docs/00-ai-trial-and-billing-implementation.md`
 - **他業界の AI 有料事例（ベンチマーク）**: `docs/ai-paid-service-reference-examples.md`
 - 開催履歴 × AI 帰属: `docs/room-gathering-history-and-ai-billing-project.md`

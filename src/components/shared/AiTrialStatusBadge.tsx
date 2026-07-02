@@ -44,11 +44,14 @@ export function AiTrialStatusBadge({
   const primary = formatAiTrialStatusPrimaryLine(status);
   const secondary = formatAiTrialStatusSecondaryLine(status);
   const exhausted = status.phase === 'trial_exhausted';
+  const creditsActive = status.phase === 'credits_active';
   const unconfirmed = status.phase === 'email_unconfirmed';
 
   const borderClass = exhausted
     ? 'border-amber-700/50 bg-amber-950/30 text-amber-100/95'
-    : unconfirmed
+    : creditsActive
+      ? 'border-emerald-700/50 bg-emerald-950/30 text-emerald-100/95'
+      : unconfirmed
       ? 'border-gray-600/60 bg-gray-900/50 text-gray-300'
       : 'border-violet-600/50 bg-violet-950/40 text-violet-100/95';
 

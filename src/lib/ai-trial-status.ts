@@ -12,6 +12,7 @@ export type AiTrialPhase =
   | 'preview'
   | 'trial_active'
   | 'trial_exhausted'
+  | 'credits_active'
   | 'developer_unlimited';
 
 export type AiTrialStatus = {
@@ -22,7 +23,22 @@ export type AiTrialStatus = {
   atQuestionsRemaining: number;
   /** Phase B 以降 true。false の間は UI 表示のみで枠は消費しない */
   enforcementEnabled: boolean;
+  /** お試し枯渇後のプリペイドクレジット（`AI_CREDITS_ENABLED=1` 時） */
+  creditsEnabled: boolean;
+  creditsRemaining: number;
 };
+
+export function resolveTrialPhaseFromEntitlement(params: {
+  songsRemaining: number;
+  creditsEnabled: boolean;
+  creditsRemaining: number;
+}): AiTrialPhase {
+  if (params.songsRemaining > 0) return 'trial_active';
+  if (params.creditsEnabled && params.creditsRemaining > 0) return 'credits_active';
+  return 'trial_exhausted';
+}
+
+const CREDITS_STATUS_DEFAULTS = { creditsEnabled: false, creditsRemaining: 0 } as const;
 
 /** クライアント: env を持たず API 応答だけで開発者無制限か判定 */
 export function isAiDeveloperUnlimitedTrialStatus(
@@ -45,6 +61,7 @@ export function buildPreviewAiTrialStatus(): AiTrialStatus {
     atQuestionsGranted: AI_TRIAL_AT_QUESTIONS_GRANTED,
     atQuestionsRemaining: AI_TRIAL_AT_QUESTIONS_GRANTED,
     enforcementEnabled: enforcement,
+    ...CREDITS_STATUS_DEFAULTS,
   };
 }
 
@@ -56,6 +73,7 @@ export function buildEmailUnconfirmedAiTrialStatus(): AiTrialStatus {
     atQuestionsGranted: AI_TRIAL_AT_QUESTIONS_GRANTED,
     atQuestionsRemaining: 0,
     enforcementEnabled: isAiTrialEnforcementEnabled(),
+    ...CREDITS_STATUS_DEFAULTS,
   };
 }
 
@@ -68,6 +86,7 @@ export function buildDeveloperUnlimitedAiTrialStatus(): AiTrialStatus {
     atQuestionsGranted: AI_TRIAL_AT_QUESTIONS_GRANTED,
     atQuestionsRemaining: AI_TRIAL_AT_QUESTIONS_GRANTED,
     enforcementEnabled: isAiTrialEnforcementEnabled(),
+    ...CREDITS_STATUS_DEFAULTS,
   };
 }
 
@@ -81,6 +100,9 @@ export function formatAiTrialStatusPrimaryLine(status: AiTrialStatus): string {
   if (status.phase === 'trial_exhausted') {
     return 'AI お試し 10 曲 使い切り — 選曲・再生・チャットは無料のまま';
   }
+  if (status.phase === 'credits_active') {
+    return `AI クレジット 残 ${status.creditsRemaining}（1曲・@1回＝1）`;
+  }
   const songs = `AI お試し 残 ${status.songsRemaining}/${status.songsGranted} 曲`;
   const at = `@質問 残 ${status.atQuestionsRemaining}/${status.atQuestionsGranted}`;
   return `${songs} · ${at}`;
@@ -91,6 +113,7 @@ export function formatAiTrialStatusHeaderLabel(status: AiTrialStatus): string {
   if (status.phase === 'developer_unlimited') return 'AI制限なし（開発者）';
   if (status.phase === 'email_unconfirmed') return 'AIお試し: 確認待ち';
   if (status.phase === 'trial_exhausted') return `AIお試し残 0/${status.songsGranted}`;
+  if (status.phase === 'credits_active') return `AIクレジット残 ${status.creditsRemaining}`;
   return `AIお試し残 ${status.songsRemaining}/${status.songsGranted}`;
 }
 
@@ -100,6 +123,9 @@ export function formatAiTrialStatusSecondaryLine(status: AiTrialStatus): string 
   }
   if (status.phase === 'trial_active' && status.songsRemaining <= 2 && status.songsRemaining > 0) {
     return 'お試し残りわずかです。AI なし選曲はいつでも無料です。';
+  }
+  if (status.phase === 'credits_active' && status.creditsRemaining <= 3 && status.creditsRemaining > 0) {
+    return 'クレジット残りわずかです。';
   }
   return null;
 }
