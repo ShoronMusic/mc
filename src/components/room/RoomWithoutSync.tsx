@@ -27,6 +27,7 @@ import { isGuestSoloSession, resolveGuestSoloPlaybackHistorySinceIso } from '@/l
 import { GUEST_AI_AT_QUESTION_UNAVAILABLE } from '@/lib/ai-usage-disclosure-copy';
 import { resolveAiSelectionMode, type AiSelectionMode } from '@/lib/ai-selection-mode';
 import { AI_TRIAL_STATUS_UPDATED_EVENT } from '@/lib/ai-trial-status';
+import { requestSongOverviewChat } from '@/lib/song-overview-request-chat-client';
 import { SiteFeedbackModal } from '@/components/room/SiteFeedbackModal';
 import UserBar from '@/components/room/UserBar';
 import { getLastExitStorageKey } from '@/components/providers/AblyProviderWrapper';
@@ -335,6 +336,10 @@ export default function RoomWithoutSync({
   const nextPromptShownForVideoIdRef = useRef<string | null>(null);
   const initialGreetingDoneRef = useRef(false);
   const guestFirstSongInviteShownRef = useRef(false);
+  const songOverviewRequestedVideoIdsRef = useRef<Set<string>>(new Set());
+  const [songOverviewRequestedVideoIds, setSongOverviewRequestedVideoIds] = useState<Set<string>>(
+    () => new Set(),
+  );
   const lastSendAtRef = useRef(0);
   const sendTimestampsRef = useRef<number[]>([]);
   const playbackHistoryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1601,6 +1606,43 @@ export default function RoomWithoutSync({
     ]
   );
 
+  const handleRequestSongOverview = useCallback(
+    async (params: { messageId: string; videoId: string }) => {
+      void params.messageId;
+      const vid = params.videoId.trim();
+      if (!vid || isGuest) return;
+      if (jpDomesticSilenceVideoIdRef.current === vid) return;
+      if (songOverviewRequestedVideoIdsRef.current.has(vid)) return;
+
+      const result = await requestSongOverviewChat({
+        messages: messages.map((m) => ({
+          displayName: m.displayName,
+          body: m.body,
+          messageType: m.messageType ?? 'user',
+        })),
+        videoId: vid,
+        roomId: roomId ?? undefined,
+        isGuest,
+        userDisplayName: displayNameProp,
+      });
+
+      if (!result.ok) {
+        addSystemMessage(result.message);
+        return;
+      }
+
+      const body = result.text.startsWith('【AI回答】') ? result.text : `【AI回答】 ${result.text}`;
+      addAiMessage(body, { aiSource: 'chat_reply', videoId: vid });
+      touchActivity();
+      songOverviewRequestedVideoIdsRef.current.add(vid);
+      setSongOverviewRequestedVideoIds(new Set(songOverviewRequestedVideoIdsRef.current));
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event(AI_TRIAL_STATUS_UPDATED_EVENT));
+      }
+    },
+    [addAiMessage, addSystemMessage, displayNameProp, isGuest, messages, roomId, touchActivity],
+  );
+
   const handleSendMessage = useCallback(
     async (text: string) => {
       const limit = checkSendLimit(text, lastSendAtRef, sendTimestampsRef);
@@ -2378,6 +2420,9 @@ export default function RoomWithoutSync({
             aiTrialStatus={aiTrialStatus}
             aiTrialLoading={aiTrialState === 'loading'}
             onAiSettingsClick={!isGuest ? () => openMyPage('user') : undefined}
+            ownerAiCharacterName={AI_CHARACTER_DEFAULT_NAME}
+            onRequestSongOverview={!isGuest ? handleRequestSongOverview : undefined}
+            songOverviewRequestedVideoIds={songOverviewRequestedVideoIds}
           />
         }
         rightTop={

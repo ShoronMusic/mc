@@ -59,6 +59,13 @@ import ThemePlaylistMissionEntriesModal, {
 import AiCharacterTtsReplayButton from '@/components/chat/AiCharacterTtsReplayButton';
 import { AiTrialStatusBadge } from '@/components/shared/AiTrialStatusBadge';
 import type { AiTrialStatus } from '@/lib/ai-trial-status';
+import {
+  AI_CHARACTER_DEFAULT_ANNOUNCE_NAME,
+  canRequestSongOverviewAtQuestion,
+  formatSongOverviewRequestButtonLabel,
+  hasSongCommentaryForVideo,
+  isAgentSelectionAnnounceName,
+} from '@/lib/song-overview-request';
 
 /** 詳細フィードバック用モーダルの状態 */
 type FeedbackModalState =
@@ -166,6 +173,12 @@ interface ChatProps {
   personalAiCommentaryEnabled?: boolean;
   personalAiSongQuizEnabled?: boolean;
   personalAiRecommendEnabled?: boolean;
+  /** エージェント表示名（選曲アナウンスの「〇〇さん」照合） */
+  ownerAiCharacterName?: string;
+  /** エージェント選曲アナウンスから概要をリクエスト（@1回・クレジット消費） */
+  onRequestSongOverview?: (params: { messageId: string; videoId: string }) => void | Promise<void>;
+  /** 自分が概要リクエスト済みの videoId（ボタン非表示用） */
+  songOverviewRequestedVideoIds?: ReadonlySet<string>;
 }
 
 function formatTime(createdAt: string): string {
@@ -731,6 +744,9 @@ export default function Chat({
   personalAiCommentaryEnabled = true,
   personalAiSongQuizEnabled = true,
   personalAiRecommendEnabled = true,
+  ownerAiCharacterName = 'エージェント1号',
+  onRequestSongOverview,
+  songOverviewRequestedVideoIds,
 }: ChatProps) {
   const pathname = usePathname();
   const pathSegs = pathname?.split('/').filter(Boolean) ?? [];
@@ -754,6 +770,9 @@ export default function Chat({
   const [joinPasteHintAiPickBusyId, setJoinPasteHintAiPickBusyId] = useState<string | null>(null);
   const [joinPasteHintAiPickDoneIds, setJoinPasteHintAiPickDoneIds] = useState<Set<string>>(
     () => new Set(),
+  );
+  const [songOverviewRequestBusyVideoId, setSongOverviewRequestBusyVideoId] = useState<string | null>(
+    null,
   );
 
   const addNextSongRecommendToMyList = useCallback(
@@ -1517,6 +1536,23 @@ export default function Chat({
                 isSelectionAnnounce && selectorName
                   ? participantsWithColor.find((p) => p.displayName === selectorName)?.textColor ?? undefined
                   : undefined;
+              const announceVideoId =
+                typeof m.videoId === 'string' && m.videoId.trim() ? m.videoId.trim() : '';
+              const agentAnnounceName = (ownerAiCharacterName || AI_CHARACTER_DEFAULT_ANNOUNCE_NAME).trim();
+              const showSongOverviewRequestButton =
+                isSelectionAnnounce &&
+                ownerAiCharacterJoinEnabled &&
+                !viewerIsGuest &&
+                Boolean(onRequestSongOverview) &&
+                isAgentSelectionAnnounceName(selectorName, agentAnnounceName) &&
+                !m.jpDomesticSilenceForVideoId &&
+                announceVideoId.length > 0 &&
+                canRequestSongOverviewAtQuestion(aiTrialStatus) &&
+                !hasSongCommentaryForVideo(messages, announceVideoId) &&
+                !(songOverviewRequestedVideoIds?.has(announceVideoId) ?? false);
+              const songOverviewButtonLabel = aiTrialStatus
+                ? formatSongOverviewRequestButtonLabel(aiTrialStatus)
+                : 'この曲の概要を開く（1クレジット消費）';
               const feedback = feedbackState[m.id];
               const bodyContent: ReactNode =
                 m.messageType === 'ai'
@@ -1722,6 +1758,32 @@ export default function Chat({
                         </div>
                       </div>
                     )}
+                  {showSongOverviewRequestButton && onRequestSongOverview && announceVideoId ? (
+                    <div className="mt-2 border-t border-gray-700/60 pt-2">
+                      <button
+                        type="button"
+                        disabled={songOverviewRequestBusyVideoId === announceVideoId}
+                        onClick={() => {
+                          setSongOverviewRequestBusyVideoId(announceVideoId);
+                          void Promise.resolve(
+                            onRequestSongOverview({
+                              messageId: m.id,
+                              videoId: announceVideoId,
+                            }),
+                          ).finally(() => {
+                            setSongOverviewRequestBusyVideoId((cur) =>
+                              cur === announceVideoId ? null : cur,
+                            );
+                          });
+                        }}
+                        className="rounded border border-sky-600/70 bg-sky-900/30 px-2.5 py-1 text-xs font-medium text-sky-100 hover:bg-sky-800/45 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {songOverviewRequestBusyVideoId === announceVideoId
+                          ? '概要を取得中…'
+                          : songOverviewButtonLabel}
+                      </button>
+                    </div>
+                  ) : null}
                   </>
                 ) : (
                   <>
