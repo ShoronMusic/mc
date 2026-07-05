@@ -12,7 +12,7 @@ export default function GuideAiPage() {
     <article className="space-y-6 text-sm leading-relaxed text-gray-300">
       <h1 className="text-2xl font-bold text-white">AI について</h1>
       <p className="text-xs leading-relaxed text-gray-500">
-        部屋内チャットのリンクから開いた場合、画面上部に「← チャットの部屋に戻る」が表示されます。表示されない場合は、ブラウザの戻るでも直前の画面に戻れます。
+        部屋内チャットのリンクから開いた場合に画面上部に「← チャットの部屋に戻る」が表示されます。表示されない場合は、ブラウザの戻るでも直前の画面に戻れます。
       </p>
       <YouTubeDataApiQuotaCallout />
       <p className="rounded-lg border border-violet-900/50 bg-violet-950/20 px-3 py-2.5 text-sm text-gray-400">

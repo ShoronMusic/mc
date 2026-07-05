@@ -1703,7 +1703,7 @@ export default function RoomWithoutSync({
         return;
       }
 
-      const body = formatSongOverviewAiReplyBody(displayNameProp, result.text);
+      const body = formatSongOverviewAiReplyBody(displayNameProp, result.text); 
       addAiMessage(body, { aiSource: 'chat_reply', videoId: vid });
       touchActivity();
       songOverviewRequestedVideoIdsRef.current.add(vid);
