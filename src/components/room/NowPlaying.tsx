@@ -1,28 +1,26 @@
 'use client';
 
 /**
- * Now Playing：現在の曲名・AI 解説表示（初期プレースホルダー）
+ * プレイヤー直下: 再生中曲のアーティスト - 曲名（♪ 付き）
  */
 
 interface NowPlayingProps {
-  title?: string;
-  artist?: string;
-  aiCommentary?: string;
+  artistTitle?: string | null;
 }
 
-export default function NowPlaying({
-  title,
-  artist,
-  aiCommentary,
-}: NowPlayingProps) {
+export default function NowPlaying({ artistTitle }: NowPlayingProps) {
+  const line = typeof artistTitle === 'string' ? artistTitle.trim() : '';
   return (
-    <div className="rounded-lg border border-gray-700 bg-gray-900/50 p-3 text-sm">
-      <div className="font-medium text-white">
-        {title ?? '—'} {artist != null && artist !== '' && `/ ${artist}`}
-      </div>
-      {aiCommentary && (
-        <p className="mt-2 text-gray-400">{aiCommentary}</p>
-      )}
+    <div
+      className="flex min-h-[2rem] shrink-0 items-center gap-1.5 rounded-lg bg-gray-950 px-2.5 py-1.5 text-xs text-gray-200"
+      aria-live="polite"
+    >
+      <span className="shrink-0 font-semibold text-orange-200" aria-hidden>
+        ♪
+      </span>
+      <span className="min-w-0 truncate font-medium" title={line || undefined}>
+        {line || '—'}
+      </span>
     </div>
   );
 }

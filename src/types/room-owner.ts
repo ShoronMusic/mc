@@ -56,6 +56,14 @@ export interface TurnStatePayload {
   selectionRoundNumber?: number;
 }
 
+/** パスボタンからの選曲パス／パス予約（チャットに「パス」を出さない） */
+export const TURN_PASS_EVENT = 'room:turnPass';
+
+export interface TurnPassPayload {
+  clientId: string;
+  displayName: string;
+}
+
 /** オーナーによる5分制限のON/OFF。その部屋のセッションのみ。デフォルトON */
 export const OWNER_5MIN_LIMIT_EVENT = 'owner:5minLimit';
 

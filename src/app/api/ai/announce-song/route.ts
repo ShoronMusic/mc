@@ -125,6 +125,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       text,
+      artistTitle,
       durationSeconds: durationSeconds ?? undefined,
       japaneseDomestic: isJapaneseDomestic,
       jpDomesticSilence,

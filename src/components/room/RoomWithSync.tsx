@@ -27,6 +27,7 @@ import MyPage, { type MyPageMainTab } from '@/components/mypage/MyPage';
 import { RoomAiSettingsModal } from '@/components/mypage/RoomAiSettingsModal';
 import { RoomChatLogModal } from '@/components/room/RoomChatLogModal';
 import RoomMainLayout from '@/components/room/RoomMainLayout';
+import NowPlaying from '@/components/room/NowPlaying';
 import RoomPlaybackHistory from '@/components/room/RoomPlaybackHistory';
 import ChatSummaryModalBody, {
   buildActiveUsageTimeLabelFromFetch,
@@ -141,6 +142,7 @@ import {
   OWNER_SONG_QUIZ_EVENT,
   OWNER_STATE_EVENT,
   TURN_STATE_EVENT,
+  TURN_PASS_EVENT,
   OWNER_5MIN_LIMIT_EVENT,
   DEFAULT_OWNER_AI_CHARACTER_JOIN_ENABLED,
   DEFAULT_OWNER_NEXT_SONG_RECOMMEND_ENABLED,
@@ -157,6 +159,7 @@ import {
   type OwnerSongQuizPayload,
   type OwnerStatePayload,
   type TurnStatePayload,
+  type TurnPassPayload,
   type Owner5MinLimitPayload,
 } from '@/types/room-owner';
 import {
@@ -485,6 +488,7 @@ export default function RoomWithSync({
   /** scheduleAutoPlay が直近に play を publish した時刻（YT の PLAYING で二重 publish しない） */
   const lastScheduledPlayPublishAtRef = useRef(0);
   const [videoId, setVideoId] = useState<string | null>(null);
+  const [currentPlayingArtistTitle, setCurrentPlayingArtistTitle] = useState('');
   const [currentTime, setCurrentTime] = useState(0);
   const [playing, setPlaying] = useState(false);
   const playingRef = useRef(false);
@@ -840,6 +844,8 @@ export default function RoomWithSync({
   >([]);
   /** ターン案内・changeVideo: リング上で次の「在室かつ選曲参加」の clientId */
   const resolveNextPresentTurnRef = useRef<(afterClientId: string) => string>(() => '');
+  /** 未再生時は AI ターンを飛ばし、次の人間選曲者へ（エージェントは開始直後に自動選曲しない） */
+  const resolvePromptTurnClientIdRef = useRef<(turnClientId: string) => string>((id) => id.trim());
   /** 入室順のフォールバック（古いクライアントが joinedAtMs を送らない場合）＋ ref 更新後に participants を再計算する */
   const joinOrderByClientIdRef = useRef<Map<string, number>>(new Map());
   const [joinOrderEpoch, setJoinOrderEpoch] = useState(0);
@@ -1050,6 +1056,9 @@ export default function RoomWithSync({
   songLimit5MinEnabledRef.current = songLimit5MinEnabled;
   videoIdRef.current = videoId;
   playingRef.current = playing;
+  useEffect(() => {
+    if (!videoId) setCurrentPlayingArtistTitle('');
+  }, [videoId]);
   useResumeYoutubeWhenTabVisible(playerRef, videoIdRef, playingRef);
   /** 自分のステータス（離席・ROM・食事中など）。参加者名横に表示 */
   const [userStatus, setUserStatus] = useState('');
@@ -1689,6 +1698,21 @@ export default function RoomWithSync({
     }
     return '';
   };
+  resolvePromptTurnClientIdRef.current = (turnClientId: string) => {
+    let id = turnClientId.trim();
+    if (!id) return '';
+    if (!ownerAiCharacterJoinEnabledRef.current) return id;
+    const hasActiveVideo = Boolean((videoIdRef.current ?? '').trim());
+    const hasSessionSong = Boolean(lastChangeVideoPublisherRef.current.trim());
+    if (hasActiveVideo || hasSessionSong) return id;
+    const max = Math.max(1, participatingOrderRef.current.length);
+    for (let guard = 0; id === AI_CHARACTER_CLIENT_ID && guard < max; guard += 1) {
+      const next = resolveNextPresentTurnRef.current(id);
+      if (!next || next === id) break;
+      id = next;
+    }
+    return id;
+  };
   /** 参加者欄の [n] と同じ入室順（1始まり）。Ably ハンドラから参照 */
   const participantJoinRankByClientIdRef = useRef<Map<string, number>>(new Map());
   useEffect(() => {
@@ -2262,6 +2286,17 @@ export default function RoomWithSync({
             }),
           );
         }
+      }
+      return;
+    }
+    if (message.name === TURN_PASS_EVENT) {
+      const d = message.data as TurnPassPayload;
+      const passClientId = typeof d?.clientId === 'string' ? d.clientId.trim() : '';
+      if (passClientId) {
+        handlePassPhraseFromClientRef.current(
+          passClientId,
+          typeof d.displayName === 'string' && d.displayName.trim() ? d.displayName.trim() : '参加者',
+        );
       }
       return;
     }
@@ -3122,6 +3157,17 @@ export default function RoomWithSync({
     [publish, channel]
   );
 
+  /** パスボタン: 全クライアントで同一処理（協調役が TURN_STATE を配信） */
+  const requestPassTurnFromButton = useCallback(() => {
+    const cid = (myClientId ?? '').trim();
+    if (!cid) return;
+    const payload: TurnPassPayload = {
+      clientId: cid,
+      displayName: effectiveDisplayName.trim() || '参加者',
+    };
+    safePublish(TURN_PASS_EVENT, payload);
+  }, [myClientId, effectiveDisplayName, safePublish]);
+
   const publishSongQuizAnswer = useCallback(
     (quizMessageId: string, videoIdForAnswer: string, pickedIndex: number) => {
       const cid = (myClientId ?? '').trim();
@@ -3691,8 +3737,18 @@ export default function RoomWithSync({
       displayName: string,
       options?: { fiveMinPrefix?: string; afterAiCharacterSong?: boolean },
     ) => {
-      const turnId = turnClientId.trim();
-      const name = displayName.trim() || '次の方';
+      let turnId = turnClientId.trim();
+      let name = displayName.trim() || '次の方';
+      if (turnId === AI_CHARACTER_CLIENT_ID) {
+        publishSelectorWaitingMessage(turnId, name);
+        return;
+      }
+      const effectiveTurnId = resolvePromptTurnClientIdRef.current(turnId);
+      if (effectiveTurnId && effectiveTurnId !== turnId) {
+        turnId = effectiveTurnId;
+        const p = participatingOrderRef.current.find((x) => x.clientId === turnId);
+        if (p?.displayName?.trim()) name = p.displayName.trim();
+      }
       const orderLen = participatingOrderRef.current.length;
 
       if (orderLen <= 1) {
@@ -4028,6 +4084,26 @@ export default function RoomWithSync({
         Boolean(myClientId) &&
         coordinationRef.current !== '' &&
         myClientId === coordinationRef.current;
+
+      const passerHasQueuedSong = isParticipantQueuedForTurn(sid, displayName);
+
+      // 選曲済み: この番枠では選曲待ちではない → 次の自分の番用パス予約／取消のみ
+      if (sid === cur && passerHasQueuedSong) {
+        if (passTurnReservationClientIdsRef.current.includes(sid)) {
+          removePassTurnReservation(sid);
+          if (imCoordinator) {
+            addSystemMessage(`${displayName}さんがパス予約を取り消しました。`);
+          }
+        } else {
+          addPassTurnReservation(sid);
+          if (imCoordinator) {
+            addSystemMessage(
+              `${displayName}さんが次の選曲をパス予約しました（自分の番が来たら自動でパスします）。`,
+            );
+          }
+        }
+        return;
+      }
 
       if (sid === cur) {
         removePassTurnReservation(sid);
@@ -4747,6 +4823,12 @@ export default function RoomWithSync({
       }
       break;
     }
+    const skippedCur = resolvePromptTurnClientIdRef.current(cur);
+    if (skippedCur !== cur) {
+      cur = skippedCur;
+      setCurrentTurnClientId(cur);
+      publishRef.current?.(TURN_STATE_EVENT, buildTurnStatePayload(cur));
+    }
     // 選曲予約済みなら「次を貼って」案内は出さない（5分経過・曲終了どちらも）
     const qReserve = songReservationQueueRef.current;
     if (qReserve.length > 0) {
@@ -4852,14 +4934,16 @@ export default function RoomWithSync({
     ) {
       return;
     }
-    const next = resolveNextPresentTurnRef.current(cur);
+    const next = resolvePromptTurnClientIdRef.current(resolveNextPresentTurnRef.current(cur));
     if (next && next !== cur) {
       setCurrentTurnClientId(next);
+      currentTurnClientIdRef.current = next;
       publishRef.current?.(TURN_STATE_EVENT, buildTurnStatePayload(next));
       return;
     }
     if (!next) {
       setCurrentTurnClientId('');
+      currentTurnClientIdRef.current = '';
       publishRef.current?.(TURN_STATE_EVENT, buildTurnStatePayload(''));
     }
   }, [currentTurnClientId, participants, presenceData, buildTurnStatePayload, myClientId, addSystemMessage, removePassTurnReservation, promptSelectorTurnMessages, publishSelectorWaitingMessage]);
@@ -4985,6 +5069,11 @@ export default function RoomWithSync({
               ...(jpSilence ? { jpDomesticSilenceForVideoId: vid } : {}),
             });
             touchActivity();
+          }
+          const artistTitle =
+            typeof data?.artistTitle === 'string' ? data.artistTitle.trim() : '';
+          if (artistTitle && videoIdRef.current === vid) {
+            setCurrentPlayingArtistTitle(artistTitle);
           }
           const durationSec =
             typeof data?.durationSeconds === 'number' && data.durationSeconds > 0
@@ -6569,12 +6658,18 @@ export default function RoomWithSync({
     };
 
     const currentVid = (videoIdRef.current ?? '').trim();
+    const hasSessionSong = Boolean(lastChangeVideoPublisherRef.current.trim());
     const nextHumanId = resolveNextHumanTurnAfterAi();
-    // まだ曲が流れておらず人間が在室なら、AI の自動選曲は行わずユーザーにターンを返す
-    if (!currentVid && nextHumanId) {
+    // セッション開始直後（まだ1曲も選曲されていない）だけ、AI 自動選曲は行わず人間へ返す
+    if (!currentVid && !hasSessionSong && nextHumanId) {
       const b = charAutoPickCtxRef.current.buildTurnStatePayload;
       setCurrentTurnClientId(nextHumanId);
+      currentTurnClientIdRef.current = nextHumanId;
       publishRef.current?.(TURN_STATE_EVENT, b(nextHumanId));
+      const humanName =
+        participatingOrderRef.current.find((p) => p.clientId === nextHumanId)?.displayName ??
+        '次の方';
+      promptSelectorTurnMessagesRef.current(nextHumanId, humanName);
       return;
     }
 
@@ -8211,6 +8306,11 @@ export default function RoomWithSync({
     ]
   );
 
+  const myHasQueuedSongForPass = useMemo(
+    () => Boolean(myClientId && isParticipantQueuedForTurn(myClientId, effectiveDisplayName)),
+    [myClientId, effectiveDisplayName, queuedSongPublisherClientIds],
+  );
+
   const chatInputNode = (
     <ChatInput
       ref={chatInputRef}
@@ -8242,9 +8342,10 @@ export default function RoomWithSync({
       turnPassControls={
         !isGuest && participatesInSelection && participatingOrder.length > 1 && myClientId
           ? {
-              isMyTurn: currentTurnClientId === myClientId,
+              isMyTurn: currentTurnClientId === myClientId && !myHasQueuedSongForPass,
               passReserved: passTurnReservationClientIds.includes(myClientId),
-              onConfirmPass: () => handlePassPhraseFromClient(myClientId, effectiveDisplayName),
+              hasQueuedSong: myHasQueuedSongForPass,
+              onConfirmPass: () => requestPassTurnFromButton(),
             }
           : null
       }
@@ -8770,6 +8871,7 @@ export default function RoomWithSync({
           onClose={() => setAiSettingsOpen(false)}
           isChatOwner={canUseOwnerControls}
           showOwnerAiTab={canUseOwnerControls}
+          defaultOwnerTab={canUseOwnerControls}
           roomAiOwnerPolicy={{
             commentaryOn: !isCommentPackFullyOff(commentPackSlots),
             quizOn: ownerSongQuizEnabled,
@@ -8988,6 +9090,7 @@ export default function RoomWithSync({
           />
         }
         rightTop={
+          <div className="flex min-h-0 flex-col gap-1.5">
           <div className="relative">
             <YouTubePlayer
               ref={playerRef}
@@ -9096,6 +9199,8 @@ export default function RoomWithSync({
                 />
               </button>
             </div>
+          </div>
+            <NowPlaying artistTitle={currentPlayingArtistTitle} />
           </div>
         }
         rightBottom={

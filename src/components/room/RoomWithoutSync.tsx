@@ -171,6 +171,7 @@ export default function RoomWithoutSync({
   const chatInputRef = useRef<ChatInputHandle>(null);
   const [roomDisplayTitleCurrent, setRoomDisplayTitleCurrent] = useState(roomDisplayTitle);
   const [videoId, setVideoId] = useState<string | null>(null);
+  const [currentPlayingArtistTitle, setCurrentPlayingArtistTitle] = useState('');
   const [playing, setPlaying] = useState(false);
   const playingRef = useRef(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -450,6 +451,9 @@ export default function RoomWithoutSync({
   const songQuizLocalAnswersByIdRef = useRef<Map<string, SongQuizAnswerRow[]>>(new Map());
   videoIdRef.current = videoId;
   playingRef.current = playing;
+  useEffect(() => {
+    if (!videoId) setCurrentPlayingArtistTitle('');
+  }, [videoId]);
   useResumeYoutubeWhenTabVisible(playerRef, videoIdRef, playingRef);
 
   useEffect(() => {
@@ -1093,6 +1097,11 @@ export default function RoomWithoutSync({
             }
             addAiMessage(data.text, { bypassJpDomesticSilence: true, videoId: vid });
             touchActivity();
+          }
+          const artistTitle =
+            typeof data?.artistTitle === 'string' ? data.artistTitle.trim() : '';
+          if (artistTitle && videoIdRef.current === vid) {
+            setCurrentPlayingArtistTitle(artistTitle);
           }
           const durationSec =
             typeof data?.durationSeconds === 'number' && data.durationSeconds > 0
@@ -2636,7 +2645,7 @@ export default function RoomWithoutSync({
                 </button>
               </div>
             </div>
-            <NowPlaying />
+            <NowPlaying artistTitle={currentPlayingArtistTitle} />
           </>
         }
         rightBottom={

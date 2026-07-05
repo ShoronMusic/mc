@@ -12,6 +12,8 @@ export type RoomAiSettingsModalProps = {
   onClose: () => void;
   isChatOwner?: boolean;
   showOwnerAiTab: boolean;
+  /** true のとき最初に「部屋（オーナー）」タブを表示（オーナー単独・複数参加いずれも） */
+  defaultOwnerTab?: boolean;
   roomAiOwnerPolicy?: RoomAiOwnerPolicy;
   ownerAiCharacterJoinEnabled: boolean;
   onOwnerAiCharacterJoinToggle?: () => void;
@@ -32,6 +34,7 @@ export function RoomAiSettingsModal({
   onClose,
   isChatOwner = false,
   showOwnerAiTab,
+  defaultOwnerTab = false,
   roomAiOwnerPolicy,
   ownerAiCharacterJoinEnabled,
   onOwnerAiCharacterJoinToggle,
@@ -47,7 +50,9 @@ export function RoomAiSettingsModal({
   onJpAiUnlockToggle,
   onOpenFullMyPage,
 }: RoomAiSettingsModalProps) {
-  const [tab, setTab] = useState<AiSettingsTab>('personal');
+  const [tab, setTab] = useState<AiSettingsTab>(() =>
+    showOwnerAiTab && defaultOwnerTab ? 'owner' : 'personal',
+  );
 
   return (
     <div
