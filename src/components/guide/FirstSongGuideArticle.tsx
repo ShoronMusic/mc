@@ -2,6 +2,7 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
+import { ServicePricingNoticeBrief } from '@/components/legal/ServicePricingNotice';
 
 const BASE = '/images/first-time-song-selection';
 
@@ -249,12 +250,15 @@ export function FirstSongGuideArticle({
             ）。続けて青い<strong className="text-white">「送信」</strong>ボタンを押します。
           </li>
           <li>
-            <strong className="text-white">再生が始まり</strong>、チャットには{' '}
+            <strong className="text-white">再生が始まり</strong>ます。AI 付きで選曲した場合は、チャットに{' '}
             <strong className="text-white">AI による曲解説</strong>
             が出ます。左のプレイヤーに動画が表示されれば
             <strong className="text-white">完了</strong>です。
           </li>
         </ol>
+        <div className="mt-3 text-sm text-gray-400 md:text-base">
+          <ServicePricingNoticeBrief />
+        </div>
         <div className="space-y-4 pt-2">
           <Fig
             src={`${BASE}/sc-04.png`}

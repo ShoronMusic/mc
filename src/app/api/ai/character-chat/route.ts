@@ -107,6 +107,11 @@ export async function POST(request: Request) {
     const roomId = typeof body?.roomId === 'string' ? body.roomId.trim() : '';
     const aiCharacterDisplayName =
       typeof body?.aiCharacterDisplayName === 'string' ? body.aiCharacterDisplayName.trim() : '';
+    const songSelectorDisplayName =
+      typeof body?.songSelectorDisplayName === 'string' ? body.songSelectorDisplayName.trim() : '';
+    const selectorHint = songSelectorDisplayName
+      ? `\n【いま流れている曲の選曲者】${songSelectorDisplayName}さん。褒める／応じる対象はこの参加者だけです。\n`
+      : '';
     const text = await generateChatReply(
       list,
       currentSong,
@@ -118,7 +123,7 @@ export async function POST(request: Request) {
       {
         forceReply: true,
         userTasteSummary,
-        personaInstruction: CHARACTER_PERSONA_INSTRUCTION,
+        personaInstruction: CHARACTER_PERSONA_INSTRUCTION + selectorHint,
         characterSelfDisplayName: aiCharacterDisplayName || null,
       },
     );

@@ -1,11 +1,24 @@
 import Ably from 'ably';
 import type { PresenceMessage } from 'ably';
-import { OWNER_ABSENCE_MS } from '@/lib/room-owner';
+import {
+  OWNER_ABSENCE_MS,
+  authUserIdFromRoomClientId,
+} from '@/lib/room-owner';
 import { OWNER_STATE_EVENT, type OwnerStatePayload } from '@/types/room-owner';
 import { allPresenceMembers } from '@/lib/ably-channel-presence';
 
 function presenceTimestamp(m: PresenceMessage): number {
   return typeof m.timestamp === 'number' ? m.timestamp : 0;
+}
+
+function isOwnerPresentInMembers(ownerClientId: string, members: PresenceMessage[]): boolean {
+  if (members.some((m) => m.clientId === ownerClientId)) return true;
+  const authId = authUserIdFromRoomClientId(ownerClientId);
+  if (!authId) return false;
+  return members.some((m) => {
+    const d = m.data as { authUserId?: string } | undefined;
+    return typeof d?.authUserId === 'string' && d.authUserId.trim() === authId;
+  });
 }
 
 /**
@@ -17,7 +30,6 @@ export async function resolveRoomOwnerClientId(
   roomId: string,
   members: PresenceMessage[]
 ): Promise<string | null> {
-  const presentIds = new Set(members.map((m) => m.clientId));
   const sortedByJoin = [...members].sort((a, b) => presenceTimestamp(a) - presenceTimestamp(b));
   const oldestId = sortedByJoin[0]?.clientId ?? null;
   const now = Date.now();
@@ -52,7 +64,7 @@ export async function resolveRoomOwnerClientId(
   }
 
   const { ownerClientId, ownerLeftAt } = latest;
-  const ownerPresent = presentIds.has(ownerClientId);
+  const ownerPresent = isOwnerPresentInMembers(ownerClientId, members);
 
   if (ownerPresent) {
     return ownerClientId;

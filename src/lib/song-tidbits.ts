@@ -74,9 +74,17 @@ export interface StoredCommentPack {
 
 /** 新曲モードで基本コメント末尾に付与する注釈（キャッシュ判定にも使う先頭フレーズ） */
 export const COMMENT_PACK_NEW_RELEASE_DISCLAIMER =
-  '\n\n【注釈】新曲と判断したため、周辺情報が十分でない場合もあり、AIコメントの真偽の精度が低い可能性があります。';
+  '\n\n【注釈】YouTube動画の公開が最近のため、周辺情報が十分でない場合もあり、AIコメントの真偽の精度が低い可能性があります。';
 
-const NEW_RELEASE_CACHE_MARKER = '【注釈】新曲と判断したため';
+/** 注釈キャッシュ判定用（旧文言も DB ヒットさせる） */
+export const COMMENT_PACK_NEW_RELEASE_CACHE_MARKERS = [
+  '【注釈】YouTube動画の公開が最近のため',
+  '【注釈】新曲と判断したため',
+] as const;
+
+function bodyHasNewReleaseCacheMarker(body: string): boolean {
+  return COMMENT_PACK_NEW_RELEASE_CACHE_MARKERS.some((m) => body.includes(m));
+}
 
 /**
  * 新曲モードで保存された基本コメントのみキャッシュヒット（自由4本は使わない）
@@ -103,7 +111,7 @@ export async function getStoredNewReleaseCommentPack(
     return null;
   }
   const b = typeof data?.body === 'string' ? data.body.trim() : '';
-  if (!b || !b.includes(NEW_RELEASE_CACHE_MARKER)) return null;
+  if (!b || !bodyHasNewReleaseCacheMarker(b)) return null;
   const tid = typeof (data as { id?: string })?.id === 'string' ? (data as { id: string }).id : '';
 
   return { baseComment: b, freeComments: [], tidbitIds: tid ? [tid] : undefined };
@@ -134,7 +142,7 @@ export async function getStoredBaseOnlyCommentPackByVideoId(
     return null;
   }
   const body = typeof baseRow?.body === 'string' ? baseRow.body.trim() : '';
-  if (!body || body.includes(NEW_RELEASE_CACHE_MARKER)) return null;
+  if (!body || bodyHasNewReleaseCacheMarker(body)) return null;
 
   const { data: chat1, error: e2 } = await supabase
     .from('song_tidbits')

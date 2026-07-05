@@ -3,7 +3,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { useState } from 'react';
+import { useState, type CSSProperties } from 'react';
 import {
   GUIDE_ENJOY_BADGE_LABELS,
   GUIDE_ENJOY_CORE_SECTIONS,
@@ -15,6 +15,7 @@ import {
   GUIDE_ENJOY_USAGE_HIGHLIGHTS,
   type GuideEnjoyCategory,
   type GuideEnjoyFeatureBadge,
+  type GuideEnjoyIllustration,
 } from '@/lib/guide-enjoy-features';
 import { guideInternalHref } from '@/lib/policy-modal-link';
 
@@ -60,6 +61,51 @@ function SelectionMethodDescription({
   return <p className={`mt-2 text-sm ${textClass}`}>{description}</p>;
 }
 
+function SelectionMethodImages({
+  images,
+  lightTone,
+}: {
+  images: readonly GuideEnjoyIllustration[];
+  lightTone: boolean;
+}) {
+  const totalWidth = images.reduce((sum, image) => sum + image.width, 0);
+
+  return (
+    <div className="w-full min-w-0 shrink px-3 py-3 sm:shrink-0 sm:px-4 sm:py-4">
+      <div className="mx-auto flex w-full max-w-full items-end justify-center gap-2 sm:mx-0 sm:ml-auto sm:justify-end">
+        {images.map((image) => (
+          <figure
+            key={image.src}
+            className="flex min-w-0 flex-col items-center"
+            style={{
+              flex: `${image.width} 1 0`,
+              maxWidth: `${Math.round((image.width / totalWidth) * 100)}%`,
+            }}
+          >
+            {image.caption ? (
+              <figcaption
+                className={`mb-1.5 text-center text-xs font-medium ${
+                  lightTone ? 'text-gray-600' : 'text-gray-300'
+                }`}
+              >
+                {image.caption}
+              </figcaption>
+            ) : null}
+            <Image
+              src={image.src}
+              alt={image.alt}
+              width={image.width}
+              height={image.height}
+              className="h-auto w-full max-w-full"
+              sizes={`(max-width: 640px) ${Math.round((image.width / totalWidth) * 45)}vw, ${image.width}px`}
+            />
+          </figure>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function EnjoyCategoryPanel({
   category,
   showHeading = true,
@@ -83,7 +129,7 @@ function EnjoyCategoryPanel({
             {category.title}
           </h2>
         )}
-        <p className={`text-sm text-gray-500 ${showHeading ? 'mt-1' : ''}`}>{category.lead}</p>
+        <p className={`text-sm text-gray-400 ${showHeading ? 'mt-1' : 'mt-0.5'}`}>{category.lead}</p>
       </div>
       <ul className={`grid gap-3 ${twoColGrid ? 'sm:grid-cols-2' : ''}`}>
         {category.features.map((feature) => {
@@ -191,25 +237,26 @@ export function GuideEnjoyFeatureList() {
   return (
     <article className="space-y-8 text-sm leading-relaxed text-gray-300">
       <header className="space-y-3">
-        <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">
+        <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
           {GUIDE_ENJOY_INTRO.subtitle}
         </p>
         <h1 className="text-2xl font-bold text-white">{GUIDE_ENJOY_INTRO.title}</h1>
         <p className="text-gray-400">{GUIDE_ENJOY_INTRO.lead}</p>
-        <ul className="flex flex-nowrap items-stretch gap-2 overflow-x-auto">
+        <ul className="flex flex-col gap-2 sm:flex-row sm:flex-nowrap sm:items-stretch sm:overflow-x-auto">
           {GUIDE_ENJOY_USAGE_HIGHLIGHTS.map((pattern) => {
             const imageDisplayWidth = Math.round(pattern.imageWidth * 0.9);
             const isLightCard = pattern.cardTone === 'light';
+            const cardWidth = pattern.imageWidth + 24;
 
             return (
             <li
               key={pattern.title}
-              className={`flex shrink-0 flex-col rounded-xl border ${
+              className={`flex w-full flex-col rounded-xl border sm:w-[var(--enjoy-highlight-card-w)] sm:shrink-0 ${
                 isLightCard
                   ? 'border-gray-200 bg-white'
                   : 'border-gray-700 bg-gray-900/60'
               }`}
-              style={{ width: pattern.imageWidth + 24 }}
+              style={{ '--enjoy-highlight-card-w': `${cardWidth}px` } as CSSProperties}
             >
               <div className="flex-1 p-4 pb-0">
                 <h2
@@ -236,12 +283,13 @@ export function GuideEnjoyFeatureList() {
                   alt={pattern.imageAlt}
                   width={pattern.imageWidth}
                   height={pattern.imageHeight}
-                  className="h-auto shrink-0"
+                  className="h-auto w-full max-w-full sm:max-w-none sm:shrink-0"
                   style={{
-                    width: `${imageDisplayWidth}px`,
+                    width: '100%',
+                    maxWidth: `${imageDisplayWidth}px`,
                     height: 'auto',
                   }}
-                  sizes={`${imageDisplayWidth}px`}
+                  sizes={`(max-width: 639px) 100vw, ${imageDisplayWidth}px`}
                   draggable={false}
                 />
               </div>
@@ -333,7 +381,7 @@ export function GuideEnjoyFeatureList() {
           <h2 id="enjoy-song-selection-heading" className="text-base font-semibold text-white">
             {GUIDE_ENJOY_SONG_SELECTION.title}
           </h2>
-          <p className="mt-1 text-sm text-gray-500">{GUIDE_ENJOY_SONG_SELECTION.lead}</p>
+          <p className="mt-1 text-sm text-gray-400">{GUIDE_ENJOY_SONG_SELECTION.lead}</p>
         </div>
         <div
           role="tablist"
@@ -418,31 +466,7 @@ export function GuideEnjoyFeatureList() {
                 ) : null}
               </div>
               {activeSelectionMethod.images?.length ? (
-                <div className="flex shrink-0 flex-nowrap items-end justify-end gap-2 px-3 py-3 sm:gap-3 sm:px-4 sm:py-4">
-                  {activeSelectionMethod.images.map((image) => (
-                    <figure key={image.src} className="flex shrink-0 flex-col items-center">
-                      {'caption' in image && image.caption ? (
-                        <figcaption
-                          className={`mb-1.5 text-center text-xs font-medium ${
-                            activeSelectionMethod.cardTone === 'light'
-                              ? 'text-gray-600'
-                              : 'text-gray-300'
-                          }`}
-                        >
-                          {image.caption}
-                        </figcaption>
-                      ) : null}
-                      <Image
-                        src={image.src}
-                        alt={image.alt}
-                        width={image.width}
-                        height={image.height}
-                        className="h-auto shrink-0"
-                        sizes={`${image.width}px`}
-                      />
-                    </figure>
-                  ))}
-                </div>
+                <SelectionMethodImages images={activeSelectionMethod.images} lightTone={activeSelectionMethod.cardTone === 'light'} />
               ) : null}
             </div>
           </div>
@@ -525,7 +549,7 @@ export function GuideEnjoyFeatureList() {
           <h2 id="enjoy-tabs-heading" className="text-base font-semibold text-white">
             もっと楽しむ
           </h2>
-          <p className="mt-1 text-xs text-gray-500">タブを切り替えて、機能をカテゴリごとに確認できます。</p>
+          <p className="mt-1 text-sm text-gray-400">タブを切り替えて、機能をカテゴリごとに確認できます。</p>
         </div>
 
         <section className="space-y-4" aria-labelledby="enjoy-original-ais-heading">
@@ -533,7 +557,7 @@ export function GuideEnjoyFeatureList() {
             <h3 id="enjoy-original-ais-heading" className="text-sm font-semibold text-white">
               {GUIDE_ENJOY_ORIGINAL_AIS.title}
             </h3>
-            <p className="mt-1 text-xs text-gray-500">{GUIDE_ENJOY_ORIGINAL_AIS.lead}</p>
+            <p className="mt-1 text-sm text-gray-400">{GUIDE_ENJOY_ORIGINAL_AIS.lead}</p>
           </div>
           <ul className="grid gap-3 sm:grid-cols-2">
             {GUIDE_ENJOY_ORIGINAL_AIS.roles.map((role) => (
@@ -636,6 +660,22 @@ export function GuideEnjoyFeatureList() {
               className="text-sky-400 underline-offset-2 hover:underline"
             >
               チャットのマナー
+            </Link>
+          </li>
+          <li>
+            <Link
+              href={guideInternalHref('/sitemap', linkSearchParams)}
+              className="text-sky-400 underline-offset-2 hover:underline"
+            >
+              サイトマップ
+            </Link>
+          </li>
+          <li>
+            <Link
+              href={guideInternalHref('/services', linkSearchParams)}
+              className="text-sky-400 underline-offset-2 hover:underline"
+            >
+              サービス一覧
             </Link>
           </li>
           <li>

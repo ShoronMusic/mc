@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { fetchLiveGatheringStartedAtIso } from '@/lib/live-gathering-playback-since';
 
 export const dynamic = 'force-dynamic';
 
@@ -62,14 +63,27 @@ export async function GET(request: Request) {
   const nowIso = new Date().toISOString();
   const endIso = nowIso < session.endIso ? nowIso : session.endIso;
 
-  const { data: playData, error: playErr } = await supabase
+  let gatheringStartedAt: string | null = null;
+  try {
+    gatheringStartedAt = await fetchLiveGatheringStartedAtIso(supabase, roomId);
+  } catch (e) {
+    console.error('[room-session-summary] gathering since', e);
+  }
+
+  let playQuery = supabase
     .from('room_playback_history')
     .select('played_at, display_name, video_id, artist_name, title, style')
     .eq('room_id', roomId)
-    .gte('played_at', session.startIso)
-    .lt('played_at', endIso)
     .order('played_at', { ascending: true })
     .limit(2000);
+
+  if (gatheringStartedAt) {
+    playQuery = playQuery.gte('played_at', gatheringStartedAt).lte('played_at', nowIso);
+  } else {
+    playQuery = playQuery.gte('played_at', session.startIso).lt('played_at', endIso);
+  }
+
+  const { data: playData, error: playErr } = await playQuery;
   if (playErr) return NextResponse.json({ error: playErr.message }, { status: 500 });
 
   const { data: liveGathering, error: liveErr } = await supabase

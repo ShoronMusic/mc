@@ -31,7 +31,20 @@ export interface PlaybackMessage {
   selectionRoundNumber?: number;
   /** 選曲者の AI モード（full = 解説等あり / none = 選曲のみ）。changeVideo・queueSong で引き継ぐ */
   aiMode?: 'full' | 'none';
+  /** queueSong / sync スナップショット: 再接続後も選曲者を特定 */
+  publisherAuthUserId?: string;
+  publisherDisplayName?: string;
+  /** sync スナップショット: 再生中の選曲予約キュー全体 */
+  reservationQueue?: ReservationQueueEntryPayload[];
 }
+
+export type ReservationQueueEntryPayload = {
+  videoId: string;
+  publisherClientId: string;
+  aiMode?: 'full' | 'none';
+  publisherAuthUserId?: string;
+  publisherDisplayName?: string;
+};
 
 /** 後から入室したクライアントが再生状態を問い合わせ */
 export const REQUEST_PLAYBACK_SYNC_EVENT = 'room:requestPlaybackSync';

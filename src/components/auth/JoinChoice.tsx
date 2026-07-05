@@ -5,15 +5,23 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { createClient, isSupabaseConfigured } from '@/lib/supabase/client';
 import { assignDefaultGuestDisplayName } from '@/lib/guest-display-name';
-import { rememberGuestRoom, readGuestDisplayNameHint } from '@/lib/guest-room-persistence';
+import {
+  GUEST_NAME_STORAGE_KEY,
+  GUEST_ROOM_KEY,
+  GUEST_STORAGE_KEY,
+} from '@/lib/guest-room-storage-keys';
+import { resolveGuestDisplayNameForJoin, roomDisplayNameValidationMessage } from '@/lib/room-display-name';
 import { setOAuthReturnPathCookie } from '@/lib/oauth-return-path';
 import { getBrowserAppOrigin } from '@/lib/app-origin';
+import { rememberGuestRoom, readGuestDisplayNameHint } from '@/lib/guest-room-persistence';
 import { SimpleAuthForm } from './SimpleAuthForm';
 import { AuthErrorBanner } from './AuthErrorBanner';
 
-export const GUEST_STORAGE_KEY = 'mc:guest';
-export const GUEST_NAME_STORAGE_KEY = 'mc:guest_name';
-export const GUEST_ROOM_KEY = 'mc:guest_room';
+export {
+  GUEST_NAME_STORAGE_KEY,
+  GUEST_ROOM_KEY,
+  GUEST_STORAGE_KEY,
+} from '@/lib/guest-room-storage-keys';
 
 export function GoogleBrandIcon({ className }: { className?: string }) {
   return (
@@ -64,9 +72,17 @@ export function JoinChoice({ onJoin, roomId, joinVerifying = false }: JoinChoice
     if (guestSubmitting || joinVerifying) return;
     setGuestSubmitting(true);
     try {
-      const name = guestHandle.trim() || assignDefaultGuestDisplayName();
-      rememberGuestRoom(roomId, name);
-      await onJoin(name, 'guest');
+      const trimmed = guestHandle.trim();
+      const name = trimmed
+        ? resolveGuestDisplayNameForJoin(trimmed)
+        : assignDefaultGuestDisplayName();
+      if (trimmed && !name) {
+        setError(roomDisplayNameValidationMessage(trimmed));
+        return;
+      }
+      const guestName = name ?? assignDefaultGuestDisplayName();
+      rememberGuestRoom(roomId, guestName);
+      await onJoin(guestName, 'guest');
     } finally {
       setGuestSubmitting(false);
     }

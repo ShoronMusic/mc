@@ -797,11 +797,6 @@ export default function ThemePlaylistMissionPanel({ isGuest, canDeleteRecordedEn
         <div
           className="fixed inset-0 z-[78] flex items-center justify-center bg-black/65 p-4"
           role="presentation"
-          onClick={() => {
-            if (!busy) {
-              setToggleConfirmModal((prev) => ({ ...prev, open: false }));
-            }
-          }}
         >
           <div
             role="dialog"
@@ -852,9 +847,6 @@ export default function ThemePlaylistMissionPanel({ isGuest, canDeleteRecordedEn
         <div
           className="fixed inset-0 z-[80] flex items-center justify-center bg-black/65 p-4"
           role="presentation"
-          onClick={() => {
-            if (!busy) setDeleteModal({ open: false, theme: null, entryCount: 0 });
-          }}
         >
           <div
             role="dialog"

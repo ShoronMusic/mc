@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useState } from 'react';
 import { writeTermsAccepted } from '@/lib/terms-consent';
@@ -25,6 +26,13 @@ export function TermsConsentBlock({ nextPath }: TermsConsentBlockProps) {
 
   return (
     <div className="border-t border-gray-700 bg-gray-900/95 p-4">
+      <p className="mb-3 text-xs leading-relaxed text-gray-500">
+        本サービスは、初回アクセス時から Cookie 等により利用状況を分析することがあります（部屋入室前の規約同意とは別枠です）。詳細は{' '}
+        <Link href="/privacy" className="text-amber-400/90 underline-offset-2 hover:underline">
+          プライバシーポリシー
+        </Link>
+        （Cookie および端末内保存・外部送信）をご確認ください。
+      </p>
       <label className="flex cursor-pointer items-start gap-3 text-sm text-gray-300">
         <input
           type="checkbox"

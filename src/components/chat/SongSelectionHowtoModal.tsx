@@ -37,14 +37,8 @@ export function SongSelectionHowtoModal({ open, onClose }: Props) {
   useEffect(() => {
     if (!open) {
       setDetail(false);
-      return;
     }
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 
@@ -54,7 +48,6 @@ export function SongSelectionHowtoModal({ open, onClose }: Props) {
       role="dialog"
       aria-modal="true"
       aria-labelledby={detail ? 'song-howto-detail-title' : 'song-howto-modal-title'}
-      onClick={onClose}
     >
       <div
         className="max-h-full w-full max-w-md overflow-auto"

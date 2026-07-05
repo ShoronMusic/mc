@@ -22,11 +22,17 @@ type Mode = '24h' | 'last100';
 
 interface EraDistributionModalProps {
   roomId: string;
+  playbackHistorySinceIso?: string;
   open: boolean;
   onClose: () => void;
 }
 
-export default function EraDistributionModal({ roomId, open, onClose }: EraDistributionModalProps) {
+export default function EraDistributionModal({
+  roomId,
+  playbackHistorySinceIso,
+  open,
+  onClose,
+}: EraDistributionModalProps) {
   const [subTab, setSubTab] = useState<Mode>('24h');
   const [loading, setLoading] = useState(false);
   const [total, setTotal] = useState(0);
@@ -37,10 +43,12 @@ export default function EraDistributionModal({ roomId, open, onClose }: EraDistr
     setLoading(true);
     try {
       const mode = subTab === '24h' ? '24h' : 'last100';
-      const res = await fetch(
-        `/api/room-playback-era-stats?roomId=${encodeURIComponent(roomId)}&mode=${mode}`,
-        { credentials: 'include' }
-      );
+      const qs = new URLSearchParams({ roomId, mode });
+      const since = playbackHistorySinceIso?.trim() ?? '';
+      if (since) qs.set('since', since);
+      const res = await fetch(`/api/room-playback-era-stats?${qs.toString()}`, {
+        credentials: 'include',
+      });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setTotal(0);
@@ -55,7 +63,7 @@ export default function EraDistributionModal({ roomId, open, onClose }: EraDistr
     } finally {
       setLoading(false);
     }
-  }, [roomId, open, subTab]);
+  }, [roomId, open, subTab, playbackHistorySinceIso]);
 
   useEffect(() => {
     if (open) void load();
@@ -92,7 +100,6 @@ export default function EraDistributionModal({ roomId, open, onClose }: EraDistr
       role="dialog"
       aria-modal="true"
       aria-labelledby="era-dist-title"
-      onClick={onClose}
     >
       <div
         className="w-full max-w-lg rounded-lg border border-gray-600 bg-gray-900 p-4 text-gray-100 shadow-xl"

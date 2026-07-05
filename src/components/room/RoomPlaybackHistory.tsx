@@ -13,6 +13,10 @@ import {
   ROOM_PLAYBACK_HISTORY_PAGE_SIZE,
 } from '@/lib/room-playback-history-pagination';
 import { getArtistAndSong, getMainArtist, repairQuotedSongArtistPackInversion } from '@/lib/format-song-display';
+import {
+  favoriteHeartActiveTextClass,
+  favoriteHeartOutlineHoverClass,
+} from '@/lib/favorite-heart-ui';
 import { resolveFamousPvArtistSongPack } from '@/lib/youtube-famous-pv-override';
 import { SONG_STYLE_OPTIONS } from '@/lib/song-styles';
 import type { Music8ArtistJson } from '@/lib/music8-artist-display';
@@ -266,10 +270,12 @@ interface RoomPlaybackHistoryProps {
   /** 変更されると再取得する（部屋側で10秒後にPOSTしたあと更新用） */
   refreshKey?: number;
   /**
-   * 指定時は played_at >= この ISO 時刻の行のみ取得（ゲスト単独セッション向け）。
+   * 指定時は played_at >= この ISO 時刻の行のみ取得（ゲスト単独・開催中会向け）。
    * 未指定なら部屋の直近履歴（既定100件）。
    */
   playbackHistorySinceIso?: string;
+  /** ゲスト単独セッション向け（分布ボタン非表示・文言切替） */
+  playbackHistoryGuestSessionOnly?: boolean;
   /** 選曲者列の色（チャット・UserBar と同じ。表示名一致で適用） */
   participantsWithColor?: { displayName: string; textColor: string }[];
   /** ゲストでないときのみお気に入り利用可 */
@@ -315,6 +321,7 @@ export default function RoomPlaybackHistory({
   currentVideoId,
   refreshKey = 0,
   playbackHistorySinceIso,
+  playbackHistoryGuestSessionOnly = false,
   participantsWithColor = [],
   isGuest = true,
   favoritedVideoIds = [],
@@ -611,7 +618,8 @@ export default function RoomPlaybackHistory({
 
   const currentRow = currentVideoId ? sorted.find((r) => r.video_id === currentVideoId) : undefined;
 
-  const sessionOnlyHistory = Boolean(playbackHistorySinceIso?.trim());
+  const hasSinceFilter = Boolean(playbackHistorySinceIso?.trim());
+  const showDistributionStats = !playbackHistoryGuestSessionOnly;
 
   const toggleSort = useCallback(() => {
     setSortOrder((o) => (o === 'desc' ? 'asc' : 'desc'));
@@ -798,12 +806,15 @@ export default function RoomPlaybackHistory({
           <button
             type="button"
             onClick={() => {
+              if (activeTab === 'history') {
+                onOpenHistoryModal?.();
+                return;
+              }
               setActiveTab('history');
-              onOpenHistoryModal?.();
             }}
             className={`inline-flex items-center gap-1 rounded px-2 py-1 text-sm transition ${activeTab === 'history' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:bg-gray-700/50 hover:text-gray-200'}`}
-            title={onOpenHistoryModal ? '視聴履歴（クリックで拡大表示）' : undefined}
-            aria-label={onOpenHistoryModal ? '視聴履歴を拡大表示' : '視聴履歴'}
+            title={onOpenHistoryModal ? '視聴履歴（選択中に再クリックで拡大表示）' : undefined}
+            aria-label={onOpenHistoryModal ? '視聴履歴（選択中に再クリックで拡大表示）' : '視聴履歴'}
           >
             <ClockIcon className="h-4 w-4 shrink-0" aria-hidden />
             視聴履歴
@@ -826,7 +837,7 @@ export default function RoomPlaybackHistory({
               ソングデータ
             </button>
           )}
-          {!sessionOnlyHistory && (
+          {showDistributionStats && (
             <>
               <button
                 type="button"
@@ -970,9 +981,11 @@ export default function RoomPlaybackHistory({
             ) : sorted.length === 0 ? (
               <tr>
                 <td colSpan={8} className="py-2 text-center text-gray-500">
-                  {sessionOnlyHistory
+                  {playbackHistoryGuestSessionOnly
                     ? 'このセッションではまだ再生履歴がありません'
-                    : '履歴がありません'}
+                    : hasSinceFilter
+                      ? 'この会ではまだ再生履歴がありません'
+                      : '履歴がありません'}
                 </td>
               </tr>
             ) : (
@@ -1156,11 +1169,11 @@ export default function RoomPlaybackHistory({
                           aria-label={isFavorited ? 'お気に入り解除' : 'お気に入りに追加'}
                         >
                           {isFavorited ? (
-                            <span className="text-red-500" aria-hidden>
+                            <span className={favoriteHeartActiveTextClass} aria-hidden>
                               ♥
                             </span>
                           ) : (
-                            <span className="text-gray-500 hover:text-red-400" aria-hidden>
+                            <span className={`text-gray-500 ${favoriteHeartOutlineHoverClass}`} aria-hidden>
                               ♡
                             </span>
                           )}
@@ -1220,12 +1233,14 @@ export default function RoomPlaybackHistory({
 
       <StyleDistributionModal
         roomId={roomId}
+        playbackHistorySinceIso={playbackHistorySinceIso}
         open={styleDistOpen}
         onClose={() => setStyleDistOpen(false)}
       />
 
       <EraDistributionModal
         roomId={roomId}
+        playbackHistorySinceIso={playbackHistorySinceIso}
         open={eraDistOpen}
         onClose={() => setEraDistOpen(false)}
       />
@@ -1236,7 +1251,6 @@ export default function RoomPlaybackHistory({
           role="dialog"
           aria-modal="true"
           aria-labelledby="style-modal-title"
-          onClick={closeStyleModal}
         >
           <div
             className="w-full max-w-sm rounded-lg border border-gray-600 bg-gray-800 p-4 shadow-xl"

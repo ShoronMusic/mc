@@ -1,5 +1,13 @@
 /** マイページ未設定・行なし時: 曲解説 ON、クイズ・おすすめ OFF（初回は AI解説1 のみ想定） */
 export const DEFAULT_USER_ROOM_AI_COMMENTARY_ENABLED = true;
+
+/** 同期部屋の部屋側 AI 上限（参加者の個人スイッチ無効化・説明用） */
+export type RoomAiOwnerPolicy = {
+  commentaryOn: boolean;
+  quizOn: boolean;
+  recommendOn: boolean;
+};
+
 export const DEFAULT_USER_ROOM_AI_SONG_QUIZ_ENABLED = false;
 export const DEFAULT_USER_ROOM_AI_NEXT_SONG_RECOMMEND_ENABLED = false;
 

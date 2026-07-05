@@ -8,8 +8,8 @@ import {
   useStartPageIntroVisible,
 } from '@/components/home/StartPageSiteIntro';
 import { TopPageLoginAndLiveRooms } from '@/components/home/TopPageLoginAndLiveRooms';
-import { createClient, isSupabaseConfigured } from '@/lib/supabase/client';
 import { hasGuestRoomPersistence } from '@/lib/guest-room-persistence';
+import { loadBrowserSupabaseClient } from '@/lib/supabase/load-browser-client';
 import { useEffect, useState } from 'react';
 
 function StartPageTitle() {
@@ -42,7 +42,7 @@ function StartPageRoomEntryIntro({ showLoginHint = true }: { showLoginHint?: boo
       </p>
       {showLoginHint ? (
         <p className="mb-4 text-center text-xs text-gray-500 lg:text-left">
-          ログイン済みの方は主催者機能が使えます。未ログインの方は「新規で部屋を立ち上げる」または「ログインして過去の主催を再開」から入室方法を選べます。
+          ログイン済みの方は主催者機能が使えます。未ログインの方は「新規で部屋を立ち上げる」または「ログインして主催した部屋を再開」から入室方法を選べます。
         </p>
       ) : null}
     </>
@@ -58,25 +58,29 @@ function useTopPageLoggedIn() {
       setIsLoggedIn(false);
       return;
     }
-    const supabase = createClient();
-    if (!isSupabaseConfigured() || !supabase) {
-      setIsLoggedIn(false);
-      return;
-    }
     let active = true;
-    void supabase.auth.getUser().then(({ data }) => {
+    let unsubscribe: (() => void) | undefined;
+    void loadBrowserSupabaseClient().then(({ client, configured }) => {
       if (!active) return;
-      setIsLoggedIn(!!data.user);
-    });
-    const { data: sub } = supabase.auth.onAuthStateChange(() => {
-      void supabase.auth.getUser().then(({ data }) => {
+      if (!configured || !client) {
+        setIsLoggedIn(false);
+        return;
+      }
+      void client.auth.getUser().then(({ data }) => {
         if (!active) return;
         setIsLoggedIn(!!data.user);
       });
+      const { data: sub } = client.auth.onAuthStateChange(() => {
+        void client.auth.getUser().then(({ data }) => {
+          if (!active) return;
+          setIsLoggedIn(!!data.user);
+        });
+      });
+      unsubscribe = () => sub.subscription.unsubscribe();
     });
     return () => {
       active = false;
-      sub.subscription.unsubscribe();
+      unsubscribe?.();
     };
   }, []);
 

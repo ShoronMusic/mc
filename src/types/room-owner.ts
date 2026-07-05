@@ -7,7 +7,6 @@ import type { CommentPackSlotSelection } from '@/lib/comment-pack-slots';
 export const OWNER_FORCE_EXIT_EVENT = 'owner:forceExit';
 /** オーナーが他参加者の選曲参加／視聴専用を切り替え（対象クライアントのみ状態を反映） */
 export const OWNER_SET_PARTICIPANT_SELECTION_EVENT = 'owner:setParticipantSelection';
-export const OWNER_AI_FREE_SPEECH_STOP_EVENT = 'owner:aiFreeSpeechStop';
 export const OWNER_STATE_EVENT = 'owner:state';
 export const OWNER_SONG_QUIZ_EVENT = 'owner:songQuiz';
 export const OWNER_NEXT_SONG_RECOMMEND_EVENT = 'owner:nextSongRecommend';
@@ -24,10 +23,6 @@ export interface OwnerSetParticipantSelectionPayload {
   targetDisplayName: string;
   /** true: 選曲に参加 / false: 視聴専用 */
   participatesInSelection: boolean;
-}
-
-export interface OwnerAiFreeSpeechStopPayload {
-  enabled: boolean;
 }
 
 export interface OwnerSongQuizPayload {
@@ -78,6 +73,19 @@ export interface OwnerCommentPackModePayload {
   slots: CommentPackSlotSelection;
   /** Date.now()。古いメッセージの後着で上書きされチェックが点滅するのを防ぐ */
   sentAt?: number;
+}
+
+/** オーナー設定のまとめ再配信（遅延入室・取りこぼし対策）。5秒×6本の個別 heartbeat は使わない */
+export const OWNER_SETTINGS_HEARTBEAT_EVENT = 'owner:settingsHeartbeat';
+
+export interface OwnerSettingsHeartbeatPayload {
+  sentAt: number;
+  slots: CommentPackSlotSelection;
+  jpAiUnlockEnabled: boolean;
+  songQuizEnabled: boolean;
+  aiCharacterJoinEnabled: boolean;
+  aiCharacterName: string;
+  nextSongRecommendEnabled: boolean;
 }
 
 /** オーナーによる「邦楽AI解説の解禁」設定（その部屋のセッションのみ）。デフォルトOFF */

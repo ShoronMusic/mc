@@ -1,6 +1,6 @@
 # ⭐ プリペイド課金 — 方針・価格・損益まとめ（2026-07）
 
-> **用途**: 有料化 Phase D の**商品・価格の決定記録**。実装マスタは `docs/00-ai-trial-and-billing-implementation.md`、収支モデル全般は `docs/monetization-options.md`、原価帰属は `docs/room-gathering-history-and-ai-billing-project.md`。  
+> **用途**: 有料化 Phase D の**商品・価格の決定記録**。実装マスタは `docs/00-ai-trial-and-billing-implementation.md`、収支モデル全般は `docs/monetization-options.md`、原価帰属は `docs/room-gathering-history-and-ai-billing-project.md`。**特商法・VO・Stripe 運用**は `docs/commercial-transactions-vo-stripe-setup.md`。  
 > **ステータス**: 商品方針 **確定**。段階1（Stripe なし・管理手動付与）**実装中** — 下記「実装ログ」参照
 
 最終更新: **2026-07-02**
@@ -198,6 +198,7 @@ trial 枯渇 & credits > 0 → B3（full・クレジット消費）
 
 ### 段階2（Stripe）
 
+- [ ] 特商法・VO・050（方針: `docs/commercial-transactions-vo-stripe-setup.md` §6 段階 B）
 - [ ] Stripe Checkout + Webhook（¥500 / ¥1,000 商品）
 - [ ] UI: 枯渇時チャージ導線・マイページ購入
 - [ ] 利用規約・FAQ（プリペイド・残高・お試し10曲）

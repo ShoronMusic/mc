@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 type Props = {
@@ -28,6 +28,20 @@ export function AdminSongBasicInfoEditPanel({
   const [originalReleaseDate, setOriginalReleaseDate] = useState(initialOriginalReleaseDate ?? '');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    setDisplayTitle(initialDisplayTitle ?? '');
+    setMainArtist(initialMainArtist ?? '');
+    setSongTitle(initialSongTitle ?? '');
+    setStyle(initialStyle ?? '');
+    setOriginalReleaseDate(initialOriginalReleaseDate ?? '');
+  }, [
+    initialDisplayTitle,
+    initialMainArtist,
+    initialSongTitle,
+    initialStyle,
+    initialOriginalReleaseDate,
+  ]);
 
   async function handleSave() {
     setBusy(true);

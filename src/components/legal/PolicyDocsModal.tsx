@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 
-export type PolicyDocsTab = 'terms' | 'privacy' | 'guide' | 'enjoy';
+export type PolicyDocsTab = 'terms' | 'privacy' | 'guide';
 
 type PolicyDocsModalProps = {
   open: boolean;
@@ -22,15 +22,12 @@ function policyDocsIframeSrc(tab: PolicyDocsTab, returnToSegment?: string | null
       return `/privacy?modal=1${returnQ}`;
     case 'guide':
       return `/guide?modal=1${returnQ}`;
-    case 'enjoy':
-      return `/guide/enjoy?modal=1${returnQ}`;
     default:
       return `/terms?modal=1${returnQ}`;
   }
 }
 
 const TAB_LABELS: Record<PolicyDocsTab, string> = {
-  enjoy: '楽しみ方',
   guide: 'ご利用上の注意',
   terms: '利用規約',
   privacy: 'プライバシー',
@@ -56,7 +53,6 @@ export function PolicyDocsModal({
       role="dialog"
       aria-modal="true"
       aria-label="ご案内・規約"
-      onClick={onClose}
     >
       <div
         className="flex h-[85vh] w-full max-w-5xl flex-col overflow-hidden rounded-lg border border-gray-700 bg-gray-900"
@@ -64,7 +60,7 @@ export function PolicyDocsModal({
       >
         <div className="flex shrink-0 items-center justify-between gap-2 border-b border-gray-700 px-3 py-2">
           <div className="flex min-w-0 items-center gap-1 overflow-x-auto [scrollbar-width:thin]">
-            {(['enjoy', 'guide', 'terms', 'privacy'] as const).map((tab) => (
+            {(['guide', 'terms', 'privacy'] as const).map((tab) => (
               <button
                 key={tab}
                 type="button"

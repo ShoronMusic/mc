@@ -20,6 +20,20 @@ function readRemoteClaimMs(row: PresenceAuthRow | undefined): number {
     : 0;
 }
 
+function remoteHasCompetingSession(
+  remoteInstanceId: string,
+  remoteClaimMs: number,
+  localInstanceId: string,
+  localClaimMs: number,
+): boolean {
+  if (remoteClaimMs > localClaimMs) return true;
+  return (
+    remoteClaimMs === localClaimMs &&
+    Boolean(remoteInstanceId) &&
+    remoteInstanceId !== localInstanceId
+  );
+}
+
 /**
  * 同一 auth clientId: sessionClaimedAtMs が新しい端末が操作権を持つ。
  */
@@ -55,14 +69,19 @@ export function detectRoomSessionTakeoverState(input: {
 
   if (connectionLive && holdsSession) return 'active';
 
-  if (myPresence && remoteClaimMs > localClaimMs) return 'supplanted';
-  if (myPresence && remoteClaimMs === localClaimMs && remoteInstanceId && remoteInstanceId !== localInstanceId) {
-    return 'supplanted';
+  /** 同一 claim で instance 未反映／再接続中など、presence 同期待ち */
+  if (
+    myPresence &&
+    remoteClaimMs === localClaimMs &&
+    (!remoteInstanceId || remoteInstanceId === localInstanceId)
+  ) {
+    return 'connecting';
   }
 
-  if (!connectionLive && myPresence && remoteClaimMs >= localClaimMs) return 'supplanted';
-
-  if (connectionLive && myPresence && !holdsSession && remoteClaimMs >= localClaimMs && localClaimMs <= remoteClaimMs) {
+  if (
+    myPresence &&
+    remoteHasCompetingSession(remoteInstanceId, remoteClaimMs, localInstanceId, localClaimMs)
+  ) {
     return 'supplanted';
   }
 

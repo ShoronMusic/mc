@@ -1,5 +1,10 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
+import {
+  favoriteRowNeedsMetadata,
+  resolveFavoriteVideoMetadata,
+} from '@/lib/favorite-video-metadata';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,6 +16,39 @@ export type FavoriteItem = {
   title: string | null;
   artist_name: string | null;
 };
+
+async function enrichFavoriteItems(items: FavoriteItem[]): Promise<FavoriteItem[]> {
+  const admin = createAdminClient();
+  if (!admin || items.length === 0) return items;
+
+  const metadataByVideo = new Map<string, { title: string | null; artistName: string | null }>();
+  const needsLookup = Array.from(
+    new Set(
+      items
+        .filter((row) => favoriteRowNeedsMetadata(row.title, row.artist_name))
+        .map((row) => row.video_id.trim())
+        .filter(Boolean),
+    ),
+  );
+
+  await Promise.all(
+    needsLookup.map(async (videoId) => {
+      const meta = await resolveFavoriteVideoMetadata(admin, videoId);
+      metadataByVideo.set(videoId, meta);
+    }),
+  );
+
+  return items.map((row) => {
+    if (!favoriteRowNeedsMetadata(row.title, row.artist_name)) return row;
+    const meta = metadataByVideo.get(row.video_id.trim());
+    if (!meta) return row;
+    return {
+      ...row,
+      title: row.title?.trim() || meta.title,
+      artist_name: row.artist_name?.trim() || meta.artistName,
+    };
+  });
+}
 
 /**
  * GET: 自分のお気に入り一覧。?idsOnly=1 のときは videoIds のみ返す（視聴履歴のハート表示用）
@@ -69,7 +107,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ items: (data ?? []) as FavoriteItem[] });
+  return NextResponse.json({ items: await enrichFavoriteItems((data ?? []) as FavoriteItem[]) });
 }
 
 /**
@@ -102,11 +140,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'videoId is required' }, { status: 400 });
   }
 
-  const title = typeof body?.title === 'string' ? body.title.trim() || null : null;
-  const artistName = typeof body?.artistName === 'string' ? body.artistName.trim() || null : null;
+  let title = typeof body?.title === 'string' ? body.title.trim() || null : null;
+  let artistName = typeof body?.artistName === 'string' ? body.artistName.trim() || null : null;
   const playedAtDate = playedAt ? new Date(playedAt) : new Date();
   if (Number.isNaN(playedAtDate.getTime())) {
     return NextResponse.json({ error: 'playedAt must be valid ISO date' }, { status: 400 });
+  }
+
+  if (favoriteRowNeedsMetadata(title, artistName)) {
+    const admin = createAdminClient();
+    const resolved = await resolveFavoriteVideoMetadata(admin, videoId);
+    if (!title?.trim()) title = resolved.title;
+    if (!artistName?.trim()) artistName = resolved.artistName;
   }
 
   const { error } = await supabase.from('user_favorites').insert({
@@ -120,6 +165,28 @@ export async function POST(request: Request) {
 
   if (error) {
     if (error.code === '23505') {
+      if (title || artistName) {
+        const { data: existing } = await supabase
+          .from('user_favorites')
+          .select('title, artist_name')
+          .eq('user_id', user.id)
+          .eq('video_id', videoId)
+          .maybeSingle();
+        const patch: { title?: string; artist_name?: string } = {};
+        if (title && favoriteRowNeedsMetadata(existing?.title ?? null, existing?.artist_name ?? null)) {
+          patch.title = title;
+        }
+        if (artistName && !(existing?.artist_name ?? '').trim()) {
+          patch.artist_name = artistName;
+        }
+        if (Object.keys(patch).length > 0) {
+          await supabase
+            .from('user_favorites')
+            .update(patch)
+            .eq('user_id', user.id)
+            .eq('video_id', videoId);
+        }
+      }
       return NextResponse.json({ ok: true });
     }
     if (error.code === '42P01') {

@@ -23,6 +23,29 @@ export const OWNER_ABSENCE_MS = 5 * 60 * 1000;
 
 const OWNER_STATE_PREFIX = 'mc:owner_state:';
 
+export function isAuthBasedRoomClientId(clientId: string): boolean {
+  return clientId.startsWith('mc-u-');
+}
+
+export function authUserIdFromRoomClientId(clientId: string): string | null {
+  if (!isAuthBasedRoomClientId(clientId)) return null;
+  const id = clientId.slice('mc-u-'.length).trim();
+  return id && /^[0-9a-f-]{36}$/i.test(id) ? id : null;
+}
+
+/** オーナーの clientId が在室 participants にいるか（ログイン時は authUserId でも照合） */
+export function resolveOwnerStillPresent(
+  ownerClientId: string,
+  participants: ReadonlyArray<{ clientId: string; authUserId?: string }>,
+): boolean {
+  const oid = ownerClientId.trim();
+  if (!oid) return false;
+  if (participants.some((p) => p.clientId === oid)) return true;
+  const authId = authUserIdFromRoomClientId(oid);
+  if (authId && participants.some((p) => p.authUserId === authId)) return true;
+  return false;
+}
+
 export function getOwnerStateStorageKey(roomId: string): string {
   return `${OWNER_STATE_PREFIX}${roomId}`;
 }
@@ -96,10 +119,6 @@ export function getRoomClientIdStorageKey(roomId: string): string {
 /** ログイン済み: Supabase user id から安定した Ably clientId（端末間で同一＝同時接続は1つ） */
 export function buildAuthRoomClientId(authUserId: string): string {
   return `mc-u-${authUserId.trim()}`;
-}
-
-export function isAuthBasedRoomClientId(clientId: string): boolean {
-  return clientId.startsWith('mc-u-');
 }
 
 /**

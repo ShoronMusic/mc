@@ -6,6 +6,7 @@ import {
   ServiceDisclaimerIntro,
   ServiceDisclaimerList,
 } from '@/components/legal/ServiceDisclaimer';
+import { AiCreditsPricingGuide } from '@/components/legal/AiCreditsPricingGuide';
 import { ServicePricingNotice } from '@/components/legal/ServicePricingNotice';
 
 /**
@@ -22,6 +23,10 @@ export function GuideFullNotice() {
         、マナーの分割表示は{' '}
         <Link href="/guide" className="text-amber-400 underline-offset-2 hover:underline">
           ご利用上の注意
+        </Link>
+        、個人情報・Cookie・利用状況分析は{' '}
+        <Link href="/privacy" className="text-amber-400 underline-offset-2 hover:underline">
+          プライバシーポリシー
         </Link>
         からご確認いただけます。
       </p>
@@ -58,6 +63,10 @@ export function GuideFullNotice() {
 
       <article className="space-y-5 border-b border-gray-800 pb-6">
         <h2 className="text-lg font-bold text-white">AI について</h2>
+        <section className="space-y-2">
+          <h3 className="font-semibold text-white">利用料金（AI）</h3>
+          <AiCreditsPricingGuide showTitle={false} />
+        </section>
         <section className="space-y-2">
           <h3 className="font-semibold text-white">回答の性質</h3>
           <p className="text-gray-400">
@@ -171,7 +180,7 @@ export function GuideFullNotice() {
             までです。
           </p>
           <p className="text-gray-400">
-            開催中の部屋では、チャットオーナーが右上の<strong className="text-gray-300">「鍵を掛ける」</strong>で新規参加を締め切れます（既に参加済みのユーザーは再入室できます）。
+            開催中の部屋では、チャットオーナーがマイページの<strong className="text-gray-300">部屋設定（オーナー）</strong>から<strong className="text-gray-300">「鍵を掛ける」</strong>で新規参加を締め切れます（既に参加済みのユーザーは再入室できます）。
           </p>
           <p className="text-gray-400">
             補足として、<strong className="text-gray-300">1部屋を個人専用</strong>（試聴・整理など）、

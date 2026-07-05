@@ -8,6 +8,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { RoomPlaybackHistoryRow } from '@/app/api/room-playback-history/route';
 import { appendRoomPlaybackHistoryPagination } from '@/lib/room-playback-history-pagination';
 import { getArtistAndSong, repairQuotedSongArtistPackInversion } from '@/lib/format-song-display';
+import {
+  favoriteHeartActiveTextClass,
+  favoriteHeartOutlineHoverClass,
+} from '@/lib/favorite-heart-ui';
 
 const COL_NO = 'No';
 const COL_PARTICIPANT = '選曲者';
@@ -276,18 +280,6 @@ export default function ThemePlaylistMissionEntriesModal({ open, onClose, themeI
     };
   }, [open, themeId, roomId, roomClientId]);
 
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
-
   const handleHeart = useCallback(
     (entry: MissionEntryApi) => {
       if (isGuest) {
@@ -317,7 +309,6 @@ export default function ThemePlaylistMissionEntriesModal({ open, onClose, themeI
     <div
       className="fixed inset-0 z-[60] flex items-center justify-center bg-black/65 p-3"
       role="presentation"
-      onClick={onClose}
     >
       <div
         className="flex max-h-[85vh] w-full max-w-4xl flex-col overflow-hidden rounded-lg border border-amber-800/50 bg-gray-900 shadow-xl"
@@ -546,11 +537,11 @@ export default function ThemePlaylistMissionEntriesModal({ open, onClose, themeI
                               aria-label={isFavorited ? 'お気に入り解除' : 'お気に入りに追加'}
                             >
                               {isFavorited ? (
-                                <span className="text-red-500" aria-hidden>
+                                <span className={favoriteHeartActiveTextClass} aria-hidden>
                                   ♥
                                 </span>
                               ) : (
-                                <span className="text-gray-500 hover:text-red-400" aria-hidden>
+                                <span className={`text-gray-500 ${favoriteHeartOutlineHoverClass}`} aria-hidden>
                                   ♡
                                 </span>
                               )}

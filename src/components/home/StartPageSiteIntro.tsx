@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { hasGuestRoomPersistence } from '@/lib/guest-room-persistence';
 import { ConsentPageLiveChats } from '@/components/home/ConsentPageLiveChats';
-import { createClient, isSupabaseConfigured } from '@/lib/supabase/client';
+import { loadBrowserSupabaseClient } from '@/lib/supabase/load-browser-client';
 
 /** サイト紹介動画（トップ・ご利用にあたっての説明内） */
 const SITE_INTRO_YOUTUBE_VIDEO_ID = 'gtwgUAcV3rE';
@@ -38,13 +38,14 @@ export function useStartPageIntroVisible(forceShow = false) {
       setShow(false);
       return;
     }
-    const supabase = createClient();
-    if (!isSupabaseConfigured() || !supabase) {
-      setShow(true);
-      return;
-    }
-    void supabase.auth.getUser().then(({ data: { user } }) => {
-      setShow(!user);
+    void loadBrowserSupabaseClient().then(({ client, configured }) => {
+      if (!configured || !client) {
+        setShow(true);
+        return;
+      }
+      void client.auth.getUser().then(({ data: { user } }) => {
+        setShow(!user);
+      });
     });
   }, [forceShow]);
 

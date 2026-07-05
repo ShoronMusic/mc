@@ -13,6 +13,7 @@ import {
   HandThumbUpIcon,
   HandThumbDownIcon,
   ChatBubbleLeftRightIcon,
+  DocumentTextIcon,
   AtSymbolIcon,
   ArrowTopRightOnSquareIcon,
   ChevronDownIcon,
@@ -121,6 +122,8 @@ interface ChatProps {
   onNextSongRecommendReject?: (messageId: string, recommendationId: string) => void | Promise<void>;
   /** 途中参加向けチャットサマリーを開く */
   onChatSummaryClick?: () => void;
+  /** チャットログ（保存済み＋画面上）をモーダル表示 */
+  onChatLogClick?: () => void;
   /** オーナー設定: 邦楽AI解説を解禁中ならヘッダー左に表示 */
   jpAiUnlockEnabled?: boolean;
   /** オーナー設定: ヘッダー「AI曲解説」ピル（曲紹介スロットが全非オフでない） */
@@ -716,6 +719,7 @@ export default function Chat({
   onTidbitLibraryReject,
   onNextSongRecommendReject,
   onChatSummaryClick,
+  onChatLogClick,
   jpAiUnlockEnabled = false,
   ownerAiCommentaryEnabled = true,
   ownerCommentPackSlots,
@@ -1298,6 +1302,17 @@ export default function Chat({
   return (
     <div className="flex flex-1 flex-col overflow-hidden rounded-lg border border-gray-700 bg-gray-900/50">
       <div className="flex flex-nowrap items-center gap-x-2 gap-y-0 border-b border-gray-700 px-3 py-2 max-lg:py-1.5 lg:flex-wrap lg:items-center lg:gap-x-3 lg:gap-y-1.5">
+        {onChatLogClick ? (
+          <button
+            type="button"
+            onClick={onChatLogClick}
+            className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded border border-gray-600 bg-gray-800/90 text-gray-300 hover:bg-gray-700 hover:text-gray-100"
+            aria-label="チャットログを表示"
+            title="チャットログ（今回の会または今日）"
+          >
+            <DocumentTextIcon className="h-4 w-4" aria-hidden />
+          </button>
+        ) : null}
         <span
           className="shrink-0 text-sm font-medium text-gray-300"
           title="参加者同士のチャット欄です。"
@@ -1374,8 +1389,8 @@ export default function Chat({
               type="button"
               onClick={onAiSettingsClick}
               className="shrink-0 rounded border border-violet-500/65 bg-violet-900/35 px-1.5 py-0.5 text-[10px] font-semibold leading-none tracking-tight text-violet-200 hover:bg-violet-900/55"
-              aria-label="AI 設定（マイページのユーザー設定を開く）"
-              title="自分の選曲 AI（解説・クイズ・おすすめの opt-out）。部屋上限・エージェントは部屋設定タブ"
+              aria-label="AI 設定（選曲時の AI と @ 質問向け趣向）"
+              title="選曲時の AI（解説・クイズ・おすすめ）と @ 質問向けの趣向メモ。部屋上限はオーナー向けタブ"
             >
               AI設定
             </button>
@@ -2144,7 +2159,6 @@ export default function Chat({
       {feedbackModal.open && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-          onClick={(e) => e.target === e.currentTarget && !feedbackModal.done && closeFeedbackModal()}
           role="dialog"
           aria-modal="true"
           aria-labelledby="feedback-modal-title"
@@ -2265,7 +2279,6 @@ export default function Chat({
       {objectionModal.open && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-          onClick={(e) => e.target === e.currentTarget && !objectionModal.done && closeObjectionModal()}
           role="dialog"
           aria-modal="true"
           aria-labelledby="objection-modal-title"
@@ -2356,7 +2369,6 @@ export default function Chat({
       {tuningReportModal.open && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-          onClick={(e) => e.target === e.currentTarget && !tuningReportModal.done && closeTuningReportModal()}
           role="dialog"
           aria-modal="true"
           aria-labelledby="tuning-report-modal-title"
@@ -2453,7 +2465,6 @@ export default function Chat({
           role="dialog"
           aria-modal="true"
           aria-label="AIに関する案内"
-          onClick={() => setAiHelpModalOpen(false)}
         >
           <div
             className="flex max-h-[min(80vh,28rem)] w-full max-w-md flex-col overflow-hidden rounded-lg border border-gray-600 bg-gray-900 shadow-xl"
@@ -2568,7 +2579,6 @@ export default function Chat({
           role="dialog"
           aria-modal="true"
           aria-labelledby="next-rec-preview-title"
-          onClick={() => setNextRecPreview(null)}
         >
           <div
             className="flex max-h-[min(90vh,40rem)] w-full max-w-lg flex-col overflow-hidden rounded-lg border border-violet-700/60 bg-gray-950 shadow-xl"
@@ -2649,7 +2659,6 @@ export default function Chat({
           role="dialog"
           aria-modal="true"
           aria-labelledby="chat-ai-question-examples-title"
-          onClick={() => setAiQuestionExamplesOpen(false)}
         >
           <div
             className="max-h-[min(80vh,28rem)] w-full max-w-md overflow-y-auto rounded-lg border border-gray-600 bg-gray-900 p-4 shadow-xl"

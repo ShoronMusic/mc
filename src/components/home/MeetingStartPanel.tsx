@@ -2,7 +2,8 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
-import { createClient, isSupabaseConfigured } from '@/lib/supabase/client';
+import { loadBrowserSupabaseClient } from '@/lib/supabase/load-browser-client';
+import { startRoomGatheringClient } from '@/lib/start-room-gathering-client';
 import { hasGuestRoomPersistence } from '@/lib/guest-room-persistence';
 
 const DEFAULT_ROOM_COUNT = 90;
@@ -87,13 +88,13 @@ export function MeetingStartPanel() {
       setAuthChecked(true);
       return;
     }
-    const supabase = createClient();
-    if (!isSupabaseConfigured() || !supabase) {
-      setVisible(false);
-      setAuthChecked(true);
-      return;
-    }
-    supabase.auth
+    void loadBrowserSupabaseClient().then(({ client, configured }) => {
+      if (!configured || !client) {
+        setVisible(false);
+        setAuthChecked(true);
+        return;
+      }
+      void client.auth
       .getUser()
       .then(({ data: { user } }) => {
         const loggedIn = !!user;
@@ -142,6 +143,7 @@ export function MeetingStartPanel() {
       .finally(() => {
         setAuthChecked(true);
       });
+    });
   }, []);
 
   const selectedRoom = myRooms.find((r) => r.roomId === joinRoomId);
@@ -219,10 +221,12 @@ export function MeetingStartPanel() {
     const selected = myRooms.find((r) => r.roomId === joinRoomId);
     const before = selected?.title?.trim() ?? '';
     const after = joinTitle.trim();
-    if (after && before !== after) {
-      try {
-        setMessage(null);
-        setBusy(true);
+    const titleForSession = after || before || '未設定の部屋';
+
+    setMessage(null);
+    setBusy(true);
+    try {
+      if (selected?.isLive && after && before !== after) {
         const res = await fetch('/api/room-gatherings', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -236,14 +240,24 @@ export function MeetingStartPanel() {
         if (!res.ok) {
           const data = (await res.json().catch(() => ({}))) as { error?: string };
           setMessage(data?.error ?? '名前の更新に失敗しました。');
+          return;
         }
-      } catch {
-        setMessage('名前の更新に失敗しました。');
-      } finally {
-        setBusy(false);
       }
+
+      if (selected && !selected.isLive) {
+        const started = await startRoomGatheringClient(joinRoomId, titleForSession);
+        if (!started.ok) {
+          setMessage(started.error);
+          return;
+        }
+      }
+
+      window.location.href = `/${encodeURIComponent(joinRoomId)}`;
+    } catch {
+      setMessage('通信に失敗しました。');
+    } finally {
+      setBusy(false);
     }
-    window.location.href = `/${encodeURIComponent(joinRoomId)}`;
   }, [joinRoomId, joinTitle, myRooms]);
 
   if (!authChecked) {
@@ -355,12 +369,12 @@ export function MeetingStartPanel() {
                   disabled={busy}
                   className="block w-full rounded-md border border-sky-500/50 bg-sky-900/25 px-4 py-2.5 text-center text-sm font-medium text-sky-100 hover:bg-sky-900/40"
                 >
-                  この部屋へ入る
+                  {soleOrganizerRoom.isLive ? 'この部屋へ入る' : '開催を再開して入室'}
                 </button>
                 <button
                   type="button"
                   onClick={() => void run('end', { roomId: joinRoomId })}
-                  disabled={busy}
+                  disabled={busy || !soleOrganizerRoom.isLive}
                   className="rounded-md border border-slate-500 bg-slate-800 px-4 py-2.5 text-sm text-slate-200 hover:bg-slate-700 disabled:opacity-50"
                 >
                   開催を終了
@@ -440,12 +454,12 @@ export function MeetingStartPanel() {
                   disabled={busy}
                   className="block w-full rounded-md border border-sky-500/50 bg-sky-900/20 px-4 py-2 text-center text-sm font-medium text-sky-200 hover:bg-sky-900/35"
                 >
-                  この部屋へ入る
+                  {selectedRoom?.isLive ? 'この部屋へ入る' : '開催を再開して入室'}
                 </button>
                 <button
                   type="button"
                   onClick={() => void run('end', { roomId: joinRoomId })}
-                  disabled={busy}
+                  disabled={busy || !selectedRoom?.isLive}
                   className="rounded-md border border-slate-500 bg-slate-800 px-4 py-2 text-sm text-slate-200 hover:bg-slate-700 disabled:opacity-50"
                 >
                   この部屋の開催を終了

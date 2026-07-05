@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { endStaleLiveGatheringIfNeeded } from '@/lib/stale-live-gathering';
 import { displayNameFromAuthUserMetadata } from '@/lib/auth-user-public-display-name';
 
 export const dynamic = 'force-dynamic';
@@ -101,6 +102,13 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const roomId = safeRoomId(searchParams.get('roomId') ?? '');
   const roomsRaw = searchParams.get('rooms') ?? '';
+
+  if (roomId) {
+    const adminForStale = createAdminClient();
+    if (adminForStale) {
+      await endStaleLiveGatheringIfNeeded(adminForStale, roomId);
+    }
+  }
 
   const buildBaseQuery = (withJoinLocked: boolean) => {
     const selectCols = withJoinLocked
@@ -263,7 +271,27 @@ export async function GET(request: Request) {
 
   if (roomId) {
     const first = rooms[0];
-    const isOrganizer = first ? organizerRoomIdSet.has(first.roomId) : false;
+    let isOrganizer = first ? organizerRoomIdSet.has(first.roomId) : false;
+    let canResume = false;
+    let organizerTitle: string | null = null;
+
+    if (!first && sessionUserId && admin) {
+      const { data: myRow, error: myRowErr } = await admin
+        .from('room_gatherings')
+        .select('title, status')
+        .eq('room_id', roomId)
+        .eq('created_by', sessionUserId)
+        .order('started_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (!myRowErr && myRow) {
+        isOrganizer = true;
+        canResume = String((myRow as { status?: string }).status ?? '') === 'ended';
+        const t = (myRow as { title?: string | null }).title;
+        organizerTitle = typeof t === 'string' && t.trim() ? t.trim() : null;
+      }
+    }
+
     return NextResponse.json(
       {
         configured: true,
@@ -278,18 +306,20 @@ export async function GET(request: Request) {
               joinLocked: first.joinLocked,
               canEnter: first.canEnter,
               isOrganizer,
+              canResume: false,
               hostDisplayName: first.hostDisplayName,
             }
           : {
               roomId,
               gatheringId: '',
-              title: null,
+              title: organizerTitle,
               startedAt: null,
               isLive: false,
               displayTitle: '',
               joinLocked: false,
               canEnter: true,
-              isOrganizer: false,
+              isOrganizer,
+              canResume,
             },
         rooms: [],
       },

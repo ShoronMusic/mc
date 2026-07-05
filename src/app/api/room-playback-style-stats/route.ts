@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import {
+  parsePlaybackHistorySinceQuery,
+  resolveRoomPlaybackStatsSinceIso,
+} from '@/lib/live-gathering-playback-since';
 
 export const dynamic = 'force-dynamic';
-
-const TWENTY_FOUR_H_MS = 24 * 60 * 60 * 1000;
 
 function aggregateStyles(rows: { style: string | null }[]): Record<string, number> {
   const counts: Record<string, number> = {};
@@ -16,7 +18,7 @@ function aggregateStyles(rows: { style: string | null }[]): Record<string, numbe
 
 /**
  * GET: 部屋の視聴履歴からスタイル件数集計
- * Query: roomId, mode = 24h | last100
+ * Query: roomId, mode = 24h | last100, since（任意・ISO8601）
  */
 export async function GET(request: Request) {
   const supabase = await createClient();
@@ -34,14 +36,19 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'mode must be 24h or last100' }, { status: 400 });
   }
 
-  const since = new Date(Date.now() - TWENTY_FOUR_H_MS).toISOString();
+  const sinceQuery = parsePlaybackHistorySinceQuery(searchParams.get('since'));
+  const sinceIso = await resolveRoomPlaybackStatsSinceIso(supabase, roomId, sinceQuery, mode);
 
   if (mode === '24h') {
-    const { data, error } = await supabase
+    let query = supabase
       .from('room_playback_history')
       .select('style')
-      .eq('room_id', roomId)
-      .gte('played_at', since);
+      .eq('room_id', roomId);
+    if (sinceIso) {
+      query = query.gte('played_at', sinceIso);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       if (error.code === '42P01') {
@@ -60,12 +67,16 @@ export async function GET(request: Request) {
     return NextResponse.json({ mode: '24h', total, counts });
   }
 
-  const { data, error } = await supabase
+  let last100Query = supabase
     .from('room_playback_history')
     .select('style')
     .eq('room_id', roomId)
     .order('played_at', { ascending: false })
     .limit(100);
+  if (sinceIso) {
+    last100Query = last100Query.gte('played_at', sinceIso);
+  }
+  const { data, error } = await last100Query;
 
   if (error) {
     if (error.code === '42P01') {

@@ -10,7 +10,7 @@
  * モバイル縦横は CSS のみでレイアウト切替（向き変更でプレイヤーを再マウントしない）。
  */
 
-import { useCallback, useEffect } from 'react';
+import { useCallback } from 'react';
 import { useIsLgViewport } from '@/hooks/useLgViewport';
 import ResizableSection from '@/components/room/ResizableSection';
 
@@ -41,19 +41,9 @@ export default function RoomMainLayout({
     onPlaybackHistoryModalClose?.();
   }, [onPlaybackHistoryModalClose]);
 
-  useEffect(() => {
-    if (!playbackHistoryModalOpen) return;
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') closeHistoryModal();
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [playbackHistoryModalOpen, closeHistoryModal]);
-
   const historyModal = showHistoryModal ? (
     <div
       className="fixed inset-0 z-[60] flex flex-col justify-end bg-black/65 sm:items-center sm:justify-center sm:p-4"
-      onClick={(e) => e.target === e.currentTarget && closeHistoryModal()}
       role="dialog"
       aria-modal="true"
       aria-labelledby="room-playback-history-modal-title"

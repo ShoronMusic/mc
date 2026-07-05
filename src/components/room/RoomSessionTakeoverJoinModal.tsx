@@ -21,18 +21,23 @@ export function RoomSessionTakeoverJoinModal({
     >
       <div className="w-full max-w-md rounded-xl border border-amber-600/70 bg-gray-900 p-5 shadow-2xl">
         <h2 id="room-session-join-title" className="text-base font-semibold text-amber-50">
-          同じアカウントが別の端末で参加中です
+          同じアカウントが別のタブ・ウィンドウで参加中です
         </h2>
         <p className="mt-2 text-sm leading-relaxed text-gray-300">
           部屋 <span className="font-mono text-amber-100">{roomId}</span>{' '}
-          には、同じアカウントが<strong className="font-medium text-gray-100">別の端末</strong>で入っています。
+          には、同じアカウントが
+          <strong className="font-medium text-gray-100">別のタブ・別ウィンドウ、または別端末</strong>
+          で入っています。
+        </p>
+        <p className="mt-2 text-sm leading-relaxed text-gray-300">
+          同じブラウザでタブを2つ開いている場合も、同時に操作できるのはどちらか一方だけです。
         </p>
         <p className="mt-2 text-sm leading-relaxed text-gray-300">
           スマホ1台だけの場合は、ホーム画面の洋楽AIチャットが<strong className="font-medium text-gray-100">二重登録</strong>されていないか確認してください（共有先に2つ出るときなど）。
         </p>
         <p className="mt-2 text-sm leading-relaxed text-gray-300">
-          <strong className="font-medium text-gray-100">この端末で参加</strong>
-          すると、先に入っていた端末は自動的に退室します。同時に操作できるのはどちらか一方だけです。
+          <strong className="font-medium text-gray-100">このタブで参加</strong>
+          すると、先に入っていたタブ・端末は操作できなくなります。
         </p>
         <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
           <button
@@ -47,7 +52,7 @@ export function RoomSessionTakeoverJoinModal({
             onClick={onConfirm}
             className="rounded border border-lime-600/80 bg-lime-900/50 px-4 py-2 text-sm font-semibold text-lime-50 hover:bg-lime-800/60"
           >
-            この端末で参加する
+            このタブで参加する
           </button>
         </div>
       </div>

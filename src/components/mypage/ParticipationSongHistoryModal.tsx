@@ -46,7 +46,6 @@ export function ParticipationSongHistoryModal({
       role="dialog"
       aria-modal="true"
       aria-label="参加日の選曲リスト"
-      onClick={onClose}
     >
       <div
         className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-lg border border-gray-700 bg-gray-900"

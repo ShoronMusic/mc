@@ -65,9 +65,30 @@ type LogRow = {
   body: string;
 };
 
+type LogRowJson = {
+  clientMessageId?: string;
+  createdAt: string;
+  messageType: 'user' | 'ai' | 'system';
+  displayName: string;
+  body: string;
+};
+
+function toJsonRow(r: LogRow): LogRowJson | null {
+  const mt = r.message_type;
+  if (mt !== 'user' && mt !== 'ai' && mt !== 'system') return null;
+  return {
+    createdAt: r.created_at,
+    messageType: mt,
+    displayName: (r.display_name ?? '').replace(/\r?\n/g, ' '),
+    body: r.body ?? '',
+  };
+}
+
 /**
- * GET: 指定部屋・指定日（JST 1日）の会話ログをプレーンテキストで返す。
- * Query: roomId（必須）, date=YYYY-MM-DD（省略時は今日 JST）, gatheringId（任意）, download=1（ファイルダウンロード）
+ * GET: 指定部屋の会話ログ。
+ * Query: roomId（必須）, format=json（UI用）, scope=gathering|day（省略時 day）,
+ *   date=YYYY-MM-DD（day 時・省略時は今日 JST）, gatheringId（scope=gathering 時必須）,
+ *   download=1（プレーンテキストファイル）
  */
 export async function GET(request: Request) {
   const supabase = await createClient();
@@ -83,20 +104,26 @@ export async function GET(request: Request) {
 
   const dateParam = searchParams.get('date')?.trim();
   const gatheringId = safeGatheringId(searchParams.get('gatheringId'));
+  const scopeParam = searchParams.get('scope')?.trim() ?? 'day';
+  const scope = scopeParam === 'gathering' ? 'gathering' : 'day';
+  const formatJson = searchParams.get('format') === 'json';
   const ymd = dateParam && dateParam.length > 0 ? dateParam : todayJstYmd();
-  const range = jstDayRangeUtc(ymd);
-  if (!range) {
+  const range = scope === 'day' ? jstDayRangeUtc(ymd) : null;
+  if (scope === 'day' && !range) {
     return NextResponse.json({ error: 'date は YYYY-MM-DD 形式で指定してください' }, { status: 400 });
+  }
+  if (scope === 'gathering' && !gatheringId) {
+    return NextResponse.json({ error: 'scope=gathering のとき gatheringId が必要です' }, { status: 400 });
   }
 
   let query = supabase
     .from('room_chat_log')
-    .select('created_at, message_type, display_name, body')
-    .eq('room_id', roomId)
-    .gte('created_at', range.startIso)
-    .lt('created_at', range.endIso);
-  if (gatheringId) {
+    .select('created_at, message_type, display_name, body');
+  query = query.eq('room_id', roomId);
+  if (scope === 'gathering' && gatheringId) {
     query = query.eq('gathering_id', gatheringId);
+  } else if (range) {
+    query = query.gte('created_at', range.startIso).lt('created_at', range.endIso);
   }
   const { data, error } = await query.order('created_at', { ascending: true }).limit(MAX_EXPORT_ROWS + 1);
 
@@ -118,10 +145,23 @@ export async function GET(request: Request) {
   const truncated = rows.length > MAX_EXPORT_ROWS;
   const list = truncated ? rows.slice(0, MAX_EXPORT_ROWS) : rows;
 
+  if (formatJson) {
+    const jsonRows = list.map(toJsonRow).filter((r): r is LogRowJson => r != null);
+    return NextResponse.json({
+      scope,
+      dateJst: scope === 'day' ? ymd : null,
+      gatheringId: scope === 'gathering' ? gatheringId : null,
+      roomId,
+      count: jsonRows.length,
+      truncated,
+      rows: jsonRows,
+    });
+  }
+
   const header = [
     `部屋ID: ${roomId}`,
-    gatheringId ? `会ID: ${gatheringId}` : null,
-    `日付（JST）: ${ymd}`,
+    scope === 'gathering' && gatheringId ? `会ID: ${gatheringId}` : null,
+    scope === 'day' ? `日付（JST）: ${ymd}` : '範囲: 今回の会',
     `件数: ${list.length}${truncated ? `（上限 ${MAX_EXPORT_ROWS} 件で打ち切り）` : ''}`,
     '---',
     '',

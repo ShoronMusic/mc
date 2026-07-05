@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { getBrowserAppOrigin } from '@/lib/app-origin';
 import {
   buildEmailConfirmRedirectUrl,
@@ -13,7 +13,8 @@ import {
   PASSWORD_POLICY_HINT,
   passwordTooShortMessage,
 } from '@/lib/auth-password-policy';
-import { createClient } from '@/lib/supabase/client';
+import type { BrowserSupabaseClient } from '@/lib/supabase/load-browser-client';
+import { loadBrowserSupabaseClient } from '@/lib/supabase/load-browser-client';
 
 interface SimpleAuthFormProps {
   onSuccess: (displayName: string) => void;
@@ -46,9 +47,26 @@ export function SimpleAuthForm({
   const [loading, setLoading] = useState(false);
   const [awaitingEmailConfirmation, setAwaitingEmailConfirmation] = useState(false);
   const [resendNotice, setResendNotice] = useState<string | null>(null);
+  const [supabase, setSupabase] = useState<BrowserSupabaseClient | null>(null);
 
-  const supabase = createClient();
-  if (!supabase) return null;
+  useEffect(() => {
+    let active = true;
+    void loadBrowserSupabaseClient().then(({ client }) => {
+      if (!active) return;
+      setSupabase(client);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  if (!supabase) {
+    return (
+      <div className="flex flex-col gap-3">
+        <p className="text-sm text-gray-400">フォームを読み込んでいます…</p>
+      </div>
+    );
+  }
 
   const resolveEmailConfirmRedirectPath = (): string => {
     if (emailConfirmRedirectPath) return emailConfirmRedirectPath;

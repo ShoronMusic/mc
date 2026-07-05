@@ -1,33 +1,62 @@
 import { isTrialRoomId } from '@/lib/trial-rooms';
+import { startRoomGatheringClient } from '@/lib/start-room-gathering-client';
 
 export type RoomEntryGateResult =
   | { ok: true; liveTitle: string; roomDisplayTitle: string }
   | { ok: false; closedMessage: string; liveTitle: string; roomDisplayTitle: string };
 
+type RoomLiveStatusPayload = {
+  configured?: boolean;
+  message?: string;
+  room?: {
+    isLive?: boolean;
+    title?: string | null;
+    displayTitle?: string | null;
+    joinLocked?: boolean;
+    canEnter?: boolean;
+    isOrganizer?: boolean;
+    canResume?: boolean;
+  };
+};
+
+async function fetchRoomLiveStatus(roomId: string): Promise<RoomLiveStatusPayload> {
+  const res = await fetch(`/api/room-live-status?roomId=${encodeURIComponent(roomId)}`, {
+    credentials: 'include',
+  });
+  return (await res.json()) as RoomLiveStatusPayload;
+}
+
 /**
  * 部屋入室前のクライアント側ゲート（JoinGate と同じ条件）。
  * 名前入力後・URL 直打ち直後の両方で呼ぶこと。
  */
-export async function runRoomEntryGateCheck(roomId: string): Promise<RoomEntryGateResult> {
+export async function runRoomEntryGateCheck(
+  roomId: string,
+  options?: { allowOrganizerResume?: boolean },
+): Promise<RoomEntryGateResult> {
   const emptyTitles = { liveTitle: '', roomDisplayTitle: '' };
   const trialRoom = isTrialRoomId(roomId);
+  const allowOrganizerResume = options?.allowOrganizerResume !== false;
 
   try {
-    const res = await fetch(`/api/room-live-status?roomId=${encodeURIComponent(roomId)}`, {
-      credentials: 'include',
-    });
-    const data = (await res.json()) as {
-      configured?: boolean;
-      message?: string;
-      room?: {
-        isLive?: boolean;
-        title?: string | null;
-        displayTitle?: string | null;
-        joinLocked?: boolean;
-        canEnter?: boolean;
-        isOrganizer?: boolean;
-      };
-    };
+    let data = await fetchRoomLiveStatus(roomId);
+
+    if (
+      allowOrganizerResume &&
+      data?.configured === true &&
+      data?.room?.isLive !== true &&
+      !trialRoom &&
+      data?.room?.isOrganizer === true &&
+      data?.room?.canResume === true
+    ) {
+      const resumed = await startRoomGatheringClient(
+        roomId,
+        typeof data.room?.title === 'string' ? data.room.title : undefined,
+      );
+      if (resumed.ok) {
+        data = await fetchRoomLiveStatus(roomId);
+      }
+    }
 
     if (data?.configured !== true) {
       return {

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { createClient, isSupabaseConfigured } from '@/lib/supabase/client';
+import { loadBrowserSupabaseClient } from '@/lib/supabase/load-browser-client';
 import { clearGuestRoomPersistence, hasGuestRoomPersistence, readGuestDisplayNameHint } from '@/lib/guest-room-persistence';
 import { clearKnownAuthUserId } from '@/lib/share-target-pending';
 
@@ -35,15 +35,16 @@ export function TopPageAuthBar() {
       setLoading(false);
       return;
     }
-    const supabase = createClient();
-    if (!isSupabaseConfigured() || !supabase) {
-      setLoading(false);
-      return;
-    }
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      setDisplayName(user ? getDisplayName(user) : null);
-      setIsGuest(false);
-      setLoading(false);
+    void loadBrowserSupabaseClient().then(({ client, configured }) => {
+      if (!configured || !client) {
+        setLoading(false);
+        return;
+      }
+      void client.auth.getUser().then(({ data: { user } }) => {
+        setDisplayName(user ? getDisplayName(user) : null);
+        setIsGuest(false);
+        setLoading(false);
+      });
     });
   }, []);
 
@@ -54,9 +55,9 @@ export function TopPageAuthBar() {
       window.location.reload();
       return;
     }
-    const supabase = createClient();
-    if (!supabase) return;
-    await supabase.auth.signOut();
+    const { client } = await loadBrowserSupabaseClient();
+    if (!client) return;
+    await client.auth.signOut();
     clearKnownAuthUserId();
     setDisplayName(null);
     window.location.reload();

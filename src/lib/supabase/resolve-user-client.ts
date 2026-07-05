@@ -1,24 +1,24 @@
 import type { User } from '@supabase/supabase-js';
-import { createClient } from '@/lib/supabase/client';
+import { loadBrowserSupabaseClient } from '@/lib/supabase/load-browser-client';
 
 async function readUserOnce(): Promise<User | null> {
-  const supabase = createClient();
-  if (!supabase) return null;
+  const { client } = await loadBrowserSupabaseClient();
+  if (!client) return null;
   const {
     data: { session },
-  } = await supabase.auth.getSession();
+  } = await client.auth.getSession();
   if (session?.user) return session.user;
   const {
     data: { user },
-  } = await supabase.auth.getUser();
+  } = await client.auth.getUser();
   return user ?? null;
 }
 
 async function tryRefreshSession(): Promise<User | null> {
-  const supabase = createClient();
-  if (!supabase) return null;
+  const { client } = await loadBrowserSupabaseClient();
+  if (!client) return null;
   try {
-    const { data, error } = await supabase.auth.refreshSession();
+    const { data, error } = await client.auth.refreshSession();
     if (error) return null;
     return data.session?.user ?? null;
   } catch {
@@ -42,7 +42,7 @@ export async function resolveSupabaseUserClient(options?: {
     if (immediate) return immediate;
   }
 
-  const supabase = createClient();
+  const { client: supabase } = await loadBrowserSupabaseClient();
   if (!supabase) return null;
 
   return new Promise((resolve) => {
@@ -67,7 +67,7 @@ export async function resolveSupabaseUserClient(options?: {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((_event: string, session) => {
       if (session?.user) finish(session.user);
     });
   });

@@ -8,7 +8,11 @@ import { FROM_START_KEY } from './FromStartMarker';
 import { AblyProviderWrapper } from '@/components/providers/AblyProviderWrapper';
 import { getRoomClientId, isKickedForRoom, isKickedSitewide } from '@/lib/room-owner';
 import { fetchRoomAuthSessionCheck } from '@/lib/room-auth-session-check-client';
-import { regenerateRoomSessionClaim, getOrCreateRoomSessionClaim } from '@/lib/room-session-instance';
+import {
+  regenerateRoomSessionClaim,
+  getOrCreateRoomSessionClaim,
+  isRoomClaimOwnedByThisBrowserTab,
+} from '@/lib/room-session-instance';
 import {
   clearGuestRoomPersistence,
   rememberGuestRoom,
@@ -118,7 +122,8 @@ export function JoinGate({ roomId }: JoinGateProps) {
         const lastEnter = getLastRoomEnterForRoom(roomId);
         const resumeSameDevice =
           skipSessionGateRef.current || isRecentRoomEnter(lastEnter);
-        if (resumeSameDevice) {
+        const sameBrowserTab = isRoomClaimOwnedByThisBrowserTab(roomId);
+        if (resumeSameDevice && sameBrowserTab) {
           commitEnterRoom(enter);
           return;
         }

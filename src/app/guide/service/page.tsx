@@ -4,10 +4,11 @@ import {
   ServiceDisclaimerList,
 } from '@/components/legal/ServiceDisclaimer';
 import { ServicePricingNotice } from '@/components/legal/ServicePricingNotice';
+import { formatCommercialTransactionsOperatorFooter } from '@/lib/commercial-transactions-operator';
 
 export const metadata: Metadata = {
   title: 'サービス全般 | ご利用上の注意',
-  description: '利用料金、免責、変更、お問い合わせなどに関する案内です。',
+  description: '免責、変更、お問い合わせなど。利用料金の詳細は AI利用料金・クレジット ページに集約しています。',
 };
 
 export default function GuideServicePage() {
@@ -123,7 +124,7 @@ export default function GuideServicePage() {
       </section>
       <section className="space-y-3 rounded-lg border border-gray-800 bg-gray-900/40 p-4">
         <h2 className="text-base font-semibold text-white">運営者・連絡先</h2>
-        <p className="text-gray-300">洋楽AIチャット事務局</p>
+        <p className="text-gray-300">{formatCommercialTransactionsOperatorFooter()}</p>
         <p className="text-gray-300">musicaichat0@gmail.com</p>
       </section>
     </article>

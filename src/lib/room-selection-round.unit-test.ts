@@ -1,7 +1,11 @@
 import assert from 'node:assert';
 import {
+  buildSelectionRoundPersistData,
   computeNextSelectionRound,
   getSelectablePresentRing,
+  readPersistedSelectionRound,
+  selectionRoundGatheringMatches,
+  selectionRoundStorageKey,
 } from './room-selection-round';
 
 function testRing() {
@@ -65,8 +69,66 @@ function testSingleParticipantNoBump() {
   );
 }
 
+function testGatheringMatches() {
+  assert.strictEqual(selectionRoundGatheringMatches(null, null), true);
+  assert.strictEqual(selectionRoundGatheringMatches(undefined, undefined), true);
+  assert.strictEqual(
+    selectionRoundGatheringMatches('2026-07-05T00:00:00Z', '2026-07-05T00:00:00Z'),
+    true,
+  );
+  assert.strictEqual(
+    selectionRoundGatheringMatches('2026-04-02T00:00:00Z', '2026-07-05T00:00:00Z'),
+    false,
+  );
+  assert.strictEqual(selectionRoundGatheringMatches('2026-07-05T00:00:00Z', null), false);
+  assert.strictEqual(selectionRoundGatheringMatches(null, '2026-07-05T00:00:00Z'), false);
+}
+
+function testBuildPersistData() {
+  const data = buildSelectionRoundPersistData({
+    round: 3.7,
+    ownerClientId: ' owner-a ',
+    gatheringStartedAt: ' 2026-07-05T00:00:00Z ',
+  });
+  assert.strictEqual(data.round, 3);
+  assert.strictEqual(data.ownerClientId, 'owner-a');
+  assert.strictEqual(data.gatheringStartedAt, '2026-07-05T00:00:00Z');
+  assert.strictEqual(typeof data.updatedAt, 'number');
+}
+
+function testPersistIgnoresOwnerClientIdOnRead() {
+  if (typeof sessionStorage === 'undefined') {
+    console.log('room-selection-round.unit-test.ts: skip sessionStorage (non-browser)');
+    return;
+  }
+  const roomId = 'test-room-round';
+  const key = selectionRoundStorageKey(roomId);
+  sessionStorage.removeItem(key);
+  sessionStorage.setItem(
+    key,
+    JSON.stringify({
+      round: 5,
+      ownerClientId: 'old-owner',
+      updatedAt: Date.now(),
+      gatheringStartedAt: '2026-07-05T00:00:00Z',
+    }),
+  );
+  assert.strictEqual(
+    readPersistedSelectionRound(roomId, { gatheringStartedAt: '2026-07-05T00:00:00Z' }),
+    5,
+  );
+  assert.strictEqual(
+    readPersistedSelectionRound(roomId, { gatheringStartedAt: '2026-04-02T00:00:00Z' }),
+    null,
+  );
+  sessionStorage.removeItem(key);
+}
+
 testRing();
 testRoundIncrement();
 testAnchorWhenOwnerAbsent();
 testSingleParticipantNoBump();
+testGatheringMatches();
+testBuildPersistData();
+testPersistIgnoresOwnerClientIdOnRead();
 console.log('room-selection-round.unit-test.ts: ok');

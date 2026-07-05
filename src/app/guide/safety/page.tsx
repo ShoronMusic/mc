@@ -44,7 +44,7 @@ export default function GuideSafetyPage({ searchParams }: GuideSafetyPageProps) 
           までです。
         </p>
         <p className="text-gray-400">
-          開催中の部屋では、チャットオーナーが右上の<strong className="text-gray-300">「鍵を掛ける」</strong>で新規参加を締め切れます（既に参加済みのユーザーは再入室できます）。
+          開催中の部屋では、チャットオーナーがマイページの<strong className="text-gray-300">部屋設定（オーナー）</strong>から<strong className="text-gray-300">「鍵を掛ける」</strong>で新規参加を締め切れます（既に参加済みのユーザーは再入室できます）。
         </p>
         <p className="text-gray-400">
           補足として、<strong className="text-gray-300">1部屋を個人専用</strong>（試聴・整理など）、

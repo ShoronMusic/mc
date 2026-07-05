@@ -113,9 +113,6 @@ export function SiteFeedbackModal({
     <div
       className="fixed inset-0 z-[95] flex items-center justify-center bg-black/70 p-4"
       role="presentation"
-      onClick={(e) => {
-        if (e.target === e.currentTarget && step !== 'thanks' && !sending) handleClose();
-      }}
     >
       <div
         className="relative w-full max-w-md rounded-xl border border-gray-600 bg-gray-900 p-6 shadow-2xl"

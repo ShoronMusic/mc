@@ -6,7 +6,8 @@ import {
   type TopPageLoginEntryIntent,
 } from '@/components/auth/TopPageLoginEntry';
 import { HomeRoomLinks } from '@/components/home/HomeRoomLinks';
-import { createClient, isSupabaseConfigured } from '@/lib/supabase/client';
+import type { BrowserSupabaseClient } from '@/lib/supabase/load-browser-client';
+import { loadBrowserSupabaseClient } from '@/lib/supabase/load-browser-client';
 
 type TopPageLoginAndLiveRoomsProps = {
   /** all=従来どおり / live=開催中一覧のみ / auth=ログイン・ゲスト導線のみ */
@@ -14,15 +15,26 @@ type TopPageLoginAndLiveRoomsProps = {
 };
 
 /**
- * 未ログイン時は「新規で部屋を立ち上げる」「過去の主催を再開（ログイン）」を上に、
+ * 未ログイン時は「新規で部屋を立ち上げる」「ログインして主催した部屋を再開」を上に、
  * その下に開催中（参加者あり）の部屋一覧を置く。
  */
 export function TopPageLoginAndLiveRooms({ part = 'all' }: TopPageLoginAndLiveRoomsProps) {
   const [authIntent, setAuthIntent] = useState<TopPageLoginEntryIntent | null>(null);
   const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null);
+  const [hasSupabase, setHasSupabase] = useState(false);
+  const [supabase, setSupabase] = useState<BrowserSupabaseClient | null>(null);
 
-  const supabase = createClient();
-  const hasSupabase = isSupabaseConfigured() && !!supabase;
+  useEffect(() => {
+    let active = true;
+    void loadBrowserSupabaseClient().then(({ client, configured }) => {
+      if (!active) return;
+      setSupabase(client);
+      setHasSupabase(configured);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!hasSupabase || !supabase) {
@@ -63,16 +75,22 @@ export function TopPageLoginAndLiveRooms({ part = 'all' }: TopPageLoginAndLiveRo
           <button
             type="button"
             onClick={() => setAuthIntent('new-room')}
-            className="flex w-full items-center justify-center rounded border border-gray-600 bg-gray-800 px-3 py-2.5 text-sm font-medium text-white hover:bg-gray-700"
+            className="flex w-full items-center justify-center gap-2 rounded border border-gray-600 bg-gray-800 px-3 py-2.5 text-sm font-medium text-white hover:bg-gray-700"
           >
+            <span className="inline-flex shrink-0 items-center rounded border border-emerald-700/50 bg-emerald-950/50 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-emerald-200">
+              NEW
+            </span>
             新規で部屋を立ち上げる
           </button>
           <button
             type="button"
             onClick={() => setAuthIntent('resume-host')}
-            className="flex w-full items-center justify-center rounded border border-gray-600 bg-gray-800 px-3 py-2.5 text-sm font-medium text-white hover:bg-gray-700"
+            className="flex w-full items-center justify-center gap-2 rounded border border-gray-600 bg-gray-800 px-3 py-2.5 text-sm font-medium text-white hover:bg-gray-700"
           >
-            ログインして過去に主催した部屋を再開する
+            <span className="inline-flex shrink-0 items-center rounded border border-sky-700/50 bg-sky-950/50 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-sky-200">
+              継続
+            </span>
+            ログインして主催した部屋を再開
           </button>
         </div>
       );

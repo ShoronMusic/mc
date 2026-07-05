@@ -1,9 +1,10 @@
 import type { Metadata } from 'next';
 import { YouTubeDataApiQuotaCallout } from '@/components/guide/YouTubeDataApiQuotaCallout';
+import { AiCreditsPricingGuideLink } from '@/components/legal/AiCreditsPricingGuide';
 
 export const metadata: Metadata = {
   title: 'AI について | ご利用上の注意',
-  description: 'AI が参加するチャットでの注意事項です。',
+  description: 'AI が参加するチャットでの注意事項です。料金は AI利用料金・クレジット ページをご覧ください。',
 };
 
 export default function GuideAiPage() {
@@ -14,6 +15,11 @@ export default function GuideAiPage() {
         部屋内チャットのリンクから開いた場合、画面上部に「← チャットの部屋に戻る」が表示されます。表示されない場合は、ブラウザの戻るでも直前の画面に戻れます。
       </p>
       <YouTubeDataApiQuotaCallout />
+      <p className="rounded-lg border border-violet-900/50 bg-violet-950/20 px-3 py-2.5 text-sm text-gray-400">
+        AI の料金・クレジット消費・お試し枠・購入については{' '}
+        <AiCreditsPricingGuideLink className="font-medium text-violet-200 underline-offset-2 hover:underline" />
+        にまとめています。
+      </p>
       <section className="space-y-3">
         <h2 className="text-base font-semibold text-white">回答の性質</h2>
         <p className="text-gray-400">

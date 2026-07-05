@@ -45,15 +45,6 @@ export function GuestRegisterPromptModal({ open, onClose, roomId = '' }: GuestRe
     }
   }, [open]);
 
-  useEffect(() => {
-    if (!termsDocModalOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setTermsDocModalOpen(false);
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [termsDocModalOpen]);
-
   if (!open) return null;
 
   const pathname =
@@ -100,7 +91,6 @@ export function GuestRegisterPromptModal({ open, onClose, roomId = '' }: GuestRe
       role="dialog"
       aria-modal="true"
       aria-labelledby="guest-register-modal-title"
-      onClick={onClose}
     >
       <div
         className="max-h-[min(92vh,640px)] w-full max-w-md overflow-y-auto rounded-xl border border-gray-600 bg-gray-900 p-6 shadow-2xl"
@@ -254,7 +244,6 @@ export function GuestRegisterPromptModal({ open, onClose, roomId = '' }: GuestRe
         role="dialog"
         aria-modal="true"
         aria-label="利用規約"
-        onClick={() => setTermsDocModalOpen(false)}
       >
         <div
           className="flex h-[min(88vh,720px)] w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-gray-600 bg-gray-900 shadow-2xl"

@@ -22,6 +22,7 @@ function getSupabaseAnonKey(): string {
  * Next.js dev の Strict Mode 二重マウントでも安定する。
  */
 export function createClient() {
+  if (typeof window === 'undefined') return null;
   const url = getSupabaseUrl();
   const key = getSupabaseAnonKey();
   if (!url || !key) return null;

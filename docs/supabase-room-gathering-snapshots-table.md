@@ -63,6 +63,33 @@ create index if not exists idx_room_gathering_participant_snapshots_gathering
 alter table public.room_gathering_snapshots enable row level security;
 alter table public.room_gathering_participant_snapshots enable row level security;
 -- 読み書きは service_role（管理 API）のみ
+
+-- 会終了時の視聴履歴スナップショット（主催者がマイページで閲覧）
+create table if not exists public.room_gathering_playback_snapshots (
+  id uuid primary key default gen_random_uuid(),
+  gathering_id uuid not null references public.room_gatherings(id) on delete cascade,
+  room_id text not null,
+  owner_user_id uuid references auth.users(id) on delete set null,
+  sort_order integer not null default 0,
+  video_id text not null,
+  display_name text not null,
+  is_guest boolean not null default false,
+  played_at timestamptz not null,
+  title text,
+  artist_name text,
+  style text,
+  selection_round integer,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_room_gathering_playback_snapshots_gathering
+  on public.room_gathering_playback_snapshots (gathering_id, sort_order);
+
+create index if not exists idx_room_gathering_playback_snapshots_owner_ended
+  on public.room_gathering_playback_snapshots (owner_user_id, played_at desc);
+
+alter table public.room_gathering_playback_snapshots enable row level security;
+-- 読み書きは service_role（会終了処理）のみ。マイページ閲覧は API 経由
 ```
 
 ## 集計元（実装済み）
@@ -70,6 +97,7 @@ alter table public.room_gathering_participant_snapshots enable row level securit
 | 項目 | 主なデータ源 |
 |------|----------------|
 | 選曲数 | `room_playback_history`（`started_at`〜`ended_at` + `room_id`） |
+| **視聴履歴（曲リスト）** | 会終了時に `room_gathering_playback_snapshots` へコピー（`src/lib/room-gathering-playback-snapshot.ts`）· マイページ `GET /api/user/hosted-gathering-playback` |
 | 参加者・滞在 | `user_room_participation_history`（`gathering_id` 優先、なければ時刻窓） |
 | Gemini | `gemini_usage_logs`（`gathering_id` 優先、なければ時刻 + `room_id`） |
 | AI エージェント | `ai_character_song_pick_logs` + `billing_kind = ai_agent` |

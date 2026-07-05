@@ -13,8 +13,11 @@ export function selectionRoundStorageKey(roomId: string): string {
 
 export interface PersistedSelectionRound {
   round: number;
+  /** 直近 persist 時点のチャットオーナー clientId（メタ情報。読み取り条件には使わない） */
   ownerClientId: string;
   updatedAt: number;
+  /** 同一会（live gathering）の started_at。変わったらラウンドを新規開始 */
+  gatheringStartedAt?: string;
 }
 
 export type SelectionRoundParticipant = {
@@ -60,12 +63,35 @@ export function computeNextSelectionRound(params: {
   return previousRound;
 }
 
+export function normalizeGatheringStartedAtForSelectionRound(
+  value: string | null | undefined,
+): string | null {
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+/** sessionStorage の gatheringStartedAt と現在の会が同一か */
+export function selectionRoundGatheringMatches(
+  stored: string | null | undefined,
+  current: string | null | undefined,
+): boolean {
+  const s = normalizeGatheringStartedAtForSelectionRound(stored);
+  const c = normalizeGatheringStartedAtForSelectionRound(current);
+  if (c === null && s === null) return true;
+  if (c === null || s === null) return false;
+  return c === s;
+}
+
+export interface ReadPersistedSelectionRoundOptions {
+  gatheringStartedAt?: string | null;
+  maxGapMs?: number;
+}
+
 export function readPersistedSelectionRound(
   roomId: string,
-  currentOwnerClientId: string,
-  maxGapMs: number = SELECTION_ROUND_SESSION_MAX_GAP_MS,
+  options: ReadPersistedSelectionRoundOptions = {},
 ): number | null {
-  if (typeof window === 'undefined' || !roomId.trim() || !currentOwnerClientId.trim()) return null;
+  if (typeof window === 'undefined' || !roomId.trim()) return null;
+  const maxGapMs = options.maxGapMs ?? SELECTION_ROUND_SESSION_MAX_GAP_MS;
   try {
     const raw = sessionStorage.getItem(selectionRoundStorageKey(roomId));
     if (!raw) return null;
@@ -74,18 +100,36 @@ export function readPersistedSelectionRound(
       typeof data.round !== 'number' ||
       !Number.isFinite(data.round) ||
       data.round < 1 ||
-      typeof data.ownerClientId !== 'string' ||
-      data.ownerClientId !== currentOwnerClientId ||
       typeof data.updatedAt !== 'number' ||
       !Number.isFinite(data.updatedAt)
     ) {
       return null;
     }
     if (Date.now() - data.updatedAt > maxGapMs) return null;
+    if (!selectionRoundGatheringMatches(data.gatheringStartedAt, options.gatheringStartedAt)) {
+      return null;
+    }
     return Math.floor(data.round);
   } catch {
     return null;
   }
+}
+
+export function buildSelectionRoundPersistData(params: {
+  round: number;
+  ownerClientId: string;
+  gatheringStartedAt?: string | null;
+}): PersistedSelectionRound {
+  const ownerClientId = params.ownerClientId.trim();
+  const gatheringStartedAt = normalizeGatheringStartedAtForSelectionRound(
+    params.gatheringStartedAt,
+  );
+  return {
+    round: Math.max(1, Math.floor(params.round)),
+    ownerClientId,
+    updatedAt: Date.now(),
+    ...(gatheringStartedAt ? { gatheringStartedAt } : {}),
+  };
 }
 
 export function persistSelectionRound(roomId: string, data: PersistedSelectionRound): void {

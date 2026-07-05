@@ -121,11 +121,13 @@ function RoomRow({
   configured,
   loading,
   payload,
+  viewOnly = false,
 }: {
   room: LiveRoom;
   configured: boolean;
   loading: boolean;
   payload: RoomPayload | undefined;
+  viewOnly?: boolean;
 }) {
   const headline = (room.displayTitle?.trim() || room.title).trim();
   const startedAtLabel = formatRoomStartedAt(room.startedAt);
@@ -199,9 +201,15 @@ function RoomRow({
     </>
   );
 
-  if (joinLocked && !canEnter) {
+  if (viewOnly || (joinLocked && !canEnter)) {
     return (
-      <div className="flex flex-col gap-1.5 rounded-lg border border-amber-700/60 bg-gray-800/80 px-4 py-3 text-gray-300">
+      <div
+        className={`flex flex-col gap-1.5 rounded-lg border px-4 py-3 text-gray-300 ${
+          joinLocked && !canEnter
+            ? 'border-amber-700/60 bg-gray-800/80'
+            : 'border-gray-600 bg-gray-800/80'
+        }`}
+      >
         {body}
       </div>
     );
@@ -217,7 +225,7 @@ function RoomRow({
   );
 }
 
-export function HomeRoomLinks() {
+export function HomeRoomLinks({ viewOnly = false }: { viewOnly?: boolean }) {
   const mockRoomCount = getDevMockActiveRoomsCount();
   const mockEnabled = isDevMockActiveRoomsEnabled();
   const [configured, setConfigured] = useState<boolean | null>(mockEnabled ? true : null);
@@ -333,7 +341,9 @@ export function HomeRoomLinks() {
                 開催中の部屋（参加中）
               </h2>
               <p className="text-center text-[11px] leading-relaxed text-emerald-200/70">
-                いま誰かが入室している会です。タップするとその部屋へ入れます。
+                {viewOnly
+                  ? 'いま誰かが入室している会の一覧です（閲覧のみ・入室はできません）。'
+                  : 'いま誰かが入室している会です。タップするとその部屋へ入れます。'}
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-1.5" aria-label="並び替え">
@@ -369,6 +379,7 @@ export function HomeRoomLinks() {
                   configured={configured === true}
                   loading={loading}
                   payload={byId[room.roomId]}
+                  viewOnly={viewOnly}
                 />
               </li>
             ))}

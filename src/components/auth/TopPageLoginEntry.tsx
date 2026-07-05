@@ -1,15 +1,15 @@
 'use client';
 
 import { EnvelopeIcon } from '@heroicons/react/24/outline';
-import { useEffect, useState } from 'react';
-import { createClient, isSupabaseConfigured } from '@/lib/supabase/client';
+import { useEffect, useState, type ComponentType } from 'react';
 import { getBrowserAppOrigin } from '@/lib/app-origin';
 import { setOAuthReturnPathCookie } from '@/lib/oauth-return-path';
 import { TRIAL_ROOM_IDS, pickTrialRoomId } from '@/lib/trial-rooms';
 import { assignDefaultGuestDisplayName } from '@/lib/guest-display-name';
 import { FROM_START_KEY } from './FromStartMarker';
 import { rememberGuestRoom, readGuestDisplayNameHint } from '@/lib/guest-room-persistence';
-import { SimpleAuthForm } from './SimpleAuthForm';
+import type { BrowserSupabaseClient } from '@/lib/supabase/load-browser-client';
+import { loadBrowserSupabaseClient } from '@/lib/supabase/load-browser-client';
 
 function GoogleBrandIcon({ className }: { className?: string }) {
   return (
@@ -35,6 +35,14 @@ function GoogleBrandIcon({ className }: { className?: string }) {
 }
 
 export type TopPageLoginEntryIntent = 'new-room' | 'resume-host';
+
+type LazySimpleAuthFormProps = {
+  onSuccess: (displayName: string) => void;
+  onCancel: () => void;
+  onError: (message: string) => void;
+  onAwaitingEmailConfirmation?: (email: string) => void;
+  emailConfirmRedirectPath?: string;
+};
 
 function EntryLeadCopy({ intent }: { intent?: TopPageLoginEntryIntent }) {
   if (intent === 'new-room') {
@@ -70,9 +78,12 @@ export function TopPageLoginEntry({
   /** トップの二段階導線から渡すと、見出し文言を切り替える */
   entryIntent?: TopPageLoginEntryIntent;
 } = {}) {
-  const supabase = createClient();
-  const hasSupabase = isSupabaseConfigured() && !!supabase;
+  const [hasSupabase, setHasSupabase] = useState(false);
+  const [supabase, setSupabase] = useState<BrowserSupabaseClient | null>(null);
   const [showSimpleForm, setShowSimpleForm] = useState(false);
+  const [AuthFormComponent, setAuthFormComponent] = useState<ComponentType<LazySimpleAuthFormProps> | null>(
+    null,
+  );
   const [showGuestForm, setShowGuestForm] = useState(false);
   const [guestHandle, setGuestHandle] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -81,12 +92,32 @@ export function TopPageLoginEntry({
   const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null);
 
   useEffect(() => {
+    let active = true;
+    void loadBrowserSupabaseClient().then(({ client, configured }) => {
+      if (!active) return;
+      setSupabase(client);
+      setHasSupabase(configured);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!showSimpleForm || AuthFormComponent) return;
+    void import('./SimpleAuthForm').then(({ SimpleAuthForm }) => {
+      setAuthFormComponent(() => SimpleAuthForm);
+    });
+  }, [showSimpleForm, AuthFormComponent]);
+
+  useEffect(() => {
     if (!hasSupabase || !supabase) {
       setIsLoggedIn(false);
       return;
     }
     let active = true;
-    supabase.auth.getUser().then(({ data }) => {
+    let unsubscribe: (() => void) | undefined;
+    void supabase.auth.getUser().then(({ data }) => {
       if (!active) return;
       setIsLoggedIn(!!data.user);
     });
@@ -96,9 +127,10 @@ export function TopPageLoginEntry({
         setIsLoggedIn(!!data.user);
       });
     });
+    unsubscribe = () => sub.subscription.unsubscribe();
     return () => {
       active = false;
-      sub.subscription.unsubscribe();
+      unsubscribe?.();
     };
   }, [hasSupabase, supabase]);
 
@@ -271,28 +303,34 @@ export function TopPageLoginEntry({
       {showSimpleForm && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4">
           <div className="w-full max-w-sm rounded-lg border border-gray-700 bg-gray-900 p-6">
-            <SimpleAuthForm
-              emailConfirmRedirectPath="/"
-              onSuccess={() => {
-                setShowSimpleForm(false);
-                window.location.reload();
-              }}
-              onCancel={() => {
-                setShowSimpleForm(false);
-                setError(null);
-                setAuthNotice(null);
-              }}
-              onError={(m) => {
-                if (m) setAuthNotice(null);
-                setError(m || null);
-              }}
-              onAwaitingEmailConfirmation={(email) => {
-                setError(null);
-                setAuthNotice(
-                  `登録を受け付けました（${email}）。確認メールのリンクを開いたあと、再度ログインしてください。迷惑メールフォルダも確認してください。`,
-                );
-              }}
-            />
+            {AuthFormComponent ? (
+              <AuthFormComponent
+                emailConfirmRedirectPath="/"
+                onSuccess={() => {
+                  setShowSimpleForm(false);
+                  window.location.reload();
+                }}
+                onCancel={() => {
+                  setShowSimpleForm(false);
+                  setError(null);
+                  setAuthNotice(null);
+                }}
+                onError={(m) => {
+                  if (m) setAuthNotice(null);
+                  setError(m || null);
+                }}
+                onAwaitingEmailConfirmation={(email) => {
+                  setError(null);
+                  setAuthNotice(
+                    `登録を受け付けました（${email}）。確認メールのリンクを開いたあと、再度ログインしてください。迷惑メールフォルダも確認してください。`,
+                  );
+                }}
+              />
+            ) : (
+              <p className="text-sm text-gray-400" role="status">
+                フォームを読み込み中…
+              </p>
+            )}
             {authNotice && <p className="mt-3 text-sm text-emerald-300/95">{authNotice}</p>}
             {error && <p className="mt-3 text-sm text-red-400">{error}</p>}
           </div>

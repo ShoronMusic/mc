@@ -10,6 +10,7 @@ import {
   type GeminiUsageTokenSummary,
 } from '@/lib/gemini-pricing';
 import type { GeminiUsageBillingKind } from '@/lib/gemini-usage-attribution';
+import { persistGatheringPlaybackSnapshot } from '@/lib/room-gathering-playback-snapshot';
 
 type GatheringRow = {
   id: string;
@@ -416,6 +417,22 @@ export async function persistRoomGatheringSnapshot(
     if (partInsErr && partInsErr.code !== '42P01') {
       console.error('[room-gathering-snapshot] participant insert', partInsErr.message);
     }
+  }
+
+  const playbackSnap = await persistGatheringPlaybackSnapshot(admin, {
+    gatheringId: id,
+    roomId,
+    ownerUserId: g.created_by,
+    startedAt,
+    endedAt,
+  });
+  if (!playbackSnap.ok) {
+    console.error('[room-gathering-snapshot] playback snapshot', playbackSnap.error);
+  } else if (!('skipped' in playbackSnap && playbackSnap.skipped) && playbackSnap.inserted > 0) {
+    console.info('[room-gathering-snapshot] playback snapshot saved', {
+      gatheringId: id,
+      inserted: playbackSnap.inserted,
+    });
   }
 
   return { ok: true, gatheringId: id };

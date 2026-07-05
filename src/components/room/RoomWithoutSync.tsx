@@ -2,6 +2,10 @@
 
 import Image from 'next/image';
 import { ClockIcon, EnvelopeIcon, HeartIcon, UserCircleIcon } from '@heroicons/react/24/outline';
+import {
+  favoriteHeartActiveRingClass,
+  favoriteHeartActiveTextClass,
+} from '@/lib/favorite-heart-ui';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Chat from '@/components/chat/Chat';
 import { AiUsageBillingNotice } from '@/components/room/AiUsageBillingNotice';
@@ -12,6 +16,8 @@ import YouTubePlayer, {
 import { useResumeYoutubeWhenTabVisible } from '@/hooks/useResumeYoutubeWhenTabVisible';
 import { GuestRegisterPromptModal } from '@/components/auth/GuestRegisterPromptModal';
 import MyPage, { type MyPageMainTab } from '@/components/mypage/MyPage';
+import { RoomAiSettingsModal } from '@/components/mypage/RoomAiSettingsModal';
+import { RoomChatLogModal } from '@/components/room/RoomChatLogModal';
 import NowPlaying from '@/components/room/NowPlaying';
 import RoomMainLayout from '@/components/room/RoomMainLayout';
 import RoomPlaybackHistory from '@/components/room/RoomPlaybackHistory';
@@ -23,13 +29,17 @@ import { useThemePlaylistRoomSubmitMission } from '@/hooks/useThemePlaylistRoomS
 import { useAiTrialStatus } from '@/hooks/useAiTrialStatus';
 import { scheduleGuestFirstSongInvite } from '@/lib/guest-first-song-invite';
 import { MUSICAICHAT_ROOM_TAGLINE } from '@/lib/musicaichat-room-tagline';
-import { isGuestSoloSession, resolveGuestSoloPlaybackHistorySinceIso } from '@/lib/guest-solo-playback-history-since';
+import { isGuestSoloSession } from '@/lib/guest-solo-playback-history-since';
+import { resolvePlaybackHistorySinceIso } from '@/lib/playback-history-since';
 import { GUEST_AI_AT_QUESTION_UNAVAILABLE } from '@/lib/ai-usage-disclosure-copy';
 import { resolveAiSelectionMode, type AiSelectionMode } from '@/lib/ai-selection-mode';
 import { AI_TRIAL_STATUS_UPDATED_EVENT } from '@/lib/ai-trial-status';
+import { USER_ROOM_AI_FEATURES_UPDATED_EVENT } from '@/lib/user-room-ai-features-client-events';
 import { requestSongOverviewChat } from '@/lib/song-overview-request-chat-client';
 import { SiteFeedbackModal } from '@/components/room/SiteFeedbackModal';
 import UserBar from '@/components/room/UserBar';
+import { SiteGuideModal, type SiteGuideTab } from '@/components/site/SiteGuideModal';
+import { RoomHeaderSiteGuideButton } from '@/components/room/RoomHeaderSiteGuideButton';
 import { getLastExitStorageKey } from '@/components/providers/AblyProviderWrapper';
 import {
   checkSendLimit,
@@ -196,6 +206,9 @@ export default function RoomWithoutSync({
   }, [roomId]);
   const [myPageOpen, setMyPageOpen] = useState(false);
   const [myPageInitialTab, setMyPageInitialTab] = useState<MyPageMainTab | undefined>(undefined);
+  const [aiSettingsOpen, setAiSettingsOpen] = useState(false);
+  const [chatLogModalOpen, setChatLogModalOpen] = useState(false);
+  const [userRoomAiFeaturesRefreshKey, setUserRoomAiFeaturesRefreshKey] = useState(0);
   const [aiTrialRefreshKey, setAiTrialRefreshKey] = useState(0);
   const { status: aiTrialStatus, state: aiTrialState } = useAiTrialStatus(isGuest, aiTrialRefreshKey);
   useEffect(() => {
@@ -203,6 +216,12 @@ export default function RoomWithoutSync({
     const onUpdate = () => setAiTrialRefreshKey((k) => k + 1);
     window.addEventListener(AI_TRIAL_STATUS_UPDATED_EVENT, onUpdate);
     return () => window.removeEventListener(AI_TRIAL_STATUS_UPDATED_EVENT, onUpdate);
+  }, []);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const onUpdate = () => setUserRoomAiFeaturesRefreshKey((k) => k + 1);
+    window.addEventListener(USER_ROOM_AI_FEATURES_UPDATED_EVENT, onUpdate);
+    return () => window.removeEventListener(USER_ROOM_AI_FEATURES_UPDATED_EVENT, onUpdate);
   }, []);
   const lastSelectionAiModeRef = useRef<AiSelectionMode>('none');
   const [participatesInSelection] = useState(true);
@@ -214,6 +233,12 @@ export default function RoomWithoutSync({
   const [guestRegisterModalOpen, setGuestRegisterModalOpen] = useState(false);
   const [siteFeedbackOpen, setSiteFeedbackOpen] = useState(false);
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
+  const [siteGuideModalOpen, setSiteGuideModalOpen] = useState(false);
+  const [siteGuideModalTab, setSiteGuideModalTab] = useState<SiteGuideTab>('enjoy');
+  const openSiteGuideModal = useCallback((tab: SiteGuideTab) => {
+    setSiteGuideModalTab(tab);
+    setSiteGuideModalOpen(true);
+  }, []);
   const [leaveFeedbackPending, setLeaveFeedbackPending] = useState(false);
   const [playbackHistoryModalOpen, setPlaybackHistoryModalOpen] = useState(false);
   const [chatSummaryModalOpen, setChatSummaryModalOpen] = useState(false);
@@ -345,18 +370,50 @@ export default function RoomWithoutSync({
   const playbackHistoryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoPlayPollRef = useRef<number | null>(null);
   const [playbackHistoryRefreshKey, setPlaybackHistoryRefreshKey] = useState(0);
+  const [gatheringStartedAtIso, setGatheringStartedAtIso] = useState<string | null>(null);
   /** ゲスト単独時の視聴履歴フィルタ用（コンポーネントマウント＝入室時刻） */
   const roomSessionEnteredAtMsRef = useRef(Date.now());
   const roomHasRegisteredParticipant = !isGuest;
   const playbackHistorySinceIso = useMemo(
     () =>
-      resolveGuestSoloPlaybackHistorySinceIso(
+      resolvePlaybackHistorySinceIso({
         isGuest,
         roomHasRegisteredParticipant,
-        roomSessionEnteredAtMsRef.current,
-      ),
-    [isGuest, roomHasRegisteredParticipant],
+        sessionEnteredAtMs: roomSessionEnteredAtMsRef.current,
+        gatheringStartedAtIso,
+      }),
+    [isGuest, roomHasRegisteredParticipant, gatheringStartedAtIso],
   );
+  const playbackHistoryGuestSessionOnly = isGuestSoloSession({
+    isGuest,
+    roomHasRegisteredParticipant,
+    humanParticipantCount: 1,
+  });
+
+  useEffect(() => {
+    if (!roomId?.trim()) return;
+    let cancelled = false;
+    const rid = roomId.trim();
+    void fetch(`/api/room-live-status?roomId=${encodeURIComponent(rid)}`, { credentials: 'include' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (cancelled) return;
+        const room = (d as { room?: { isLive?: boolean; startedAt?: string | null } } | null)?.room;
+        if (room?.isLive === true) {
+          const startedAt =
+            typeof room.startedAt === 'string' && room.startedAt.trim() ? room.startedAt.trim() : null;
+          setGatheringStartedAtIso(startedAt);
+        } else {
+          setGatheringStartedAtIso(null);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setGatheringStartedAtIso(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [roomId]);
   const [skipUsedForVideoId, setSkipUsedForVideoId] = useState<string | null>(null);
   const [yellowCards, setYellowCards] = useState(0);
   const [favoritedVideoIds, setFavoritedVideoIds] = useState<string[]>([]);
@@ -431,7 +488,7 @@ export default function RoomWithoutSync({
     return () => {
       cancelled = true;
     };
-  }, [isGuest, myPageOpen]);
+  }, [isGuest, myPageOpen, aiSettingsOpen, userRoomAiFeaturesRefreshKey]);
 
   /** プレビュー中だけメイン再生音量を落とす */
   const previewActiveRef = useRef(false);
@@ -494,7 +551,17 @@ export default function RoomWithoutSync({
   );
 
   const handleFavoriteCurrentClick = useCallback(
-    async ({ videoId: vid, isFavorited }: { videoId: string; isFavorited: boolean }) => {
+    async ({
+      videoId: vid,
+      isFavorited,
+      title,
+      artistName,
+    }: {
+      videoId: string;
+      isFavorited: boolean;
+      title?: string | null;
+      artistName?: string | null;
+    }) => {
       if (isGuest) return;
       const videoIdTrim = (vid ?? '').trim();
       if (!videoIdTrim) return;
@@ -503,6 +570,8 @@ export default function RoomWithoutSync({
         fetchFavoritedIds();
         return;
       }
+      const titleTrim = typeof title === 'string' ? title.trim() : '';
+      const artistTrim = typeof artistName === 'string' ? artistName.trim() : '';
       await fetch('/api/favorites', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -510,6 +579,8 @@ export default function RoomWithoutSync({
           videoId: videoIdTrim,
           displayName: displayNameProp,
           playedAt: new Date().toISOString(),
+          ...(titleTrim ? { title: titleTrim } : {}),
+          ...(artistTrim ? { artistName: artistTrim } : {}),
         }),
       });
       fetchFavoritedIds();
@@ -2190,6 +2261,9 @@ export default function RoomWithoutSync({
       onClearLocalAiQuestionGuard={
         chatStyleAdminTools ? clearLocalAiQuestionGuardState : undefined
       }
+      favoritedVideoIds={favoritedVideoIds}
+      onFavoriteVideoToggle={handleFavoriteCurrentClick}
+      onRefreshFavoritedVideoIds={fetchFavoritedIds}
     />
   );
 
@@ -2231,6 +2305,8 @@ export default function RoomWithoutSync({
         </div>
         {onLeave && (
           <div className="flex shrink-0 flex-nowrap items-center justify-end gap-1.5 sm:gap-2">
+            <RoomHeaderSiteGuideButton tab="enjoy" onOpen={openSiteGuideModal} />
+            <RoomHeaderSiteGuideButton tab="sitemap" onOpen={openSiteGuideModal} />
             <button
               type="button"
               onClick={handleOpenSiteFeedbackFromHeader}
@@ -2240,16 +2316,6 @@ export default function RoomWithoutSync({
             >
               <EnvelopeIcon className="h-4 w-4 shrink-0" aria-hidden />
               <span className="hidden lg:inline">ご意見</span>
-            </button>
-            <button
-              type="button"
-              onClick={handleInviteFriends}
-              className="h-10 w-10 rounded border border-sky-700 bg-sky-900/35 px-0 py-0 text-[11px] font-medium leading-none text-sky-200 hover:bg-sky-800/55 sm:w-auto sm:px-3 sm:py-2 sm:text-sm"
-              title="この部屋の招待リンクを共有"
-              aria-label="友達を招待"
-            >
-              <span className="sm:hidden">招待</span>
-              <span className="hidden sm:inline">友達を招待</span>
             </button>
             <button
               type="button"
@@ -2268,7 +2334,7 @@ export default function RoomWithoutSync({
           displayName={displayNameProp}
           isGuest={isGuest}
           onGuestRegisterClick={isGuest ? () => setGuestRegisterModalOpen(true) : undefined}
-          onMyPageClick={!isGuest && isLg ? () => openMyPage('user') : undefined}
+          onMyPageClick={isLg || isGuest ? () => openMyPage('user') : undefined}
           onPlaybackHistoryClick={undefined}
           currentVideoId={videoId}
           favoritedVideoIds={favoritedVideoIds}
@@ -2296,7 +2362,6 @@ export default function RoomWithoutSync({
           role="dialog"
           aria-modal="true"
           aria-label="友達を招待"
-          onClick={() => setInviteModalOpen(false)}
         >
           <div
             className="w-full max-w-sm rounded-lg border border-gray-600 bg-gray-900 p-4 shadow-xl"
@@ -2328,6 +2393,13 @@ export default function RoomWithoutSync({
         roomId={roomId}
       />
 
+      <SiteGuideModal
+        open={siteGuideModalOpen}
+        onClose={() => setSiteGuideModalOpen(false)}
+        initialTab={siteGuideModalTab}
+        returnToSegment={headerRoomId}
+      />
+
       {myPageOpen && (
             <MyPage
               onClose={() => {
@@ -2343,8 +2415,35 @@ export default function RoomWithoutSync({
                 } catch {}
               }}
               onRoomProfileSaved={({ displayTitle }) => setRoomDisplayTitleCurrent(displayTitle)}
+              roomId={roomId}
+              isGuest={isGuest}
+              onGuestRegisterClick={
+                isGuest ? () => {
+                  setMyPageOpen(false);
+                  setMyPageInitialTab(undefined);
+                  setGuestRegisterModalOpen(true);
+                } : undefined
+              }
+              onInviteFriendsClick={handleInviteFriends}
             />
       )}
+
+      {aiSettingsOpen && !isGuest ? (
+        <RoomAiSettingsModal
+          onClose={() => setAiSettingsOpen(false)}
+          showOwnerAiTab={false}
+          ownerAiCharacterJoinEnabled={false}
+          onOpenFullMyPage={() => openMyPage('user')}
+        />
+      ) : null}
+
+      <RoomChatLogModal
+        open={chatLogModalOpen}
+        onClose={() => setChatLogModalOpen(false)}
+        roomId={roomId ?? 'local'}
+        liveMessages={messages}
+        sessionOnly
+      />
 
       {chatSummaryModalOpen && (
         <div
@@ -2352,7 +2451,6 @@ export default function RoomWithoutSync({
           role="dialog"
           aria-modal="true"
           aria-label="チャットサマリー"
-          onClick={() => setChatSummaryModalOpen(false)}
         >
           <div
             className="max-h-[85vh] w-full max-w-2xl overflow-auto rounded-lg border border-gray-700 bg-gray-900 p-4"
@@ -2390,6 +2488,7 @@ export default function RoomWithoutSync({
             userTextColor={userTextColor}
             currentVideoId={videoId}
             onChatSummaryClick={roomId ? openChatSummaryModal : undefined}
+            onChatLogClick={() => setChatLogModalOpen(true)}
             roomId={roomId ?? 'local'}
             myClientId="local-client"
             styleAdminChatTools={chatStyleAdminTools}
@@ -2419,7 +2518,7 @@ export default function RoomWithoutSync({
             roomHasRegisteredParticipant={!isGuest}
             aiTrialStatus={aiTrialStatus}
             aiTrialLoading={aiTrialState === 'loading'}
-            onAiSettingsClick={!isGuest ? () => openMyPage('user') : undefined}
+            onAiSettingsClick={!isGuest ? () => setAiSettingsOpen(true) : undefined}
             ownerAiCharacterName={AI_CHARACTER_DEFAULT_NAME}
             onRequestSongOverview={!isGuest ? handleRequestSongOverview : undefined}
             songOverviewRequestedVideoIds={songOverviewRequestedVideoIds}
@@ -2457,7 +2556,7 @@ export default function RoomWithoutSync({
                   }}
                   disabled={!videoId || isGuest}
                   className={`flex h-9 w-9 items-center justify-center rounded-lg border border-gray-600 bg-gray-900/90 text-gray-200 backdrop-blur-sm hover:bg-gray-800 disabled:opacity-50 ${
-                    mobileCurrentIsFavorited ? 'ring-1 ring-red-500/60' : ''
+                    mobileCurrentIsFavorited ? favoriteHeartActiveRingClass : ''
                   }`}
                   aria-label={
                     isGuest
@@ -2475,7 +2574,7 @@ export default function RoomWithoutSync({
                   }
                 >
                   <HeartIcon
-                    className={`h-5 w-5 ${mobileCurrentIsFavorited ? 'text-red-500' : 'text-gray-300'}`}
+                    className={`h-5 w-5 ${mobileCurrentIsFavorited ? favoriteHeartActiveTextClass : 'text-gray-300'}`}
                     aria-hidden
                   />
                 </button>
@@ -2500,6 +2599,41 @@ export default function RoomWithoutSync({
                   <ClockIcon className="h-5 w-5" aria-hidden />
                 </button>
               </div>
+              <div className="absolute right-2 bottom-2 z-20 hidden sm:flex">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!videoId || isGuest) return;
+                    void handleFavoriteCurrentClick({
+                      videoId,
+                      isFavorited: mobileCurrentIsFavorited,
+                    });
+                  }}
+                  disabled={!videoId || isGuest}
+                  className={`flex h-9 w-9 items-center justify-center rounded-lg border border-gray-600 bg-gray-900/90 text-gray-200 backdrop-blur-sm hover:bg-gray-800 disabled:opacity-50 ${
+                    mobileCurrentIsFavorited ? favoriteHeartActiveRingClass : ''
+                  }`}
+                  aria-label={
+                    isGuest
+                      ? 'お気に入り（ログインで利用可）'
+                      : mobileCurrentIsFavorited
+                        ? 'お気に入り解除（再生中の曲）'
+                        : 'お気に入りに追加（再生中の曲）'
+                  }
+                  title={
+                    isGuest
+                      ? 'お気に入り（ログインで利用可）'
+                      : mobileCurrentIsFavorited
+                        ? 'お気に入り解除（再生中）'
+                        : 'お気に入りに追加（再生中）'
+                  }
+                >
+                  <HeartIcon
+                    className={`h-5 w-5 ${mobileCurrentIsFavorited ? favoriteHeartActiveTextClass : 'text-gray-300'}`}
+                    aria-hidden
+                  />
+                </button>
+              </div>
             </div>
             <NowPlaying />
           </>
@@ -2510,6 +2644,7 @@ export default function RoomWithoutSync({
             currentVideoId={videoId}
             refreshKey={playbackHistoryRefreshKey}
             playbackHistorySinceIso={playbackHistorySinceIso}
+            playbackHistoryGuestSessionOnly={playbackHistoryGuestSessionOnly}
             participantsWithColor={[{ displayName: displayNameProp, textColor: userTextColor }]}
             isGuest={isGuest}
             favoritedVideoIds={favoritedVideoIds}

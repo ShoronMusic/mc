@@ -14,6 +14,10 @@ import {
   DocumentTextIcon,
   IdentificationIcon,
 } from '@heroicons/react/24/outline';
+import {
+  favoriteHeartActiveRingSoftClass,
+  favoriteHeartActiveTextClass,
+} from '@/lib/favorite-heart-ui';
 import { useIsLgViewport } from '@/hooks/useLgViewport';
 import { SELECTION_ROUND_SESSION_MAX_GAP_MS } from '@/lib/room-selection-round';
 
@@ -174,7 +178,7 @@ export default function UserBar({
   const label = isGuest ? `${displayName}${hasGuestMarkerInLabel ? '' : '（ゲスト）'}` : displayName;
   const showGuestRegister = isGuest && onGuestRegisterClick != null;
   const gapHours = Math.round(SELECTION_ROUND_SESSION_MAX_GAP_MS / (60 * 60 * 1000));
-  const roundTitle = `選曲ラウンド（ラウンド ${selectionRoundNumber}）。オーナーの番が一周して戻るたびに+1。同一ブラウザでは約${gapHours}時間以内に再入室すると続きから復元します。`;
+  const roundTitle = `選曲ラウンド（ラウンド ${selectionRoundNumber}）。オーナーの番が一周して戻るたびに+1。オーナー引継ぎでは維持し、新しい会が始まると1から。同一ブラウザでは約${gapHours}時間以内に再入室すると続きから復元します。`;
 
   const participantNamesTitle =
     participants.length > 0
@@ -263,7 +267,7 @@ export default function UserBar({
         }}
         disabled={!canToggleCurrentFavorite}
         className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-600 bg-gray-800 text-gray-200 hover:bg-gray-700 disabled:opacity-50 ${
-          currentIsFavorited ? 'ring-1 ring-red-500/40' : ''
+          currentIsFavorited ? favoriteHeartActiveRingSoftClass : ''
         }`}
         aria-label={
           isGuest
@@ -281,7 +285,7 @@ export default function UserBar({
         }
       >
         <HeartIcon
-          className={`h-5 w-5 ${currentIsFavorited ? 'text-red-500' : 'text-gray-400'}`}
+          className={`h-5 w-5 ${currentIsFavorited ? favoriteHeartActiveTextClass : 'text-gray-400'}`}
           aria-hidden
         />
       </button>

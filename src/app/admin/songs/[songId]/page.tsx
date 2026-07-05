@@ -356,6 +356,11 @@ export default async function SongDetailPage({ params }: SongDetailPageProps) {
     console.error('[admin/song-detail] comment_feedback exception', e);
   }
 
+  const primaryVideoId =
+    (typeof song.music8_video_id === 'string' && song.music8_video_id.trim()) ||
+    videos.find((v) => v.video_id.trim())?.video_id.trim() ||
+    null;
+
   return (
     <main className="mx-auto max-w-4xl bg-gray-950 p-4 text-gray-100">
       <AdminMenuBar />
@@ -405,6 +410,19 @@ export default async function SongDetailPage({ params }: SongDetailPageProps) {
             <span className="text-gray-400">—</span>
           </p>
         )}
+
+        {primaryVideoId ? (
+          <p>
+            <a
+              href={`https://www.youtube.com/watch?v=${encodeURIComponent(primaryVideoId)}`}
+              target="_blank"
+              rel="noreferrer"
+              className="text-sm text-sky-400 hover:text-sky-300"
+            >
+              YouTube を開く
+            </a>
+          </p>
+        ) : null}
 
         {/* Music8 詳細メタ */}
         <div className="rounded border border-gray-800 bg-gray-950/40 p-3">

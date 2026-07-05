@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { clearRoomLivePresenceWatch } from '@/lib/empty-live-gathering-cron';
+import { endStaleLiveGatheringIfNeeded } from '@/lib/stale-live-gathering';
 import { persistRoomGatheringSnapshots } from '@/lib/room-gathering-snapshot';
 import { ROOM_DISPLAY_TITLE_MAX_CHARS } from '@/lib/room-lobby-message';
 
@@ -150,10 +151,21 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: selErr.message }, { status: 500 });
     }
     if (existing?.length) {
-      return NextResponse.json(
-        { error: 'この部屋ではすでに開催中の会があります。' },
-        { status: 409 },
-      );
+      const adminStale = createAdminClient();
+      if (adminStale) {
+        const stale = await endStaleLiveGatheringIfNeeded(adminStale, roomId);
+        if (!stale.ended) {
+          return NextResponse.json(
+            { error: 'この部屋ではすでに開催中の会があります。' },
+            { status: 409 },
+          );
+        }
+      } else {
+        return NextResponse.json(
+          { error: 'この部屋ではすでに開催中の会があります。' },
+          { status: 409 },
+        );
+      }
     }
 
     const { count: myLiveCount, error: myLiveErr } = await supabase

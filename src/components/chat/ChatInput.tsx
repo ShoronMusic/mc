@@ -35,9 +35,15 @@ import {
   DocumentTextIcon,
   EnvelopeIcon,
   FolderIcon,
+  HeartIcon,
   MusicalNoteIcon,
   QuestionMarkCircleIcon,
 } from '@heroicons/react/24/outline';
+import { HeartIcon as HeartIconSolid } from '@heroicons/react/24/solid';
+import {
+  favoriteHeartActiveBorderRingClass,
+  favoriteHeartActiveTextClass,
+} from '@/lib/favorite-heart-ui';
 import { SongSelectionHowtoModal } from '@/components/chat/SongSelectionHowtoModal';
 import { LibraryArtistDetailMusic8Body } from '@/components/chat/LibraryArtistDetailMusic8Body';
 import { isLibraryArtistInfoSparse } from '@/lib/library-artist-info-display';
@@ -471,6 +477,109 @@ function librarySongListPrimaryTitle(row: LibrarySongRow): string {
   return row.title;
 }
 
+function LibrarySongDetailTitleCard({
+  title,
+  subtitle,
+  selectedVideoId,
+  songVideoIds,
+  songFavoritedVideoIds,
+  favoritedVideoIds,
+  isGuest,
+  onFavoriteVideoToggle,
+  favoriteTitle,
+  favoriteArtistName,
+}: {
+  title: string;
+  subtitle: string;
+  selectedVideoId: string | null;
+  songVideoIds: string[];
+  /** この曲（song_id）に紐づくお気に入り video_id（API 照合結果） */
+  songFavoritedVideoIds: string[];
+  /** ログインユーザーのお気に入り video_id 一覧 */
+  favoritedVideoIds: string[];
+  isGuest: boolean;
+  onFavoriteVideoToggle?: (params: {
+    videoId: string;
+    isFavorited: boolean;
+    title?: string | null;
+    artistName?: string | null;
+  }) => void | Promise<void>;
+  favoriteTitle?: string | null;
+  favoriteArtistName?: string | null;
+}) {
+  const favoritedSet = useMemo(() => new Set(favoritedVideoIds), [favoritedVideoIds]);
+  const matchedIds = useMemo(() => {
+    const out = new Set<string>();
+    for (const id of songFavoritedVideoIds) {
+      if (id.trim()) out.add(id.trim());
+    }
+    for (const id of songVideoIds) {
+      const vid = id.trim();
+      if (vid && favoritedSet.has(vid)) out.add(vid);
+    }
+    if (selectedVideoId?.trim() && favoritedSet.has(selectedVideoId.trim())) {
+      out.add(selectedVideoId.trim());
+    }
+    return [...out];
+  }, [songFavoritedVideoIds, songVideoIds, selectedVideoId, favoritedSet]);
+
+  const isFavorited = matchedIds.length > 0;
+  const toggleVideoId =
+    (selectedVideoId?.trim() && matchedIds.includes(selectedVideoId.trim()) ? selectedVideoId.trim() : null) ??
+    matchedIds[0] ??
+    selectedVideoId?.trim() ??
+    songVideoIds[0]?.trim() ??
+    null;
+  const canToggle = Boolean(toggleVideoId && onFavoriteVideoToggle && !isGuest);
+
+  return (
+    <div className="mb-2 rounded border border-gray-800 bg-gray-900/60 px-3 py-2">
+      <div className="flex items-start justify-between gap-2">
+        <p className="min-w-0 flex-1 text-sm font-medium text-gray-100">{title}</p>
+        {onFavoriteVideoToggle ? (
+          <button
+            type="button"
+            onClick={() => {
+              if (!toggleVideoId || !onFavoriteVideoToggle || isGuest) return;
+              void onFavoriteVideoToggle({
+                videoId: toggleVideoId,
+                isFavorited: favoritedSet.has(toggleVideoId),
+                title: favoriteTitle,
+                artistName: favoriteArtistName,
+              });
+            }}
+            disabled={!canToggle}
+            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-gray-600 bg-gray-800/80 hover:bg-gray-700 disabled:opacity-50 ${
+              isFavorited ? favoriteHeartActiveBorderRingClass : 'text-gray-200'
+            }`}
+            aria-label={
+              isGuest
+                ? 'お気に入り（ログインで利用可）'
+                : isFavorited
+                  ? 'お気に入り解除'
+                  : 'お気に入りに追加'
+            }
+            title={
+              isGuest
+                ? 'お気に入り（ログインで利用可）'
+                : isFavorited
+                  ? 'お気に入り解除'
+                  : 'お気に入りに追加'
+            }
+          >
+            {isFavorited ? (
+              <HeartIconSolid className={`h-5 w-5 shrink-0 ${favoriteHeartActiveTextClass}`} aria-hidden />
+            ) : (
+              <HeartIcon className="h-5 w-5 shrink-0 text-gray-400" aria-hidden />
+            )}
+          </button>
+        ) : null}
+      </div>
+      <p className="mt-1 text-xs text-gray-400">{subtitle}</p>
+    </div>
+  );
+}
+
 export interface ChatInputHandle {
   /** 入力欄の末尾に文字列を追加する（参加者名クリック用） */
   insertText: (text: string) => void;
@@ -528,6 +637,17 @@ interface ChatInputProps {
   themePlaylistRoomSubmit?: { themeId: string; themeLabel: string } | null;
   /** 別端末が同一アカウントで操作中のため、この端末では送信・選曲不可 */
   roomInteractionLocked?: boolean;
+  /** お気に入り済み video_id（ライブラリ曲詳細のハート表示用） */
+  favoritedVideoIds?: string[];
+  /** ライブラリ曲詳細からお気に入りトグル */
+  onFavoriteVideoToggle?: (params: {
+    videoId: string;
+    isFavorited: boolean;
+    title?: string | null;
+    artistName?: string | null;
+  }) => void | Promise<void>;
+  /** ライブラリを開いたとき等にお気に入り ID 一覧を再取得 */
+  onRefreshFavoritedVideoIds?: () => void;
 }
 
 const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput(
@@ -548,6 +668,9 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
     onOpenSiteFeedback,
     themePlaylistRoomSubmit = null,
     roomInteractionLocked = false,
+    favoritedVideoIds = [],
+    onFavoriteVideoToggle,
+    onRefreshFavoritedVideoIds,
   },
   ref
 ) {
@@ -600,6 +723,10 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
   const [libraryLetterModalOpen, setLibraryLetterModalOpen] = useState(false);
   const [libraryCopyState, setLibraryCopyState] = useState<'idle' | 'ok' | 'fail'>('idle');
   const [libraryMyListAddBusy, setLibraryMyListAddBusy] = useState(false);
+  /** 選択中曲（song_id）に紐づくお気に入り video_id */
+  const [librarySongFavoritedVideoIds, setLibrarySongFavoritedVideoIds] = useState<string[]>([]);
+  /** ライブラリ表示中に自前取得するお気に入り ID（親 state とのズレ防止） */
+  const [libraryFavoriteIdsLocal, setLibraryFavoriteIdsLocal] = useState<string[]>([]);
   const [searchResults, setSearchResults] = useState<SearchResultRow[]>([]);
   const [previewVideoId, setPreviewVideoId] = useState<string | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -1327,6 +1454,96 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
     selectedLibraryRow?.main_artist ?? null,
   );
 
+  /** 曲詳細のお気に入り判定: 代表 video と動画バージョン候補のいずれかが登録済みなら点灯 */
+  const libraryDetailSongVideoIds = useMemo(() => {
+    const ids: string[] = [];
+    const seen = new Set<string>();
+    for (const v of librarySongVideos) {
+      const vid = v.video_id?.trim();
+      if (!vid || seen.has(vid)) continue;
+      seen.add(vid);
+      ids.push(vid);
+    }
+    const rowVid = selectedLibraryRow?.video_id?.trim();
+    if (rowVid && !seen.has(rowVid)) ids.push(rowVid);
+    return ids;
+  }, [librarySongVideos, selectedLibraryRow?.video_id]);
+
+  const favoritedVideoIdsKey = favoritedVideoIds.join('\u0001');
+  const libraryFavoriteIdsEffective = useMemo(() => {
+    const merged = new Set<string>([...favoritedVideoIds, ...libraryFavoriteIdsLocal]);
+    return [...merged];
+  }, [favoritedVideoIds, libraryFavoriteIdsLocal]);
+
+  const libraryFavoritedVideoIdSet = useMemo(
+    () => new Set(libraryFavoriteIdsEffective),
+    [libraryFavoriteIdsEffective],
+  );
+
+  const libraryDetailFavoritedVideoIds = useMemo(() => {
+    const merged = new Set<string>([
+      ...librarySongFavoritedVideoIds,
+      ...libraryDetailSongVideoIds.filter((id) => libraryFavoriteIdsEffective.includes(id)),
+    ]);
+    return [...merged];
+  }, [librarySongFavoritedVideoIds, libraryDetailSongVideoIds, libraryFavoriteIdsEffective]);
+
+  useEffect(() => {
+    if (!libraryOpen || isGuest) {
+      setLibraryFavoriteIdsLocal([]);
+      return;
+    }
+    let cancelled = false;
+    void fetch('/api/favorites?idsOnly=1', { credentials: 'include' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (cancelled) return;
+        setLibraryFavoriteIdsLocal(
+          Array.isArray(data?.videoIds)
+            ? data.videoIds.filter((id: unknown): id is string => typeof id === 'string')
+            : [],
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setLibraryFavoriteIdsLocal([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [libraryOpen, isGuest, librarySelectedSongId, favoritedVideoIdsKey]);
+
+  useEffect(() => {
+    if (!libraryOpen || isGuest) return;
+    onRefreshFavoritedVideoIds?.();
+  }, [libraryOpen, isGuest, onRefreshFavoritedVideoIds]);
+
+  useEffect(() => {
+    if (!libraryOpen || isGuest || !librarySelectedSongId) {
+      setLibrarySongFavoritedVideoIds([]);
+      return;
+    }
+    let cancelled = false;
+    void fetch(
+      `/api/favorites/song-status?songId=${encodeURIComponent(librarySelectedSongId)}`,
+      { credentials: 'include' },
+    )
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (cancelled) return;
+        setLibrarySongFavoritedVideoIds(
+          Array.isArray(data?.favoritedVideoIds)
+            ? data.favoritedVideoIds.filter((id: unknown): id is string => typeof id === 'string')
+            : [],
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setLibrarySongFavoritedVideoIds([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [libraryOpen, isGuest, librarySelectedSongId, favoritedVideoIdsKey]);
+
   const libraryMobileFocus = useMemo(
     () =>
       resolveLibraryMobileFocus({
@@ -1755,7 +1972,6 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
           role="dialog"
           aria-modal="true"
           aria-label="検索結果"
-          onClick={() => setSearchResultsOpen(false)}
         >
           <div
             className="w-full max-w-2xl rounded border border-gray-700 bg-gray-900 p-4 text-gray-100"
@@ -1886,7 +2102,6 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
           role="dialog"
           aria-modal="true"
           aria-label="プレビュー"
-          onClick={() => stopPreview()}
         >
           <div
             className="w-full max-w-3xl overflow-hidden rounded border border-gray-700 bg-gray-900 p-3"
@@ -2023,7 +2238,6 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
           role="dialog"
           aria-modal="true"
           aria-labelledby="chat-input-usage-guide-title"
-          onClick={() => setUsageGuideOpen(false)}
         >
           <div
             className="max-h-[min(80vh,28rem)] w-full max-w-md overflow-y-auto rounded-lg border border-gray-600 bg-gray-900 p-4 shadow-xl"
@@ -2126,7 +2340,6 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
           role="dialog"
           aria-modal="true"
           aria-labelledby="chat-input-ai-examples-title"
-          onClick={() => setAiQuestionExamplesOpen(false)}
         >
           <div
             className="max-h-[min(80vh,28rem)] w-full max-w-md overflow-y-auto rounded-lg border border-gray-600 bg-gray-900 p-4 shadow-xl"
@@ -2173,7 +2386,6 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
         <div
           className="fixed inset-0 z-[88] flex items-center justify-center bg-black/65 p-4"
           role="presentation"
-          onClick={() => setThemePlaylistConfirmOpen(false)}
         >
           <div
             role="dialog"
@@ -2794,6 +3006,9 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                       ]
                         .filter(Boolean)
                         .join(' · ');
+                      const rowVideoId = row.video_id?.trim() ?? '';
+                      const rowIsFavorited =
+                        !isGuest && rowVideoId.length > 0 && libraryFavoritedVideoIdSet.has(rowVideoId);
                       return (
                         <li key={row.id}>
                           <button
@@ -2808,9 +3023,23 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                                 : 'border-gray-800 bg-gray-900/60 hover:bg-gray-900'
                             }`}
                           >
-                            <p className="line-clamp-2 text-sm font-medium text-gray-100">
-                              {librarySongListPrimaryTitle(row)}
-                            </p>
+                            <div className="flex items-start justify-between gap-2">
+                              <p className="line-clamp-2 min-w-0 flex-1 text-sm font-medium text-gray-100">
+                                {librarySongListPrimaryTitle(row)}
+                              </p>
+                              {rowIsFavorited ? (
+                                <span
+                                  className="mt-0.5 shrink-0"
+                                  title="お気に入り登録済み"
+                                  aria-label="お気に入り登録済み"
+                                >
+                                  <HeartIconSolid
+                                    className={`h-4 w-4 ${favoriteHeartActiveTextClass}`}
+                                    aria-hidden
+                                  />
+                                </span>
+                              ) : null}
+                            </div>
                             <p className="mt-1 text-[11px] leading-snug text-gray-400">
                               {releaseDot ? (
                                 <>
@@ -2832,12 +3061,18 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
               {isMobileLandscape && selectedLibraryRow ? (
                 <section className="min-h-0 grid grid-cols-[minmax(0,0.68fr)_minmax(0,0.32fr)] gap-2 max-lg:col-span-2">
                   <div className="mc-scrollbar-stable min-h-0 overflow-y-auto rounded-lg border border-amber-700/55 bg-amber-950/35 p-2.5">
-                    <div className="mb-2 rounded border border-gray-800 bg-gray-900/60 px-3 py-2">
-                      <p className="text-sm font-medium text-gray-100">{selectedLibraryRow.title}</p>
-                      <p className="mt-1 text-xs text-gray-400">
-                        {librarySongArtists.artistsLine} / {selectedLibraryRow.style ?? '—'}
-                      </p>
-                    </div>
+                    <LibrarySongDetailTitleCard
+                      title={selectedLibraryRow.title}
+                      subtitle={`${librarySongArtists.artistsLine} / ${selectedLibraryRow.style ?? '—'}`}
+                      selectedVideoId={librarySelectedVideoId}
+                      songVideoIds={libraryDetailSongVideoIds}
+                      songFavoritedVideoIds={libraryDetailFavoritedVideoIds}
+                      favoritedVideoIds={libraryFavoriteIdsEffective}
+                      isGuest={isGuest}
+                      onFavoriteVideoToggle={onFavoriteVideoToggle}
+                      favoriteTitle={selectedLibraryRow.song_title ?? selectedLibraryRow.title}
+                      favoriteArtistName={selectedLibraryRow.main_artist}
+                    />
                     <div className="mb-2">
                       <p className="mb-1 text-[11px] text-gray-500">動画バージョン</p>
                       {libraryVideoLoading ? (
@@ -2954,12 +3189,18 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                 <div className="mc-scrollbar-stable min-h-0 flex-1 overflow-y-auto p-3">
                   {selectedLibraryRow ? (
                     <>
-                      <div className="mb-2 rounded border border-gray-800 bg-gray-900/60 px-3 py-2">
-                        <p className="text-sm font-medium text-gray-100">{selectedLibraryRow.title}</p>
-                        <p className="mt-1 text-xs text-gray-400">
-                          {librarySongArtists.artistsLine} / {selectedLibraryRow.style ?? '—'}
-                        </p>
-                      </div>
+                      <LibrarySongDetailTitleCard
+                        title={selectedLibraryRow.title}
+                        subtitle={`${librarySongArtists.artistsLine} / ${selectedLibraryRow.style ?? '—'}`}
+                        selectedVideoId={librarySelectedVideoId}
+                        songVideoIds={libraryDetailSongVideoIds}
+                        songFavoritedVideoIds={libraryDetailFavoritedVideoIds}
+                        favoritedVideoIds={libraryFavoriteIdsEffective}
+                        isGuest={isGuest}
+                        onFavoriteVideoToggle={onFavoriteVideoToggle}
+                        favoriteTitle={selectedLibraryRow.song_title ?? selectedLibraryRow.title}
+                        favoriteArtistName={selectedLibraryRow.main_artist}
+                      />
                       <div className="mb-2">
                         <p className="mb-1 text-[11px] text-gray-500">動画バージョン</p>
                         {libraryVideoLoading ? (
@@ -3082,7 +3323,8 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                       )}
                       {selectedLibraryRow ? (
                         <LibraryMusic8SongComment
-                          videoId={librarySelectedVideoId}
+                          selectedVideoId={librarySelectedVideoId}
+                      songVideoIds={libraryDetailSongVideoIds}
                           artistName={
                             librarySongArtists.artists?.[0]?.name ?? selectedLibraryRow.main_artist
                           }
@@ -3126,12 +3368,18 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
               </div>
               <div className="mc-scrollbar-stable min-h-0 flex-1 overflow-y-auto p-3">
                   <>
-                    <div className="mb-2 rounded border border-gray-800 bg-gray-900/60 px-3 py-2">
-                      <p className="text-sm font-medium text-gray-100">{selectedLibraryRow.title}</p>
-                      <p className="mt-1 text-xs text-gray-400">
-                        {librarySongArtists.artistsLine} / {selectedLibraryRow.style ?? '—'}
-                      </p>
-                    </div>
+                    <LibrarySongDetailTitleCard
+                      title={selectedLibraryRow.title}
+                      subtitle={`${librarySongArtists.artistsLine} / ${selectedLibraryRow.style ?? '—'}`}
+                      selectedVideoId={librarySelectedVideoId}
+                      songVideoIds={libraryDetailSongVideoIds}
+                      songFavoritedVideoIds={libraryDetailFavoritedVideoIds}
+                      favoritedVideoIds={libraryFavoriteIdsEffective}
+                      isGuest={isGuest}
+                      onFavoriteVideoToggle={onFavoriteVideoToggle}
+                      favoriteTitle={selectedLibraryRow.song_title ?? selectedLibraryRow.title}
+                      favoriteArtistName={selectedLibraryRow.main_artist}
+                    />
                     <div className="mb-2">
                       <p className="mb-1 text-[11px] text-gray-500">動画バージョン</p>
                       {libraryVideoLoading ? (
@@ -3225,7 +3473,6 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                 role="dialog"
                 aria-modal="true"
                 aria-label="アーティスト頭文字を選択"
-                onClick={() => setLibraryLetterModalOpen(false)}
               >
                 <div
                   className="w-full max-w-sm rounded-lg border border-lime-800/70 bg-gray-950 p-3"
@@ -3318,7 +3565,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
       <div className="rounded-lg border border-gray-700 bg-gray-900/50 p-2">
         {roomInteractionLocked ? (
           <p className="mb-2 rounded border border-amber-700/50 bg-amber-950/40 px-2 py-1.5 text-[11px] leading-snug text-amber-100">
-            別の端末で操作中のため、この端末では送信できません。上部の「この端末で操作する」から切り替えてください。
+            別の端末で操作中のため、この端末では送信できません。上部の「この端末で操作する」ボタンで切り替えてください。
           </p>
         ) : null}
         <div className="flex w-full flex-row flex-wrap items-stretch gap-2">

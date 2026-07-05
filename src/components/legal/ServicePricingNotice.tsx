@@ -1,12 +1,43 @@
+import { AiCreditsPricingGuideLink } from '@/components/legal/AiCreditsPricingGuide';
+import { AI_CREDITS_FREE_FEATURES } from '@/lib/ai-credits-pricing-guide';
+
 /**
- * 利用料金（現状無料・将来の有料化の可能性）— 利用規約・ガイド・同意画面で共通
+ * 利用料金（サービス全体）— 利用規約・ガイド・同意画面で共通
+ * AI の詳細は {@link AiCreditsPricingGuide} / `/guide/ai-pricing` に集約
  */
 export function ServicePricingNotice() {
   return (
+    <div className="space-y-3 text-gray-400">
+      <p>
+        本サービスは、<strong className="text-gray-300">YouTube 動画の同時視聴とチャット</strong>
+        による洋楽鑑賞を中心としたコミュニティです。次の機能は
+        <strong className="text-gray-300">無料</strong>です。
+      </p>
+      <ul className="list-disc space-y-1 pl-5">
+        {AI_CREDITS_FREE_FEATURES.map((item) => (
+          <li key={item}>{item}</li>
+        ))}
+      </ul>
+      <p>
+        <strong className="text-gray-300">AI 機能</strong>（曲解説・@ 質問・曲クイズ等）はクラウド AI
+        の利用原価がかかるため、<strong className="text-gray-300">基本は有料</strong>です。無料登録ユーザーにはお試し枠があります。クレジットの消費単位・購入価格・前払いについては、
+        <AiCreditsPricingGuideLink /> をご確認ください。
+        AI エージェントによる選曲参加は参加者のクレジットを消費せず、サイト運営側が負担します。
+      </p>
+      <p>
+        インターネット接続や第三者サービス（動画配信等）の利用に伴う通信料金等は、利用者ご自身の負担となります。無料の範囲・お試し枠・価格・課金方式は、運営の判断により予告なく変更される場合があります。変更時は法令に従い、本サービス上または運営が適切と判断する方法でお知らせします。
+      </p>
+    </div>
+  );
+}
+
+/** ガイド目次・選曲案内など、短い参照用 */
+export function ServicePricingNoticeBrief() {
+  return (
     <p className="text-gray-400">
-      本サービスは<strong className="text-gray-300">現時点では利用料金をいただいておりません（無料）</strong>です。一方で、運営の判断により、
-      <strong className="text-gray-300">今後、有料プラン・従量課金・その他の料金が発生する機能の導入</strong>
-      を行う場合があります。有料化等を行う際は、法令に従い、本サービス上または運営が適切と判断する方法で事前にお知らせします。なお、インターネット接続や第三者サービス（動画配信等）の利用に伴う通信料金等は、利用者ご自身の負担となります。
+      <strong className="text-gray-300">YouTube の同時視聴とチャット</strong>は無料、
+      <strong className="text-gray-300">AI 機能</strong>は基本有料です（AI エージェントの選曲参加はサイト側負担）。詳細は{' '}
+      <AiCreditsPricingGuideLink /> をご覧ください。
     </p>
   );
 }

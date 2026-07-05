@@ -44,6 +44,7 @@ import {
   getStoredNewReleaseCommentPack,
   insertTidbit,
 } from '../../../../lib/song-tidbits';
+import { shouldApplyCommentPackNewReleaseMode } from '@/lib/comment-pack-new-release';
 import { isRoomJpAiUnlockEnabled } from '@/lib/room-jp-ai-unlock-server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import {
@@ -75,6 +76,7 @@ import { insertAiCommentaryUnavailableEntry } from '@/lib/ai-commentary-unavaila
 import { buildSongQuizApiExtension } from '@/lib/song-quiz-after-commentary';
 import { getChatAiClientIp } from '@/lib/chat-ai-rate-limit';
 import { guardAiTrialSongSelection } from '@/lib/user-ai-trial-server';
+import { roomSyncServerLog } from '@/lib/room-sync-server-log';
 
 export const dynamic = 'force-dynamic';
 
@@ -97,8 +99,6 @@ function applySlotsToPackBodies(
 }
 
 /** YouTube 動画の公開日がこの日数以内なら「新曲」とみなし、基本コメントのみ出す */
-const NEW_RELEASE_DAYS = 30;
-
 function normalizeForDuplicateCheck(text: string): string {
   return text
     .toLowerCase()
@@ -231,15 +231,6 @@ async function fetchCommentPackChatTidbitIds(
   return out;
 }
 
-function isPublishedWithinLastDays(publishedAtIso: string | undefined, days: number): boolean {
-  if (!publishedAtIso || typeof publishedAtIso !== 'string') return false;
-  const d = new Date(publishedAtIso.trim());
-  if (Number.isNaN(d.getTime())) return false;
-  const now = Date.now();
-  const diffMs = now - d.getTime();
-  if (diffMs < 0) return false;
-  return diffMs <= days * 24 * 60 * 60 * 1000;
-}
 
 /**
  * artistDisplay（カンマ区切りの複数クレジット）を検出したとき、共演・フィーチャリング向けの追指示。
@@ -330,8 +321,27 @@ export async function POST(request: Request) {
       clientIp: getChatAiClientIp(request),
     });
     if (!trialGuard.ok) {
+      roomSyncServerLog('comment-pack:denied', {
+        roomId,
+        videoId,
+        userId: selectorUserId,
+        isGuest: requestIsGuest,
+        packPhase,
+        status: trialGuard.status,
+        error: trialGuard.body.error,
+        message: trialGuard.body.message,
+      });
       return NextResponse.json(trialGuard.body, { status: trialGuard.status });
     }
+    roomSyncServerLog('comment-pack:allowed', {
+      roomId,
+      videoId,
+      userId: selectorUserId,
+      packPhase,
+      source: trialGuard.source,
+      songsRemaining: trialGuard.songsRemaining,
+      creditsRemaining: trialGuard.creditsRemaining,
+    });
 
     const selectorGeminiLogMeta = buildGeminiUsagePersistMeta({
       roomId,
@@ -386,7 +396,6 @@ export async function POST(request: Request) {
       viewCount: snippet?.viewCount ?? null,
     });
 
-    const isNewRelease = isPublishedWithinLastDays(snippet?.publishedAt, NEW_RELEASE_DAYS);
     const devMinimalSongAi = isDevMinimalSongAi();
     const isJpEconomy = await resolveJapaneseEconomyWithMusicBrainz({
       title,
@@ -400,7 +409,7 @@ export async function POST(request: Request) {
     const roomJpAiUnlock = roomId ? await isRoomJpAiUnlockEnabled(roomId) : false;
     const jpAiUnlockEnabled = roomJpAiUnlock;
     /** 新曲のみ基本1本（自由4本なし）。開発フラグ時も同様。邦楽は公式チャンネル例外を除き生成しない */
-    const baseOnlyPackCore = equivalentBaseOnlySlots(slots) || isNewRelease || devMinimalSongAi;
+    const baseOnlyPackCoreDeferred = equivalentBaseOnlySlots(slots) || devMinimalSongAi;
 
     if (isCommentPackFullyOff(slots)) {
       return NextResponse.json({
@@ -483,6 +492,13 @@ export async function POST(request: Request) {
       song || title,
     );
     const { musicaichatSong, fallbackMusic8Song } = music8Ctx;
+    const isNewRelease = shouldApplyCommentPackNewReleaseMode({
+      youtubePublishedAt: snippet?.publishedAt ?? null,
+      youtubeDescription: snippet?.description ?? null,
+      musicaichatSong: musicaichatSong as Record<string, unknown> | null,
+      fallbackMusic8Song: fallbackMusic8Song as Record<string, unknown> | null,
+    });
+    const baseOnlyPackCore = baseOnlyPackCoreDeferred || isNewRelease;
     if (songId) {
       const writer = createAdminClient() ?? supabase;
       const rawM8 = musicaichatSong ?? fallbackMusic8Song;
@@ -731,7 +747,7 @@ ${music8SourcePolicyLine}
 
     // 1. 基本コメント（/commentary と似た役割だが、このAPI専用に少し短めに生成）
     const basePromptTail = isNewRelease
-      ? `・この動画は公開から約1ヶ月以内の新曲扱いです。周辺情報が不十分な可能性があるため、断定を避け、分かる範囲の紹介にとどめてください（推測や詳細な背景説明は控えめに）。
+      ? `・YouTube上のこの動画は公開から約1ヶ月以内です。周辺情報が不十分な可能性があるため、断定を避け、分かる範囲の紹介にとどめてください（推測や詳細な背景説明は控えめに）。
 ・この後に自由コメントは出しません。ここ1本で完結する基本紹介にしてください。`
       : devMinimalSongAi || equivalentBaseOnlySlots(slots)
         ? `・開発中モードのため、自由コメントは生成しません。ここ1本で完結する基本紹介にしてください。`

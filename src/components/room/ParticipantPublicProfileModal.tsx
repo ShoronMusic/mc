@@ -86,15 +86,6 @@ export default function ParticipantPublicProfileModal({
     };
   }, [open, targetUserId, viewerIsGuest]);
 
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
-
   if (!open) return null;
 
   const title = `${displayName}さんのプロフィール`;
@@ -105,7 +96,6 @@ export default function ParticipantPublicProfileModal({
       role="dialog"
       aria-modal="true"
       aria-labelledby="participant-public-profile-title"
-      onClick={onClose}
     >
       <div
         className="max-h-[min(80vh,520px)] w-full max-w-md overflow-y-auto rounded-xl border border-gray-600 bg-gray-900 shadow-2xl"

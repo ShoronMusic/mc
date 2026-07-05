@@ -25,6 +25,12 @@ export const GUIDE_SECTIONS = [
     short: 'AI 参加時の注意',
   },
   {
+    href: '/guide/ai-pricing',
+    slug: 'ai-pricing',
+    title: 'AI利用料金・クレジット',
+    short: '曲解説・@質問等のクレジット消費・購入',
+  },
+  {
     href: '/guide/first-song',
     slug: 'first-song',
     title: '選曲のしかた',
@@ -52,7 +58,7 @@ export const GUIDE_SECTIONS = [
     href: '/guide/service',
     slug: 'service',
     title: 'サービス全般',
-    short: '主催の上限・免責・変更・お問い合わせ',
+    short: '免責・変更・お問い合わせ（料金は AI利用料金ページ）',
   },
   {
     href: '/terms',

@@ -2,7 +2,7 @@ import {
   GUEST_NAME_STORAGE_KEY,
   GUEST_ROOM_KEY,
   GUEST_STORAGE_KEY,
-} from '@/components/auth/JoinChoice';
+} from '@/lib/guest-room-storage-keys';
 
 /** PWA 冷起動で sessionStorage が消えるため localStorage を主とする */
 

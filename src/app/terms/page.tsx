@@ -6,10 +6,11 @@ import {
 } from '@/components/legal/ServiceDisclaimer';
 import { ServicePricingNotice } from '@/components/legal/ServicePricingNotice';
 import { withPolicyModalQuery } from '@/lib/policy-modal-link';
+import { formatCommercialTransactionsOperatorFooter } from '@/lib/commercial-transactions-operator';
 
 export const metadata: Metadata = {
   title: '利用規約 | 洋楽AIチャット（β版）',
-  description: '洋楽AIチャットの利用条件（要約）です。利用料金・マナー・AI・楽曲の詳細はご利用上の注意もご覧ください。',
+  description: '洋楽AIチャットの利用条件（要約）です。利用料金（無料の音楽チャット・有料の AI）・マナー等はご利用上の注意もご覧ください。',
 };
 
 type TermsPageProps = {
@@ -27,7 +28,8 @@ function resolveReturnToPath(returnToRaw: string | string[] | undefined): string
   if (!decoded.startsWith('/')) return null;
   if (decoded.startsWith('//')) return null;
   if (decoded.includes('://')) return null;
-  if (decoded === '/terms' || decoded === '/privacy' || decoded === '/guide') return null;
+  if (decoded === '/terms' || decoded === '/privacy' || decoded === '/guide' || decoded === '/commercial-transactions')
+    return null;
   return decoded;
 }
 
@@ -53,7 +55,13 @@ export default function TermsPage({ searchParams }: TermsPageProps) {
                 ← トップへ
               </Link>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center justify-end gap-3">
+              <Link
+                href="/commercial-transactions"
+                className="text-sm text-gray-400 transition hover:text-white"
+              >
+                特商法表示
+              </Link>
               <Link href="/privacy" className="text-sm text-gray-400 transition hover:text-white">
                 プライバシー
               </Link>
@@ -199,7 +207,7 @@ export default function TermsPage({ searchParams }: TermsPageProps) {
 
         <section className="mt-10 rounded-lg border border-gray-800 bg-gray-900/40 p-4">
           <h2 className="text-sm font-semibold text-white">運営者</h2>
-          <p className="mt-2 text-sm text-gray-300">洋楽AIチャット事務局</p>
+          <p className="mt-2 text-sm text-gray-300">{formatCommercialTransactionsOperatorFooter()}</p>
           <p className="text-sm text-gray-300">musicaichat0@gmail.com</p>
         </section>
 

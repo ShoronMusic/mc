@@ -71,7 +71,6 @@ export function scheduleThemePlaylistRoomBlurbAfterPack(options: {
               ? `（お題リスト ${String(data.entry_count ?? '')}/10 コンプリート）`
               : `（お題リスト ${String(data.entry_count ?? '')}/10）`;
           options.addAiMessage(`【お題講評】 ${data.ai_comment.trim()}\n${tail}`, {
-            allowWhenAiStopped: true,
             videoId: options.videoId,
             aiSource: 'theme_playlist_room',
           });
