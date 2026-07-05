@@ -3323,8 +3323,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                       )}
                       {selectedLibraryRow ? (
                         <LibraryMusic8SongComment
-                          selectedVideoId={librarySelectedVideoId}
-                      songVideoIds={libraryDetailSongVideoIds}
+                          videoId={librarySelectedVideoId}
                           artistName={
                             librarySongArtists.artists?.[0]?.name ?? selectedLibraryRow.main_artist
                           }

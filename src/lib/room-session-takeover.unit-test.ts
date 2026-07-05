@@ -12,7 +12,7 @@ test('detectRoomSessionTakeoverState: active when claim matches', () => {
   assert.equal(
     detectRoomSessionTakeoverState({
       myClientId: myCid,
-      mySessionClaim: { instanceId: 'a', claimedAtMs: 100 },
+      mySessionClaim: { instanceId: 'a', claimedAtMs: 100, browserTabId: 'tab-a' },
       authUserId: uid,
       isGuest: false,
       connectionState: 'connected',
@@ -28,7 +28,7 @@ test('detectRoomSessionTakeoverState: supplanted when remote claim is newer', ()
   assert.equal(
     detectRoomSessionTakeoverState({
       myClientId: myCid,
-      mySessionClaim: { instanceId: 'a', claimedAtMs: 100 },
+      mySessionClaim: { instanceId: 'a', claimedAtMs: 100, browserTabId: 'tab-a' },
       authUserId: uid,
       isGuest: false,
       connectionState: 'connected',
@@ -45,7 +45,7 @@ test('shouldPublishRoomSessionPresence: false when remote claim is newer', () =>
     shouldPublishRoomSessionPresence({
       isGuest: false,
       myClientId: myCid,
-      mySessionClaim: { instanceId: 'a', claimedAtMs: 100 },
+      mySessionClaim: { instanceId: 'a', claimedAtMs: 100, browserTabId: 'tab-a' },
       presenceRows: [
         { clientId: myCid, sessionInstanceId: 'b', sessionClaimedAtMs: 200 },
       ],
@@ -58,7 +58,7 @@ test('detectRoomSessionTakeoverState: connecting (not supplanted) when local cla
   assert.equal(
     detectRoomSessionTakeoverState({
       myClientId: myCid,
-      mySessionClaim: { instanceId: 'b', claimedAtMs: 300 },
+      mySessionClaim: { instanceId: 'b', claimedAtMs: 300, browserTabId: 'tab-b' },
       authUserId: uid,
       isGuest: false,
       connectionState: 'connected',
@@ -75,7 +75,7 @@ test('shouldPublishRoomSessionPresence: true when local claim is newer (takeover
     shouldPublishRoomSessionPresence({
       isGuest: false,
       myClientId: myCid,
-      mySessionClaim: { instanceId: 'b', claimedAtMs: 300 },
+      mySessionClaim: { instanceId: 'b', claimedAtMs: 300, browserTabId: 'tab-b' },
       presenceRows: [
         { clientId: myCid, sessionInstanceId: 'a', sessionClaimedAtMs: 100 },
       ],
@@ -88,7 +88,7 @@ test('detectRoomSessionTakeoverState: connecting (not supplanted) when disconnec
   assert.equal(
     detectRoomSessionTakeoverState({
       myClientId: myCid,
-      mySessionClaim: { instanceId: 'a', claimedAtMs: 100 },
+      mySessionClaim: { instanceId: 'a', claimedAtMs: 100, browserTabId: 'tab-a' },
       authUserId: uid,
       isGuest: false,
       connectionState: 'disconnected',
@@ -104,7 +104,7 @@ test('detectRoomSessionTakeoverState: connecting when remote session fields not 
   assert.equal(
     detectRoomSessionTakeoverState({
       myClientId: myCid,
-      mySessionClaim: { instanceId: 'a', claimedAtMs: 100 },
+      mySessionClaim: { instanceId: 'a', claimedAtMs: 100, browserTabId: 'tab-a' },
       authUserId: uid,
       isGuest: false,
       connectionState: 'connected',
