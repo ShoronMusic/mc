@@ -1,5 +1,5 @@
 import type { AiTrialStatus } from '@/lib/ai-trial-status';
-import { isAiDeveloperUnlimitedTrialStatus } from '@/lib/ai-trial-status';
+import { isAiUnlimitedTrialStatus } from '@/lib/ai-trial-status';
 
 /**
  * @ 質問ガードからの強制退場（ban）をクライアントでスキップする登録ユーザーの Supabase user.id。
@@ -14,6 +14,6 @@ export function isAiQuestionGuardKickExemptUserId(
   aiTrialStatus?: AiTrialStatus | null,
 ): boolean {
   if (!userId) return false;
-  if (isAiDeveloperUnlimitedTrialStatus(aiTrialStatus)) return true;
+  if (isAiUnlimitedTrialStatus(aiTrialStatus)) return true;
   return KICK_EXEMPT_AI_QUESTION_GUARD_USER_IDS.has(userId);
 }

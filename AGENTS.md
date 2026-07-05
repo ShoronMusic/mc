@@ -31,6 +31,7 @@
 | 「@」音楽関連判定 | `src/lib/client-ai-question-guard-resolve.ts` ＋ `POST /api/ai/question-guard-classify` ＋ `src/lib/ai-question-guard-prompt.ts` | **AI ファースト**（Gemini 分類が主。クライアントのキーワード allow 列挙は廃止。選曲順・空文のみ即 allow）。API 未設定・失敗・タイムアウトは **fail-open（通す）**。`musicRelated:false` のときだけ警告。全体オフは `NEXT_PUBLIC_AI_QUESTION_GUARD_DISABLED=1`。分類 API だけ止めるなら `AI_QUESTION_GUARD_GEMINI=0`（この場合も fail-open）。異議・チューニング報告は `docs/supabase-setup.md` 11.1 / 11.2 |
 | AI 質問ガード（退場のみ免除） | `src/lib/ai-question-guard-exempt-user-ids.ts` | 指定した登録ユーザーは警告・カードは通常どおり。累積後の自動退場・入室禁止だけスキップ（`RoomWithSync` / `RoomWithoutSync`） |
 | **開発者 AI 無制限** | `AI_DEVELOPER_UNLIMITED_USER_IDS`（`.env.local` / Vercel）・`src/lib/ai-developer-unlimited-user-ids.ts` | カンマ区切り UUID。お試し枠消費・@ 枠・`/api/ai/chat` レート制限・質問ガード・「次に聴くなら」β/レートを適用しない。UI は `GET /api/user/ai-trial` の `developer_unlimited` |
+| **サポーター AI 無制限** | `AI_SUPPORTER_UNLIMITED_USER_IDS`（`.env.local` / Vercel）・`src/lib/ai-supporter-unlimited-user-ids.ts` | 開発者と同様の枠免除。UI は `phase: supporter_unlimited`・ヘッダー「AI制限なし（サポーター）」。両方に載る UUID は開発者優先 |
 | 会 live の在室 0 自動終了 | `src/lib/empty-live-gathering-cron.ts`・`GET /api/cron/end-empty-live-gatherings`・`vercel.json` | Ably presence と `room_live_presence_watch`（SQL は `docs/supabase-setup.md` 9.1）。Vercel では **`CRON_SECRET`**（`Authorization: Bearer`）必須。任意 **`EMPTY_LIVE_GATHERING_END_MS`**（ミリ秒、最小 60000）。**Hobby** は cron が **1 日 1 回まで**のため `vercel.json` は日次スケジュール（より頻繁には Pro か外部スケジューラ） |
 
 ### 設計メモ（拡張予定）

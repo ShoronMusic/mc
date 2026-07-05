@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { resolveAiUnlimitedRole } from '@/lib/ai-unlimited-user-ids';
 import {
   buildDeveloperUnlimitedAiTrialStatus,
   buildEmailUnconfirmedAiTrialStatus,
   buildPreviewAiTrialStatus,
+  buildSupporterUnlimitedAiTrialStatus,
   isAiTrialEnforcementEnabled,
 } from '@/lib/ai-trial-status';
 import { requiresEmailConfirmation } from '@/lib/supabase-email-auth';
@@ -15,7 +17,6 @@ import {
 } from '@/lib/user-ai-trial-server';
 import { loadComposedAiTrialStatus } from '@/lib/user-ai-credits-server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { isDeveloperAiUnlimitedUserId } from '@/lib/ai-developer-unlimited-user-ids';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,8 +35,12 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    if (isDeveloperAiUnlimitedUserId(user.id)) {
+    const unlimitedRole = resolveAiUnlimitedRole(user.id);
+    if (unlimitedRole === 'developer') {
       return NextResponse.json(buildDeveloperUnlimitedAiTrialStatus());
+    }
+    if (unlimitedRole === 'supporter') {
+      return NextResponse.json(buildSupporterUnlimitedAiTrialStatus());
     }
 
     if (requiresEmailConfirmation(user)) {

@@ -261,7 +261,7 @@ import { rememberLastRoomEnter } from '@/lib/room-enter-resume';
 import { listenShareTargetDelivery, SHARE_SET_CHAT_TEXT_EVENT } from '@/lib/share-target-delivery';
 import { useSupabaseAuthUserId } from '@/hooks/useSupabaseAuthUserId';
 import { isAiQuestionGuardKickExemptUserId } from '@/lib/ai-question-guard-exempt-user-ids';
-import { isAiDeveloperUnlimitedTrialStatus } from '@/lib/ai-trial-status';
+import { isAiUnlimitedTrialStatus } from '@/lib/ai-trial-status';
 import { lineFromJoinGreetingApi } from '@/lib/join-greeting-logic';
 import {
   buildCommentaryUiLabel,
@@ -1026,6 +1026,8 @@ export default function RoomWithSync({
   >(() => {});
   /** 今流れている曲を貼った人（選曲者）の clientId。参加者欄でアクティブ表示 */
   const [currentSongPosterClientId, setCurrentSongPosterClientId] = useState('');
+  /** この入室セッションで1曲以上選曲されたか（曲間の空白でも true のまま） */
+  const [sessionHasSongPost, setSessionHasSongPost] = useState(false);
   /** オーナーによる5分制限。デフォルトON。そのセッションのみ */
   const [songLimit5MinEnabled, setSongLimit5MinEnabled] = useState(true);
   /** オーナーによる曲紹介スロット [基本, ヒット/受賞, 歌詞, サウンド, アーティスト情報]（部屋ID単位で localStorage に保持） */
@@ -2634,6 +2636,7 @@ export default function RoomWithSync({
         myDisplayName: effectiveDisplayName,
       });
       lastChangeVideoPublisherRef.current = snapPoster.clientId;
+      setSessionHasSongPost(true);
       lastSongPosterDisplayNameRef.current = snapPoster.displayName;
       setCurrentSongPosterClientId(snapPoster.clientId);
       if (typeof data.currentTurnClientId === 'string') {
@@ -3064,6 +3067,7 @@ export default function RoomWithSync({
         });
         const pubId = cvPoster.clientId;
         lastChangeVideoPublisherRef.current = pubId;
+        setSessionHasSongPost(true);
         lastSongPosterDisplayNameRef.current = cvPoster.displayName;
         setCurrentSongPosterClientId(pubId);
         const fromPayload =
@@ -6176,6 +6180,7 @@ export default function RoomWithSync({
       const resolvedPosterClientId = resolvedPoster.clientId;
       const publisherDisplayName = resolvedPoster.displayName;
       lastChangeVideoPublisherRef.current = resolvedPosterClientId;
+      setSessionHasSongPost(true);
       lastSongPosterDisplayNameRef.current = publisherDisplayName;
       setCurrentSongPosterClientId(resolvedPosterClientId);
       /** 他クライアントが guest かは presence に無い。自分が選曲者のときだけ正確に渡す */
@@ -7496,7 +7501,7 @@ export default function RoomWithSync({
             messageType: 'user',
           },
         ].slice(-12);
-        if (!isAiDeveloperUnlimitedTrialStatus(aiTrialStatus)) {
+        if (!isAiUnlimitedTrialStatus(aiTrialStatus)) {
           const guardRes = await resolveAiQuestionMusicRelated(promptForGuard, recentForGuard, {
             isGuest,
             roomId: roomId ?? undefined,
@@ -8311,6 +8316,34 @@ export default function RoomWithSync({
     [myClientId, effectiveDisplayName, queuedSongPublisherClientIds],
   );
 
+  const humanSelectionParticipantCount = useMemo(
+    () => participatingOrder.filter((p) => p.clientId !== AI_CHARACTER_CLIENT_ID).length,
+    [participatingOrder],
+  );
+
+  /** セッション開始直後（まだ誰も曲を貼っていない）かつ人間が自分だけ＋AI のときはパスしても進まない */
+  const turnPassControlsAvailable = useMemo(() => {
+    if (isGuest || !participatesInSelection || participatingOrder.length <= 1 || !myClientId) {
+      return false;
+    }
+    if (
+      !sessionHasSongPost &&
+      ownerAiCharacterJoinEnabled &&
+      humanSelectionParticipantCount <= 1
+    ) {
+      return false;
+    }
+    return true;
+  }, [
+    isGuest,
+    participatesInSelection,
+    participatingOrder.length,
+    myClientId,
+    sessionHasSongPost,
+    ownerAiCharacterJoinEnabled,
+    humanSelectionParticipantCount,
+  ]);
+
   const chatInputNode = (
     <ChatInput
       ref={chatInputRef}
@@ -8340,7 +8373,7 @@ export default function RoomWithSync({
       onFavoriteVideoToggle={handleFavoriteCurrentClick}
       onRefreshFavoritedVideoIds={fetchFavoritedIds}
       turnPassControls={
-        !isGuest && participatesInSelection && participatingOrder.length > 1 && myClientId
+        turnPassControlsAvailable
           ? {
               isMyTurn: currentTurnClientId === myClientId && !myHasQueuedSongForPass,
               passReserved: passTurnReservationClientIds.includes(myClientId),

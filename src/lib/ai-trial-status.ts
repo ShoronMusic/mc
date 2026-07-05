@@ -13,7 +13,8 @@ export type AiTrialPhase =
   | 'trial_active'
   | 'trial_exhausted'
   | 'credits_active'
-  | 'developer_unlimited';
+  | 'developer_unlimited'
+  | 'supporter_unlimited';
 
 export type AiTrialStatus = {
   phase: AiTrialPhase;
@@ -45,6 +46,20 @@ export function isAiDeveloperUnlimitedTrialStatus(
   status: AiTrialStatus | null | undefined,
 ): boolean {
   return status?.phase === 'developer_unlimited';
+}
+
+/** クライアント: API 応答だけでサポーター無制限か判定 */
+export function isAiSupporterUnlimitedTrialStatus(
+  status: AiTrialStatus | null | undefined,
+): boolean {
+  return status?.phase === 'supporter_unlimited';
+}
+
+/** 開発者・サポーターいずれかの AI 無制限（枠消費・二段選曲ボタン非表示等） */
+export function isAiUnlimitedTrialStatus(status: AiTrialStatus | null | undefined): boolean {
+  return (
+    status?.phase === 'developer_unlimited' || status?.phase === 'supporter_unlimited'
+  );
 }
 
 /** `AI_TRIAL_ENFORCEMENT_ENABLED=1` のときのみ消費・API ガードを有効化 */
@@ -90,9 +105,25 @@ export function buildDeveloperUnlimitedAiTrialStatus(): AiTrialStatus {
   };
 }
 
+/** サポーターアカウント: 開発者と同様に枠・API ガードを適用しない */
+export function buildSupporterUnlimitedAiTrialStatus(): AiTrialStatus {
+  return {
+    phase: 'supporter_unlimited',
+    songsGranted: AI_TRIAL_SONGS_GRANTED,
+    songsRemaining: AI_TRIAL_SONGS_GRANTED,
+    atQuestionsGranted: AI_TRIAL_AT_QUESTIONS_GRANTED,
+    atQuestionsRemaining: AI_TRIAL_AT_QUESTIONS_GRANTED,
+    enforcementEnabled: isAiTrialEnforcementEnabled(),
+    ...CREDITS_STATUS_DEFAULTS,
+  };
+}
+
 export function formatAiTrialStatusPrimaryLine(status: AiTrialStatus): string {
   if (status.phase === 'developer_unlimited') {
     return '開発者アカウント（AI 制限なし）';
+  }
+  if (status.phase === 'supporter_unlimited') {
+    return 'サポータアカウント（AI 制限なし）';
   }
   if (status.phase === 'email_unconfirmed') {
     return 'メール確認後に AI お試し 10 曲が使えます（今は選曲のみ）';
@@ -111,6 +142,7 @@ export function formatAiTrialStatusPrimaryLine(status: AiTrialStatus): string {
 /** チャットヘッダー用の短いラベル（例: AIお試し残 7/10） */
 export function formatAiTrialStatusHeaderLabel(status: AiTrialStatus): string {
   if (status.phase === 'developer_unlimited') return 'AI制限なし（開発者）';
+  if (status.phase === 'supporter_unlimited') return 'AI制限なし（サポーター）';
   if (status.phase === 'email_unconfirmed') return 'AIお試し: 確認待ち';
   if (status.phase === 'trial_exhausted') return `AIお試し残 0/${status.songsGranted}`;
   if (status.phase === 'credits_active') return `AIクレジット残 ${status.creditsRemaining}`;

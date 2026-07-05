@@ -39,7 +39,7 @@ export function isAgentSelectionAnnounceName(
 /** @質問相当の枠があり、概要リクエストボタンを出せるか */
 export function canRequestSongOverviewAtQuestion(status: AiTrialStatus | null | undefined): boolean {
   if (!status) return false;
-  if (status.phase === 'developer_unlimited') return true;
+  if (status.phase === 'developer_unlimited' || status.phase === 'supporter_unlimited') return true;
   if (status.phase === 'email_unconfirmed' || status.phase === 'trial_exhausted') return false;
   if (status.phase === 'credits_active') return status.creditsRemaining > 0;
   if (status.phase === 'trial_active' || status.phase === 'preview') {
@@ -50,7 +50,9 @@ export function canRequestSongOverviewAtQuestion(status: AiTrialStatus | null | 
 }
 
 export function formatSongOverviewRequestButtonLabel(status: AiTrialStatus): string {
-  if (status.phase === 'developer_unlimited') return 'この曲の概要を開く';
+  if (status.phase === 'developer_unlimited' || status.phase === 'supporter_unlimited') {
+    return 'この曲の概要を開く';
+  }
   if (status.phase === 'credits_active') return 'この曲の概要を開く（1クレジット消費）';
   return 'この曲の概要を開く（@1回消費）';
 }

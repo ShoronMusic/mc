@@ -13,7 +13,7 @@ import {
   guardAndConsumeAiTrialAtQuestion,
   userTextHasAiMention,
 } from '@/lib/user-ai-trial-server';
-import { isDeveloperAiUnlimitedUserId } from '@/lib/ai-developer-unlimited-user-ids';
+import { isAiUnlimitedUserId } from '@/lib/ai-unlimited-user-ids';
 
 export const dynamic = 'force-dynamic';
 
@@ -288,7 +288,7 @@ export async function POST(request: Request) {
     }
 
     const rate = checkChatAiRateLimit(getChatAiClientIp(request), isGuest);
-    if (!rate.ok && !isDeveloperAiUnlimitedUserId(requestUserEarly?.id)) {
+    if (!rate.ok && !isAiUnlimitedUserId(requestUserEarly?.id)) {
       console.log('[ai/chat] rate_limited', {
         retryAfterSec: rate.retryAfterSec,
         isGuest,

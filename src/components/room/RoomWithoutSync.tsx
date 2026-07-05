@@ -61,7 +61,7 @@ import type { SongQuizPayload } from '@/lib/song-quiz-types';
 import { getSongQuizRevealDelayMs } from '@/lib/song-quiz-result-announcement';
 import { shouldShortCircuitSongRequestForAtPrompt } from '@/lib/ai-question-about-detail-heuristic';
 import { resolveAiQuestionMusicRelated } from '@/lib/client-ai-question-guard-resolve';
-import { isAiDeveloperUnlimitedTrialStatus } from '@/lib/ai-trial-status';
+import { isAiUnlimitedTrialStatus } from '@/lib/ai-trial-status';
 import { isDevMinimalSongAi } from '@/lib/dev-minimal-song-ai';
 import { formatMusic8ModeratorIntroPrefix } from '@/lib/music8-moderator-chat-prefix';
 import {
@@ -1809,7 +1809,7 @@ export default function RoomWithoutSync({
             messageType: 'user',
           },
         ].slice(-12);
-        if (!isAiDeveloperUnlimitedTrialStatus(aiTrialStatus)) {
+        if (!isAiUnlimitedTrialStatus(aiTrialStatus)) {
           const guardRes = await resolveAiQuestionMusicRelated(promptForGuard, recentForGuard, {
             isGuest,
             roomId: roomId ?? undefined,

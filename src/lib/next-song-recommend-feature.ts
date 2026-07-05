@@ -3,7 +3,7 @@
  * @see docs/next-song-recommend-beta-spec.md
  */
 
-import { isDeveloperAiUnlimitedUserId } from '@/lib/ai-developer-unlimited-user-ids';
+import { isAiUnlimitedUserId } from '@/lib/ai-unlimited-user-ids';
 
 export function isNextSongRecommendMasterEnabled(): boolean {
   return process.env.NEXT_SONG_RECOMMEND_ENABLED?.trim() === '1';
@@ -25,7 +25,7 @@ export function getNextSongRecommendBetaUserIds(): string[] {
  * - β UID リストが非空で、uid が含まれない → false
  */
 export function isNextSongRecommendAllowedForUser(userId: string | null | undefined): boolean {
-  if (isDeveloperAiUnlimitedUserId(userId)) return true;
+  if (isAiUnlimitedUserId(userId)) return true;
   if (!isNextSongRecommendMasterEnabled()) return false;
   if (!userId) return false;
   const beta = getNextSongRecommendBetaUserIds();

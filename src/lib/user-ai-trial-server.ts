@@ -10,7 +10,7 @@ import {
 import { isUserEmailConfirmed, requiresEmailConfirmation } from '@/lib/supabase-email-auth';
 import type { AiSelectionMode } from '@/lib/ai-selection-mode';
 import { parseAiSelectionMode } from '@/lib/ai-selection-mode';
-import { isDeveloperAiUnlimitedUserId } from '@/lib/ai-developer-unlimited-user-ids';
+import { isAiUnlimitedUserId } from '@/lib/ai-unlimited-user-ids';
 import { isAiCreditsEnabled } from '@/lib/ai-credits-config';
 import {
   fetchUserAiCreditsRow,
@@ -264,7 +264,7 @@ export async function guardAiTrialSongSelection(params: {
   packPhase?: 'base' | 'frees' | null;
   clientIp?: string;
 }): Promise<AiTrialGuardAllow | AiTrialGuardDeny> {
-  if (params.user?.id && isDeveloperAiUnlimitedUserId(params.user.id)) {
+  if (params.user?.id && isAiUnlimitedUserId(params.user.id)) {
     return { ok: true };
   }
 
@@ -408,7 +408,7 @@ export async function guardAndConsumeAiTrialAtQuestion(params: {
   isGuest: boolean;
   clientIp?: string;
 }): Promise<AiTrialGuardAllow | AiTrialGuardDeny> {
-  if (params.user?.id && isDeveloperAiUnlimitedUserId(params.user.id)) {
+  if (params.user?.id && isAiUnlimitedUserId(params.user.id)) {
     return { ok: true };
   }
 

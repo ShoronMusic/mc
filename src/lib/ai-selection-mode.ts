@@ -33,7 +33,7 @@ export function resolveAiSelectionMode(params: {
     return 'full';
   }
 
-  if (status.phase === 'developer_unlimited') {
+  if (status.phase === 'developer_unlimited' || status.phase === 'supporter_unlimited') {
     return 'full';
   }
 
@@ -57,7 +57,9 @@ export function shouldShowAiDualSelectionButtons(params: {
   const { isGuest, participatesInSelection, aiTrialStatus } = params;
   if (isGuest || !participatesInSelection || !aiTrialStatus) return false;
   if (!aiTrialStatus.enforcementEnabled) return false;
-  if (aiTrialStatus.phase === 'developer_unlimited') return false;
+  if (aiTrialStatus.phase === 'developer_unlimited' || aiTrialStatus.phase === 'supporter_unlimited') {
+    return false;
+  }
   if (aiTrialStatus.phase === 'credits_active' && aiTrialStatus.creditsRemaining > 0) {
     return true;
   }
