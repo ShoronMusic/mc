@@ -46,6 +46,8 @@ import { USER_ROOM_AI_FEATURES_UPDATED_EVENT } from '@/lib/user-room-ai-features
 import { requestSongOverviewChat } from '@/lib/song-overview-request-chat-client';
 import { SiteFeedbackModal } from '@/components/room/SiteFeedbackModal';
 import UserBar from '@/components/room/UserBar';
+import { SongReservationManageModal } from '@/components/room/SongReservationManageModal';
+import { OwnerPickSelectorModal } from '@/components/room/OwnerPickSelectorModal';
 import ParticipantPublicProfileModal from '@/components/room/ParticipantPublicProfileModal';
 import { getLastExitStorageKey } from '@/components/providers/AblyProviderWrapper';
 import {
@@ -112,6 +114,7 @@ import { useAiCharacterTtsErrorNotice } from '@/hooks/useAiCharacterTtsErrorNoti
 import {
   type PlaybackMessage,
   type PlaybackHistoryUpdatedPayload,
+  type ReservationQueueEntryPayload,
   PLAYBACK_HISTORY_UPDATED_EVENT,
   PLAYBACK_SNAPSHOT_EVENT,
   REQUEST_PLAYBACK_SYNC_EVENT,
@@ -178,6 +181,11 @@ import {
   readPersistedSelectionRound,
   type SelectionRoundParticipant,
 } from '@/lib/room-selection-round';
+import {
+  resolveSongReservationQueueApply,
+  removePublisherReservationFromQueue,
+  shouldForceReservationQueueWhilePending,
+} from '@/lib/song-reservation-queue-order';
 import {
   buildTurnStatePersistData,
   persistTurnState,
@@ -536,7 +544,9 @@ export default function RoomWithSync({
   const [siteFeedbackOpen, setSiteFeedbackOpen] = useState(false);
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
   const [feedbackExitAction, setFeedbackExitAction] = useState<'none' | 'leave' | 'logout'>('none');
-  const [cancelReservationModalOpen, setCancelReservationModalOpen] = useState(false);
+  const [songReservationManageOpen, setSongReservationManageOpen] = useState(false);
+  const [songReservationManageVideoId, setSongReservationManageVideoId] = useState('');
+  const [ownerPickSelectorOpen, setOwnerPickSelectorOpen] = useState(false);
   const [joinLocked, setJoinLocked] = useState(false);
   const [gatheringStartedAtIso, setGatheringStartedAtIso] = useState<string | null>(null);
   const [joinLockSaving, setJoinLockSaving] = useState(false);
@@ -670,6 +680,9 @@ export default function RoomWithSync({
     publisherDisplayName?: string;
   };
   const songReservationQueueRef = useRef<SongReservationQueueEntry[]>([]);
+  const applyReservationQueueSnapshotRef = useRef<
+    (entries: ReservationQueueEntryPayload[]) => void
+  >(() => {});
   /** 再接続前 clientId でも選曲者名を引けるキャッシュ */
   const publisherIdentityByClientIdRef = useRef<Map<string, PublisherIdentitySnapshot>>(new Map());
   const playbackEndedApplyRef = useRef<() => void>(() => {});
@@ -705,13 +718,51 @@ export default function RoomWithSync({
   const [skipUsedForVideoId, setSkipUsedForVideoId] = useState<string | null>(null);
   /** 5分制限キューで選曲予約中の参加者（参加者欄のステータス用・複数可） */
   const [queuedSongPublisherClientIds, setQueuedSongPublisherClientIds] = useState<string[]>([]);
+  /** 次の選曲ターンで自動パスする参加者（チャット「パス」で登録） */
+  const [passTurnReservationClientIds, setPassTurnReservationClientIds] = useState<string[]>([]);
+  const passTurnReservationClientIdsRef = useRef<string[]>([]);
+  const handlePassPhraseFromClientRef = useRef<(senderId: string, senderDisplayName: string) => void>(
+    () => {},
+  );
+
+  const syncPassTurnReservationClientIds = useCallback((ids: string[]) => {
+    const unique = [...new Set(ids.map((id) => id.trim()).filter(Boolean))];
+    passTurnReservationClientIdsRef.current = unique;
+    setPassTurnReservationClientIds(unique);
+  }, []);
+
+  const addPassTurnReservation = useCallback(
+    (clientId: string) => {
+      const cid = clientId.trim();
+      if (!cid || passTurnReservationClientIdsRef.current.includes(cid)) return;
+      syncPassTurnReservationClientIds([...passTurnReservationClientIdsRef.current, cid]);
+    },
+    [syncPassTurnReservationClientIds],
+  );
+
+  const removePassTurnReservation = useCallback(
+    (clientId: string) => {
+      const cid = clientId.trim();
+      if (!cid) return;
+      syncPassTurnReservationClientIds(
+        passTurnReservationClientIdsRef.current.filter((id) => id !== cid),
+      );
+    },
+    [syncPassTurnReservationClientIds],
+  );
 
   const syncSongReservationQueueHead = useCallback(() => {
     const q = songReservationQueueRef.current;
-    const head = q[0];
-    if (head) {
-      pendingQueuedVideoIdRef.current = head.videoId;
-      pendingQueuedPublisherRef.current = head.publisherClientId;
+    const decision = resolveSongReservationQueueApply({
+      currentTurnClientId: currentTurnClientIdRef.current,
+      participatingOrder: participatingOrderRef.current,
+      presentClientIds: presentClientIdsRef.current,
+      queue: q,
+    });
+    if (decision.kind === 'apply') {
+      const entry = q[decision.queueIndex];
+      pendingQueuedVideoIdRef.current = entry.videoId;
+      pendingQueuedPublisherRef.current = entry.publisherClientId;
     } else {
       pendingQueuedVideoIdRef.current = null;
       pendingQueuedPublisherRef.current = '';
@@ -1487,6 +1538,62 @@ export default function RoomWithSync({
     [myClientId, effectiveDisplayName],
   );
 
+  const mapReservationQueuePayloadToEntries = useCallback(
+    (entries: ReservationQueueEntryPayload[]): SongReservationQueueEntry[] => {
+      const rows = participantsRef.current.map((p) => ({
+        clientId: p.clientId,
+        authUserId: (p as { authUserId?: string }).authUserId,
+      }));
+      return entries.map((e) => {
+        const aiMode = parseAiSelectionMode(e.aiMode) ?? 'full';
+        const pubId = resolveActivePublisherClientId(
+          e.publisherClientId,
+          e.publisherAuthUserId,
+          rows,
+        );
+        const displayName = e.publisherDisplayName?.trim();
+        if (displayName) {
+          rememberPublisherIdentity(
+            publisherIdentityByClientIdRef.current,
+            pubId,
+            displayName,
+            e.publisherAuthUserId,
+          );
+        }
+        return {
+          videoId: e.videoId,
+          publisherClientId: pubId,
+          aiMode,
+          ...(e.publisherAuthUserId ? { publisherAuthUserId: e.publisherAuthUserId } : {}),
+          ...(displayName ? { publisherDisplayName: displayName } : {}),
+        };
+      });
+    },
+    [],
+  );
+
+  const buildReservationQueuePayload = useCallback((): ReservationQueueEntryPayload[] => {
+    return songReservationQueueRef.current.map((e) => ({
+      videoId: e.videoId,
+      publisherClientId: e.publisherClientId,
+      aiMode: e.aiMode,
+      ...(e.publisherAuthUserId ? { publisherAuthUserId: e.publisherAuthUserId } : {}),
+      ...(e.publisherDisplayName ? { publisherDisplayName: e.publisherDisplayName } : {}),
+    }));
+  }, []);
+
+  const applyReservationQueueSnapshot = useCallback(
+    (entries: ReservationQueueEntryPayload[]) => {
+      songReservationQueueRef.current = mapReservationQueuePayloadToEntries(entries);
+      syncSongReservationQueueHead();
+    },
+    [mapReservationQueuePayloadToEntries, syncSongReservationQueueHead],
+  );
+
+  useEffect(() => {
+    applyReservationQueueSnapshotRef.current = applyReservationQueueSnapshot;
+  }, [applyReservationQueueSnapshot]);
+
   const roomHasRegisteredParticipant = useMemo(
     () =>
       participants.some(
@@ -1596,6 +1703,15 @@ export default function RoomWithSync({
   const ownerLeftAt = ownerState.ownerLeftAt;
   const isOwner = Boolean(myClientId && ownerClientId && myClientId === ownerClientId && ownerLeftAt === null);
   const canUseOwnerControls = isOwner && !isGuest;
+  /** オーナー不在（復帰猶予中）の協調役: 選曲者指名・オーナースキップのみ代理可 */
+  const isActingOwnerPlaybackProxy = Boolean(
+    !isGuest &&
+      ownerLeftAt !== null &&
+      myClientId &&
+      coordinationClientId &&
+      myClientId === coordinationClientId,
+  );
+  const canUseOwnerPlaybackProxy = canUseOwnerControls || isActingOwnerPlaybackProxy;
 
   useEffect(() => {
     if (!roomId?.trim()) return;
@@ -2307,6 +2423,7 @@ export default function RoomWithSync({
           ...(e.publisherAuthUserId ? { publisherAuthUserId: e.publisherAuthUserId } : {}),
           ...(e.publisherDisplayName ? { publisherDisplayName: e.publisherDisplayName } : {}),
         })),
+        passTurnReservationClientIds: [...passTurnReservationClientIdsRef.current],
       } as PlaybackMessage);
       return;
     }
@@ -2322,18 +2439,8 @@ export default function RoomWithSync({
         tidbitCountSinceUserMessageRef.current = 0;
         lastEndedVideoIdForTidbitRef.current = null;
         const senderId = data.clientId ?? '';
-        if (senderId && senderId === currentTurnClientIdRef.current && isPassPhrase(data.body)) {
-          const order = participatingOrderRef.current;
-          const cur = currentTurnClientIdRef.current;
-          const nextId = resolveNextPresentTurnRef.current(cur);
-          const nextParticipant = order.find((p) => p.clientId === nextId);
-          if (senderId === myClientId) {
-            safePublish(TURN_STATE_EVENT, buildTurnStatePayload(nextId));
-            const nextDisplayName = nextParticipant?.displayName ?? '次の方';
-            addAiMessage(`${nextDisplayName}さん、次の曲を貼ってください`, {
-              bypassJpDomesticSilence: true,
-            });
-          }
+        if (senderId && isPassPhrase(data.body)) {
+          handlePassPhraseFromClientRef.current(senderId, data.displayName ?? 'ゲスト');
         }
       }
       // 次の選曲案内が出たら、全クライアントで遅延中の自由コメントを破棄（案内の後に旧曲の解説が続かないように）
@@ -2435,35 +2542,12 @@ export default function RoomWithSync({
         playbackQueueFallbackTimerRef.current = null;
       }
       if (Array.isArray(data.reservationQueue)) {
-        const rows = participantsRef.current.map((p) => ({
-          clientId: p.clientId,
-          authUserId: (p as { authUserId?: string }).authUserId,
-        }));
-        songReservationQueueRef.current = data.reservationQueue.map((e) => {
-          const aiMode = parseAiSelectionMode(e.aiMode) ?? 'full';
-          const pubId = resolveActivePublisherClientId(
-            e.publisherClientId,
-            e.publisherAuthUserId,
-            rows,
-          );
-          const displayName = e.publisherDisplayName?.trim();
-          if (displayName) {
-            rememberPublisherIdentity(
-              publisherIdentityByClientIdRef.current,
-              pubId,
-              displayName,
-              e.publisherAuthUserId,
-            );
-          }
-          return {
-            videoId: e.videoId,
-            publisherClientId: pubId,
-            aiMode,
-            ...(e.publisherAuthUserId ? { publisherAuthUserId: e.publisherAuthUserId } : {}),
-            ...(displayName ? { publisherDisplayName: displayName } : {}),
-          };
-        });
-        syncSongReservationQueueHead();
+        applyReservationQueueSnapshotRef.current(data.reservationQueue);
+      }
+      if (Array.isArray(data.passTurnReservationClientIds)) {
+        syncPassTurnReservationClientIds(
+          data.passTurnReservationClientIds.filter((id) => typeof id === 'string'),
+        );
       }
       jpDomesticSilenceVideoIdRef.current = null;
 
@@ -2734,9 +2818,13 @@ export default function RoomWithSync({
       const poster = lastChangeVideoPublisherRef.current;
       const ownerId = ownerClientIdRef.current;
       const ownerActive = ownerLeftAtRef.current === null && Boolean(ownerId);
+      const actingOwnerId =
+        ownerLeftAtRef.current !== null ? coordinationRef.current.trim() : '';
       const allowedSender =
         typeof msgClientId === 'string' &&
-        ((poster && msgClientId === poster) || (ownerActive && msgClientId === ownerId));
+        ((poster && msgClientId === poster) ||
+          (ownerActive && msgClientId === ownerId) ||
+          (actingOwnerId && msgClientId === actingOwnerId));
       if (!allowedSender) {
         playbackLog('ably: ignore skipToEnd', { msgClientId, poster, ownerId, ownerActive });
         return;
@@ -2877,22 +2965,17 @@ export default function RoomWithSync({
           clearTimeout(playbackQueueFallbackTimerRef.current);
           playbackQueueFallbackTimerRef.current = null;
         }
-        const qCv = songReservationQueueRef.current;
         const pubIdForQueue = data.publisherClientId ?? '';
-        if (qCv.length > 0) {
-          const head = qCv[0];
-          if (head.videoId === data.videoId && head.publisherClientId === pubIdForQueue) {
-            qCv.shift();
-          } else {
-            const idx = qCv.findIndex(
-              (e) => e.videoId === data.videoId && e.publisherClientId === pubIdForQueue,
-            );
-            if (idx >= 0) {
-              qCv.splice(idx, 1);
-            }
-          }
+        if (Array.isArray(data.reservationQueue)) {
+          applyReservationQueueSnapshotRef.current(data.reservationQueue);
+        } else {
+          songReservationQueueRef.current = removePublisherReservationFromQueue(
+            songReservationQueueRef.current,
+            pubIdForQueue,
+            typeof data.publisherAuthUserId === 'string' ? data.publisherAuthUserId : undefined,
+          );
+          syncSongReservationQueueHead();
         }
-        syncSongReservationQueueHead();
         jpDomesticSilenceVideoIdRef.current = null;
         setVideoId(data.videoId);
         trackEndedGraceWindowUntilRef.current = 0;
@@ -3134,23 +3217,26 @@ export default function RoomWithSync({
     const poster = lastChangeVideoPublisherRef.current;
     if (!vid || !myClientId) return;
     const isPoster = Boolean(poster && myClientId === poster);
-    const isOwnerSkip = canUseOwnerControls;
+    const isOwnerSkip = canUseOwnerPlaybackProxy;
     if (!isPoster && !isOwnerSkip) return;
     setSkipUsedForVideoId(vid);
     safePublish('skipToEnd', {
       type: 'skipToEnd',
       videoId: vid,
     } as PlaybackMessage);
-  }, [myClientId, safePublish, canUseOwnerControls]);
+  }, [myClientId, safePublish, canUseOwnerPlaybackProxy]);
 
-  const handleRequestCancelSongReservation = useCallback(() => {
+  const handleRequestManageSongReservation = useCallback(() => {
     if (!myClientId) return;
-    if (!songReservationQueueRef.current.some((e) => e.publisherClientId === myClientId)) return;
-    setCancelReservationModalOpen(true);
+    const entry = songReservationQueueRef.current.find((e) => e.publisherClientId === myClientId);
+    if (!entry?.videoId) return;
+    setSongReservationManageVideoId(entry.videoId);
+    setSongReservationManageOpen(true);
   }, [myClientId]);
 
   const handleConfirmCancelSongReservation = useCallback(() => {
-    setCancelReservationModalOpen(false);
+    setSongReservationManageOpen(false);
+    setSongReservationManageVideoId('');
     if (!myClientId) return;
     if (!songReservationQueueRef.current.some((e) => e.publisherClientId === myClientId)) return;
     safePublish('cancelQueueSong', {
@@ -3160,13 +3246,16 @@ export default function RoomWithSync({
   }, [myClientId, safePublish]);
 
   useEffect(() => {
-    if (!cancelReservationModalOpen) return;
+    if (!songReservationManageOpen) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setCancelReservationModalOpen(false);
+      if (e.key === 'Escape') {
+        setSongReservationManageOpen(false);
+        setSongReservationManageVideoId('');
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [cancelReservationModalOpen]);
+  }, [songReservationManageOpen]);
 
   /** 曲投入後に自動再生し、全員に play(currentTime: 0) を配信する（準備完了を短い間隔で待ち、操作コンテキストに近いタイミングで play） */
   const scheduleAutoPlayAfterChangeVideo = useCallback(() => {
@@ -3761,6 +3850,54 @@ export default function RoomWithSync({
     });
   }, []);
 
+  const handlePassPhraseFromClient = useCallback(
+    (senderId: string, senderDisplayName: string) => {
+      const sid = senderId.trim();
+      if (!sid) return;
+      const cur = currentTurnClientIdRef.current.trim();
+      const order = participatingOrderRef.current;
+      const displayName = senderDisplayName.trim() || '参加者';
+
+      if (sid === cur) {
+        removePassTurnReservation(sid);
+        const nextId = resolveNextPresentTurnRef.current(cur);
+        const nextParticipant = order.find((p) => p.clientId === nextId);
+        if (sid === myClientId) {
+          safePublish(TURN_STATE_EVENT, buildTurnStatePayload(nextId));
+          addAiMessage(`${nextParticipant?.displayName ?? '次の方'}さん、次の曲を貼ってください`, {
+            bypassJpDomesticSilence: true,
+          });
+        }
+        return;
+      }
+
+      if (passTurnReservationClientIdsRef.current.includes(sid)) {
+        removePassTurnReservation(sid);
+        if (myClientId === coordinationRef.current) {
+          addSystemMessage(`${displayName}さんがパス予約を取り消しました。`);
+        }
+        return;
+      }
+
+      addPassTurnReservation(sid);
+      if (myClientId === coordinationRef.current) {
+        addSystemMessage(
+          `${displayName}さんが次の選曲をパス予約しました（自分の番が来たら自動でパスします）。`,
+        );
+      }
+    },
+    [
+      myClientId,
+      safePublish,
+      buildTurnStatePayload,
+      addAiMessage,
+      addSystemMessage,
+      addPassTurnReservation,
+      removePassTurnReservation,
+    ],
+  );
+  handlePassPhraseFromClientRef.current = handlePassPhraseFromClient;
+
   useAiCharacterTtsErrorNotice(addSystemMessage);
 
   const handleToggleJoinLock = useCallback(async () => {
@@ -3864,6 +4001,8 @@ export default function RoomWithSync({
   }, [roomId, myClientId, addSystemMessage]);
 
   const previousParticipantsRef = useRef<Map<string, string> | null>(null);
+  const ownerDepartedDisplayNameRef = useRef('');
+  const ownerAbsenceAnnouncedAtRef = useRef<number | null>(null);
   useEffect(() => {
     /**
      * 入室・退出は Ably presence の在籍差分のみで見る。
@@ -3911,6 +4050,9 @@ export default function RoomWithSync({
           addAiMessage(`${displayName}さん退出`, {
             playLeaveChime: true,
           });
+          if (clientId === ownerClientIdRef.current.trim()) {
+            ownerDepartedDisplayNameRef.current = displayName;
+          }
         }
       });
       presentMap.forEach((displayName, clientId) => {
@@ -3936,7 +4078,32 @@ export default function RoomWithSync({
       });
     }
     previousParticipantsRef.current = presentMap;
-  }, [presenceData, addAiMessage, myClientId]);
+  }, [presenceData, addAiMessage, myClientId, coordinationClientId]);
+
+  useEffect(() => {
+    if (ownerLeftAt === null) {
+      ownerAbsenceAnnouncedAtRef.current = null;
+      return;
+    }
+    if (!myClientId || myClientId !== coordinationClientId) return;
+    if (ownerAbsenceAnnouncedAtRef.current === ownerLeftAt) return;
+    ownerAbsenceAnnouncedAtRef.current = ownerLeftAt;
+    const ownerName = ownerDepartedDisplayNameRef.current.trim() || 'オーナー';
+    const successorName =
+      participants.find((p) => p.clientId === oldestParticipantClientId)?.displayName?.trim() ||
+      '次の方';
+    addAiMessage(
+      `${ownerName}さんが退室しました。5分以内に復帰がなければ、${successorName}さんにオーナーを引き継ぎます。`,
+      { bypassJpDomesticSilence: true },
+    );
+  }, [
+    ownerLeftAt,
+    myClientId,
+    coordinationClientId,
+    oldestParticipantClientId,
+    participants,
+    addAiMessage,
+  ]);
 
   useEffect(() => {
     if (!joinEntryChimeEnabled) {
@@ -4179,11 +4346,23 @@ export default function RoomWithSync({
 
   /** 複数人・5分制限ON・再生中で、開始から5分未満なら次曲はキューのみ（オーナー含む全員。即時切替しない） */
   const shouldDeferMultiSongPost = useCallback(() => {
-    if (!songLimit5MinEnabledRef.current) return false;
     const order = participatingOrderRef.current;
-    if (order.length <= 1) return false;
     const normalizedNames = order.map((p) => (p.displayName ?? '').trim() || 'ゲスト');
-    if (order.length > 1 && new Set(normalizedNames).size === 1) return false;
+    const uniqueDisplayNameCount = new Set(normalizedNames).size;
+    if (
+      shouldForceReservationQueueWhilePending({
+        queueLength: songReservationQueueRef.current.length,
+        hasActiveVideo: Boolean(videoIdRef.current),
+        withinEndedGraceWindow: Date.now() < trackEndedGraceWindowUntilRef.current,
+        participatingCount: order.length,
+        uniqueDisplayNameCount,
+      })
+    ) {
+      return true;
+    }
+    if (!songLimit5MinEnabledRef.current) return false;
+    if (order.length <= 1) return false;
+    if (order.length > 1 && uniqueDisplayNameCount === 1) return false;
     if (!videoIdRef.current) return false;
     if (Date.now() < trackEndedGraceWindowUntilRef.current) return false;
     const started = currentTrackStartedAtMsRef.current;
@@ -4372,13 +4551,31 @@ export default function RoomWithSync({
         publishRef.current?.(TURN_STATE_EVENT, buildTurnStatePayload(cur));
         continue;
       }
+      if (passTurnReservationClientIdsRef.current.includes(cur)) {
+        removePassTurnReservation(cur);
+        cur = resolveNextPresentTurnRef.current(cur);
+        setCurrentTurnClientId(cur);
+        publishRef.current?.(TURN_STATE_EVENT, buildTurnStatePayload(cur));
+        continue;
+      }
       break;
     }
     // 選曲予約済みなら「次を貼って」案内は出さない（5分経過・曲終了どちらも）
-    if (cur) {
-      const qReserve = songReservationQueueRef.current;
-      if (qReserve.some((e) => e.publisherClientId === cur)) {
+    const qReserve = songReservationQueueRef.current;
+    if (qReserve.length > 0) {
+      const queueDecision = resolveSongReservationQueueApply({
+        currentTurnClientId: cur,
+        participatingOrder: order,
+        presentClientIds: present,
+        queue: qReserve,
+      });
+      if (queueDecision.kind === 'apply') {
         return;
+      }
+      if (queueDecision.kind === 'prompt') {
+        cur = queueDecision.clientId;
+        setCurrentTurnClientId(cur);
+        publishRef.current?.(TURN_STATE_EVENT, buildTurnStatePayload(cur));
       }
     }
     // 参加者が1人だけのときは、5分経過メッセージは出さない
@@ -4423,16 +4620,33 @@ export default function RoomWithSync({
         addAiMessage(`${prefix}次の曲を貼ってください`);
       }
     }
-  }, [participants, addAiMessage, myClientId, clearPendingFreeCommentTimers, buildTurnStatePayload]);
+  }, [participants, addAiMessage, myClientId, clearPendingFreeCommentTimers, buildTurnStatePayload, removePassTurnReservation]);
 
   useEffect(() => {
     promptNextTurnRef.current = () => promptNextTurn();
   }, [promptNextTurn]);
 
-  /** ターンが一時退席枠を指しているとき、在室者へ寄せる（各クライアントで同一計算） */
+  /** ターンがパス予約・一時退席枠を指しているとき、在室者へ寄せる（各クライアントで同一計算） */
   useEffect(() => {
     const cur = (currentTurnClientId ?? '').trim();
     if (!cur) return;
+
+    if (passTurnReservationClientIdsRef.current.includes(cur)) {
+      removePassTurnReservation(cur);
+      const nextId = resolveNextPresentTurnRef.current(cur);
+      const nextParticipant = participatingOrderRef.current.find((p) => p.clientId === nextId);
+      setCurrentTurnClientId(nextId);
+      if (myClientId === coordinationRef.current) {
+        publishRef.current?.(TURN_STATE_EVENT, buildTurnStatePayload(nextId));
+        if (nextId) {
+          addAiMessage(`${nextParticipant?.displayName ?? '次の方'}さん、次の曲を貼ってください`, {
+            bypassJpDomesticSilence: true,
+          });
+        }
+      }
+      return;
+    }
+
     const present = presentClientIdsRef.current;
     const pMeta = participants.find((p) => p.clientId === cur);
     if (
@@ -4453,7 +4667,7 @@ export default function RoomWithSync({
       setCurrentTurnClientId('');
       publishRef.current?.(TURN_STATE_EVENT, buildTurnStatePayload(''));
     }
-  }, [currentTurnClientId, participants, presenceData, buildTurnStatePayload]);
+  }, [currentTurnClientId, participants, presenceData, buildTurnStatePayload, myClientId, addAiMessage, removePassTurnReservation]);
 
   /**
    * changeVideo 直後のまれな競合で currentTurn が空/投稿者のままになることがある。
@@ -5646,7 +5860,11 @@ export default function RoomWithSync({
       }
       const preserve = options?.preserveReservationQueue === true;
       if (!preserve) {
-        songReservationQueueRef.current = [];
+        songReservationQueueRef.current = removePublisherReservationFromQueue(
+          songReservationQueueRef.current,
+          publisherClientId,
+          options?.publisherAuthUserIdHint,
+        );
         syncSongReservationQueueHead();
       }
       const previousVideoId = videoIdRef.current;
@@ -5699,6 +5917,7 @@ export default function RoomWithSync({
         nextTurnClientId: nextTurnId,
         aiMode: selectionAiMode,
         publisherDisplayName,
+        reservationQueue: buildReservationQueuePayload(),
         ...(posterAuthUserId ? { publisherAuthUserId: posterAuthUserId } : {}),
       } as PlaybackMessage);
       playerRef.current?.loadVideoById(id);
@@ -5778,7 +5997,78 @@ export default function RoomWithSync({
       roomId,
       schedulePlaybackHistory,
       syncSongReservationQueueHead,
+      buildReservationQueuePayload,
     ]
+  );
+
+  const handleOwnerPickSelector = useCallback(
+    (targetClientId: string) => {
+      setOwnerPickSelectorOpen(false);
+      if (!canUseOwnerPlaybackProxy) return;
+      const cid = targetClientId.trim();
+      if (!cid) return;
+      const q = songReservationQueueRef.current;
+      const idx = q.findIndex((e) => e.publisherClientId === cid);
+      if (idx >= 0) {
+        const entry = q[idx];
+        q.splice(idx, 1);
+        syncSongReservationQueueHead();
+        if (playbackQueueFallbackTimerRef.current) {
+          clearTimeout(playbackQueueFallbackTimerRef.current);
+          playbackQueueFallbackTimerRef.current = null;
+        }
+        applyingRemoteRef.current = true;
+        try {
+          const pp = resolveActivePublisherClientId(
+            entry.publisherClientId,
+            entry.publisherAuthUserId,
+            participantsRef.current.map((p) => ({
+              clientId: p.clientId,
+              authUserId: (p as { authUserId?: string }).authUserId,
+            })),
+          );
+          roomSyncLog('queue:apply', {
+            roomId,
+            videoId: entry.videoId,
+            publisherClientId: pp,
+            displayNameHint: entry.publisherDisplayName,
+            authUserIdHint: entry.publisherAuthUserId,
+            aiMode: entry.aiMode,
+            myClientId,
+            coordinationClientId: coordinationRef.current,
+            trigger: isActingOwnerPlaybackProxy ? 'acting_owner_pick' : 'owner_pick',
+          });
+          applyImmediateChangeVideo(entry.videoId, pp || cid, {
+            preserveReservationQueue: true,
+            aiMode: entry.aiMode,
+            publisherDisplayNameHint: entry.publisherDisplayName,
+            publisherAuthUserIdHint: entry.publisherAuthUserId,
+          });
+        } finally {
+          setTimeout(() => {
+            applyingRemoteRef.current = false;
+          }, 300);
+        }
+        return;
+      }
+      setCurrentTurnClientId(cid);
+      currentTurnClientIdRef.current = cid;
+      safePublish(TURN_STATE_EVENT, buildTurnStatePayload(cid));
+      const displayName = participants.find((p) => p.clientId === cid)?.displayName ?? '参加者';
+      addAiMessage(`${displayName}さん、次の曲を貼ってください`, { bypassJpDomesticSilence: true });
+    },
+    [
+      canUseOwnerPlaybackProxy,
+      isActingOwnerPlaybackProxy,
+      syncSongReservationQueueHead,
+      roomId,
+      applyImmediateChangeVideo,
+      safePublish,
+      buildTurnStatePayload,
+      participants,
+      addAiMessage,
+      myClientId,
+    ],
   );
 
   const handleJoinPasteHintAiPick = useCallback(async (): Promise<boolean> => {
@@ -6416,9 +6706,8 @@ export default function RoomWithSync({
 
   useEffect(() => {
     playbackEndedApplyRef.current = () => {
-      const pendingVid = pendingQueuedVideoIdRef.current;
-      const pendingPub = pendingQueuedPublisherRef.current;
-      if (!pendingVid) return;
+      const qAtStart = songReservationQueueRef.current;
+      if (qAtStart.length === 0) return;
 
       /**
        * queueSong 受信直後の microtask では「いま流れている曲の選曲者」＝ imPoster になりうる。
@@ -6437,7 +6726,36 @@ export default function RoomWithSync({
 
       const tryApplyQueued = () => {
         const qApply = songReservationQueueRef.current;
-        const head = qApply[0];
+        if (qApply.length === 0) return;
+        const decision = resolveSongReservationQueueApply({
+          currentTurnClientId: currentTurnClientIdRef.current,
+          participatingOrder: participatingOrderRef.current,
+          presentClientIds: presentClientIdsRef.current,
+          queue: qApply,
+        });
+        if (decision.kind === 'prompt') {
+          const promptId = decision.clientId;
+          const order = participatingOrderRef.current;
+          const displayName = order.find((o) => o.clientId === promptId)?.displayName ?? '次の方';
+          setCurrentTurnClientId(promptId);
+          currentTurnClientIdRef.current = promptId;
+          if (myClientId === coordinationRef.current) {
+            publishRef.current?.(TURN_STATE_EVENT, buildTurnStatePayload(promptId));
+            addAiMessage(`${displayName}さん、次の曲を貼ってください`, {
+              bypassJpDomesticSilence: true,
+            });
+            const vid = videoIdRef.current;
+            if (vid) nextPromptShownForVideoIdRef.current = vid;
+          }
+          syncSongReservationQueueHead();
+          if (playbackQueueFallbackTimerRef.current) {
+            clearTimeout(playbackQueueFallbackTimerRef.current);
+            playbackQueueFallbackTimerRef.current = null;
+          }
+          return;
+        }
+        if (decision.kind !== 'apply') return;
+        const head = qApply[decision.queueIndex];
         if (!head?.videoId) return;
         const pv = head.videoId;
         const pp = resolveActivePublisherClientId(
@@ -6449,7 +6767,7 @@ export default function RoomWithSync({
           })),
         );
         const queuedAiMode = head.aiMode;
-        qApply.shift();
+        qApply.splice(decision.queueIndex, 1);
         syncSongReservationQueueHead();
         if (playbackQueueFallbackTimerRef.current) {
           clearTimeout(playbackQueueFallbackTimerRef.current);
@@ -6492,19 +6810,46 @@ export default function RoomWithSync({
       }
 
       if (posterInRoom && imCoordinator) {
+        const decision = resolveSongReservationQueueApply({
+          currentTurnClientId: currentTurnClientIdRef.current,
+          participatingOrder: participatingOrderRef.current,
+          presentClientIds: presentClientIdsRef.current,
+          queue: songReservationQueueRef.current,
+        });
+        if (decision.kind === 'prompt') {
+          tryApplyQueued();
+          return;
+        }
+        if (decision.kind !== 'apply') return;
+        const vidSnapshot = songReservationQueueRef.current[decision.queueIndex]?.videoId;
+        if (!vidSnapshot) return;
         if (playbackQueueFallbackTimerRef.current) {
           clearTimeout(playbackQueueFallbackTimerRef.current);
         }
-        const vidSnapshot = pendingVid;
         playbackQueueFallbackTimerRef.current = setTimeout(() => {
           playbackQueueFallbackTimerRef.current = null;
-          if (pendingQueuedVideoIdRef.current !== vidSnapshot) return;
+          const decNow = resolveSongReservationQueueApply({
+            currentTurnClientId: currentTurnClientIdRef.current,
+            participatingOrder: participatingOrderRef.current,
+            presentClientIds: presentClientIdsRef.current,
+            queue: songReservationQueueRef.current,
+          });
+          if (decNow.kind === 'apply' && songReservationQueueRef.current[decNow.queueIndex]?.videoId !== vidSnapshot) {
+            return;
+          }
           if (myClientId !== coordinationRef.current) return;
           tryApplyQueued();
         }, QUEUE_APPLY_FALLBACK_MS);
       }
     };
-  }, [myClientId, applyImmediateChangeVideo, syncSongReservationQueueHead]);
+  }, [
+    myClientId,
+    applyImmediateChangeVideo,
+    syncSongReservationQueueHead,
+    addAiMessage,
+    buildTurnStatePayload,
+    roomId,
+  ]);
 
   const handleVideoUrlFromChat = useCallback(
     (
@@ -6766,7 +7111,8 @@ export default function RoomWithSync({
       touchActivity();
       updateSendTimestamps(lastSendAtRef, sendTimestampsRef);
 
-      if (currentTurnClientIdRef.current === myClientId && isPassPhrase(text)) {
+      if (isPassPhrase(text)) {
+        handlePassPhraseFromClientRef.current(myClientId, effectiveDisplayName);
         return;
       }
 
@@ -7908,6 +8254,7 @@ export default function RoomWithSync({
           currentOwnerClientId={ownerLeftAt === null ? ownerClientId : ''}
           currentSongPosterClientId={currentSongPosterClientId}
           queuedSongPublisherClientIds={queuedSongPublisherClientIds}
+          passTurnReservationClientIds={passTurnReservationClientIds}
           nextTurnClientId={currentTurnClientId}
           selectionRoundNumber={selectionRoundNumber}
           skipCurrentTrackActive={Boolean(
@@ -7916,18 +8263,25 @@ export default function RoomWithSync({
               myClientId &&
               skipUsedForVideoId !== videoId &&
               (myClientId === currentSongPosterClientId ||
-                canUseOwnerControls),
+                canUseOwnerPlaybackProxy),
           )}
           skipCurrentTrackDisabled={Boolean(
             videoId && currentSongPosterClientId && myClientId &&
               !(
                 myClientId === currentSongPosterClientId ||
-                canUseOwnerControls
+                canUseOwnerPlaybackProxy
               ),
           )}
           onSkipCurrentTrack={handleSkipCurrentTrack}
-          onCancelSongReservation={handleRequestCancelSongReservation}
-          onParticipantClick={(displayName) => chatInputRef.current?.insertText(` ${displayName}さん `)}
+          onManageSongReservation={handleRequestManageSongReservation}
+          onOwnerPickSelector={
+            canUseOwnerPlaybackProxy ? () => setOwnerPickSelectorOpen(true) : undefined
+          }
+          ownerPickSelectorActing={isActingOwnerPlaybackProxy}
+          ownerAbsentGrace={ownerLeftAt !== null}
+          onParticipantClick={
+            isLg ? (displayName) => chatInputRef.current?.insertText(` ${displayName}さん `) : undefined
+          }
           viewerIsGuest={isGuest}
           onParticipantPublicProfileClick={({ authUserId, displayName: dn }) =>
             setParticipantPublicProfileModal({ userId: authUserId, displayName: dn })
@@ -7943,42 +8297,24 @@ export default function RoomWithSync({
         viewerIsGuest={isGuest}
       />
 
-      {cancelReservationModalOpen && (
-        <div
-          className="fixed inset-0 z-[90] flex items-center justify-center bg-black/70 p-4"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="cancel-reservation-title"
-        >
-          <div
-            className="w-full max-w-md rounded-xl border border-gray-600 bg-gray-900 p-5 shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 id="cancel-reservation-title" className="text-lg font-semibold text-gray-100">
-              選曲予約を取り消しますか？
-            </h2>
-            <p className="mt-2 text-sm text-gray-300">
-              取り消したあと、再度予約するときは下の入力欄に YouTube の URL を貼って送信してください。
-            </p>
-            <div className="mt-5 flex flex-wrap justify-end gap-2">
-              <button
-                type="button"
-                className="rounded border border-gray-600 bg-gray-800 px-4 py-2 text-sm text-gray-200 hover:bg-gray-700"
-                onClick={() => setCancelReservationModalOpen(false)}
-              >
-                戻る
-              </button>
-              <button
-                type="button"
-                className="rounded border border-sky-700 bg-sky-900/50 px-4 py-2 text-sm font-medium text-sky-100 hover:bg-sky-800/60"
-                onClick={handleConfirmCancelSongReservation}
-              >
-                取り消す
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {songReservationManageOpen && songReservationManageVideoId ? (
+        <SongReservationManageModal
+          videoId={songReservationManageVideoId}
+          onClose={() => {
+            setSongReservationManageOpen(false);
+            setSongReservationManageVideoId('');
+          }}
+          onDelete={handleConfirmCancelSongReservation}
+        />
+      ) : null}
+
+      {ownerPickSelectorOpen ? (
+        <OwnerPickSelectorModal
+          participants={participants}
+          onPick={handleOwnerPickSelector}
+          onClose={() => setOwnerPickSelectorOpen(false)}
+        />
+      ) : null}
 
       <SiteFeedbackModal
         open={siteFeedbackOpen}

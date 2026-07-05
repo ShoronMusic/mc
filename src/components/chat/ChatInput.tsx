@@ -2263,7 +2263,11 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
               <li>
                 自分の順番が回ってきて選曲をパスする場合は、発言欄に
                 <span className="text-gray-200"> パス </span>
-                と入力してください。
+                と入力してください。まだ自分の番でなくても
+                <span className="text-gray-200"> パス </span>
+                を送ると、次の自分の番で自動パスする予約が入ります（参加者欄に「パス予約」と表示）。もう一度
+                <span className="text-gray-200"> パス </span>
+                で取り消せます。
               </li>
               <li>
                 <span className="font-medium text-gray-200">AIに質問</span>

@@ -63,6 +63,8 @@ interface UserBarProps {
   currentSongPosterClientId?: string;
   /** 次に再生予定の曲をキュー済みの参加者（5分制限・複数人時・複数可・順不同表示） */
   queuedSongPublisherClientIds?: string[];
+  /** 次の選曲ターンで自動パスする参加者 */
+  passTurnReservationClientIds?: string[];
   /** 選曲者またはチャットオーナー: スキップが押せる見た目 */
   skipCurrentTrackActive?: boolean;
   /** 上記以外: グレーアウト（クリック不可） */
@@ -75,8 +77,14 @@ interface UserBarProps {
   hideMobileRoundBadge?: boolean;
   /** 再生末尾へシークして終了扱い（active 時のみ呼ぶ） */
   onSkipCurrentTrack?: () => void;
-  /** 自分の選曲予約のみ取り消し（5分制限・キュー時） */
-  onCancelSongReservation?: () => void;
+  /** 自分の選曲予約のみ管理（5分制限・キュー時） */
+  onManageSongReservation?: () => void;
+  /** チャットオーナー: 任意の参加者を次の選曲者として指名 */
+  onOwnerPickSelector?: () => void;
+  /** オーナー不在時の協調役による代理指名 */
+  ownerPickSelectorActing?: boolean;
+  /** オーナー復帰待ち（5分猶予中） */
+  ownerAbsentGrace?: boolean;
   onParticipantClick?: (displayName: string) => void;
   /** ログイン中の閲覧者のみ。ゲストのときはプロフィールアイコンを出さない */
   viewerIsGuest?: boolean;
@@ -161,13 +169,17 @@ export default function UserBar({
   currentOwnerClientId = '',
   currentSongPosterClientId = '',
   queuedSongPublisherClientIds = [],
+  passTurnReservationClientIds = [],
   nextTurnClientId = '',
   selectionRoundNumber = 1,
   hideMobileRoundBadge = false,
   skipCurrentTrackActive = false,
   skipCurrentTrackDisabled = false,
   onSkipCurrentTrack,
-  onCancelSongReservation,
+  onManageSongReservation,
+  onOwnerPickSelector,
+  ownerPickSelectorActing = false,
+  ownerAbsentGrace = false,
   onParticipantClick,
   viewerIsGuest = false,
   onParticipantPublicProfileClick,
@@ -322,10 +334,14 @@ export default function UserBar({
           const isQueuedSongPoster =
             queuedSongPublisherClientIds.length > 0 &&
             queuedSongPublisherClientIds.includes(p.clientId);
+          const isPassTurnReserved =
+            passTurnReservationClientIds.length > 0 &&
+            passTurnReservationClientIds.includes(p.clientId);
             const isNextTurnPoster =
               Boolean(nextTurnClientId) &&
               !isCurrentSongPoster &&
               !isQueuedSongPoster &&
+              !isPassTurnReserved &&
               p.clientId === nextTurnClientId;
           const isRoomOwner = Boolean(currentOwnerClientId && p.clientId === currentOwnerClientId);
           const isMyQueuedSong =
@@ -333,9 +349,11 @@ export default function UserBar({
           const chipTitle = isCurrentSongPoster
             ? '今の曲の選曲者（再生中）'
             : isQueuedSongPoster
-              ? isMyQueuedSong && onCancelSongReservation
-                ? '選曲予約済み。クリックで確認画面が開き、取り消せます'
-                : '選曲予約済み。前の曲の終了後、順番に再生されます'
+              ? isMyQueuedSong && onManageSongReservation
+                ? '選曲済み。クリックで予約内容の確認・取り消し'
+                : '選曲済み。前の曲の終了後、順番に再生されます'
+              : isPassTurnReserved
+                ? 'パス予約済み。自分の番が来たら自動でパスします'
               : isNextTurnPoster
                 ? '次の選曲者（選曲待ち）'
                 : undefined;
@@ -347,6 +365,8 @@ export default function UserBar({
                     ? 'bg-amber-900/40 ring-1 ring-amber-600/50'
                     : isQueuedSongPoster
                       ? 'bg-sky-950/35 ring-1 ring-sky-700/40'
+                      : isPassTurnReserved
+                        ? 'bg-violet-950/35 ring-1 ring-violet-700/40'
                       : isNextTurnPoster
                         ? 'bg-emerald-950/35 ring-1 ring-emerald-700/40'
                         : ''
@@ -423,19 +443,22 @@ export default function UserBar({
                 </span>
               ) : null}
               {isQueuedSongPoster &&
-                (isMyQueuedSong && onCancelSongReservation ? (
+                (isMyQueuedSong && onManageSongReservation ? (
                   <button
                     type="button"
-                    onClick={onCancelSongReservation}
+                    onClick={onManageSongReservation}
                     className="mt-0.5 rounded border border-sky-600/70 bg-sky-950/50 px-2 py-0.5 pl-5 text-left text-[10px] font-medium leading-tight text-sky-200 hover:bg-sky-900/55"
-                    aria-label="選曲予約の取り消し（確認）"
-                    title="クリックで確認画面が開き、取り消せます"
+                    aria-label="選曲予約の確認・取り消し"
+                    title="クリックで予約内容の確認・取り消し"
                   >
-                    予約済み（順番待ち）
+                    選曲済み
                   </button>
                 ) : (
-                  <span className="pl-5 text-[10px] leading-tight text-sky-300/95">予約済み（順番待ち）</span>
+                  <span className="pl-5 text-[10px] leading-tight text-sky-300/95">選曲済み</span>
                 ))}
+              {isPassTurnReserved ? (
+                <span className="pl-5 text-[10px] leading-tight text-violet-200/95">パス予約</span>
+              ) : null}
               {isNextTurnPoster && (
                 <span className="pl-5 text-[10px] leading-tight text-emerald-200/95">NEXT（選曲待ち）</span>
               )}
@@ -488,8 +511,35 @@ export default function UserBar({
     );
 
   const desktopTrailing =
-    showGuestRegister || onMyPageClick != null || onPlaybackHistoryClick != null || onChatSummaryClick != null ? (
+    showGuestRegister ||
+    onOwnerPickSelector != null ||
+    onMyPageClick != null ||
+    onPlaybackHistoryClick != null ||
+    onChatSummaryClick != null ? (
       <div className="flex shrink-0 items-center gap-2">
+        {onOwnerPickSelector != null ? (
+          <button
+            type="button"
+            onClick={onOwnerPickSelector}
+            className="shrink-0 rounded border border-amber-700/70 bg-amber-950/45 px-3 py-2 text-sm font-medium text-amber-100 hover:bg-amber-900/55 sm:px-4"
+            aria-label={ownerPickSelectorActing ? '選曲者指名（オーナー代理）' : '選曲者指名'}
+            title={
+              ownerPickSelectorActing
+                ? 'オーナー不在中の代理として、任意の参加者を次の選曲者として指名'
+                : '任意の参加者を次の選曲者として指名'
+            }
+          >
+            選曲者指名{ownerPickSelectorActing ? '（代理）' : ''}
+          </button>
+        ) : null}
+        {ownerAbsentGrace ? (
+          <span
+            className="hidden shrink-0 rounded border border-amber-800/50 bg-amber-950/35 px-2 py-1 text-[11px] text-amber-200/90 lg:inline"
+            title="オーナー復帰待ち（5分以内に復帰がなければ引き継ぎ）"
+          >
+            オーナー不在
+          </span>
+        ) : null}
         {showGuestRegister ? (
           <button
             type="button"
@@ -585,10 +635,14 @@ export default function UserBar({
               const isQueuedSongPoster =
                 queuedSongPublisherClientIds.length > 0 &&
                 queuedSongPublisherClientIds.includes(p.clientId);
+              const isPassTurnReserved =
+                passTurnReservationClientIds.length > 0 &&
+                passTurnReservationClientIds.includes(p.clientId);
               const isNextTurnPoster =
                 Boolean(nextTurnClientId) &&
                 !isCurrentSongPoster &&
                 !isQueuedSongPoster &&
+                !isPassTurnReserved &&
                 p.clientId === nextTurnClientId;
               const isRoomOwner = Boolean(currentOwnerClientId && p.clientId === currentOwnerClientId);
               const isAiParticipant = p.clientId === AI_PARTICIPANT_CLIENT_ID;
@@ -597,9 +651,11 @@ export default function UserBar({
               const chipTitle = isCurrentSongPoster
                 ? '今の曲の選曲者（再生中）'
                 : isQueuedSongPoster
-                  ? isMyQueuedSong && onCancelSongReservation
-                    ? '選曲予約済み。タップで取り消し'
-                    : '選曲予約済み'
+                  ? isMyQueuedSong && onManageSongReservation
+                    ? '選曲済み。タップで確認・取り消し'
+                    : '選曲済み'
+                  : isPassTurnReserved
+                    ? 'パス予約済み'
                   : isNextTurnPoster
                     ? '次の選曲者'
                     : undefined;
@@ -611,6 +667,8 @@ export default function UserBar({
                       ? 'border-amber-600/70 bg-amber-950/45'
                       : isQueuedSongPoster
                         ? 'border-sky-700/60 bg-sky-950/35'
+                        : isPassTurnReserved
+                          ? 'border-violet-700/60 bg-violet-950/35'
                         : isNextTurnPoster
                           ? 'border-emerald-700/60 bg-emerald-950/35'
                           : 'border-gray-700 bg-gray-900/70'
@@ -657,18 +715,21 @@ export default function UserBar({
                     />
                   </span>
                   {isQueuedSongPoster &&
-                    (isMyQueuedSong && onCancelSongReservation ? (
+                    (isMyQueuedSong && onManageSongReservation ? (
                       <button
                         type="button"
-                        onClick={onCancelSongReservation}
+                        onClick={onManageSongReservation}
                         className="mt-0.5 rounded border border-sky-600/70 bg-sky-950/50 px-2 py-0.5 text-[10px] font-medium leading-tight text-sky-200 hover:bg-sky-900/55"
-                        aria-label="選曲予約の取り消し"
+                        aria-label="選曲予約の確認・取り消し"
                       >
-                        予約済み
+                        選曲済み
                       </button>
                     ) : (
-                      <span className="mt-0.5 text-[10px] leading-tight text-sky-300/95">予約済み</span>
+                      <span className="mt-0.5 text-[10px] leading-tight text-sky-300/95">選曲済み</span>
                     ))}
+                  {isPassTurnReserved ? (
+                    <span className="mt-0.5 text-[10px] leading-tight text-violet-200/95">パス予約</span>
+                  ) : null}
                   {isNextTurnPoster ? (
                     <span className="mt-0.5 text-[10px] leading-tight text-emerald-200/95">NEXT</span>
                   ) : null}

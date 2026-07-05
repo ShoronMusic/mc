@@ -36,6 +36,8 @@ export interface PlaybackMessage {
   publisherDisplayName?: string;
   /** sync スナップショット: 再生中の選曲予約キュー全体 */
   reservationQueue?: ReservationQueueEntryPayload[];
+  /** sync スナップショット: 次の選曲ターンで自動パスする参加者 */
+  passTurnReservationClientIds?: string[];
 }
 
 export type ReservationQueueEntryPayload = {
