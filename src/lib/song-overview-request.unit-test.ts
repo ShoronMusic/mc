@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {
   canRequestSongOverviewAtQuestion,
+  formatSongOverviewAiReplyBody,
   formatSongOverviewRequestButtonLabel,
   getSelectorNameFromAnnounceBody,
   hasSongCommentaryForVideo,
@@ -42,6 +43,15 @@ assert.equal(canRequestSongOverviewAtQuestion(creditsActive), true);
 assert.equal(canRequestSongOverviewAtQuestion({ ...creditsActive, creditsRemaining: 0 }), false);
 assert.match(formatSongOverviewRequestButtonLabel(creditsActive), /1クレジット消費/);
 assert.match(formatSongOverviewRequestButtonLabel(trialActive), /@1回消費/);
+
+assert.equal(
+  formatSongOverviewAiReplyBody('ハチ', 'Bill Withersの「Lovely Day」は…'),
+  'ハチさんからのリクエストにより【AI回答】 Bill Withersの「Lovely Day」は…',
+);
+assert.equal(
+  formatSongOverviewAiReplyBody('ハチ', '【AI回答】 Bill Withersの「Lovely Day」は…'),
+  'ハチさんからのリクエストにより【AI回答】 Bill Withersの「Lovely Day」は…',
+);
 
 assert.equal(
   hasSongCommentaryForVideo(

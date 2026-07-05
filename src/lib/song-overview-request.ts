@@ -3,6 +3,21 @@ import type { AiTrialStatus } from '@/lib/ai-trial-status';
 
 export const SONG_OVERVIEW_REQUEST_PROMPT = 'この曲の概要を説明してください';
 
+const AI_ANSWER_UI_PREFIX = '【AI回答】';
+
+/** エージェント選曲の「概要を聞く」応答をチャット表示用に整形する */
+export function formatSongOverviewAiReplyBody(
+  requesterDisplayName: string,
+  text: string,
+): string {
+  const name = requesterDisplayName.trim() || '参加者';
+  const raw = text.trim();
+  const core = raw.startsWith(AI_ANSWER_UI_PREFIX)
+    ? raw.slice(AI_ANSWER_UI_PREFIX.length).trimStart()
+    : raw;
+  return `${name}さんからのリクエストにより${AI_ANSWER_UI_PREFIX} ${core}`;
+}
+
 export const AI_CHARACTER_DEFAULT_ANNOUNCE_NAME = 'エージェント1号';
 
 /** 「〇〇さんの選曲です！」形式なら投稿者名を返す */

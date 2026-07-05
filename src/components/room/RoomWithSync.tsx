@@ -43,6 +43,7 @@ import { resolveAiSelectionMode, parseAiSelectionMode, type AiSelectionMode } fr
 import { evaluateCommentaryFetchClient } from '@/lib/room-commentary-fetch-client';
 import { AI_TRIAL_STATUS_UPDATED_EVENT } from '@/lib/ai-trial-status';
 import { USER_ROOM_AI_FEATURES_UPDATED_EVENT } from '@/lib/user-room-ai-features-client-events';
+import { formatSongOverviewAiReplyBody } from '@/lib/song-overview-request';
 import { requestSongOverviewChat } from '@/lib/song-overview-request-chat-client';
 import { SiteFeedbackModal } from '@/components/room/SiteFeedbackModal';
 import UserBar from '@/components/room/UserBar';
@@ -4016,10 +4017,17 @@ export default function RoomWithSync({
             addSystemMessage(
               `${displayName}さんがパスしました。${nextName}さんの予約曲は、この曲の終了後に再生されます。`,
             );
-            publishSelectorWaitingMessage(nextId, nextName);
           } else {
             promptSelectorTurnMessages(nextId, nextName);
           }
+        }
+        if (
+          nextId &&
+          songReservationQueueRef.current.some((e) => e.publisherClientId === nextId)
+        ) {
+          queueMicrotask(() => {
+            playbackEndedApplyRef.current();
+          });
         }
         return;
       }
@@ -4793,13 +4801,17 @@ export default function RoomWithSync({
             addSystemMessage(
               `${nextParticipant?.displayName ?? '次の方'}さんは予約済みです。この曲の終了後に再生されます。`,
             );
-            publishSelectorWaitingMessage(
-              nextId,
-              nextParticipant?.displayName ?? '次の方',
-            );
           } else {
             promptSelectorTurnMessages(nextId, nextParticipant?.displayName ?? '次の方');
           }
+        }
+        if (
+          nextId &&
+          songReservationQueueRef.current.some((e) => e.publisherClientId === nextId)
+        ) {
+          queueMicrotask(() => {
+            playbackEndedApplyRef.current();
+          });
         }
       }
       return;
@@ -6979,6 +6991,10 @@ export default function RoomWithSync({
         if (decision.kind !== 'apply') return;
         const vidSnapshot = songReservationQueueRef.current[decision.queueIndex]?.videoId;
         if (!vidSnapshot) return;
+        if (stGuard === YT_PLAYER_STATE_ENDED) {
+          tryApplyQueued();
+          return;
+        }
         if (playbackQueueFallbackTimerRef.current) {
           clearTimeout(playbackQueueFallbackTimerRef.current);
         }
@@ -7212,7 +7228,7 @@ export default function RoomWithSync({
         return;
       }
 
-      const body = result.text.startsWith('【AI回答】') ? result.text : `【AI回答】 ${result.text}`;
+      const body = formatSongOverviewAiReplyBody(effectiveDisplayName, result.text);
       addAiMessage(body, {
         aiSource: 'chat_reply',
         videoId: vid,

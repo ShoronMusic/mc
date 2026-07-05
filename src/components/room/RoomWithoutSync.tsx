@@ -35,6 +35,7 @@ import { GUEST_AI_AT_QUESTION_UNAVAILABLE } from '@/lib/ai-usage-disclosure-copy
 import { resolveAiSelectionMode, type AiSelectionMode } from '@/lib/ai-selection-mode';
 import { AI_TRIAL_STATUS_UPDATED_EVENT } from '@/lib/ai-trial-status';
 import { USER_ROOM_AI_FEATURES_UPDATED_EVENT } from '@/lib/user-room-ai-features-client-events';
+import { formatSongOverviewAiReplyBody } from '@/lib/song-overview-request';
 import { requestSongOverviewChat } from '@/lib/song-overview-request-chat-client';
 import { SiteFeedbackModal } from '@/components/room/SiteFeedbackModal';
 import UserBar from '@/components/room/UserBar';
@@ -1702,7 +1703,7 @@ export default function RoomWithoutSync({
         return;
       }
 
-      const body = result.text.startsWith('【AI回答】') ? result.text : `【AI回答】 ${result.text}`;
+      const body = formatSongOverviewAiReplyBody(effectiveDisplayName, result.text);
       addAiMessage(body, { aiSource: 'chat_reply', videoId: vid });
       touchActivity();
       songOverviewRequestedVideoIdsRef.current.add(vid);
