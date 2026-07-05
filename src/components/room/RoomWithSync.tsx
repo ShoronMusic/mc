@@ -3690,7 +3690,7 @@ export default function RoomWithSync({
     const ownerStillPresent = resolveOwnerStillPresent(ownerClientId, participants);
     if (!ownerStillPresent) {
       if (ownerLeftAt === null) {
-        const ownerSeenThisSession = previousParticipantsRef.current.has(ownerClientId);
+        const ownerSeenThisSession = previousParticipantsRef.current?.has(ownerClientId) ?? false;
         if (ownerSeenThisSession) {
           const next = { ownerClientId, ownerLeftAt: Date.now() };
           apply(next);
@@ -5686,6 +5686,12 @@ export default function RoomWithSync({
         nextTurnOverride !== ''
           ? nextTurnOverride
           : resolveNextPresentTurnRef.current(resolvedPosterClientId);
+      const posterParticipant = participants.find((p) => p.clientId === resolvedPosterClientId);
+      const posterAuthUserId =
+        options?.publisherAuthUserIdHint?.trim() ||
+        (posterParticipant && 'authUserId' in posterParticipant
+          ? posterParticipant.authUserId?.trim()
+          : undefined);
       safePublish('changeVideo', {
         type: 'changeVideo',
         videoId: id,
@@ -5693,14 +5699,7 @@ export default function RoomWithSync({
         nextTurnClientId: nextTurnId,
         aiMode: selectionAiMode,
         publisherDisplayName,
-        ...(options?.publisherAuthUserIdHint?.trim() ||
-        participants.find((p) => p.clientId === resolvedPosterClientId)?.authUserId?.trim()
-          ? {
-              publisherAuthUserId:
-                options?.publisherAuthUserIdHint?.trim() ||
-                participants.find((p) => p.clientId === resolvedPosterClientId)?.authUserId?.trim(),
-            }
-          : {}),
+        ...(posterAuthUserId ? { publisherAuthUserId: posterAuthUserId } : {}),
       } as PlaybackMessage);
       playerRef.current?.loadVideoById(id);
       scheduleAutoPlayAfterChangeVideo();

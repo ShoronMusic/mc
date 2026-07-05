@@ -19,19 +19,19 @@ export function displayNameForChatMessage(m: ChatMessage): string {
 }
 
 export function chatMessagesToLogRows(messages: ChatMessage[]): RoomChatLogRow[] {
-  return messages
-    .map((m) => {
-      const body = (typeof m.body === 'string' ? m.body : '').trim();
-      if (!body) return null;
-      return {
-        clientMessageId: m.id,
-        createdAt: m.createdAt,
-        messageType: m.messageType,
-        displayName: displayNameForChatMessage(m),
-        body,
-      };
-    })
-    .filter((r): r is RoomChatLogRow => r != null);
+  const rows: RoomChatLogRow[] = [];
+  for (const m of messages) {
+    const body = (typeof m.body === 'string' ? m.body : '').trim();
+    if (!body) continue;
+    rows.push({
+      clientMessageId: m.id,
+      createdAt: m.createdAt,
+      messageType: m.messageType,
+      displayName: displayNameForChatMessage(m),
+      body,
+    });
+  }
+  return rows;
 }
 
 /** DB 行と未保存のライブ行を時系列マージ（clientMessageId で重複除去） */
