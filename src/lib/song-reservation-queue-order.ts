@@ -7,11 +7,13 @@ import { resolveActivePublisherClientId } from '@/lib/room-publisher-identity';
 export type SongReservationQueueEntryLike = {
   publisherClientId: string;
   publisherAuthUserId?: string;
+  publisherDisplayName?: string;
 };
 
 export type QueueParticipantIdentity = {
   clientId: string;
   authUserId?: string;
+  displayName?: string;
 };
 
 /** キュー行が指定参加者（ターン上の clientId）の予約か */
@@ -19,6 +21,7 @@ export function queueEntryMatchesParticipant(
   entry: SongReservationQueueEntryLike,
   participantClientId: string,
   participants: readonly QueueParticipantIdentity[],
+  participantDisplayNameHint?: string,
 ): boolean {
   const cid = participantClientId.trim();
   if (!cid) return false;
@@ -36,18 +39,27 @@ export function queueEntryMatchesParticipant(
     );
     if (resolved === cid) return true;
   }
+  const name =
+    participantDisplayNameHint?.trim() ||
+    row?.displayName?.trim() ||
+    '';
+  const entryName = entry.publisherDisplayName?.trim();
+  if (name && entryName && name === entryName) return true;
   return false;
 }
 
-/** 参加者が選曲予約キューに載っているか（clientId / authUserId / 再接続 ID を照合） */
+/** 参加者が選曲予約キューに載っているか（clientId / authUserId / 表示名 / 再接続 ID を照合） */
 export function participantHasQueuedReservation(
   participantClientId: string,
   queue: readonly SongReservationQueueEntryLike[],
   participants: readonly QueueParticipantIdentity[],
+  participantDisplayNameHint?: string,
 ): boolean {
   const cid = participantClientId.trim();
   if (!cid || queue.length === 0) return false;
-  return queue.some((e) => queueEntryMatchesParticipant(e, cid, participants));
+  return queue.some((e) =>
+    queueEntryMatchesParticipant(e, cid, participants, participantDisplayNameHint),
+  );
 }
 
 export type ResolveSongReservationQueueApplyResult =
@@ -83,8 +95,9 @@ export function resolveSongReservationQueueApply(params: {
 
   for (let step = 0; step < ring.length; step++) {
     const cid = ring[(startIdx + step) % ring.length];
+    const displayName = identities.find((p) => p.clientId === cid)?.displayName;
     const queueIndex = params.queue.findIndex((e) =>
-      queueEntryMatchesParticipant(e, cid, identities),
+      queueEntryMatchesParticipant(e, cid, identities, displayName),
     );
     if (queueIndex < 0) {
       return { kind: 'prompt', clientId: cid };

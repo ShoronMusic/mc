@@ -16,6 +16,8 @@ type RoomLiveStatusPayload = {
     canEnter?: boolean;
     isOrganizer?: boolean;
     canResume?: boolean;
+    /** 単一部屋照会時のみ。Ably 在室数（入室ゲート用） */
+    presenceCount?: number;
   };
 };
 
@@ -95,29 +97,42 @@ export async function runRoomEntryGateCheck(
       };
     }
 
-    try {
-      const p = await fetch(`/api/room-presence?rooms=${encodeURIComponent(roomId)}`, {
-        credentials: 'include',
-      });
-      const pd = (await p.json()) as {
-        configured?: boolean;
-        rooms?: Array<{ roomId: string; count: number }>;
-      };
-      if (pd?.configured === true) {
-        const row = Array.isArray(pd.rooms) ? pd.rooms.find((r) => r.roomId === roomId) : null;
-        const count = row?.count ?? 0;
-        const isOrganizer = data?.room?.isOrganizer === true;
-        if (count === 0 && !isOrganizer && !isTrialRoomId(roomId)) {
-          return {
-            ok: false,
-            closedMessage: '主催者の入室待ちです。主催者が先に入室すると参加できます。',
-            liveTitle,
-            roomDisplayTitle,
-          };
-        }
+    const isOrganizer = data?.room?.isOrganizer === true;
+    const presenceFromStatus =
+      typeof data?.room?.presenceCount === 'number' ? data.room.presenceCount : null;
+    if (presenceFromStatus !== null) {
+      if (presenceFromStatus === 0 && !isOrganizer && !trialRoom) {
+        return {
+          ok: false,
+          closedMessage: '主催者の入室待ちです。主催者が先に入室すると参加できます。',
+          liveTitle,
+          roomDisplayTitle,
+        };
       }
-    } catch {
-      // 参加者数取得に失敗した場合は live 判定のみで通す（従来どおり）
+    } else {
+      try {
+        const p = await fetch(`/api/room-presence?rooms=${encodeURIComponent(roomId)}`, {
+          credentials: 'include',
+        });
+        const pd = (await p.json()) as {
+          configured?: boolean;
+          rooms?: Array<{ roomId: string; count: number }>;
+        };
+        if (pd?.configured === true) {
+          const row = Array.isArray(pd.rooms) ? pd.rooms.find((r) => r.roomId === roomId) : null;
+          const count = row?.count ?? 0;
+          if (count === 0 && !isOrganizer && !trialRoom) {
+            return {
+              ok: false,
+              closedMessage: '主催者の入室待ちです。主催者が先に入室すると参加できます。',
+              liveTitle,
+              roomDisplayTitle,
+            };
+          }
+        }
+      } catch {
+        // 参加者数取得に失敗した場合は live 判定のみで通す（従来どおり）
+      }
     }
 
     return { ok: true, liveTitle, roomDisplayTitle };

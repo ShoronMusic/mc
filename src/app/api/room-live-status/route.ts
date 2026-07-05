@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { endStaleLiveGatheringIfNeeded } from '@/lib/stale-live-gathering';
+import { endStaleLiveGatheringIfNeeded, countAblyPresenceForRoom } from '@/lib/stale-live-gathering';
 import { displayNameFromAuthUserMetadata } from '@/lib/auth-user-public-display-name';
 
 export const dynamic = 'force-dynamic';
@@ -103,10 +103,19 @@ export async function GET(request: Request) {
   const roomId = safeRoomId(searchParams.get('roomId') ?? '');
   const roomsRaw = searchParams.get('rooms') ?? '';
 
+  /** 単一部屋照会時は Ably を1回だけ取得し、stale 判定と入室ゲートの在室数に共用する */
+  let singleRoomPresenceCount: number | undefined;
   if (roomId) {
+    const counted = await countAblyPresenceForRoom(roomId);
+    if (typeof counted === 'number') {
+      singleRoomPresenceCount = counted;
+    }
     const adminForStale = createAdminClient();
     if (adminForStale) {
-      await endStaleLiveGatheringIfNeeded(adminForStale, roomId);
+      await endStaleLiveGatheringIfNeeded(adminForStale, roomId, {
+        presenceCount: singleRoomPresenceCount,
+        skipPresenceFetch: true,
+      });
     }
   }
 
@@ -308,6 +317,9 @@ export async function GET(request: Request) {
               isOrganizer,
               canResume: false,
               hostDisplayName: first.hostDisplayName,
+              ...(typeof singleRoomPresenceCount === 'number'
+                ? { presenceCount: singleRoomPresenceCount }
+                : {}),
             }
           : {
               roomId,
@@ -320,6 +332,9 @@ export async function GET(request: Request) {
               canEnter: true,
               isOrganizer,
               canResume,
+              ...(typeof singleRoomPresenceCount === 'number'
+                ? { presenceCount: singleRoomPresenceCount }
+                : {}),
             },
         rooms: [],
       },

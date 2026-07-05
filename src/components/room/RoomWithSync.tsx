@@ -721,6 +721,7 @@ export default function RoomWithSync({
   const [skipUsedForVideoId, setSkipUsedForVideoId] = useState<string | null>(null);
   /** 5分制限キューで選曲予約中の参加者（参加者欄のステータス用・複数可） */
   const [queuedSongPublisherClientIds, setQueuedSongPublisherClientIds] = useState<string[]>([]);
+  const queuedSongPublisherClientIdsRef = useRef<string[]>([]);
   /** 次の選曲ターンで自動パスする参加者（チャット「パス」で登録） */
   const [passTurnReservationClientIds, setPassTurnReservationClientIds] = useState<string[]>([]);
   const passTurnReservationClientIdsRef = useRef<string[]>([]);
@@ -772,6 +773,7 @@ export default function RoomWithSync({
       pendingQueuedPublisherRef.current = '';
     }
     setQueuedSongPublisherClientIds(q.map((e) => e.publisherClientId));
+    queuedSongPublisherClientIdsRef.current = q.map((e) => e.publisherClientId);
   }, []);
   const [favoritedVideoIds, setFavoritedVideoIds] = useState<string[]>([]);
   const [chatStyleAdminTools, setChatStyleAdminTools] = useState(false);
@@ -1458,7 +1460,19 @@ export default function RoomWithSync({
     participantsRef.current.map((p) => ({
       clientId: p.clientId,
       authUserId: (p as { authUserId?: string }).authUserId,
+      displayName: p.displayName,
     }));
+  const isParticipantQueuedForTurn = (clientId: string, displayName?: string) => {
+    const cid = clientId.trim();
+    if (!cid) return false;
+    const identities = getQueueParticipantIdentities();
+    const q = songReservationQueueRef.current;
+    const name = (displayName ?? identities.find((p) => p.clientId === cid)?.displayName ?? '').trim();
+    if (participantHasQueuedReservation(cid, q, identities, name || undefined)) return true;
+    if (queuedSongPublisherClientIdsRef.current.includes(cid)) return true;
+    if (name && q.some((e) => e.publisherDisplayName?.trim() === name)) return true;
+    return false;
+  };
 
   useEffect(() => {
     syncPublisherIdentityMapFromParticipants(
@@ -3636,6 +3650,7 @@ export default function RoomWithSync({
       const turnId = turnClientId.trim();
       const name = displayName.trim() || '次の方';
       if (!turnId || participatingOrderRef.current.length <= 1) return;
+      if (isParticipantQueuedForTurn(turnId, name)) return;
       const waitPayload: ChatMessagePayload = {
         id: createMessageId(),
         body: `${name}さんの選曲待ち`,
@@ -3705,13 +3720,7 @@ export default function RoomWithSync({
         return;
       }
 
-      if (
-        participantHasQueuedReservation(
-          turnId,
-          songReservationQueueRef.current,
-          getQueueParticipantIdentities(),
-        )
-      ) {
+      if (isParticipantQueuedForTurn(turnId, name)) {
         queueMicrotask(() => {
           playbackEndedApplyRef.current();
         });
@@ -4023,20 +4032,13 @@ export default function RoomWithSync({
       if (sid === cur) {
         removePassTurnReservation(sid);
         const nextId = resolveNextPresentTurnRef.current(cur);
+        const nextParticipant = order.find((p) => p.clientId === nextId);
+        const nextName = nextParticipant?.displayName ?? '次の方';
         setCurrentTurnClientId(nextId);
         currentTurnClientIdRef.current = nextId;
         if (imCoordinator) {
           publishRef.current?.(TURN_STATE_EVENT, buildTurnStatePayload(nextId));
-          const nextParticipant = order.find((p) => p.clientId === nextId);
-          const nextName = nextParticipant?.displayName ?? '次の方';
-          const identities = getQueueParticipantIdentities();
-          const nextHasQueue =
-            Boolean(nextId) &&
-            participantHasQueuedReservation(
-              nextId,
-              songReservationQueueRef.current,
-              identities,
-            );
+          const nextHasQueue = Boolean(nextId) && isParticipantQueuedForTurn(nextId, nextName);
           if (!nextId) {
             addSystemMessage(`${displayName}さんがパスしました。`);
           } else if (nextHasQueue) {
@@ -4047,14 +4049,7 @@ export default function RoomWithSync({
             promptSelectorTurnMessages(nextId, nextName);
           }
         }
-        if (
-          nextId &&
-          participantHasQueuedReservation(
-            nextId,
-            songReservationQueueRef.current,
-            getQueueParticipantIdentities(),
-          )
-        ) {
+        if (nextId && isParticipantQueuedForTurn(nextId, nextName)) {
           queueMicrotask(() => {
             playbackEndedApplyRef.current();
           });
@@ -4828,27 +4823,17 @@ export default function RoomWithSync({
       if (myClientId === coordinationRef.current) {
         publishRef.current?.(TURN_STATE_EVENT, buildTurnStatePayload(nextId));
         if (nextId) {
-          const nextHasQueue = participantHasQueuedReservation(
-            nextId,
-            songReservationQueueRef.current,
-            getQueueParticipantIdentities(),
-          );
+          const nextName = nextParticipant?.displayName ?? '次の方';
+          const nextHasQueue = isParticipantQueuedForTurn(nextId, nextName);
           if (nextHasQueue) {
             addSystemMessage(
-              `${nextParticipant?.displayName ?? '次の方'}さんは予約済みです。この曲の終了後に再生されます。`,
+              `${nextName}さんは予約済みです。この曲の終了後に再生されます。`,
             );
           } else {
-            promptSelectorTurnMessages(nextId, nextParticipant?.displayName ?? '次の方');
+            promptSelectorTurnMessages(nextId, nextName);
           }
         }
-        if (
-          nextId &&
-          participantHasQueuedReservation(
-            nextId,
-            songReservationQueueRef.current,
-            getQueueParticipantIdentities(),
-          )
-        ) {
+        if (nextId && isParticipantQueuedForTurn(nextId, nextParticipant?.displayName)) {
           queueMicrotask(() => {
             playbackEndedApplyRef.current();
           });
@@ -6948,6 +6933,10 @@ export default function RoomWithSync({
           const promptId = decision.clientId;
           const order = participatingOrderRef.current;
           const displayName = order.find((o) => o.clientId === promptId)?.displayName ?? '次の方';
+          if (isParticipantQueuedForTurn(promptId, displayName)) {
+            syncSongReservationQueueHead();
+            return;
+          }
           setCurrentTurnClientId(promptId);
           currentTurnClientIdRef.current = promptId;
           if (myClientId === coordinationRef.current) {
@@ -8250,6 +8239,15 @@ export default function RoomWithSync({
       favoritedVideoIds={favoritedVideoIds}
       onFavoriteVideoToggle={handleFavoriteCurrentClick}
       onRefreshFavoritedVideoIds={fetchFavoritedIds}
+      turnPassControls={
+        !isGuest && participatesInSelection && participatingOrder.length > 1 && myClientId
+          ? {
+              isMyTurn: currentTurnClientId === myClientId,
+              passReserved: passTurnReservationClientIds.includes(myClientId),
+              onConfirmPass: () => handlePassPhraseFromClient(myClientId, effectiveDisplayName),
+            }
+          : null
+      }
       trailingSlot={
         isYoutubeKeywordSearchEnabled() ? (
           <button

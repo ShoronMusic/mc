@@ -648,6 +648,12 @@ interface ChatInputProps {
   }) => void | Promise<void>;
   /** ライブラリを開いたとき等にお気に入り ID 一覧を再取得 */
   onRefreshFavoritedVideoIds?: () => void;
+  /** 同期部屋: 自分の番のパス／パス予約（チャットに「パス」を出さず handlePassPhrase へ） */
+  turnPassControls?: {
+    isMyTurn: boolean;
+    passReserved: boolean;
+    onConfirmPass: () => void;
+  } | null;
 }
 
 const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput(
@@ -671,10 +677,12 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
     favoritedVideoIds = [],
     onFavoriteVideoToggle,
     onRefreshFavoritedVideoIds,
+    turnPassControls = null,
   },
   ref
 ) {
   const [value, setValue] = useState('');
+  const [passConfirmOpen, setPassConfirmOpen] = useState(false);
   const [searching, setSearching] = useState(false);
   const [searchResultsOpen, setSearchResultsOpen] = useState(false);
   const [usageGuideOpen, setUsageGuideOpen] = useState(false);
@@ -713,6 +721,12 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
   const [libraryVideoError, setLibraryVideoError] = useState<string | null>(null);
   const isLg = useIsLgViewport();
   const isMobileLandscape = useIsMobileLandscapeViewport();
+  const showTurnPassButton = Boolean(turnPassControls && participatesInSelection && !roomInteractionLocked);
+  const turnPassButtonLabel = turnPassControls?.isMyTurn
+    ? 'パス'
+    : turnPassControls?.passReserved
+      ? '予約取消'
+      : 'パス予約';
   const [libraryArtistInfo, setLibraryArtistInfo] = useState<LibraryArtistInfo | null>(null);
   const [libraryArtistInfoLoading, setLibraryArtistInfoLoading] = useState(false);
   const [libraryArtistInfoError, setLibraryArtistInfoError] = useState<string | null>(null);
@@ -914,6 +928,33 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
 
     onSendMessage(trimmed);
     setValue('');
+  };
+
+  const confirmTurnPass = () => {
+    setPassConfirmOpen(false);
+    turnPassControls?.onConfirmPass();
+  };
+
+  const renderTurnPassButton = (className: string) => {
+    if (!showTurnPassButton || !turnPassControls) return null;
+    return (
+      <button
+        type="button"
+        onClick={() => setPassConfirmOpen(true)}
+        title={
+          turnPassControls.isMyTurn
+            ? 'この番の選曲をパスする'
+            : turnPassControls.passReserved
+              ? 'パス予約を取り消す'
+              : '次の自分の番で自動パスする予約を入れる'
+        }
+        className={className}
+        aria-haspopup="dialog"
+        aria-expanded={passConfirmOpen}
+      >
+        {turnPassButtonLabel}
+      </button>
+    );
   };
 
   const submitVideoUrl = (mode: AiSelectionMode) => {
@@ -2261,13 +2302,12 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                 </li>
               ) : null}
               <li>
-                自分の順番が回ってきて選曲をパスする場合は、発言欄に
+                自分の順番が回ってきたら<strong className="text-gray-200">パス</strong>
+                ボタンで選曲をスキップできます（確認のあと実行。チャットに「パス」とは出ません）。まだ自分の番でないときは
+                <span className="text-gray-200"> パス予約 </span>
+                ボタンで、次の自分の番に自動パスする予約が入ります（参加者欄に「パス予約」と表示）。発言欄に
                 <span className="text-gray-200"> パス </span>
-                と入力してください。まだ自分の番でなくても
-                <span className="text-gray-200"> パス </span>
-                を送ると、次の自分の番で自動パスする予約が入ります（参加者欄に「パス予約」と表示）。もう一度
-                <span className="text-gray-200"> パス </span>
-                で取り消せます。
+                と入力しても同じ動作です。
               </li>
               <li>
                 <span className="font-medium text-gray-200">AIに質問</span>
@@ -2385,6 +2425,53 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
           </div>
         </div>
       )}
+
+      {passConfirmOpen && turnPassControls ? (
+        <div
+          className="fixed inset-0 z-[88] flex items-center justify-center bg-black/65 p-4"
+          role="presentation"
+          onClick={() => setPassConfirmOpen(false)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="turn-pass-confirm-title"
+            className="w-full max-w-md rounded-lg border border-violet-800/50 bg-gray-900 p-4 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="turn-pass-confirm-title" className="text-sm font-semibold text-violet-100">
+              {turnPassControls.isMyTurn
+                ? '選曲をパス'
+                : turnPassControls.passReserved
+                  ? 'パス予約の取消'
+                  : 'パス予約'}
+            </h2>
+            <p className="mt-2 text-xs leading-relaxed text-gray-300">
+              {turnPassControls.isMyTurn
+                ? 'この番の選曲をパスします。次の方に回ります（チャットには「パス」と表示されません）。'
+                : turnPassControls.passReserved
+                  ? '次の自分の番での自動パス予約を取り消します。'
+                  : 'まだ自分の番ではありませんが、次の自分の番が来たら自動でパスする予約を入れます。'}
+            </p>
+            <div className="mt-4 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                className="rounded border border-gray-600 bg-gray-800 px-4 py-2 text-sm text-gray-200 hover:bg-gray-700"
+                onClick={() => setPassConfirmOpen(false)}
+              >
+                キャンセル
+              </button>
+              <button
+                type="button"
+                onClick={confirmTurnPass}
+                className="rounded border border-violet-600/80 bg-violet-800/80 px-4 py-2 text-sm font-semibold text-violet-50 hover:bg-violet-700/90"
+              >
+                {turnPassButtonLabel}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {themePlaylistConfirmOpen && themePlaylistRoomSubmit && onVideoUrl ? (
         <div
@@ -3602,6 +3689,9 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
               aria-disabled={roomInteractionLocked}
             />
           </div>
+          {renderTurnPassButton(
+            'box-border hidden h-[3.75rem] w-[4.25rem] shrink-0 items-center justify-center rounded border border-violet-600/70 bg-violet-900/35 px-1 text-[11px] font-semibold leading-tight text-violet-100 hover:bg-violet-800/50 sm:flex',
+          )}
           {themePlaylistRoomSubmit && onVideoUrl ? (
             <div className="hidden h-[3.75rem] shrink-0 flex-col justify-center gap-1 sm:flex">
               <button
@@ -3664,6 +3754,9 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
             </button>
           )}
           <div className="flex w-full items-center gap-2 sm:hidden">
+            {renderTurnPassButton(
+              'box-border flex h-11 min-w-[4.25rem] shrink-0 items-center justify-center rounded border border-violet-600/70 bg-violet-900/35 px-1 text-[11px] font-semibold text-violet-100 hover:bg-violet-800/50',
+            )}
             {showDualSongButtons ? (
               <>
                 <button

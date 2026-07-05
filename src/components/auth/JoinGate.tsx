@@ -186,27 +186,32 @@ export function JoinGate({ roomId }: JoinGateProps) {
       return true;
     };
 
-    void checkRoomLive().then(async (isLive) => {
+    const fromShare = hasPendingShareChatText() || isShareRoomEnterPending();
+    const lastEnter = fromStart ? null : getLastRoomEnterForRoom(roomId);
+    const recentResume = isRecentRoomEnter(lastEnter);
+    const shouldResumeEnter = !fromStart && (fromShare || recentResume);
+    if (shouldResumeEnter) {
+      setLoadingHint(fromShare ? '共有から部屋に戻っています…' : '部屋に戻っています…');
+      skipSessionGateRef.current = true;
+    }
+
+    void (async () => {
+      const [isLive, user] = await Promise.all([
+        checkRoomLive(),
+        supabase
+          ? resolveSupabaseUserClient({
+              maxWaitMs: shouldResumeEnter || getKnownAuthUserId() ? 12000 : 2500,
+              tryRefreshSession: shouldResumeEnter || Boolean(getKnownAuthUserId()),
+            })
+          : Promise.resolve(null),
+      ]);
+
       if (!isLive) return;
 
       if (!supabase) {
         if (!tryEnterAsGuestFromStorage()) setStatus('choice');
         return;
       }
-
-      const fromShare = hasPendingShareChatText() || isShareRoomEnterPending();
-      const lastEnter = fromStart ? null : getLastRoomEnterForRoom(roomId);
-      const recentResume = isRecentRoomEnter(lastEnter);
-      const shouldResumeEnter = !fromStart && (fromShare || recentResume);
-      if (shouldResumeEnter) {
-        setLoadingHint(fromShare ? '共有から部屋に戻っています…' : '部屋に戻っています…');
-        skipSessionGateRef.current = true;
-      }
-
-      const user = await resolveSupabaseUserClient({
-        maxWaitMs: shouldResumeEnter || getKnownAuthUserId() ? 12000 : 2500,
-        tryRefreshSession: shouldResumeEnter || Boolean(getKnownAuthUserId()),
-      });
 
       if (user) {
         const cid = getRoomClientId(roomId, user.id);
@@ -271,7 +276,7 @@ export function JoinGate({ roomId }: JoinGateProps) {
       setAuthUserId(null);
       if (fromShare) consumeShareRoomEnterPending();
       if (!tryEnterAsGuestFromStorage()) setStatus('choice');
-    });
+    })();
   }, [roomId, consentOk, tryEnterRoom, commitEnterRoom]);
 
   const handleJoin = async (name: string, mode: 'guest' | 'registered') => {

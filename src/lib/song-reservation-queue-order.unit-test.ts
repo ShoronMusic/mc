@@ -79,6 +79,17 @@ test('participantHasQueuedReservation: matches authUserId when clientId differs'
   );
 });
 
+test('participantHasQueuedReservation: matches displayName when clientId differs', () => {
+  assert.equal(
+    participantHasQueuedReservation(
+      'mc-u-hachi',
+      [{ publisherClientId: 'ably-old', publisherDisplayName: 'ハチ' }],
+      [{ clientId: 'mc-u-hachi', displayName: 'ハチ' }],
+    ),
+    true,
+  );
+});
+
 test('queueEntryMatchesParticipant: false for unrelated participant', () => {
   assert.equal(
     queueEntryMatchesParticipant(
