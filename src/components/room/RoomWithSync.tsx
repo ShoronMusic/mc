@@ -186,6 +186,7 @@ import {
   resolveSongReservationQueueApply,
   removePublisherReservationFromQueue,
   shouldForceReservationQueueWhilePending,
+  participantHasQueuedReservation,
 } from '@/lib/song-reservation-queue-order';
 import { isChatMessageVisibleToClient } from '@/lib/chat-message-audience';
 import {
@@ -760,6 +761,7 @@ export default function RoomWithSync({
       participatingOrder: participatingOrderRef.current,
       presentClientIds: presentClientIdsRef.current,
       queue: q,
+      participantIdentities: getQueueParticipantIdentities(),
     });
     if (decision.kind === 'apply') {
       const entry = q[decision.queueIndex];
@@ -1452,6 +1454,11 @@ export default function RoomWithSync({
   ]);
   const participantsRef = useRef(participants);
   participantsRef.current = participants;
+  const getQueueParticipantIdentities = () =>
+    participantsRef.current.map((p) => ({
+      clientId: p.clientId,
+      authUserId: (p as { authUserId?: string }).authUserId,
+    }));
 
   useEffect(() => {
     syncPublisherIdentityMapFromParticipants(
@@ -3698,6 +3705,19 @@ export default function RoomWithSync({
         return;
       }
 
+      if (
+        participantHasQueuedReservation(
+          turnId,
+          songReservationQueueRef.current,
+          getQueueParticipantIdentities(),
+        )
+      ) {
+        queueMicrotask(() => {
+          playbackEndedApplyRef.current();
+        });
+        return;
+      }
+
       if (options?.afterAiCharacterSong && isHumanParticipantClientId(turnId)) {
         joinPasteHintAiPickUsedRef.current = false;
         addAiMessage(JOIN_PASTE_YOUTUBE_URL_HINT, {
@@ -3988,6 +4008,7 @@ export default function RoomWithSync({
           participatingOrder: order,
           presentClientIds: presentClientIdsRef.current,
           queue: songReservationQueueRef.current,
+          participantIdentities: getQueueParticipantIdentities(),
         });
         if (queueDecision.kind === 'prompt' && queueDecision.clientId === sid) {
           cur = sid;
@@ -4008,9 +4029,14 @@ export default function RoomWithSync({
           publishRef.current?.(TURN_STATE_EVENT, buildTurnStatePayload(nextId));
           const nextParticipant = order.find((p) => p.clientId === nextId);
           const nextName = nextParticipant?.displayName ?? '次の方';
+          const identities = getQueueParticipantIdentities();
           const nextHasQueue =
             Boolean(nextId) &&
-            songReservationQueueRef.current.some((e) => e.publisherClientId === nextId);
+            participantHasQueuedReservation(
+              nextId,
+              songReservationQueueRef.current,
+              identities,
+            );
           if (!nextId) {
             addSystemMessage(`${displayName}さんがパスしました。`);
           } else if (nextHasQueue) {
@@ -4023,7 +4049,11 @@ export default function RoomWithSync({
         }
         if (
           nextId &&
-          songReservationQueueRef.current.some((e) => e.publisherClientId === nextId)
+          participantHasQueuedReservation(
+            nextId,
+            songReservationQueueRef.current,
+            getQueueParticipantIdentities(),
+          )
         ) {
           queueMicrotask(() => {
             playbackEndedApplyRef.current();
@@ -4730,8 +4760,12 @@ export default function RoomWithSync({
         participatingOrder: order,
         presentClientIds: present,
         queue: qReserve,
+        participantIdentities: getQueueParticipantIdentities(),
       });
       if (queueDecision.kind === 'apply') {
+        queueMicrotask(() => {
+          playbackEndedApplyRef.current();
+        });
         return;
       }
       if (queueDecision.kind === 'prompt') {
@@ -4794,8 +4828,10 @@ export default function RoomWithSync({
       if (myClientId === coordinationRef.current) {
         publishRef.current?.(TURN_STATE_EVENT, buildTurnStatePayload(nextId));
         if (nextId) {
-          const nextHasQueue = songReservationQueueRef.current.some(
-            (e) => e.publisherClientId === nextId,
+          const nextHasQueue = participantHasQueuedReservation(
+            nextId,
+            songReservationQueueRef.current,
+            getQueueParticipantIdentities(),
           );
           if (nextHasQueue) {
             addSystemMessage(
@@ -4807,7 +4843,11 @@ export default function RoomWithSync({
         }
         if (
           nextId &&
-          songReservationQueueRef.current.some((e) => e.publisherClientId === nextId)
+          participantHasQueuedReservation(
+            nextId,
+            songReservationQueueRef.current,
+            getQueueParticipantIdentities(),
+          )
         ) {
           queueMicrotask(() => {
             playbackEndedApplyRef.current();
@@ -6902,6 +6942,7 @@ export default function RoomWithSync({
           participatingOrder: participatingOrderRef.current,
           presentClientIds: presentClientIdsRef.current,
           queue: qApply,
+          participantIdentities: getQueueParticipantIdentities(),
         });
         if (decision.kind === 'prompt') {
           const promptId = decision.clientId;
@@ -6983,6 +7024,7 @@ export default function RoomWithSync({
           participatingOrder: participatingOrderRef.current,
           presentClientIds: presentClientIdsRef.current,
           queue: songReservationQueueRef.current,
+          participantIdentities: getQueueParticipantIdentities(),
         });
         if (decision.kind === 'prompt') {
           tryApplyQueued();
@@ -7005,6 +7047,7 @@ export default function RoomWithSync({
             participatingOrder: participatingOrderRef.current,
             presentClientIds: presentClientIdsRef.current,
             queue: songReservationQueueRef.current,
+            participantIdentities: getQueueParticipantIdentities(),
           });
           if (decNow.kind === 'apply' && songReservationQueueRef.current[decNow.queueIndex]?.videoId !== vidSnapshot) {
             return;

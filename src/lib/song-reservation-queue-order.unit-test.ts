@@ -4,6 +4,8 @@ import {
   resolveSongReservationQueueApply,
   removePublisherReservationFromQueue,
   shouldForceReservationQueueWhilePending,
+  participantHasQueuedReservation,
+  queueEntryMatchesParticipant,
 } from './song-reservation-queue-order';
 import type { SelectionRoundParticipant } from '@/lib/room-selection-round';
 
@@ -48,6 +50,43 @@ test('resolveSongReservationQueueApply: apply due user entry even if not FIFO he
       queue: [{ publisherClientId: 'ai' }, { publisherClientId: 'b' }],
     }),
     { kind: 'apply', queueIndex: 1 },
+  );
+});
+
+test('resolveSongReservationQueueApply: apply when queue uses authUserId and ring uses live clientId', () => {
+  const auth = '11111111-1111-1111-1111-111111111111';
+  assert.deepEqual(
+    resolveSongReservationQueueApply({
+      currentTurnClientId: 'mc-u-live',
+      participatingOrder: [{ clientId: 'mc-u-live' }, { clientId: 'b' }],
+      presentClientIds: new Set(['mc-u-live', 'b']),
+      queue: [{ publisherClientId: 'old-ably-cid', publisherAuthUserId: auth }],
+      participantIdentities: [{ clientId: 'mc-u-live', authUserId: auth }],
+    }),
+    { kind: 'apply', queueIndex: 0 },
+  );
+});
+
+test('participantHasQueuedReservation: matches authUserId when clientId differs', () => {
+  const auth = '22222222-2222-2222-2222-222222222222';
+  assert.equal(
+    participantHasQueuedReservation(
+      'mc-u-hachi',
+      [{ publisherClientId: 'ably-old', publisherAuthUserId: auth }],
+      [{ clientId: 'mc-u-hachi', authUserId: auth }],
+    ),
+    true,
+  );
+});
+
+test('queueEntryMatchesParticipant: false for unrelated participant', () => {
+  assert.equal(
+    queueEntryMatchesParticipant(
+      { publisherClientId: 'x' },
+      'mc-u-hachi',
+      [{ clientId: 'mc-u-hachi', authUserId: 'aaa' }],
+    ),
+    false,
   );
 });
 

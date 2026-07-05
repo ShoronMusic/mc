@@ -2,11 +2,53 @@ import {
   getSelectablePresentRing,
   type SelectionRoundParticipant,
 } from '@/lib/room-selection-round';
+import { resolveActivePublisherClientId } from '@/lib/room-publisher-identity';
 
 export type SongReservationQueueEntryLike = {
   publisherClientId: string;
   publisherAuthUserId?: string;
 };
+
+export type QueueParticipantIdentity = {
+  clientId: string;
+  authUserId?: string;
+};
+
+/** キュー行が指定参加者（ターン上の clientId）の予約か */
+export function queueEntryMatchesParticipant(
+  entry: SongReservationQueueEntryLike,
+  participantClientId: string,
+  participants: readonly QueueParticipantIdentity[],
+): boolean {
+  const cid = participantClientId.trim();
+  if (!cid) return false;
+  const pubId = entry.publisherClientId.trim();
+  if (pubId && pubId === cid) return true;
+  const row = participants.find((p) => p.clientId === cid);
+  const auth = row?.authUserId?.trim();
+  const entryAuth = entry.publisherAuthUserId?.trim();
+  if (auth && entryAuth && auth === entryAuth) return true;
+  if (pubId) {
+    const resolved = resolveActivePublisherClientId(
+      pubId,
+      entryAuth,
+      participants.map((p) => ({ clientId: p.clientId, authUserId: p.authUserId })),
+    );
+    if (resolved === cid) return true;
+  }
+  return false;
+}
+
+/** 参加者が選曲予約キューに載っているか（clientId / authUserId / 再接続 ID を照合） */
+export function participantHasQueuedReservation(
+  participantClientId: string,
+  queue: readonly SongReservationQueueEntryLike[],
+  participants: readonly QueueParticipantIdentity[],
+): boolean {
+  const cid = participantClientId.trim();
+  if (!cid || queue.length === 0) return false;
+  return queue.some((e) => queueEntryMatchesParticipant(e, cid, participants));
+}
 
 export type ResolveSongReservationQueueApplyResult =
   | { kind: 'apply'; queueIndex: number }
@@ -22,9 +64,15 @@ export function resolveSongReservationQueueApply(params: {
   participatingOrder: SelectionRoundParticipant[];
   presentClientIds: ReadonlySet<string>;
   queue: SongReservationQueueEntryLike[];
+  /** authUserId 照合（省略時は participatingOrder の clientId のみ） */
+  participantIdentities?: readonly QueueParticipantIdentity[];
 }): ResolveSongReservationQueueApplyResult {
   const ring = getSelectablePresentRing(params.participatingOrder, params.presentClientIds);
   if (ring.length === 0 || params.queue.length === 0) return { kind: 'idle' };
+
+  const identities: QueueParticipantIdentity[] = params.participantIdentities
+    ? [...params.participantIdentities]
+    : params.participatingOrder.map((p) => ({ clientId: p.clientId }));
 
   const cur = params.currentTurnClientId.trim();
   let startIdx = 0;
@@ -35,7 +83,9 @@ export function resolveSongReservationQueueApply(params: {
 
   for (let step = 0; step < ring.length; step++) {
     const cid = ring[(startIdx + step) % ring.length];
-    const queueIndex = params.queue.findIndex((e) => e.publisherClientId.trim() === cid);
+    const queueIndex = params.queue.findIndex((e) =>
+      queueEntryMatchesParticipant(e, cid, identities),
+    );
     if (queueIndex < 0) {
       return { kind: 'prompt', clientId: cid };
     }
