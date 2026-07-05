@@ -88,6 +88,10 @@ export interface ChatMessage {
   characterTtsArtistJa?: string | null;
   /** 入室直後の選曲案内に「選曲方法」リンクと AI 先出しボタンを付ける */
   joinPasteHintCta?: boolean;
+  /** この clientId の参加者だけに表示（Ably 同期・未指定は全員） */
+  audienceClientId?: string;
+  /** この clientId の参加者には表示しない（他の全員向け） */
+  audienceExcludeClientId?: string;
 }
 
 /** Ably で送るチャットイベントのペイロード */
@@ -154,4 +158,8 @@ export interface ChatMessagePayload {
   characterTtsArtistJa?: string | null;
   /** 入室直後の選曲案内 CTA */
   joinPasteHintCta?: boolean;
+  /** この clientId の参加者だけに表示 */
+  audienceClientId?: string;
+  /** この clientId の参加者には表示しない */
+  audienceExcludeClientId?: string;
 }

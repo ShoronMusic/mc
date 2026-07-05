@@ -186,6 +186,7 @@ import {
   removePublisherReservationFromQueue,
   shouldForceReservationQueueWhilePending,
 } from '@/lib/song-reservation-queue-order';
+import { isChatMessageVisibleToClient } from '@/lib/chat-message-audience';
 import {
   buildTurnStatePersistData,
   persistTurnState,
@@ -2439,7 +2440,7 @@ export default function RoomWithSync({
         tidbitCountSinceUserMessageRef.current = 0;
         lastEndedVideoIdForTidbitRef.current = null;
         const senderId = data.clientId ?? '';
-        if (senderId && isPassPhrase(data.body)) {
+        if (senderId && isPassPhrase(data.body) && senderId !== myClientId) {
           handlePassPhraseFromClientRef.current(senderId, data.displayName ?? 'ゲスト');
         }
       }
@@ -2461,6 +2462,7 @@ export default function RoomWithSync({
       }
       setMessages((prev) => {
         if (prev.some((m) => m.id === data.id)) return prev;
+        if (!isChatMessageVisibleToClient(data, myClientId ?? '')) return prev;
         const p = data as ChatMessagePayload & { clientId?: string };
         return [
           ...prev,
@@ -2493,13 +2495,18 @@ export default function RoomWithSync({
               ? { characterTtsArtistJa: p.characterTtsArtistJa }
               : {}),
             ...(p.joinPasteHintCta ? { joinPasteHintCta: true as const } : {}),
+            ...(p.audienceClientId ? { audienceClientId: p.audienceClientId } : {}),
+            ...(p.audienceExcludeClientId
+              ? { audienceExcludeClientId: p.audienceExcludeClientId }
+              : {}),
           },
         ];
       });
       if (
         shouldPlayIncomingCharacterTtsClient() &&
         data.messageType === 'ai' &&
-        data.aiSource === 'character_chat'
+        data.aiSource === 'character_chat' &&
+        isChatMessageVisibleToClient(data, myClientId ?? '')
       ) {
         scheduleAiCharacterTtsPlayback(
           data.body,
@@ -3508,6 +3515,8 @@ export default function RoomWithSync({
         characterTtsArtistJa?: string | null;
         /** 入室直後の選曲案内 CTA（選曲方法リンク・AI先出しボタン） */
         joinPasteHintCta?: boolean;
+        /** 次の選曲者本人だけに表示 */
+        audienceClientId?: string;
       }
     ) => {
       const jpSilence = jpDomesticSilenceVideoIdRef.current;
@@ -3547,9 +3556,18 @@ export default function RoomWithSync({
           ? { characterTtsArtistJa: options.characterTtsArtistJa.trim() }
           : {}),
         ...(options?.joinPasteHintCta ? { joinPasteHintCta: true as const } : {}),
+        ...(options?.audienceClientId?.trim()
+          ? { audienceClientId: options.audienceClientId.trim() }
+          : {}),
       };
       if (!options?.localOnly) {
         safePublish(CHAT_MESSAGE_EVENT, payload);
+      }
+      if (
+        options?.audienceClientId?.trim() &&
+        options.audienceClientId.trim() !== (myClientId ?? '').trim()
+      ) {
+        return;
       }
       const ttsOptions = payload.characterTtsArtistJa
         ? { leadArtistJa: payload.characterTtsArtistJa }
@@ -3582,6 +3600,10 @@ export default function RoomWithSync({
             ? { characterTtsArtistJa: payload.characterTtsArtistJa }
             : {}),
           ...(payload.joinPasteHintCta ? { joinPasteHintCta: true as const } : {}),
+          ...(payload.audienceClientId ? { audienceClientId: payload.audienceClientId } : {}),
+          ...(payload.audienceExcludeClientId
+            ? { audienceExcludeClientId: payload.audienceExcludeClientId }
+            : {}),
         },
       ]);
       if (
@@ -3593,12 +3615,112 @@ export default function RoomWithSync({
         scheduleAiCharacterTtsPlayback(body, id, ttsOptions);
       }
     },
-    [safePublish]
+    [safePublish, myClientId]
   );
 
   useEffect(() => {
     addAiMessageRef.current = addAiMessage;
   }, [addAiMessage]);
+
+  /** 他参加者向け: 「○○さんの選曲待ち」（選曲者本人には出さない） */
+  const publishSelectorWaitingMessage = useCallback(
+    (turnClientId: string, displayName: string) => {
+      const turnId = turnClientId.trim();
+      const name = displayName.trim() || '次の方';
+      if (!turnId || participatingOrderRef.current.length <= 1) return;
+      const waitPayload: ChatMessagePayload = {
+        id: createMessageId(),
+        body: `${name}さんの選曲待ち`,
+        displayName: 'システム',
+        messageType: 'system',
+        createdAt: new Date().toISOString(),
+        audienceExcludeClientId: turnId,
+      };
+      safePublish(CHAT_MESSAGE_EVENT, waitPayload);
+      if ((myClientId ?? '').trim() !== turnId) {
+        setMessages((prev) => {
+          const last = prev[prev.length - 1];
+          if (last?.messageType === 'system' && last.body === waitPayload.body) {
+            const dt = Date.now() - new Date(last.createdAt).getTime();
+            if (Number.isFinite(dt) && dt >= 0 && dt < 5000) return prev;
+          }
+          return [
+            ...prev,
+            {
+              id: waitPayload.id,
+              body: waitPayload.body,
+              displayName: waitPayload.displayName,
+              messageType: 'system',
+              createdAt: waitPayload.createdAt,
+              audienceExcludeClientId: turnId,
+            },
+          ];
+        });
+      }
+    },
+    [safePublish, myClientId],
+  );
+
+  /** 複数人: 次の選曲者本人にだけ促し、他参加者には「○○さんの選曲待ち」 */
+  const promptSelectorTurnMessages = useCallback(
+    (
+      turnClientId: string,
+      displayName: string,
+      options?: { fiveMinPrefix?: string; afterAiCharacterSong?: boolean },
+    ) => {
+      const turnId = turnClientId.trim();
+      const name = displayName.trim() || '次の方';
+      const orderLen = participatingOrderRef.current.length;
+
+      if (orderLen <= 1) {
+        if (options?.afterAiCharacterSong && turnId && isHumanParticipantClientId(turnId)) {
+          joinPasteHintAiPickUsedRef.current = false;
+          addAiMessage(JOIN_PASTE_YOUTUBE_URL_HINT, {
+            joinPasteHintCta: true,
+            bypassJpDomesticSilence: true,
+          });
+        } else if (turnId) {
+          const prefix = options?.fiveMinPrefix ?? '';
+          addAiMessage(`${prefix}${name}さん、次の曲を貼ってください`, {
+            bypassJpDomesticSilence: true,
+          });
+        } else {
+          const prefix = options?.fiveMinPrefix ?? '';
+          addAiMessage(`${prefix}次の曲を貼ってください`, { bypassJpDomesticSilence: true });
+        }
+        return;
+      }
+
+      if (!turnId) {
+        const prefix = options?.fiveMinPrefix ?? '';
+        addAiMessage(`${prefix}次の曲を貼ってください`, { bypassJpDomesticSilence: true });
+        return;
+      }
+
+      if (options?.afterAiCharacterSong && isHumanParticipantClientId(turnId)) {
+        joinPasteHintAiPickUsedRef.current = false;
+        addAiMessage(JOIN_PASTE_YOUTUBE_URL_HINT, {
+          joinPasteHintCta: true,
+          audienceClientId: turnId,
+          bypassJpDomesticSilence: true,
+        });
+      } else {
+        const prefix = options?.fiveMinPrefix ?? '';
+        addAiMessage(`${prefix}${name}さん、次の曲を貼ってください`, {
+          audienceClientId: turnId,
+          bypassJpDomesticSilence: true,
+        });
+      }
+
+      publishSelectorWaitingMessage(turnId, name);
+    },
+    [addAiMessage, publishSelectorWaitingMessage],
+  );
+
+  const promptSelectorTurnMessagesRef = useRef(promptSelectorTurnMessages);
+  useEffect(() => {
+    promptSelectorTurnMessagesRef.current = promptSelectorTurnMessages;
+  }, [promptSelectorTurnMessages]);
 
   const buildNextSongRecommendExtras = useCallback(
     (targetVideoId: string): Record<string, unknown> => {
@@ -3854,33 +3976,64 @@ export default function RoomWithSync({
     (senderId: string, senderDisplayName: string) => {
       const sid = senderId.trim();
       if (!sid) return;
-      const cur = currentTurnClientIdRef.current.trim();
+      let cur = currentTurnClientIdRef.current.trim();
       const order = participatingOrderRef.current;
       const displayName = senderDisplayName.trim() || '参加者';
+
+      // ターン表示とずれているとき: キュー上「次に選曲を促す対象」と一致すれば即時パス扱い
+      if (sid !== cur && songReservationQueueRef.current.length > 0) {
+        const queueDecision = resolveSongReservationQueueApply({
+          currentTurnClientId: cur,
+          participatingOrder: order,
+          presentClientIds: presentClientIdsRef.current,
+          queue: songReservationQueueRef.current,
+        });
+        if (queueDecision.kind === 'prompt' && queueDecision.clientId === sid) {
+          cur = sid;
+        }
+      }
+
+      const imCoordinator =
+        Boolean(myClientId) &&
+        coordinationRef.current !== '' &&
+        myClientId === coordinationRef.current;
 
       if (sid === cur) {
         removePassTurnReservation(sid);
         const nextId = resolveNextPresentTurnRef.current(cur);
-        const nextParticipant = order.find((p) => p.clientId === nextId);
-        if (sid === myClientId) {
-          safePublish(TURN_STATE_EVENT, buildTurnStatePayload(nextId));
-          addAiMessage(`${nextParticipant?.displayName ?? '次の方'}さん、次の曲を貼ってください`, {
-            bypassJpDomesticSilence: true,
-          });
+        setCurrentTurnClientId(nextId);
+        currentTurnClientIdRef.current = nextId;
+        if (imCoordinator) {
+          publishRef.current?.(TURN_STATE_EVENT, buildTurnStatePayload(nextId));
+          const nextParticipant = order.find((p) => p.clientId === nextId);
+          const nextName = nextParticipant?.displayName ?? '次の方';
+          const nextHasQueue =
+            Boolean(nextId) &&
+            songReservationQueueRef.current.some((e) => e.publisherClientId === nextId);
+          if (!nextId) {
+            addSystemMessage(`${displayName}さんがパスしました。`);
+          } else if (nextHasQueue) {
+            addSystemMessage(
+              `${displayName}さんがパスしました。${nextName}さんの予約曲は、この曲の終了後に再生されます。`,
+            );
+            publishSelectorWaitingMessage(nextId, nextName);
+          } else {
+            promptSelectorTurnMessages(nextId, nextName);
+          }
         }
         return;
       }
 
       if (passTurnReservationClientIdsRef.current.includes(sid)) {
         removePassTurnReservation(sid);
-        if (myClientId === coordinationRef.current) {
+        if (imCoordinator) {
           addSystemMessage(`${displayName}さんがパス予約を取り消しました。`);
         }
         return;
       }
 
       addPassTurnReservation(sid);
-      if (myClientId === coordinationRef.current) {
+      if (imCoordinator) {
         addSystemMessage(
           `${displayName}さんが次の選曲をパス予約しました（自分の番が来たら自動でパスします）。`,
         );
@@ -3888,12 +4041,13 @@ export default function RoomWithSync({
     },
     [
       myClientId,
-      safePublish,
       buildTurnStatePayload,
       addAiMessage,
       addSystemMessage,
       addPassTurnReservation,
       removePassTurnReservation,
+      promptSelectorTurnMessages,
+      publishSelectorWaitingMessage,
     ],
   );
   handlePassPhraseFromClientRef.current = handlePassPhraseFromClient;
@@ -4585,42 +4739,34 @@ export default function RoomWithSync({
 
     clearPendingFreeCommentTimers();
 
-    const postGuestPickPromptAfterAiSong = () => {
-      joinPasteHintAiPickUsedRef.current = false;
-      addAiMessage(JOIN_PASTE_YOUTUBE_URL_HINT, {
-        joinPasteHintCta: true,
-      });
-    };
-
-    // 参加者が1人だけのとき（通常の曲終了時）は、シンプルに全員宛てのメッセージにする
-    if (orderLength <= 1) {
-      if (afterAiCharacterSong) {
-        postGuestPickPromptAfterAiSong();
-      } else {
-        addAiMessage('次の曲をどうぞ');
-      }
-      return;
-    }
-
     const prefix = fiveMinElapsed ? '5分経過しましたので、' : '';
     if (cur) {
       const displayName = order.find((o) => o.clientId === cur)?.displayName ?? '次の方';
-      if (
-        afterAiCharacterSong &&
-        isHumanParticipantClientId(cur)
-      ) {
-        postGuestPickPromptAfterAiSong();
-      } else {
-        addAiMessage(`${prefix}${displayName}さん、次の曲を貼ってください`);
-      }
+      promptSelectorTurnMessages(cur, displayName, {
+        fiveMinPrefix: prefix,
+        afterAiCharacterSong:
+          afterAiCharacterSong && isHumanParticipantClientId(cur),
+      });
     } else {
-      if (afterAiCharacterSong) {
-        postGuestPickPromptAfterAiSong();
+      if (orderLength <= 1 && afterAiCharacterSong) {
+        joinPasteHintAiPickUsedRef.current = false;
+        addAiMessage(JOIN_PASTE_YOUTUBE_URL_HINT, {
+          joinPasteHintCta: true,
+          bypassJpDomesticSilence: true,
+        });
       } else {
-        addAiMessage(`${prefix}次の曲を貼ってください`);
+        addAiMessage(`${prefix}次の曲を貼ってください`, { bypassJpDomesticSilence: true });
       }
     }
-  }, [participants, addAiMessage, myClientId, clearPendingFreeCommentTimers, buildTurnStatePayload, removePassTurnReservation]);
+  }, [
+    participants,
+    addAiMessage,
+    myClientId,
+    clearPendingFreeCommentTimers,
+    buildTurnStatePayload,
+    removePassTurnReservation,
+    promptSelectorTurnMessages,
+  ]);
 
   useEffect(() => {
     promptNextTurnRef.current = () => promptNextTurn();
@@ -4636,12 +4782,24 @@ export default function RoomWithSync({
       const nextId = resolveNextPresentTurnRef.current(cur);
       const nextParticipant = participatingOrderRef.current.find((p) => p.clientId === nextId);
       setCurrentTurnClientId(nextId);
+      currentTurnClientIdRef.current = nextId;
       if (myClientId === coordinationRef.current) {
         publishRef.current?.(TURN_STATE_EVENT, buildTurnStatePayload(nextId));
         if (nextId) {
-          addAiMessage(`${nextParticipant?.displayName ?? '次の方'}さん、次の曲を貼ってください`, {
-            bypassJpDomesticSilence: true,
-          });
+          const nextHasQueue = songReservationQueueRef.current.some(
+            (e) => e.publisherClientId === nextId,
+          );
+          if (nextHasQueue) {
+            addSystemMessage(
+              `${nextParticipant?.displayName ?? '次の方'}さんは予約済みです。この曲の終了後に再生されます。`,
+            );
+            publishSelectorWaitingMessage(
+              nextId,
+              nextParticipant?.displayName ?? '次の方',
+            );
+          } else {
+            promptSelectorTurnMessages(nextId, nextParticipant?.displayName ?? '次の方');
+          }
         }
       }
       return;
@@ -4667,7 +4825,7 @@ export default function RoomWithSync({
       setCurrentTurnClientId('');
       publishRef.current?.(TURN_STATE_EVENT, buildTurnStatePayload(''));
     }
-  }, [currentTurnClientId, participants, presenceData, buildTurnStatePayload, myClientId, addAiMessage, removePassTurnReservation]);
+  }, [currentTurnClientId, participants, presenceData, buildTurnStatePayload, myClientId, addSystemMessage, removePassTurnReservation, promptSelectorTurnMessages, publishSelectorWaitingMessage]);
 
   /**
    * changeVideo 直後のまれな競合で currentTurn が空/投稿者のままになることがある。
@@ -6055,7 +6213,7 @@ export default function RoomWithSync({
       currentTurnClientIdRef.current = cid;
       safePublish(TURN_STATE_EVENT, buildTurnStatePayload(cid));
       const displayName = participants.find((p) => p.clientId === cid)?.displayName ?? '参加者';
-      addAiMessage(`${displayName}さん、次の曲を貼ってください`, { bypassJpDomesticSilence: true });
+      promptSelectorTurnMessages(cid, displayName);
     },
     [
       canUseOwnerPlaybackProxy,
@@ -6066,7 +6224,7 @@ export default function RoomWithSync({
       safePublish,
       buildTurnStatePayload,
       participants,
-      addAiMessage,
+      promptSelectorTurnMessages,
       myClientId,
     ],
   );
@@ -6741,9 +6899,7 @@ export default function RoomWithSync({
           currentTurnClientIdRef.current = promptId;
           if (myClientId === coordinationRef.current) {
             publishRef.current?.(TURN_STATE_EVENT, buildTurnStatePayload(promptId));
-            addAiMessage(`${displayName}さん、次の曲を貼ってください`, {
-              bypassJpDomesticSilence: true,
-            });
+            promptSelectorTurnMessagesRef.current(promptId, displayName);
             const vid = videoIdRef.current;
             if (vid) nextPromptShownForVideoIdRef.current = vid;
           }
@@ -6846,7 +7002,6 @@ export default function RoomWithSync({
     myClientId,
     applyImmediateChangeVideo,
     syncSongReservationQueueHead,
-    addAiMessage,
     buildTurnStatePayload,
     roomId,
   ]);
