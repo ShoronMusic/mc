@@ -4,7 +4,7 @@ import Image from 'next/image';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useChannel, useChannelStateListener, usePresenceListener } from 'ably/react';
 import { useRoomAblyPresence } from '@/hooks/useRoomAblyPresence';
-import { getAblyOwnerSettingsHeartbeatMs } from '@/lib/ably-traffic-config';
+import { getAblyOwnerSettingsHeartbeatMs, getAblyPresenceUpdateMinIntervalMs } from '@/lib/ably-traffic-config';
 import {
   shouldPauseAblyBackgroundTraffic,
   useAblyRoomTraffic,
@@ -705,6 +705,9 @@ export default function RoomWithSync({
   const aiCharacterWasAiTurnForEpochRef = useRef(false);
   /** ターンが一瞬だけ人間に戻ると wasAi が false になり epoch が積み上がり character-song-pick が連打されるため、非AIは短時間デバウンスしてから wasAi を落とす */
   const aiCharacterEpochHumanDebounceTimerRef = useRef<number | null>(null);
+  const aiCharacterAutoPickRetryTimerRef = useRef<number | null>(null);
+  const [aiCharacterAutoPickRetryTrigger, setAiCharacterAutoPickRetryTrigger] = useState(0);
+  const lastPresenceUpdateAtMsRef = useRef(0);
   const currentSongPosterClientIdRef = useRef('');
   const characterManualSongPickInFlightRef = useRef(false);
   const joinPasteHintAiPickUsedRef = useRef(false);
@@ -1291,7 +1294,12 @@ export default function RoomWithSync({
     }
     const json = JSON.stringify(presencePayload);
     if (json === lastPresencePayloadJsonRef.current) return;
+    const minGap = getAblyPresenceUpdateMinIntervalMs();
+    const now = Date.now();
+    const elapsed = now - lastPresenceUpdateAtMsRef.current;
+    if (lastPresenceUpdateAtMsRef.current > 0 && elapsed < minGap) return;
     lastPresencePayloadJsonRef.current = json;
+    lastPresenceUpdateAtMsRef.current = now;
     void updateStatus(presencePayload).catch((err) => {
       // eslint-disable-next-line no-console
       console.warn('[Ably] presence update failed (ignored):', err);
@@ -1305,6 +1313,15 @@ export default function RoomWithSync({
     updateStatus,
     presencePayload,
   ]);
+
+  useEffect(() => {
+    return () => {
+      if (aiCharacterAutoPickRetryTimerRef.current != null) {
+        clearTimeout(aiCharacterAutoPickRetryTimerRef.current);
+        aiCharacterAutoPickRetryTimerRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -6710,10 +6727,13 @@ export default function RoomWithSync({
     }));
 
     const vidForPick = (videoIdRef.current ?? '').trim();
+    const pickController = new AbortController();
+    const pickTimeoutId = window.setTimeout(() => pickController.abort(), 120_000);
     void fetch('/api/ai/character-song-pick', {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
+      signal: pickController.signal,
       body: JSON.stringify({
         messages: listForCharacterAi,
         videoId: vidForPick || undefined,
@@ -6729,7 +6749,17 @@ export default function RoomWithSync({
         const ctx = charAutoPickCtxRef.current;
         const b = ctx.buildTurnStatePayload;
         if (pick && typeof pick === 'object' && (pick as { throttled?: boolean }).throttled === true) {
-          aiCharacterLastAutoPickTurnKeyRef.current = turnKey;
+          const retrySec =
+            typeof (pick as { retryAfterSec?: unknown }).retryAfterSec === 'number'
+              ? Math.max(1, Math.ceil((pick as { retryAfterSec: number }).retryAfterSec))
+              : 90;
+          if (aiCharacterAutoPickRetryTimerRef.current == null) {
+            aiCharacterAutoPickRetryTimerRef.current = window.setTimeout(() => {
+              aiCharacterAutoPickRetryTimerRef.current = null;
+              if ((currentTurnClientIdRef.current ?? '').trim() !== AI_CHARACTER_CLIENT_ID) return;
+              setAiCharacterAutoPickRetryTrigger((n) => n + 1);
+            }, retrySec * 1000);
+          }
           return null;
         }
         if (!pick?.ok || !pick?.query) {
@@ -6909,6 +6939,7 @@ export default function RoomWithSync({
         aiCharacterAutoPickTurnEpochRef.current += 1;
       })
       .finally(() => {
+        clearTimeout(pickTimeoutId);
         aiCharacterAutoPickInFlightRef.current = false;
       });
     // videoId / poster / callbacks の更新で effect が再実行され、同一 AI ターンで character-song-pick が連打されるのを防ぐ
@@ -6918,6 +6949,7 @@ export default function RoomWithSync({
     oldestParticipantClientId,
     coordinationClientId,
     currentTurnClientId,
+    aiCharacterAutoPickRetryTrigger,
     shouldAiCharacterUseReservationQueue,
     buildAiCharacterPickedSongChatBody,
     buildAiCharacterYoutubeWatchUrl,

@@ -17,6 +17,8 @@ import { isYouTubeConfigured } from '@/lib/youtube-search';
 import { persistAiCharacterSongPickLog } from '@/lib/ai-character-song-pick-log';
 
 export const dynamic = 'force-dynamic';
+/** Gemini + YouTube 解決。Hobby 10s / Pro 60s まで（Vercel プラン上限） */
+export const maxDuration = 60;
 const USER_PICK_EXCLUDE_MAX = 120;
 
 export async function POST(request: Request) {

@@ -34,3 +34,10 @@ export function isAblyReduceTrafficWhenHidden(): boolean {
   if (process.env.NEXT_PUBLIC_ABLY_REDUCE_WHEN_HIDDEN === '0') return false;
   return true;
 }
+
+/** presence.update の最小間隔（既定 30 秒。同一 payload の連打防止） */
+export function getAblyPresenceUpdateMinIntervalMs(): number {
+  const raw = process.env.NEXT_PUBLIC_ABLY_PRESENCE_MIN_UPDATE_MS;
+  const n = parsePositiveInt(raw, 30_000);
+  return clamp(n, 5_000, 300_000);
+}

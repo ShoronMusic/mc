@@ -50,6 +50,7 @@
 - **プリペイド課金（Phase D 価格正本）**: `docs/00-prepaid-pricing-summary.md`（¥500＝20曲 · ¥1,000＝40曲 · 1曲＝1クレジット）。実装マスタは `docs/00-ai-trial-and-billing-implementation.md`
 - **開催履歴 × AI 課金帰属（継続実装）**: `docs/room-gathering-history-and-ai-billing-project.md`。**Phase 1–3 完了**: 帰属ログ（`billing_kind`/`billing_user_id`）・マイページ参加履歴（personal/roomCommon）・管理 **課金・原価** タブ（12h スロット `/admin/gathering-history` · ユーザー別 `/admin/user-billing-usage` · 部屋原価 `/admin/room-cost-summary`）· YT クォータ→¥・Ably 推定（`src/lib/infra-cost-estimates.ts`）。**Phase 2b 待ち**: `room_gathering_snapshots` SQL 実行後に終了会スナップショット記録開始。**Phase 4**: ⭐ `docs/00-ai-trial-and-billing-implementation.md`（10曲お試し・選曲のみ無料）→ プリペイド課金は **`docs/00-prepaid-pricing-summary.md`**（¥500＝20曲 · ¥1,000＝40曲）
 - **PWA・スマホアプリ化**（PC は Web のまま）: 索引 `docs/00-pwa-mobile-app.md`（詳細は `docs/pwa-*.md` に集約）。実装: `public/manifest.webmanifest`・`src/components/pwa/PwaInstallHint.tsx`・`npm run dev:lan`（スマホ実機確認は `docs/pwa-dev-verify-mobile.md`）
+- **本番障害・再発防止（2026-07-05）**: `docs/incident-20260705-musicai-jp-production.md`（Supabase Nano 枯渇・504 middleware・AI 選曲停止・対応 TODO）
 
 ### Chrome 拡張（YouTube → 発言欄・任意）
 
