@@ -67,6 +67,8 @@ import {
   hasSongCommentaryForVideo,
   isAgentSelectionAnnounceName,
 } from '@/lib/song-overview-request';
+import { IS_MC_PRODUCT, chatHeaderIconBtnClass, roomFrameBlockClass, roomFrameInnerHeaderClass } from '@/lib/product-branding';
+import { shouldApplyParticipantChatColorInline, labelTextOnBackground, mcParticipantSpeechColorForAnnounce, participantDisplayNamesMatch } from '@/lib/chat-text-color';
 
 /** 詳細フィードバック用モーダルの状態 */
 type FeedbackModalState =
@@ -283,6 +285,24 @@ function OwnerRoomFeatureHeaderPill({
   );
 }
 
+function resolveSelectorTextColor(
+  selectorName: string,
+  participantsWithColor: { displayName: string; textColor?: string }[],
+  currentUserDisplayName?: string,
+  userTextColor?: string,
+): string | undefined {
+  const fromList = participantsWithColor.find((p) =>
+    participantDisplayNamesMatch(selectorName, p.displayName),
+  )?.textColor;
+  if (fromList?.trim()) return fromList.trim();
+  const me = (currentUserDisplayName ?? '').trim();
+  if (!me || !userTextColor?.trim()) return undefined;
+  if (participantDisplayNamesMatch(selectorName, me)) {
+    return userTextColor.trim();
+  }
+  return undefined;
+}
+
 function renderSelectionAnnounceBodyWithMusicNote(body: string): ReactNode {
   const lines = body.split('\n');
   if (lines.length < 2) return body;
@@ -307,6 +327,57 @@ function renderSelectionAnnounceBodyWithMusicNote(body: string): ReactNode {
       ) : null}
     </>
   );
+}
+
+/** mc: 1行・「〇〇選曲♪」ラベル（BG=発言色・白抜き）＋曲名（発言色） */
+function renderMcSelectionAnnounceBody(
+  body: string,
+  selectorName: string,
+  speechColor?: string,
+): ReactNode {
+  const lines = body.split('\n');
+  const artistLine = (lines.length >= 2 ? lines[1] : lines[0] ?? '').trim();
+  const rest = lines.length >= 2 ? lines.slice(2).join('\n').trim() : '';
+  const label = `${selectorName}選曲♪`;
+  const announceColor = mcParticipantSpeechColorForAnnounce(speechColor);
+  return (
+    <span className="inline-flex flex-wrap items-baseline gap-x-1 animate-song-intro-fade-in">
+      <span
+        className="mr-0.5 inline-flex shrink-0 items-center rounded px-1.5 py-0.5 text-[10px] font-semibold"
+        style={{
+          backgroundColor: announceColor,
+          color: labelTextOnBackground(announceColor),
+        }}
+      >
+        {label}
+      </span>
+      <span
+        className="animate-song-intro-fade-in animate-song-line-fade-delayed"
+        style={{ color: announceColor }}
+      >
+        {artistLine}
+      </span>
+      {rest ? (
+        <>
+          {' '}
+          <span className="animate-song-intro-fade-in" style={{ color: announceColor }}>
+            {rest}
+          </span>
+        </>
+      ) : null}
+    </span>
+  );
+}
+
+function renderSelectionAnnounceBody(
+  body: string,
+  selectorName: string | null,
+  labelColor?: string,
+): ReactNode {
+  if (IS_MC_PRODUCT && selectorName) {
+    return renderMcSelectionAnnounceBody(body, selectorName, labelColor);
+  }
+  return renderSelectionAnnounceBodyWithMusicNote(body);
 }
 
 const DEFAULT_MESSAGE_COLOR = '#e5e7eb';
@@ -752,6 +823,8 @@ export default function Chat({
   onRequestSongOverview,
   songOverviewRequestedVideoIds,
 }: ChatProps) {
+  const chatStyleAdminEnabled = !IS_MC_PRODUCT && styleAdminChatTools;
+  const chatModeratorToolsEnabled = !IS_MC_PRODUCT && canRejectTidbit;
   const pathname = usePathname();
   const pathSegs = pathname?.split('/').filter(Boolean) ?? [];
   const roomPathSegment = pathSegs.length === 1 ? pathSegs[0] : null;
@@ -974,7 +1047,7 @@ export default function Chat({
   }
 
   async function submitArtistTitleReport(m: ChatMessageType) {
-    if (!styleAdminChatTools || !canSaveArtistTitleMeta(m)) return;
+    if (!chatStyleAdminEnabled || !canSaveArtistTitleMeta(m)) return;
     const vid = m.videoId!.trim();
     const note = window.prompt('メモ（任意・不具合の気づきなど）', '') ?? '';
     setArtistTitleReportingId(m.id);
@@ -1300,13 +1373,17 @@ export default function Chat({
   ] as const;
 
   return (
-    <div className="flex flex-1 flex-col overflow-hidden rounded-lg border border-gray-700 bg-gray-900/50">
-      <div className="flex flex-nowrap items-center gap-x-2 gap-y-0 border-b border-gray-700 px-3 py-2 max-lg:py-1.5 lg:flex-wrap lg:items-center lg:gap-x-3 lg:gap-y-1.5">
+    <div className={roomFrameBlockClass('flex flex-1 flex-col')}>
+      <div
+        className={roomFrameInnerHeaderClass(
+          'flex flex-nowrap items-center gap-x-2 gap-y-0 max-lg:py-1.5 lg:flex-wrap lg:items-center lg:gap-x-3 lg:gap-y-1.5',
+        )}
+      >
         {onChatLogClick ? (
           <button
             type="button"
             onClick={onChatLogClick}
-            className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded border border-gray-600 bg-gray-800/90 text-gray-300 hover:bg-gray-700 hover:text-gray-100"
+            className={chatHeaderIconBtnClass()}
             aria-label="チャットログを表示"
             title="チャットログ（今回の会または今日）"
           >
@@ -1314,11 +1391,12 @@ export default function Chat({
           </button>
         ) : null}
         <span
-          className="shrink-0 text-sm font-medium text-gray-300"
+          className={`shrink-0 text-sm font-medium ${IS_MC_PRODUCT ? 'text-gray-800' : 'text-gray-300'}`}
           title="参加者同士のチャット欄です。"
         >
           チャット
         </span>
+        {!IS_MC_PRODUCT ? (
         <div
           className="inline-flex min-w-0 flex-1 flex-nowrap items-center gap-x-1.5 overflow-x-auto lg:flex-wrap lg:gap-x-2 lg:gap-y-1 lg:overflow-visible"
           role="status"
@@ -1396,19 +1474,25 @@ export default function Chat({
             </button>
           ) : null}
         </div>
+        ) : null}
         {isLg ? (
           <div className="ml-auto inline-flex min-w-0 flex-wrap items-center justify-end gap-x-3 gap-y-1">
             {onChatSummaryClick ? (
               <button
                 type="button"
                 onClick={onChatSummaryClick}
-                className="text-[11px] text-cyan-300/90 underline decoration-dotted underline-offset-2 hover:text-cyan-200"
+                className={`text-[11px] underline decoration-dotted underline-offset-2 ${
+                  IS_MC_PRODUCT
+                    ? 'text-gray-600 hover:text-gray-900'
+                    : 'text-cyan-300/90 hover:text-cyan-200'
+                }`}
                 aria-label="チャットサマリーを表示"
                 title="ここまでの流れ"
               >
                 チャットサマリー
               </button>
             ) : null}
+            {!IS_MC_PRODUCT ? (
             <button
               type="button"
               onClick={() => {
@@ -1424,13 +1508,14 @@ export default function Chat({
               <AtSymbolIcon className="h-3.5 w-3.5 shrink-0" aria-hidden />
               <span className="underline decoration-dotted underline-offset-2">AIに質問…</span>
             </button>
+            ) : null}
           </div>
         ) : (
           <div ref={chatHeaderMoreRef} className="relative shrink-0">
             <button
               type="button"
               onClick={() => setChatHeaderMoreOpen((o) => !o)}
-              className="inline-flex h-7 w-7 items-center justify-center rounded border border-gray-600 bg-gray-800/90 text-gray-200 hover:bg-gray-700"
+              className={chatHeaderIconBtnClass()}
               aria-haspopup="menu"
               aria-expanded={chatHeaderMoreOpen}
               aria-label="チャットサマリー・AI質問メニュー"
@@ -1440,7 +1525,9 @@ export default function Chat({
             </button>
             {chatHeaderMoreOpen ? (
               <div
-                className="absolute right-0 top-full z-30 mt-1 min-w-[11rem] rounded-md border border-gray-600 bg-gray-900 py-1 shadow-lg"
+                className={`absolute right-0 top-full z-30 mt-1 min-w-[11rem] rounded-md border py-1 shadow-lg ${
+                  IS_MC_PRODUCT ? 'border-gray-200 bg-white' : 'border-gray-600 bg-gray-900'
+                }`}
                 role="menu"
               >
                 {onChatSummaryClick ? (
@@ -1451,11 +1538,14 @@ export default function Chat({
                       setChatHeaderMoreOpen(false);
                       onChatSummaryClick();
                     }}
-                    className="block w-full px-3 py-2 text-left text-[11px] text-cyan-300 hover:bg-gray-800"
+                    className={`block w-full px-3 py-2 text-left text-[11px] hover:bg-gray-100 ${
+                      IS_MC_PRODUCT ? 'text-gray-700' : 'text-cyan-300 hover:bg-gray-800'
+                    }`}
                   >
                     チャットサマリー
                   </button>
                 ) : null}
+                {!IS_MC_PRODUCT ? (
                 <button
                   type="button"
                   role="menuitem"
@@ -1469,6 +1559,7 @@ export default function Chat({
                   <AtSymbolIcon className="h-3.5 w-3.5 shrink-0" aria-hidden />
                   AIに質問…
                 </button>
+                ) : null}
               </div>
             ) : null}
           </div>
@@ -1549,8 +1640,19 @@ export default function Chat({
                   : undefined;
               const selectionAnnounceColor =
                 isSelectionAnnounce && selectorName
-                  ? participantsWithColor.find((p) => p.displayName === selectorName)?.textColor ?? undefined
+                  ? resolveSelectorTextColor(
+                      selectorName,
+                      participantsWithColor,
+                      currentUserDisplayName,
+                      userTextColor,
+                    )
                   : undefined;
+              const selectionAnnounceInlineColor =
+                !isYellowEmphasisAi && isSelectionAnnounce && IS_MC_PRODUCT
+                  ? mcParticipantSpeechColorForAnnounce(selectionAnnounceColor)
+                  : !isYellowEmphasisAi && isSelectionAnnounce && selectionAnnounceColor
+                    ? selectionAnnounceColor
+                    : undefined;
               const announceVideoId =
                 typeof m.videoId === 'string' && m.videoId.trim() ? m.videoId.trim() : '';
               const agentAnnounceName = (ownerAiCharacterName || AI_CHARACTER_DEFAULT_ANNOUNCE_NAME).trim();
@@ -1591,7 +1693,11 @@ export default function Chat({
                         </span>
                       )
                   : isSelectionAnnounce
-                    ? renderSelectionAnnounceBodyWithMusicNote(bodyTextForDisplay)
+                    ? renderSelectionAnnounceBody(
+                        bodyTextForDisplay,
+                        selectorName,
+                        selectionAnnounceColor,
+                      )
                     : isCharacterChatMessage
                       ? <span className="whitespace-pre-wrap break-words">{bodyTextForDisplay}</span>
                     : isThemePlaylistRoomReview
@@ -1652,13 +1758,23 @@ export default function Chat({
                 className={`rounded-lg px-3 py-2 text-sm ${
                   m.messageType === 'ai'
                     ? isNextSongRecommendMessage
-                      ? 'border border-violet-700/70 bg-gray-950'
+                      ? IS_MC_PRODUCT
+                        ? 'border border-gray-300 bg-gray-50 text-gray-800'
+                        : 'border border-violet-700/70 bg-gray-950'
                       : isThemePlaylistRoomReview
-                        ? 'border border-amber-700/55 bg-amber-950/20'
-                        : 'border border-gray-600 bg-gray-700/80'
+                        ? IS_MC_PRODUCT
+                          ? 'border border-gray-300 bg-gray-50 text-gray-800'
+                          : 'border border-amber-700/55 bg-amber-950/20'
+                        : IS_MC_PRODUCT
+                          ? 'border border-gray-200 bg-gray-100 text-gray-800'
+                          : 'border border-gray-600 bg-gray-700/80'
                     : m.messageType === 'system'
-                      ? 'border border-amber-700/40 bg-amber-900/10 text-amber-200/90'
-                      : 'bg-gray-800/80'
+                      ? IS_MC_PRODUCT
+                        ? 'border border-gray-200 bg-gray-50 text-gray-700'
+                        : 'border border-amber-700/40 bg-amber-900/10 text-amber-200/90'
+                      : IS_MC_PRODUCT
+                        ? 'border border-gray-200 bg-gray-50 text-gray-900'
+                        : 'bg-gray-800/80'
                 } ${
                   shouldAnimateAiCommentary
                     ? 'opacity-0'
@@ -1671,15 +1787,22 @@ export default function Chat({
                   <>
                   <div className="flex items-baseline justify-between gap-2">
                     <div
-                      className={`min-w-0 flex-1 break-words whitespace-pre-wrap ${
+                      className={`min-w-0 flex-1 break-words ${
+                        isSelectionAnnounce && IS_MC_PRODUCT ? '' : 'whitespace-pre-wrap'
+                      } ${
                         isYellowEmphasisAi
                           ? 'font-semibold text-yellow-300'
-                          : `${isCharacterChatMessage ? 'text-amber-100/85' : isSelectionAnnounce ? 'text-gray-300' : 'text-gray-200'} ${isSelectionAnnounce || isNextPromptMessage ? 'font-bold' : ''}`
+                          : `${isCharacterChatMessage ? 'text-amber-100/85' : isSelectionAnnounce ? (IS_MC_PRODUCT ? '' : selectionAnnounceInlineColor ? '' : 'text-gray-300') : 'text-gray-200'} ${isSelectionAnnounce || isNextPromptMessage ? 'font-bold' : ''}`
                       }`}
                       style={
-                        !isYellowEmphasisAi && isSelectionAnnounce && selectionAnnounceColor
-                          ? { color: selectionAnnounceColor }
-                          : undefined
+                        selectionAnnounceInlineColor && !(IS_MC_PRODUCT && isSelectionAnnounce)
+                          ? { color: selectionAnnounceInlineColor }
+                          : shouldApplyParticipantChatColorInline() &&
+                              !isYellowEmphasisAi &&
+                              isSelectionAnnounce &&
+                              selectionAnnounceColor
+                            ? { color: selectionAnnounceColor }
+                            : undefined
                       }
                     >
                       {parsedUiLabel.label == null &&
@@ -1804,9 +1927,17 @@ export default function Chat({
                   <>
                     <div className="mb-0.5 flex items-baseline justify-between gap-2">
                       <span
-                        className={`font-medium ${m.messageType !== 'user' || !messageColor ? 'text-gray-300' : ''}`}
+                        className={`font-medium ${
+                          m.messageType !== 'user' || !messageColor || IS_MC_PRODUCT
+                            ? IS_MC_PRODUCT
+                              ? 'text-gray-800'
+                              : 'text-gray-300'
+                            : ''
+                        }`}
                         style={
-                          m.messageType === 'user' && messageColor
+                          shouldApplyParticipantChatColorInline() &&
+                          m.messageType === 'user' &&
+                          messageColor
                             ? { color: messageColor }
                             : undefined
                         }
@@ -1818,13 +1949,21 @@ export default function Chat({
                       </span>
                     </div>
                     <p
-                      className={`whitespace-pre-wrap break-words ${messageColor ? '' : 'text-gray-200'} ${isSelectionAnnounce || isNextPromptMessage ? 'font-bold' : ''}`}
+                      className={`whitespace-pre-wrap break-words ${
+                        IS_MC_PRODUCT
+                          ? 'text-gray-900'
+                          : messageColor
+                            ? ''
+                            : 'text-gray-200'
+                      } ${isSelectionAnnounce || isNextPromptMessage ? 'font-bold' : ''}`}
                       style={
-                        m.messageType === 'user'
-                          ? { color: messageColor ?? DEFAULT_MESSAGE_COLOR }
-                          : isSelectionAnnounce && selectionAnnounceColor
-                            ? { color: selectionAnnounceColor }
-                            : undefined
+                        shouldApplyParticipantChatColorInline()
+                          ? m.messageType === 'user'
+                            ? { color: messageColor ?? DEFAULT_MESSAGE_COLOR }
+                            : isSelectionAnnounce && selectionAnnounceColor
+                              ? { color: selectionAnnounceColor }
+                              : undefined
+                          : undefined
                       }
                     >
                       {parsedUiLabel.label ? (
@@ -1934,6 +2073,7 @@ export default function Chat({
                               );
                             })()
                           : null}
+                        {!IS_MC_PRODUCT ? (
                         <div className="mt-2 flex flex-wrap items-center gap-1 border-t border-cyan-900/40 pt-2 text-xs">
                           <button
                             type="button"
@@ -1971,9 +2111,10 @@ export default function Chat({
                             <ChatBubbleLeftRightIcon className="h-4 w-4" />
                           </button>
                         </div>
+                        ) : null}
                       </div>
                     )}
-                    {canRejectTidbit && roomId?.trim() && (
+                    {chatModeratorToolsEnabled && roomId?.trim() && (
                       <div className="mt-1.5 flex justify-end">
                         <button
                           type="button"
@@ -1998,6 +2139,7 @@ export default function Chat({
                   </a>
                 )}
                 {m.messageType === 'ai' &&
+                  !IS_MC_PRODUCT &&
                   ((renderedBodyText.startsWith('[NEW]') || renderedBodyText.startsWith('[DB]')) ||
                     (m.aiSource === 'next_song_recommend' && m.nextSongRecommendPending !== true)) && (
                   <div className="mt-1 flex flex-wrap items-center gap-1 text-xs">
@@ -2031,7 +2173,7 @@ export default function Chat({
                     >
                       <ChatBubbleLeftRightIcon className="h-4 w-4" />
                     </button>
-                    {canRejectTidbit &&
+                    {chatModeratorToolsEnabled &&
                       onTidbitLibraryReject &&
                       m.tidbitId &&
                       !m.tidbitLibraryRejected && (
@@ -2056,7 +2198,7 @@ export default function Chat({
                     {m.tidbitLibraryRejected && (
                       <span className="text-amber-200/80">※ライブラリから削除済</span>
                     )}
-                    {canRejectTidbit &&
+                    {chatModeratorToolsEnabled &&
                       onNextSongRecommendReject &&
                       m.aiSource === 'next_song_recommend' &&
                       m.recommendationId && (
@@ -2078,7 +2220,7 @@ export default function Chat({
                           {nextSongRecRejectingId === m.id ? '処理中…' : 'NG（おすすめをDBから外す）'}
                         </button>
                       )}
-                    {canRejectTidbit && roomId?.trim() && (
+                    {chatModeratorToolsEnabled && roomId?.trim() && (
                       <button
                         type="button"
                         onClick={() => openTuningReportModal(m)}
@@ -2091,7 +2233,7 @@ export default function Chat({
                   </div>
                 )}
                 {m.messageType === 'ai' &&
-                  styleAdminChatTools &&
+                  chatStyleAdminEnabled &&
                   canSaveArtistTitleMeta(m) && (
                     <div className="mt-1">
                       <button
@@ -2108,7 +2250,7 @@ export default function Chat({
                     </div>
                   )}
                 {m.messageType === 'ai' &&
-                  canRejectTidbit &&
+                  chatModeratorToolsEnabled &&
                   roomId?.trim() &&
                   !(renderedBodyText.startsWith('[NEW]') || renderedBodyText.startsWith('[DB]')) && (
                     <div className="mt-1 flex justify-end">

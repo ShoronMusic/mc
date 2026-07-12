@@ -6,6 +6,7 @@ import {
   clearOauthReturnCookieOn,
   hasOAuthAuthorizationQuery,
 } from '@/lib/oauth-return-path';
+import { isMcBlockedPath, isMcProduct } from '@/lib/product-mode';
 import { updateSupabaseSession } from '@/lib/supabase/middleware';
 
 /**
@@ -15,8 +16,16 @@ import { updateSupabaseSession } from '@/lib/supabase/middleware';
  */
 export async function middleware(request: NextRequest) {
   const url = request.nextUrl.clone();
+  const { pathname } = url;
 
-  if (url.pathname.startsWith('/auth/callback') || url.pathname.startsWith('/api')) {
+  if (isMcProduct() && isMcBlockedPath(pathname)) {
+    if (pathname.startsWith('/api')) {
+      return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    }
+    return new NextResponse('Not Found', { status: 404 });
+  }
+
+  if (pathname.startsWith('/auth/callback') || pathname.startsWith('/api')) {
     return NextResponse.next();
   }
 

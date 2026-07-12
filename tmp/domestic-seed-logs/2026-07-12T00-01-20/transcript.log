@@ -1,0 +1,60 @@
+﻿**********************
+Windows PowerShell トランスクリプト開始
+開始時刻: 20260712000121
+ユーザー名: LAPTOP-N3TR5NE7\ymap6
+RunAs ユーザー: LAPTOP-N3TR5NE7\ymap6
+構成名: 
+コンピューター: LAPTOP-N3TR5NE7 (Microsoft Windows NT 10.0.26200.0)
+ホスト アプリケーション: C:\windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/run-domestic-playlist-seed.ps1 -PlaylistUrl https://www.youtube.com/watch?v=aF6qA9hCK70&list=PL5XfxmiFda5vynLlCflY36h4d6ZA5n7sW -MaxItems 2 -SkipReviewPause
+プロセス ID: 26312
+PSVersion: 5.1.26100.8737
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.26100.8737
+BuildVersion: 10.0.26100.8737
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+[1/3] fetch (build JSON)
+[log] step -> E:\mc\tmp\domestic-seed-logs\2026-07-12T00-01-20\01-fetch.log
+npx.cmd : [fetch] playlist PL5XfxmiFda5vynLlCflY36h4d6ZA5n7sW
+発生場所 E:\mc\scripts\run-domestic-playlist-seed.ps1:115 文字:5
++     & npx @('tsx') @Arguments 1> $stdoutFile 2> $stderrFile
++     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ([fetch] playlis...lY36h4d6ZA5n7sW:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+[fetch] 2 videos 窶・resolving metadata (MB 1req/s 縺ｮ縺溘ａ謨ｰ蛻・°縺九ｊ縺ｾ縺・
+[resolveArtistSongForPackAsync] heuristic {
+  title: '縲梧擲莠ｬ magic hour - Instrumental Version featuring David Spinozza -縲庚V',
+  authorName: 'DREAMS COME TRUE',
+  artistDisplay: '縲梧擲莠ｬ magic hour, David Spinozza - 縲庚V',
+  song: 'Instrumental Version'
+}
+[resolveArtistSongForPackAsync] heuristic {
+  title: 'DREAMS COME TRUE縲梧擲莠ｬ magic hour縲・,
+  authorName: 'DREAMS COME TRUE',
+  artistDisplay: 'DREAMS COME TRUE',
+  song: 'DREAMS COME TRUE縲梧擲莠ｬ magic hour縲・
+}
+npx.cmd : [fetch] playlist PL5XfxmiFda5vynLlCflY36h4d6ZA5n7sW
+発生場所 E:\mc\scripts\run-domestic-playlist-seed.ps1:115 文字:5
++     & npx @('tsx') @Arguments 1> $stdoutFile 2> $stderrFile
++     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ([fetch] playlis...lY36h4d6ZA5n7sW:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+
+[fetch] 2 videos 窶・resolving metadata (MB 1req/s 縺ｮ縺溘ａ謨ｰ蛻・°縺九ｊ縺ｾ縺・
+[fetch] 2/2
+[fetch] 菫晏ｭ・ E:\mc\tmp\domestic-seed-PL5XfxmiFda5vynLlCflY36h-2026-07-12T00-01-20.json
+  蜈ｨ 2 莉ｶ / 蜴溽乢譌･ 1 / 蜈ｬ蠑衆K 0 / include 0
+[fetch] JSON 繧堤｢ｺ隱阪＠縲∝ｿ・ｦ√↑繧・artist/title/譌･莉・include 繧堤ｷｨ髮・＠縺ｦ縺九ｉ apply 繧貞ｮ溯｡後＠縺ｦ縺上□縺輔＞縲・
+[1/3] fetch done: total=2 releaseDate=1 officialOk=0 included=0
+[2/3] skipped (use -ApplyDryRun or -Apply)
+[3/3] skipped (use -Apply -ForceAllow for DB write)
+      JSON: E:\mc\tmp\domestic-seed-PL5XfxmiFda5vynLlCflY36h-2026-07-12T00-01-20.json
+[log] done. combined=E:\mc\tmp\domestic-seed-logs\2026-07-12T00-01-20\run.log errors=E:\mc\tmp\domestic-seed-logs\2026-07-12T00-01-20\run-errors.log transcript=E:\mc\tmp\domestic-seed-logs\2026-07-12T00-01-20\transcript.log
+**********************
+Windows PowerShell トランスクリプト終了
+終了時刻: 20260712000130
+**********************

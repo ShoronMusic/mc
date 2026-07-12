@@ -1,5 +1,18 @@
-import { shouldUseJapaneseEconomyCommentPack } from '@/lib/comment-pack-jp-economy';
+import {
+  metadataIndicatesJapaneseDomestic,
+  shouldUseJapaneseEconomyCommentPack,
+} from '@/lib/comment-pack-jp-economy';
+import {
+  ensureDomesticJpArtistCache,
+  looksLikeOfficialArtistChannel,
+  matchesDomesticJpArtist,
+  stripYoutubeOfficialChannelSuffix,
+} from '@/lib/domestic-jp-artists';
 import { isJapaneseArtistByMusicBrainzLookup } from '@/lib/musicbrainz-artist-area';
+import {
+  ensureWesternTreatedJpArtistCache,
+  matchesWesternTreatedJpArtist,
+} from '@/lib/western-treated-jp-artists';
 
 export type JapaneseEconomyMetadataInput = Parameters<typeof shouldUseJapaneseEconomyCommentPack>[0];
 
@@ -28,23 +41,67 @@ function isClearlyNonJapaneseMetadata(opts: JapaneseEconomyMetadataInput): boole
   if (hasAnyJapanese) return false;
   const artistLike = (opts.artist ?? opts.artistDisplay ?? '').trim();
   const titleLike = (opts.song ?? opts.title ?? '').trim();
-  // 最低限、アーティスト名・曲名が英数字主体で取れている場合は「非邦楽メタ」とみなす
   const latinArtist = /[A-Za-z]/.test(artistLike);
   const latinTitle = /[A-Za-z]/.test(titleLike);
   return latinArtist && latinTitle;
 }
 
+function artistNameForMusicBrainzLookup(opts: JapaneseEconomyMetadataInput): string {
+  const candidates = [
+    opts.artist,
+    opts.artistDisplay,
+    stripYoutubeOfficialChannelSuffix(opts.channelTitle),
+  ];
+  for (const c of candidates) {
+    const t = (c ?? '').trim();
+    if (t.length >= 2 && t.length <= 200) return t;
+  }
+  return '';
+}
+
 /**
- * 邦楽節約と同じ条件で判定（主要メタの日本語／ja 音声 → 即 true、概要欄のみの日本語は英字主体なら除外、それ以外は MusicBrainz）。
- * COMMENT_PACK_JP_ECONOMY=0 のときは常に false（MusicBrainz も呼ばない）。
+ * 邦楽として扱うか（catalog_scope・邦楽 DB 登録・視聴履歴等）。
+ * COMMENT_PACK_JP_ECONOMY には依存しない。
+ */
+export async function resolveJapaneseDomesticWithMusicBrainz(
+  opts: JapaneseEconomyMetadataInput,
+): Promise<boolean> {
+  await ensureWesternTreatedJpArtistCache();
+  await ensureDomesticJpArtistCache();
+
+  if (matchesWesternTreatedJpArtist(opts.artist, opts.artistDisplay)) return false;
+  if (
+    matchesDomesticJpArtist(
+      opts.artist,
+      opts.artistDisplay,
+      opts.channelTitle,
+      opts.title,
+    )
+  ) {
+    return true;
+  }
+  if (metadataIndicatesJapaneseDomestic(opts)) return true;
+
+  if (process.env.MUSICBRAINZ_LOOKUP === '0') return false;
+
+  const forMb = artistNameForMusicBrainzLookup(opts);
+  if (!forMb) return false;
+
+  const skipMb =
+    isClearlyNonJapaneseMetadata(opts) &&
+    !matchesDomesticJpArtist(forMb) &&
+    !looksLikeOfficialArtistChannel(opts.channelTitle);
+  if (skipMb) return false;
+
+  return isJapaneseArtistByMusicBrainzLookup(forMb);
+}
+
+/**
+ * comment-pack の邦楽節約と同条件（COMMENT_PACK_JP_ECONOMY=0 のときは常に false）。
  */
 export async function resolveJapaneseEconomyWithMusicBrainz(
-  opts: JapaneseEconomyMetadataInput
+  opts: JapaneseEconomyMetadataInput,
 ): Promise<boolean> {
-  if (shouldUseJapaneseEconomyCommentPack(opts)) return true;
   if (process.env.COMMENT_PACK_JP_ECONOMY === '0') return false;
-  if (isClearlyNonJapaneseMetadata(opts)) return false;
-  const forMb = (opts.artist ?? opts.artistDisplay ?? '').trim();
-  if (!forMb) return false;
-  return isJapaneseArtistByMusicBrainzLookup(forMb);
+  return resolveJapaneseDomesticWithMusicBrainz(opts);
 }

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getStyleAdminUserIds } from '@/lib/style-admin';
+import { parseAdminProductFilter, runAdminHistoryQueryScoped } from '@/lib/room-history-product';
 
 export const dynamic = 'force-dynamic';
 
@@ -75,14 +76,20 @@ export async function GET(request: Request) {
 
   const daysParam = new URL(request.url).searchParams.get('days');
   const days = Math.min(90, Math.max(1, parseInt(daysParam || '7', 10) || 7));
+  const productFilter = parseAdminProductFilter(new URL(request.url).searchParams.get('product'));
   const since = new Date(Date.now() - days * 86400000).toISOString();
 
-  const { data: rows, error } = await admin
-    .from('gemini_usage_logs')
-    .select('*')
-    .gte('created_at', since)
-    .order('created_at', { ascending: false })
-    .limit(5000);
+  const scanRes = await runAdminHistoryQueryScoped((applyProductEq, scopedProduct) => {
+    let q = admin
+      .from('gemini_usage_logs')
+      .select('*')
+      .gte('created_at', since)
+      .order('created_at', { ascending: false })
+      .limit(5000);
+    if (applyProductEq && scopedProduct) q = q.eq('product', scopedProduct);
+    return q;
+  }, productFilter);
+  const { data: rows, error } = scanRes;
 
   if (error) {
     if (error.code === '42P01') {
@@ -130,6 +137,7 @@ export async function GET(request: Request) {
 
   return NextResponse.json({
     days,
+    product: productFilter,
     totals: {
       calls: list.length,
       promptTokens,

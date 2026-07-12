@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { fetchLiveGatheringStartedAtIso } from '@/lib/live-gathering-playback-since';
+import {
+  getRoomHistoryProductId,
+  runRoomHistoryQueryScoped,
+  withRoomHistoryProductEq,
+} from '@/lib/room-history-product';
 
 export const dynamic = 'force-dynamic';
 
@@ -62,6 +67,7 @@ export async function GET(request: Request) {
   const session = nowJstSession();
   const nowIso = new Date().toISOString();
   const endIso = nowIso < session.endIso ? nowIso : session.endIso;
+  const historyProduct = getRoomHistoryProductId();
 
   let gatheringStartedAt: string | null = null;
   try {
@@ -70,20 +76,22 @@ export async function GET(request: Request) {
     console.error('[room-session-summary] gathering since', e);
   }
 
-  let playQuery = supabase
-    .from('room_playback_history')
-    .select('played_at, display_name, video_id, artist_name, title, style')
-    .eq('room_id', roomId)
-    .order('played_at', { ascending: true })
-    .limit(2000);
-
-  if (gatheringStartedAt) {
-    playQuery = playQuery.gte('played_at', gatheringStartedAt).lte('played_at', nowIso);
-  } else {
-    playQuery = playQuery.gte('played_at', session.startIso).lt('played_at', endIso);
-  }
-
-  const { data: playData, error: playErr } = await playQuery;
+  const playRes = await runRoomHistoryQueryScoped((scopeProduct) => {
+    let playQuery = supabase
+      .from('room_playback_history')
+      .select('played_at, display_name, video_id, artist_name, title, style')
+      .eq('room_id', roomId)
+      .order('played_at', { ascending: true })
+      .limit(2000);
+    if (gatheringStartedAt) {
+      playQuery = playQuery.gte('played_at', gatheringStartedAt).lte('played_at', nowIso);
+    } else {
+      playQuery = playQuery.gte('played_at', session.startIso).lt('played_at', endIso);
+    }
+    if (scopeProduct) playQuery = withRoomHistoryProductEq(playQuery, historyProduct);
+    return playQuery;
+  });
+  const { data: playData, error: playErr } = playRes;
   if (playErr) return NextResponse.json({ error: playErr.message }, { status: 500 });
 
   const { data: liveGathering, error: liveErr } = await supabase
@@ -98,18 +106,20 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: liveErr.message }, { status: 500 });
   }
 
-  let chatQuery = supabase
-    .from('room_chat_log')
-    .select('created_at, message_type, display_name')
-    .eq('room_id', roomId)
-    .gte('created_at', session.startIso)
-    .lt('created_at', endIso);
-  if (liveGathering?.id) {
-    chatQuery = chatQuery.eq('gathering_id', liveGathering.id);
-  }
-  const { data: chatData, error: chatErr } = await chatQuery
-    .order('created_at', { ascending: true })
-    .limit(5000);
+  const chatRes = await runRoomHistoryQueryScoped((scopeProduct) => {
+    let chatQuery = supabase
+      .from('room_chat_log')
+      .select('created_at, message_type, display_name')
+      .eq('room_id', roomId)
+      .gte('created_at', session.startIso)
+      .lt('created_at', endIso);
+    if (liveGathering?.id) {
+      chatQuery = chatQuery.eq('gathering_id', liveGathering.id);
+    }
+    if (scopeProduct) chatQuery = withRoomHistoryProductEq(chatQuery, historyProduct);
+    return chatQuery.order('created_at', { ascending: true }).limit(5000);
+  });
+  const { data: chatData, error: chatErr } = chatRes;
   if (chatErr && chatErr.code !== '42P01') return NextResponse.json({ error: chatErr.message }, { status: 500 });
 
   const plays = (playData ?? []) as Array<{

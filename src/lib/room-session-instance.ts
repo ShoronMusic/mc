@@ -1,7 +1,8 @@
 /** 同一 auth clientId のうち、どのブラウザタブが「操作中」かを presence で区別する */
 
+import { getGatheringProductId, getRoomProductScopedStorageKey, PRODUCT_MA } from '@/lib/room-product-scope';
+
 const PREFIX = 'mc:room_session_claim:';
-const BROWSER_TAB_ID_KEY = 'mc:browser_tab_id';
 
 export type RoomSessionClaim = {
   instanceId: string;
@@ -9,8 +10,14 @@ export type RoomSessionClaim = {
   browserTabId: string;
 };
 
+const BROWSER_TAB_ID_KEY = 'mc:browser_tab_id';
+
 export function getRoomSessionClaimStorageKey(roomId: string): string {
-  return `${PREFIX}${roomId}`;
+  return getRoomProductScopedStorageKey(PREFIX, roomId);
+}
+
+function getLegacyRoomSessionClaimStorageKey(roomId: string): string {
+  return `${PREFIX}${roomId.trim()}`;
 }
 
 function newInstanceId(): string {
@@ -77,7 +84,13 @@ function writeClaimRaw(key: string, claim: RoomSessionClaim): RoomSessionClaim {
 
 function readClaim(roomId: string): RoomSessionClaim | null {
   if (!roomId) return null;
-  return readClaimRaw(getRoomSessionClaimStorageKey(roomId));
+  const key = getRoomSessionClaimStorageKey(roomId);
+  let claim = readClaimRaw(key);
+  if (!claim && getGatheringProductId() === PRODUCT_MA) {
+    claim = readClaimRaw(getLegacyRoomSessionClaimStorageKey(roomId));
+    if (claim) writeClaimRaw(key, claim);
+  }
+  return claim;
 }
 
 function writeClaim(roomId: string, claim: RoomSessionClaim): RoomSessionClaim {

@@ -118,7 +118,9 @@ export type SongReportSelectionRow = {
   played_at: string;
   date_jst: string;
   room_id: string;
+  room_product?: string;
   room_display_title: string;
+  room_lobby_subtitle?: string | null;
   selector_display_name: string;
   snapshot_title: string | null;
   snapshot_artist: string | null;

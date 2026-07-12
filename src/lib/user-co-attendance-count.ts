@@ -4,6 +4,12 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { ProductId } from '@/lib/product-mode';
+import {
+  getRoomHistoryProductId,
+  runRoomHistoryQueryScoped,
+  withRoomHistoryProductEq,
+} from '@/lib/room-history-product';
 
 function uniqueGatheringIds(rows: { gathering_id?: string | null }[] | null): string[] {
   const set = new Set<string>();
@@ -19,17 +25,23 @@ export async function countCoAttendanceGatherings(
   admin: SupabaseClient,
   viewerUserId: string,
   targetUserId: string,
+  product: ProductId = getRoomHistoryProductId(),
 ): Promise<number | null> {
   const a = viewerUserId.trim();
   const b = targetUserId.trim();
   if (!a || !b) return 0;
   if (a === b) return 0;
 
-  const { data: viewerRows, error: viewerErr } = await admin
-    .from('user_room_participation_history')
-    .select('gathering_id')
-    .eq('user_id', a)
-    .not('gathering_id', 'is', null);
+  const viewerRes = await runRoomHistoryQueryScoped((scopeProduct) => {
+    let q = admin
+      .from('user_room_participation_history')
+      .select('gathering_id')
+      .eq('user_id', a)
+      .not('gathering_id', 'is', null);
+    if (scopeProduct) q = withRoomHistoryProductEq(q, product);
+    return q;
+  });
+  const { data: viewerRows, error: viewerErr } = viewerRes;
 
   if (viewerErr) {
     if (viewerErr.code === '42P01') return null;
@@ -39,11 +51,16 @@ export async function countCoAttendanceGatherings(
   const viewerGatheringIds = uniqueGatheringIds(viewerRows);
   if (viewerGatheringIds.length === 0) return 0;
 
-  const { data: targetRows, error: targetErr } = await admin
-    .from('user_room_participation_history')
-    .select('gathering_id')
-    .eq('user_id', b)
-    .in('gathering_id', viewerGatheringIds);
+  const targetRes = await runRoomHistoryQueryScoped((scopeProduct) => {
+    let q = admin
+      .from('user_room_participation_history')
+      .select('gathering_id')
+      .eq('user_id', b)
+      .in('gathering_id', viewerGatheringIds);
+    if (scopeProduct) q = withRoomHistoryProductEq(q, product);
+    return q;
+  });
+  const { data: targetRows, error: targetErr } = targetRes;
 
   if (targetErr) {
     if (targetErr.code === '42P01') return null;

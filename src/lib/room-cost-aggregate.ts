@@ -26,6 +26,11 @@ import {
   emptyYoutubeApiSlotStats,
   type YoutubeApiSlotStats,
 } from '@/lib/youtube-api-slot-aggregate';
+import {
+  parseAdminProductFilter,
+  runAdminHistoryQueryScoped,
+  type AdminProductFilter,
+} from '@/lib/room-history-product';
 
 type RoomBucket = {
   room_id: string;
@@ -144,6 +149,7 @@ export async function aggregateRoomCostSummaries(
     roomId?: string | null;
     ownerUserId?: string | null;
     nowMs?: number;
+    productFilter?: AdminProductFilter;
   } = {},
 ): Promise<{ rooms: RoomCostSummaryRow[]; owners: OwnerCostSummaryRow[] }> {
   const nowMs = options.nowMs ?? Date.now();
@@ -154,17 +160,21 @@ export async function aggregateRoomCostSummaries(
     : new Date(nowMs - lookbackDays * 86400000).toISOString();
   const roomFilter = options.roomId?.trim() || '';
   const ownerFilter = options.ownerUserId?.trim() || '';
+  const productFilter = options.productFilter ?? parseAdminProductFilter(null);
 
-  const gatherings = await loadGatheringsForBillingWindow(admin, fromIso);
+  const gatherings = await loadGatheringsForBillingWindow(admin, fromIso, productFilter);
   const roomMap = new Map<string, RoomBucket>();
 
   const resolveOwner = (roomId: string, iso: string): string | null =>
     attributeYoutubeLogToOwner(gatherings, roomId, iso);
 
-  let geminiQuery = admin.from('gemini_usage_logs').select(GEMINI_SELECT).gte('created_at', fromIso).limit(15000);
-  if (roomFilter) geminiQuery = geminiQuery.eq('room_id', roomFilter);
-
-  const { data: geminiRows, error: geminiErr } = await geminiQuery;
+  const geminiRes = await runAdminHistoryQueryScoped((applyProductEq, scopedProduct) => {
+    let q = admin.from('gemini_usage_logs').select(GEMINI_SELECT).gte('created_at', fromIso).limit(15000);
+    if (roomFilter) q = q.eq('room_id', roomFilter);
+    if (applyProductEq && scopedProduct) q = q.eq('product', scopedProduct);
+    return q;
+  }, productFilter);
+  const { data: geminiRows, error: geminiErr } = geminiRes;
   if (!geminiErr || geminiErr.code === '42703') {
     const rows = geminiErr?.code === '42703' ? [] : ((geminiRows ?? []) as GeminiBillingLogRow[]);
     for (const raw of rows) {
@@ -176,17 +186,20 @@ export async function aggregateRoomCostSummaries(
       addBillingKind(b.byBilling, raw.billing_kind, raw);
     }
   } else if (geminiErr.code !== '42P01') {
-    throw new Error(geminiErr.message);
+    throw new Error(geminiErr.message ?? 'gemini_usage_logs query failed');
   }
 
-  let playQuery = admin
-    .from('room_playback_history')
-    .select('room_id, played_at, user_id')
-    .gte('played_at', fromIso)
-    .limit(10000);
-  if (roomFilter) playQuery = playQuery.eq('room_id', roomFilter);
-
-  const { data: playRows } = await playQuery;
+  const playRes = await runAdminHistoryQueryScoped((applyProductEq, scopedProduct) => {
+    let q = admin
+      .from('room_playback_history')
+      .select('room_id, played_at, user_id')
+      .gte('played_at', fromIso)
+      .limit(10000);
+    if (roomFilter) q = q.eq('room_id', roomFilter);
+    if (applyProductEq && scopedProduct) q = q.eq('product', scopedProduct);
+    return q;
+  }, productFilter);
+  const { data: playRows } = playRes;
   for (const raw of playRows ?? []) {
     const roomId = typeof raw.room_id === 'string' ? raw.room_id.trim() : '';
     if (!roomId) continue;
@@ -197,14 +210,17 @@ export async function aggregateRoomCostSummaries(
     }
   }
 
-  let chatQuery = admin
-    .from('room_chat_log')
-    .select('room_id, message_type, created_at')
-    .gte('created_at', fromIso)
-    .limit(8000);
-  if (roomFilter) chatQuery = chatQuery.eq('room_id', roomFilter);
-
-  const { data: chatRows } = await chatQuery;
+  const chatRes = await runAdminHistoryQueryScoped((applyProductEq, scopedProduct) => {
+    let q = admin
+      .from('room_chat_log')
+      .select('room_id, message_type, created_at')
+      .gte('created_at', fromIso)
+      .limit(8000);
+    if (roomFilter) q = q.eq('room_id', roomFilter);
+    if (applyProductEq && scopedProduct) q = q.eq('product', scopedProduct);
+    return q;
+  }, productFilter);
+  const { data: chatRows } = chatRes;
   for (const raw of chatRows ?? []) {
     const roomId = typeof raw.room_id === 'string' ? raw.room_id.trim() : '';
     if (!roomId) continue;
@@ -217,14 +233,17 @@ export async function aggregateRoomCostSummaries(
     }
   }
 
-  let ytQuery = admin
-    .from('youtube_api_usage_logs')
-    .select('room_id, endpoint, ok, created_at')
-    .gte('created_at', fromIso)
-    .limit(8000);
-  if (roomFilter) ytQuery = ytQuery.eq('room_id', roomFilter);
-
-  const { data: ytRows, error: ytErr } = await ytQuery;
+  const ytRes = await runAdminHistoryQueryScoped((applyProductEq, scopedProduct) => {
+    let q = admin
+      .from('youtube_api_usage_logs')
+      .select('room_id, endpoint, ok, created_at')
+      .gte('created_at', fromIso)
+      .limit(8000);
+    if (roomFilter) q = q.eq('room_id', roomFilter);
+    if (applyProductEq && scopedProduct) q = q.eq('product', scopedProduct);
+    return q;
+  }, productFilter);
+  const { data: ytRows, error: ytErr } = ytRes;
   if (!ytErr) {
     for (const raw of ytRows ?? []) {
       const roomId = typeof raw.room_id === 'string' ? raw.room_id.trim() : '';

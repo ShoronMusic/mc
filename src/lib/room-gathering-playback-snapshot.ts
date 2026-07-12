@@ -4,6 +4,8 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { ProductId } from '@/lib/product-mode';
+import { normalizeRoomHistoryProduct, runRoomHistoryQueryScoped, withRoomHistoryProductEq } from '@/lib/room-history-product';
 
 export type GatheringPlaybackSnapshotResult =
   | { ok: true; inserted: number; skipped?: false }
@@ -31,6 +33,7 @@ export async function persistGatheringPlaybackSnapshot(
     ownerUserId: string | null;
     startedAt: string;
     endedAt: string;
+    product?: ProductId | string | null;
   },
 ): Promise<GatheringPlaybackSnapshotResult> {
   const gatheringId = params.gatheringId.trim();
@@ -54,23 +57,31 @@ export async function persistGatheringPlaybackSnapshot(
     return { ok: true, skipped: true, reason: 'already_saved' };
   }
 
-  const { data, error: histErr } = await admin
-    .from('room_playback_history')
-    .select(
-      'video_id, display_name, is_guest, played_at, title, artist_name, style, selection_round',
-    )
-    .eq('room_id', roomId)
-    .gte('played_at', params.startedAt)
-    .lte('played_at', params.endedAt)
-    .order('played_at', { ascending: true })
-    .order('id', { ascending: true })
-    .limit(5000);
+  const historyProduct = normalizeRoomHistoryProduct(params.product);
+
+  const histRes = await runRoomHistoryQueryScoped((scopeProduct) => {
+    let q = admin
+      .from('room_playback_history')
+      .select(
+        'video_id, display_name, is_guest, played_at, title, artist_name, style, selection_round',
+      )
+      .eq('room_id', roomId)
+      .gte('played_at', params.startedAt)
+      .lte('played_at', params.endedAt)
+      .order('played_at', { ascending: true })
+      .order('id', { ascending: true })
+      .limit(5000);
+    if (scopeProduct) q = withRoomHistoryProductEq(q, historyProduct);
+    return q;
+  });
+
+  const { data, error: histErr } = histRes;
 
   if (histErr) {
     if (histErr.code === '42P01') {
       return { ok: true, skipped: true, reason: 'playback_history_missing' };
     }
-    return { ok: false, error: histErr.message };
+    return { ok: false, error: histErr.message ?? 'query failed' };
   }
 
   const rows = (data ?? []) as HistoryRow[];

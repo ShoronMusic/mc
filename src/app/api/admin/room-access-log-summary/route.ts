@@ -2,6 +2,11 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getStyleAdminUserIds } from '@/lib/style-admin';
+import {
+  normalizeRoomHistoryProduct,
+  parseAdminProductFilter,
+  runAdminHistoryQueryScoped,
+} from '@/lib/room-history-product';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,7 +24,8 @@ function toJstYmd(iso: string): string {
 }
 
 /**
- * STYLE_ADMIN。直近 N 日の room_access_log を走査し、(JST 日付 × 部屋) ごとの入室数を返す。
+ * STYLE_ADMIN。直近 N 日の room_access_log を走査し、(JST 日付 × product × 部屋) ごとの入室数を返す。
+ * Query: days, product=all|musicaichat|musicchat
  */
 export async function GET(request: Request) {
   const supabase = await createClient();
@@ -68,8 +74,10 @@ export async function GET(request: Request) {
     );
   }
 
-  const daysParam = new URL(request.url).searchParams.get('days');
+  const { searchParams } = new URL(request.url);
+  const daysParam = searchParams.get('days');
   const days = Math.min(120, Math.max(1, parseInt(daysParam || '30', 10) || 30));
+  const productFilter = parseAdminProductFilter(searchParams.get('product'));
   const sinceMs = Date.now() - days * 86400000;
   const sinceIso = new Date(sinceMs).toISOString();
 
@@ -79,12 +87,20 @@ export async function GET(request: Request) {
   let offset = 0;
 
   for (;;) {
-    const { data, error } = await admin
-      .from('room_access_log')
-      .select('room_id, accessed_at, is_guest')
-      .gte('accessed_at', sinceIso)
-      .order('accessed_at', { ascending: false })
-      .range(offset, offset + PAGE_SIZE - 1);
+    const scanRes = await runAdminHistoryQueryScoped((applyProductEq, scopedProduct) => {
+      let q = admin
+        .from('room_access_log')
+        .select('room_id, product, accessed_at, is_guest')
+        .gte('accessed_at', sinceIso)
+        .order('accessed_at', { ascending: false })
+        .range(offset, offset + PAGE_SIZE - 1);
+      if (applyProductEq && scopedProduct) {
+        q = q.eq('product', scopedProduct);
+      }
+      return q;
+    }, productFilter);
+
+    const { data, error } = scanRes;
 
     if (error) {
       if (error.code === '42P01') {
@@ -108,8 +124,9 @@ export async function GET(request: Request) {
       const roomId = typeof row.room_id === 'string' ? row.room_id.trim() : '';
       const accessed = typeof row.accessed_at === 'string' ? row.accessed_at : '';
       if (!roomId || !accessed) continue;
+      const product = normalizeRoomHistoryProduct((row as { product?: string }).product);
       const ymd = toJstYmd(accessed);
-      const key = `${ymd}\t${roomId}`;
+      const key = `${ymd}\t${product}\t${roomId}`;
       const cur = counts.get(key) ?? { total: 0, guests: 0, members: 0 };
       cur.total += 1;
       if (row.is_guest === true) cur.guests += 1;
@@ -126,21 +143,30 @@ export async function GET(request: Request) {
     offset += PAGE_SIZE;
   }
 
-  const rows: { date_jst: string; room_id: string; total: number; guests: number; members: number }[] = [];
+  const rows: {
+    date_jst: string;
+    room_id: string;
+    product: string;
+    total: number;
+    guests: number;
+    members: number;
+  }[] = [];
   for (const [key, c] of Array.from(counts.entries())) {
-    const [date_jst, room_id] = key.split('\t');
-    if (date_jst && room_id) {
-      rows.push({ date_jst, room_id, total: c.total, guests: c.guests, members: c.members });
+    const [date_jst, product, room_id] = key.split('\t');
+    if (date_jst && product && room_id) {
+      rows.push({ date_jst, room_id, product, total: c.total, guests: c.guests, members: c.members });
     }
   }
 
   rows.sort((a, b) => {
     if (a.date_jst !== b.date_jst) return b.date_jst.localeCompare(a.date_jst);
+    if (a.product !== b.product) return a.product.localeCompare(b.product);
     return a.room_id.localeCompare(b.room_id, 'ja');
   });
 
   return NextResponse.json({
     days,
+    product: productFilter,
     rows,
     scanned,
     truncated,

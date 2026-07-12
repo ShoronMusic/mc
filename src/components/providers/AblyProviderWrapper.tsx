@@ -20,16 +20,17 @@ import {
 import { AblyRoomTrafficProvider } from '@/lib/ably-room-traffic-context';
 import { useAblyBackgroundSuspend } from '@/hooks/useAblyBackgroundSuspend';
 import { createClient } from '@/lib/supabase/client';
+import { getAblyRoomChannelName, getRoomProductScopedStorageKey } from '@/lib/room-product-scope';
 
 const DEFAULT_DISPLAY_NAME = 'ゲスト';
 
 /** 退室時刻・表示名を記録するキー（部屋ごと）。同一部屋に戻ったとき「おかえりなさい」に使う */
 export function getLastExitStorageKey(roomId: string): string {
-  return `mc:last_exit:${roomId}`;
+  return getRoomProductScopedStorageKey('mc:last_exit:', roomId);
 }
 
 function getChannelName(roomId: string): string {
-  return `room:${roomId}`;
+  return getAblyRoomChannelName(roomId);
 }
 
 function getValidKey(): string | null {

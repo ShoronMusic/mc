@@ -6,10 +6,13 @@ import { AdminLoginHint } from '@/components/auth/AdminLoginHint';
 import { StartPageMainCard } from '@/components/home/StartPageMainCard';
 import { SessionReplacedNotice } from '@/components/home/SessionReplacedNotice';
 import { SharePendingNotice } from '@/components/home/SharePendingNotice';
+import { isMcProduct } from '@/lib/product-mode';
 
 export const dynamic = 'force-dynamic';
 
 export default function StartPage() {
+  const mc = isMcProduct();
+
   return (
     <>
       <FromStartMarker />
@@ -24,7 +27,11 @@ export default function StartPage() {
           <AdminLoginHint />
         </div>
       </Suspense>
-      <div className="flex min-h-screen flex-col items-center justify-center bg-gray-950 p-4 pt-16">
+      <div
+        className={`flex min-h-screen flex-col items-center justify-center p-4 pt-16 ${
+          mc ? 'bg-[var(--mc-bg-page)]' : 'bg-gray-950'
+        }`}
+      >
         <SessionReplacedNotice />
         <SharePendingNotice />
         <StartPageMainCard />

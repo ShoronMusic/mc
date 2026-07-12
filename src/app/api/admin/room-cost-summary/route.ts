@@ -4,6 +4,7 @@ import { requireStyleAdminApi } from '@/lib/admin-access';
 import { formatGeminiCostJpyApprox } from '@/lib/gemini-pricing';
 import { formatInfraCostJpyApprox } from '@/lib/infra-cost-estimates';
 import { aggregateRoomCostSummaries } from '@/lib/room-cost-aggregate';
+import { parseAdminProductFilter } from '@/lib/room-history-product';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,12 +24,14 @@ export async function GET(request: Request) {
   const days = Math.min(90, Math.max(1, parseInt(url.searchParams.get('days') || '30', 10) || 30));
   const roomId = url.searchParams.get('roomId')?.trim() || '';
   const ownerUserId = url.searchParams.get('ownerUserId')?.trim() || '';
+  const productFilter = parseAdminProductFilter(url.searchParams.get('product'));
 
   try {
     const { rooms, owners } = await aggregateRoomCostSummaries(admin, {
       lookbackDays: days,
       roomId: roomId || null,
       ownerUserId: ownerUserId || null,
+      productFilter,
     });
 
     const totals = rooms.reduce(

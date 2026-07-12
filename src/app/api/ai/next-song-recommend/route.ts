@@ -21,6 +21,8 @@ import {
   parseSeedLabelToArtistTitle,
 } from '@/lib/next-song-recommend-store';
 import { upsertSongAndVideo } from '@/lib/song-entities';
+import { buildSongDbRegistrationInput } from '@/lib/song-db-registration-gate';
+import { resolveJapaneseEconomyWithMusicBrainz } from '@/lib/resolve-japanese-economy';
 import { getChatAiClientIp } from '@/lib/chat-ai-rate-limit';
 import { guardAiTrialSongSelection } from '@/lib/user-ai-trial-server';
 import { isAiUnlimitedUserId } from '@/lib/ai-unlimited-user-ids';
@@ -105,6 +107,28 @@ export async function POST(request: Request): Promise<NextResponse<OkDisabled | 
       artistDisplay && song
         ? `${artistDisplay} — ${song}`
         : formatArtistTitle(title, authorName, snippet?.description ?? null, snippet?.channelTitle ?? null);
+    const isJpEconomy = await resolveJapaneseEconomyWithMusicBrainz({
+      title,
+      artistDisplay,
+      artist,
+      song,
+      description: snippet?.description ?? null,
+      channelTitle: snippet?.channelTitle ?? null,
+      defaultAudioLanguage: snippet?.defaultAudioLanguage ?? null,
+    });
+    const registrationCheck = buildSongDbRegistrationInput({
+      videoId,
+      rawTitle: title,
+      channelTitle: snippet?.channelTitle ?? null,
+      channelId: snippet?.channelId ?? null,
+      categoryId: snippet?.categoryId ?? null,
+      description: snippet?.description ?? null,
+      mainArtist: artistDisplay ?? artist ?? null,
+      songTitle: song,
+      isJapaneseDomestic: isJpEconomy,
+      channelAuthorName: authorName ?? null,
+      viewCount: snippet?.viewCount ?? null,
+    });
     const seedSongId =
       artistDisplay && song
         ? await upsertSongAndVideo({
@@ -112,6 +136,7 @@ export async function POST(request: Request): Promise<NextResponse<OkDisabled | 
             videoId,
             mainArtist: artistDisplay,
             songTitle: song,
+            registrationCheck,
           })
         : artist && song
           ? await upsertSongAndVideo({
@@ -119,6 +144,7 @@ export async function POST(request: Request): Promise<NextResponse<OkDisabled | 
               videoId,
               mainArtist: artist,
               songTitle: song,
+              registrationCheck,
             })
           : null;
 

@@ -1,5 +1,16 @@
 'use client';
 
+import {
+  IS_MC_PRODUCT,
+  librarySecondaryBtnClass,
+  mypageActiveRowClass,
+  mypageDateGroupClass,
+  mypageMetaBadgeClass,
+  mypagePickSongBtnClass,
+  mypagePlayBtnClass,
+  showRoomStyleUi,
+} from '@/lib/product-branding';
+
 export type MyPageSongHistoryRow = {
   id: string;
   room_id: string;
@@ -85,27 +96,26 @@ function SongHistoryEntry({
       : '';
   const title = row.title || row.video_id;
   const artist = row.artist ? `（${row.artist}）` : '';
+  const active = activePreviewVideoId === row.video_id;
 
   return (
     <li
-      className={`border-b border-gray-700/50 pb-2 last:border-0 last:pb-0 ${
-        activePreviewVideoId === row.video_id
-          ? 'rounded bg-lime-950/20 px-1 ring-1 ring-lime-700/40'
-          : ''
-      }`}
+      className={`border-b pb-2 last:border-0 last:pb-0 ${
+        IS_MC_PRODUCT ? 'border-gray-200' : 'border-gray-700/50'
+      } ${active ? mypageActiveRowClass() : ''}`}
     >
       <p className="text-xs text-gray-500">
         部屋 {row.room_id || '—'} · {timeStr}
         {roundSuffix}
       </p>
-      <p className="text-sm text-gray-200">
+      <p className={`text-sm ${IS_MC_PRODUCT ? 'text-gray-900' : 'text-gray-200'}`}>
         {title}
         {artist}
       </p>
       <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px]">
-        {row.style?.trim() ? (
+        {showRoomStyleUi() && row.style?.trim() ? (
           <span
-            className="rounded border border-gray-700/70 bg-gray-900/40 px-1.5 py-0.5"
+            className={mypageMetaBadgeClass()}
             style={{ color: styleColor(row.style) }}
             title={`スタイル: ${row.style}`}
           >
@@ -114,24 +124,22 @@ function SongHistoryEntry({
         ) : null}
         {row.era?.trim() ? (
           <span
-            className="rounded border border-gray-700/70 bg-gray-900/40 px-1.5 py-0.5"
+            className={mypageMetaBadgeClass()}
             style={{ color: eraColor(row.era) }}
             title={`年代: ${row.era}`}
           >
             {row.era}
           </span>
         ) : null}
-        {!row.style?.trim() && !row.era?.trim() ? <span className="text-gray-500">—</span> : null}
+        {(showRoomStyleUi() ? !row.style?.trim() : true) && !row.era?.trim() ? (
+          <span className="text-gray-500">—</span>
+        ) : null}
       </div>
       <div className="mt-1 flex flex-wrap items-center gap-2">
         <button
           type="button"
           onClick={() => onPlayPreview(row)}
-          className={`shrink-0 rounded border px-2 py-1 text-xs font-medium ${
-            activePreviewVideoId === row.video_id
-              ? 'border-lime-500 bg-lime-800 text-white'
-              : 'border-lime-700/60 bg-lime-900/30 text-lime-200 hover:bg-lime-900/50'
-          }`}
+          className={mypagePlayBtnClass(active)}
           title="プレイヤーで再生"
         >
           再生
@@ -140,14 +148,14 @@ function SongHistoryEntry({
           href={row.url}
           target="_blank"
           rel="noopener noreferrer"
-          className="break-all text-xs text-blue-400 hover:underline"
+          className={`break-all text-xs hover:underline ${IS_MC_PRODUCT ? 'text-blue-600' : 'text-blue-400'}`}
         >
           {row.url}
         </a>
         <button
           type="button"
           onClick={() => onPickSong(row.url)}
-          className="shrink-0 rounded border border-emerald-700/60 bg-emerald-900/30 px-2 py-1 text-xs text-emerald-200 hover:bg-emerald-900/50"
+          className={mypagePickSongBtnClass()}
           title="この曲を選曲欄にセット"
         >
           選曲
@@ -155,7 +163,7 @@ function SongHistoryEntry({
         <button
           type="button"
           onClick={() => onAddToMyList(row)}
-          className="shrink-0 rounded border border-violet-600/60 bg-violet-900/40 px-2 py-1 text-xs text-violet-100 hover:bg-violet-900/60"
+          className={librarySecondaryBtnClass('px-2 py-1 text-xs')}
           title="自分のライブラリ（マイリスト）に追加"
         >
           マイリストに追加
@@ -218,8 +226,10 @@ export function MyPageSongHistoryList({
         const label = `${y}年${m}月${d}日`;
         const dayRows = byDate.get(dateKey)!;
         return (
-          <div key={dateKey} className="rounded border border-gray-700 bg-gray-800/50 p-2">
-            <p className="mb-2 text-xs font-medium text-gray-400">{label}</p>
+          <div key={dateKey} className={mypageDateGroupClass()}>
+            <p className={`mb-2 text-xs font-medium ${IS_MC_PRODUCT ? 'text-gray-600' : 'text-gray-400'}`}>
+              {label}
+            </p>
             <ul className="space-y-2">
               {dayRows.map((row) => (
                 <SongHistoryEntry

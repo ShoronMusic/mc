@@ -11,6 +11,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { aggregateRoomCostSummaries } from '@/lib/room-cost-aggregate';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { getRoomHistoryProductId } from '@/lib/room-history-product';
 
 export type AiOperationsHaltReason = 'manual_kill_switch' | 'monthly_budget_exceeded' | null;
 
@@ -101,7 +102,11 @@ export async function sumMonthlyVariableCostJpyApprox(
   nowMs = Date.now(),
 ): Promise<number> {
   const fromIso = jstMonthStartIso(nowMs);
-  const { rooms } = await aggregateRoomCostSummaries(admin, { fromIso, nowMs });
+  const { rooms } = await aggregateRoomCostSummaries(admin, {
+    fromIso,
+    nowMs,
+    productFilter: getRoomHistoryProductId(),
+  });
   let total = 0;
   for (const row of rooms) {
     total += row.total_cost_jpy_approx;

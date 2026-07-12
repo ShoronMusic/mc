@@ -1,5 +1,10 @@
 /** @type {import('next').NextConfig} */
+const product = process.env.NEXT_PUBLIC_PRODUCT?.trim().toLowerCase();
+/** ma / mc をローカルで同時 dev するとき、.next 共有で 404 になるため mc は別 dir */
+const distDir = product === 'musicchat' ? '.next-mc' : '.next';
+
 const nextConfig = {
+  distDir,
   // CI / Vercel では npm run lint を別途実行するため、next build 内の ESLint を省略してメモリ・時間を節約
   eslint: {
     ignoreDuringBuilds: true,

@@ -3,6 +3,17 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { endStaleLiveGatheringIfNeeded, countAblyPresenceForRoom } from '@/lib/stale-live-gathering';
 import { displayNameFromAuthUserMetadata } from '@/lib/auth-user-public-display-name';
+import {
+  runGatheringQueryScoped,
+  runLobbyQueryScoped,
+  withGatheringProductEq,
+  withLobbyProductEq,
+} from '@/lib/room-product-scope';
+import {
+  getRoomHistoryProductId,
+  runRoomHistoryQueryScoped,
+  withRoomHistoryProductEq,
+} from '@/lib/room-history-product';
 
 export const dynamic = 'force-dynamic';
 
@@ -64,17 +75,21 @@ async function lobbyDisplayTitleByRoomIds(
 ): Promise<Map<string, string>> {
   const map = new Map<string, string>();
   if (roomIds.length === 0) return map;
-  const { data, error } = await supabase
-    .from('room_lobby_message')
-    .select('room_id, display_title')
-    .in('room_id', roomIds);
+  const { data, error } = await runLobbyQueryScoped((scopeProduct) => {
+    let q = supabase
+      .from('room_lobby_message')
+      .select('room_id, display_title')
+      .in('room_id', roomIds);
+    if (scopeProduct) q = withLobbyProductEq(q);
+    return q;
+  });
   if (error) {
     if (error.code === '42P01') return map;
     if (error.message?.includes('display_title') || error.code === '42703') return map;
     console.error('[room-live-status] room_lobby_message', error);
     return map;
   }
-  for (const row of data ?? []) {
+  for (const row of (data as { room_id?: string; display_title?: string }[] | null) ?? []) {
     const rid = typeof (row as { room_id?: string }).room_id === 'string' ? (row as { room_id: string }).room_id : '';
     const dt =
       row && typeof (row as { display_title?: unknown }).display_title === 'string'
@@ -119,46 +134,24 @@ export async function GET(request: Request) {
     }
   }
 
-  const buildBaseQuery = (withJoinLocked: boolean) => {
+  const buildBaseQuery = (withJoinLocked: boolean, scopeProduct: boolean) => {
     const selectCols = withJoinLocked
       ? 'id, room_id, title, started_at, join_locked, created_by'
       : 'id, room_id, title, started_at, created_by';
-    return supabase
+    let q = supabase
       .from('room_gatherings')
       .select(selectCols)
       .eq('status', 'live')
       .order('started_at', { ascending: true });
+    if (scopeProduct) q = withGatheringProductEq(q);
+    return q;
   };
-  let query = buildBaseQuery(true);
 
-  if (roomId) {
-    query = query.eq('room_id', roomId);
-  } else if (roomsRaw.trim()) {
-    const ids = Array.from(
-      new Set(
-        roomsRaw
-          .split(',')
-          .map((s) => safeRoomId(s))
-          .filter((x): x is string => x != null),
-      ),
-    ).slice(0, 24);
-    if (ids.length > 0) {
-      query = query.in('room_id', ids);
-    }
-  }
-
-  let data: RoomGatheringRow[] | null = null;
-  let error: { code?: string; message?: string } | null = null;
-  {
-    const res = await query;
-    data = (res.data as RoomGatheringRow[] | null) ?? null;
-    error = res.error as { code?: string; message?: string } | null;
-  }
-  if (error?.code === '42703' || error?.message?.includes('join_locked')) {
-    let fallback = buildBaseQuery(false);
-    if (roomId) {
-      fallback = fallback.eq('room_id', roomId);
-    } else if (roomsRaw.trim()) {
+  const applyRoomIdFilter = <T extends { eq: (col: string, val: string) => T; in: (col: string, vals: string[]) => T }>(
+    query: T,
+  ): T => {
+    if (roomId) return query.eq('room_id', roomId);
+    if (roomsRaw.trim()) {
       const ids = Array.from(
         new Set(
           roomsRaw
@@ -167,9 +160,23 @@ export async function GET(request: Request) {
             .filter((x): x is string => x != null),
         ),
       ).slice(0, 24);
-      if (ids.length > 0) fallback = fallback.in('room_id', ids);
+      if (ids.length > 0) return query.in('room_id', ids);
     }
-    const res2 = await fallback;
+    return query;
+  };
+
+  const runLiveQuery = async (withJoinLocked: boolean, scopeProduct: boolean) =>
+    applyRoomIdFilter(buildBaseQuery(withJoinLocked, scopeProduct));
+
+  let data: RoomGatheringRow[] | null = null;
+  let error: { code?: string; message?: string } | null = null;
+  {
+    const res = await runGatheringQueryScoped((scopeProduct) => runLiveQuery(true, scopeProduct));
+    data = (res.data as RoomGatheringRow[] | null) ?? null;
+    error = res.error as { code?: string; message?: string } | null;
+  }
+  if (error?.code === '42703' || error?.message?.includes('join_locked')) {
+    const res2 = await runGatheringQueryScoped((scopeProduct) => runLiveQuery(false, scopeProduct));
     data = (res2.data as RoomGatheringRow[] | null) ?? null;
     error = res2.error as { code?: string; message?: string } | null;
   }
@@ -230,16 +237,21 @@ export async function GET(request: Request) {
   let organizerRoomIdSet = new Set<string>();
   if (sessionUserId && roomIdsLive.length > 0) {
     if (admin) {
-      const { data: myLiveRows, error: myLiveErr } = await admin
-        .from('room_gatherings')
-        .select('room_id')
-        .eq('status', 'live')
-        .eq('created_by', sessionUserId)
-        .in('room_id', roomIdsLive);
+      const { data: myLiveRowsRaw, error: myLiveErr } = await runGatheringQueryScoped((scopeProduct) => {
+        let q = admin
+          .from('room_gatherings')
+          .select('room_id')
+          .eq('status', 'live')
+          .eq('created_by', sessionUserId)
+          .in('room_id', roomIdsLive);
+        if (scopeProduct) q = withGatheringProductEq(q);
+        return q;
+      });
+      const myLiveRows = (myLiveRowsRaw as { room_id?: string }[] | null) ?? [];
       if (!myLiveErr) {
         organizerRoomIdSet = new Set(
-          (myLiveRows ?? [])
-            .map((r) => (typeof (r as { room_id?: string }).room_id === 'string' ? (r as { room_id: string }).room_id : ''))
+          myLiveRows
+            .map((r) => (typeof r.room_id === 'string' ? r.room_id : ''))
             .filter(Boolean),
         );
       }
@@ -249,11 +261,17 @@ export async function GET(request: Request) {
   let enteredGatheringSet = new Set<string>();
   if (sessionUserId && gatheringIdsLive.length > 0) {
     if (admin) {
-      const { data: joinedRows, error: joinedErr } = await admin
-        .from('user_room_participation_history')
-        .select('gathering_id')
-        .eq('user_id', sessionUserId)
-        .in('gathering_id', gatheringIdsLive);
+      const historyProduct = getRoomHistoryProductId();
+      const joinedRes = await runRoomHistoryQueryScoped((scopeProduct) => {
+        let q = admin
+          .from('user_room_participation_history')
+          .select('gathering_id')
+          .eq('user_id', sessionUserId)
+          .in('gathering_id', gatheringIdsLive);
+        if (scopeProduct) q = withRoomHistoryProductEq(q, historyProduct);
+        return q;
+      });
+      const { data: joinedRows, error: joinedErr } = joinedRes;
       if (!joinedErr) {
         enteredGatheringSet = new Set(
           (joinedRows ?? [])
@@ -285,14 +303,15 @@ export async function GET(request: Request) {
     let organizerTitle: string | null = null;
 
     if (!first && sessionUserId && admin) {
-      const { data: myRow, error: myRowErr } = await admin
-        .from('room_gatherings')
-        .select('title, status')
-        .eq('room_id', roomId)
-        .eq('created_by', sessionUserId)
-        .order('started_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      const { data: myRow, error: myRowErr } = await runGatheringQueryScoped((scopeProduct) => {
+        let q = admin
+          .from('room_gatherings')
+          .select('title, status')
+          .eq('room_id', roomId)
+          .eq('created_by', sessionUserId);
+        if (scopeProduct) q = withGatheringProductEq(q);
+        return q.order('started_at', { ascending: false }).limit(1).maybeSingle();
+      });
       if (!myRowErr && myRow) {
         isOrganizer = true;
         canResume = String((myRow as { status?: string }).status ?? '') === 'ended';

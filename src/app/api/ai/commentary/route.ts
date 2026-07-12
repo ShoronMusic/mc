@@ -12,6 +12,7 @@ import {
 } from '@/lib/format-song-display';
 import { generateCommentary } from '@/lib/gemini';
 import { attachMusic8SongDataIfFetched, upsertSongAndVideo } from '@/lib/song-entities';
+import { buildSongDbRegistrationInput } from '@/lib/song-db-registration-gate';
 import { insertTidbit } from '@/lib/song-tidbits';
 import {
   resolveArtistSongForPackAsync,
@@ -257,6 +258,20 @@ export async function POST(request: Request) {
           mainArtist: artist ?? authorName ?? null,
           songTitle: song ?? title,
           variant: 'tidbit',
+          registrationCheck: buildSongDbRegistrationInput({
+            videoId,
+            rawTitle: title,
+            channelTitle: snippet?.channelTitle ?? null,
+            channelId: snippet?.channelId ?? null,
+            categoryId: snippet?.categoryId ?? null,
+            description: snippet?.description ?? null,
+            mainArtist: artist ?? authorName ?? null,
+            songTitle: song ?? title,
+            hasMusic8Match: Boolean(musicaichatSong ?? fallbackMusic8Song),
+            isJapaneseDomestic: isJpEconomy,
+            channelAuthorName: authorName ?? null,
+            viewCount: snippet?.viewCount ?? null,
+          }),
         });
       } catch (e) {
         console.error('[api/ai/commentary] upsertSongAndVideo', e);

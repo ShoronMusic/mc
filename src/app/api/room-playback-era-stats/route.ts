@@ -5,6 +5,11 @@ import {
   parsePlaybackHistorySinceQuery,
   resolveRoomPlaybackStatsSinceIso,
 } from '@/lib/live-gathering-playback-since';
+import {
+  getRoomHistoryProductId,
+  runRoomHistoryQueryScoped,
+  withRoomHistoryProductEq,
+} from '@/lib/room-history-product';
 
 export const dynamic = 'force-dynamic';
 
@@ -67,17 +72,16 @@ export async function GET(request: Request) {
 
   const sinceQuery = parsePlaybackHistorySinceQuery(searchParams.get('since'));
   const sinceIso = await resolveRoomPlaybackStatsSinceIso(supabase, roomId, sinceQuery, mode);
+  const historyProduct = getRoomHistoryProductId();
 
   if (mode === '24h') {
-    let query = supabase
-      .from('room_playback_history')
-      .select('video_id')
-      .eq('room_id', roomId);
-    if (sinceIso) {
-      query = query.gte('played_at', sinceIso);
-    }
-
-    const { data, error } = await query;
+    const historyRes = await runRoomHistoryQueryScoped((scopeProduct) => {
+      let query = supabase.from('room_playback_history').select('video_id').eq('room_id', roomId);
+      if (scopeProduct) query = withRoomHistoryProductEq(query, historyProduct);
+      if (sinceIso) query = query.gte('played_at', sinceIso);
+      return query;
+    });
+    const { data, error } = historyRes;
 
     if (error) {
       if (error.code === '42P01') {
@@ -95,16 +99,18 @@ export async function GET(request: Request) {
     return NextResponse.json({ mode: '24h', total, counts });
   }
 
-  let last100Query = supabase
-    .from('room_playback_history')
-    .select('video_id')
-    .eq('room_id', roomId)
-    .order('played_at', { ascending: false })
-    .limit(100);
-  if (sinceIso) {
-    last100Query = last100Query.gte('played_at', sinceIso);
-  }
-  const { data, error } = await last100Query;
+  const last100Res = await runRoomHistoryQueryScoped((scopeProduct) => {
+    let last100Query = supabase
+      .from('room_playback_history')
+      .select('video_id')
+      .eq('room_id', roomId)
+      .order('played_at', { ascending: false })
+      .limit(100);
+    if (scopeProduct) last100Query = withRoomHistoryProductEq(last100Query, historyProduct);
+    if (sinceIso) last100Query = last100Query.gte('played_at', sinceIso);
+    return last100Query;
+  });
+  const { data, error } = last100Res;
 
   if (error) {
     if (error.code === '42P01') {

@@ -11,6 +11,12 @@ import {
 } from '@/lib/gemini-pricing';
 import type { GeminiUsageBillingKind } from '@/lib/gemini-usage-attribution';
 import { persistGatheringPlaybackSnapshot } from '@/lib/room-gathering-playback-snapshot';
+import { isMissingProductColumnError } from '@/lib/room-product-scope';
+import {
+  normalizeRoomHistoryProduct,
+  runRoomHistoryQueryScoped,
+  withRoomHistoryProductEq,
+} from '@/lib/room-history-product';
 
 type GatheringRow = {
   id: string;
@@ -19,6 +25,7 @@ type GatheringRow = {
   started_at: string | null;
   ended_at: string | null;
   created_by: string | null;
+  product?: string | null;
 };
 
 type GeminiLogRow = {
@@ -142,7 +149,7 @@ export async function persistRoomGatheringSnapshot(
 
   const { data: gathering, error: gErr } = await admin
     .from('room_gatherings')
-    .select('id, room_id, title, started_at, ended_at, created_by')
+    .select('id, room_id, title, started_at, ended_at, created_by, product')
     .eq('id', id)
     .maybeSingle();
 
@@ -160,6 +167,7 @@ export async function persistRoomGatheringSnapshot(
   }
 
   const roomId = g.room_id.trim();
+  const gatheringProduct = normalizeRoomHistoryProduct(g.product);
   const durationMs = gatheringDurationMs(startedAt, endedAt);
 
   const { data: lobby } = await admin
@@ -174,29 +182,38 @@ export async function persistRoomGatheringSnapshot(
 
   let ownerDisplayName: string | null = null;
   if (g.created_by) {
-    const { data: ownerPart } = await admin
-      .from('user_room_participation_history')
-      .select('display_name')
-      .eq('user_id', g.created_by)
-      .eq('room_id', roomId)
-      .order('joined_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    const ownerRes = await runRoomHistoryQueryScoped((scopeProduct) => {
+      let q = admin
+        .from('user_room_participation_history')
+        .select('display_name')
+        .eq('user_id', g.created_by!)
+        .eq('room_id', roomId)
+        .order('joined_at', { ascending: false })
+        .limit(1);
+      if (scopeProduct) q = withRoomHistoryProductEq(q, gatheringProduct);
+      return q.maybeSingle();
+    });
+    const { data: ownerPart } = ownerRes;
     if (ownerPart && typeof (ownerPart as { display_name?: unknown }).display_name === 'string') {
       ownerDisplayName = (ownerPart as { display_name: string }).display_name.trim() || null;
     }
   }
 
-  const { data: playRows, error: playErr } = await admin
-    .from('room_playback_history')
-    .select('user_id, played_at')
-    .eq('room_id', roomId)
-    .gte('played_at', startedAt)
-    .lte('played_at', endedAt)
-    .limit(5000);
+  const playRes = await runRoomHistoryQueryScoped((scopeProduct) => {
+    let q = admin
+      .from('room_playback_history')
+      .select('user_id, played_at')
+      .eq('room_id', roomId)
+      .gte('played_at', startedAt)
+      .lte('played_at', endedAt)
+      .limit(5000);
+    if (scopeProduct) q = withRoomHistoryProductEq(q, gatheringProduct);
+    return q;
+  });
+  const { data: playRows, error: playErr } = playRes;
 
   if (playErr && playErr.code !== '42P01') {
-    return { ok: false, error: playErr.message };
+    return { ok: false, error: playErr.message ?? 'room_playback_history query failed' };
   }
   const plays = (playRows ?? []) as PlaybackRow[];
   const songCountTotal = plays.length;
@@ -205,11 +222,16 @@ export async function persistRoomGatheringSnapshot(
   let chatAiMessages = 0;
   let ablyMessagesEstimated = 0;
 
-  const { data: chatByGathering, error: chatGErr } = await admin
-    .from('room_chat_log')
-    .select('message_type, gathering_id, created_at')
-    .eq('gathering_id', id)
-    .limit(8000);
+  const chatGatheringRes = await runRoomHistoryQueryScoped((scopeProduct) => {
+    let q = admin
+      .from('room_chat_log')
+      .select('message_type, gathering_id, created_at')
+      .eq('gathering_id', id)
+      .limit(8000);
+    if (scopeProduct) q = withRoomHistoryProductEq(q, gatheringProduct);
+    return q;
+  });
+  const { data: chatByGathering, error: chatGErr } = chatGatheringRes;
 
   if (!chatGErr && (chatByGathering?.length ?? 0) > 0) {
     for (const row of chatByGathering as ChatRow[]) {
@@ -219,13 +241,18 @@ export async function persistRoomGatheringSnapshot(
       else if (mt === 'ai') chatAiMessages += 1;
     }
   } else {
-    const { data: chatByTime, error: chatTErr } = await admin
-      .from('room_chat_log')
-      .select('message_type, gathering_id, created_at')
-      .eq('room_id', roomId)
-      .gte('created_at', startedAt)
-      .lte('created_at', endedAt)
-      .limit(8000);
+    const chatRes = await runRoomHistoryQueryScoped((scopeProduct) => {
+      let q = admin
+        .from('room_chat_log')
+        .select('message_type, gathering_id, created_at')
+        .eq('room_id', roomId)
+        .gte('created_at', startedAt)
+        .lte('created_at', endedAt)
+        .limit(8000);
+      if (scopeProduct) q = withRoomHistoryProductEq(q, gatheringProduct);
+      return q;
+    });
+    const { data: chatByTime, error: chatTErr } = chatRes;
     if (!chatTErr) {
       for (const row of (chatByTime ?? []) as ChatRow[]) {
         ablyMessagesEstimated += 1;
@@ -240,13 +267,18 @@ export async function persistRoomGatheringSnapshot(
   const geminiByBillingKind = emptyBillingKindMap();
   const geminiByUser = new Map<string, GeminiUsageTokenSummary>();
 
-  const { data: geminiRows, error: geminiErr } = await admin
-    .from('gemini_usage_logs')
-    .select(
-      'context, model, prompt_token_count, output_token_count, billing_kind, user_id, trigger_user_id, created_at, gathering_id, room_id',
-    )
-    .eq('gathering_id', id)
-    .limit(8000);
+  const geminiGatheringRes = await runRoomHistoryQueryScoped((scopeProduct) => {
+    let q = admin
+      .from('gemini_usage_logs')
+      .select(
+        'context, model, prompt_token_count, output_token_count, billing_kind, user_id, trigger_user_id, created_at, gathering_id, room_id',
+      )
+      .eq('gathering_id', id)
+      .limit(8000);
+    if (scopeProduct) q = withRoomHistoryProductEq(q, gatheringProduct);
+    return q;
+  });
+  const { data: geminiRows, error: geminiErr } = geminiGatheringRes;
 
   let geminiLogs = (geminiRows ?? []) as (GeminiLogRow & {
     created_at: string;
@@ -255,13 +287,18 @@ export async function persistRoomGatheringSnapshot(
   })[];
 
   if ((geminiErr && geminiErr.code === '42703') || geminiLogs.length === 0) {
-    const { data: fallbackRows, error: fbErr } = await admin
-      .from('gemini_usage_logs')
-      .select('context, model, prompt_token_count, output_token_count, user_id, created_at, room_id')
-      .eq('room_id', roomId)
-      .gte('created_at', startedAt)
-      .lte('created_at', endedAt)
-      .limit(8000);
+    const fbRes = await runRoomHistoryQueryScoped((scopeProduct) => {
+      let q = admin
+        .from('gemini_usage_logs')
+        .select('context, model, prompt_token_count, output_token_count, user_id, created_at, room_id')
+        .eq('room_id', roomId)
+        .gte('created_at', startedAt)
+        .lte('created_at', endedAt)
+        .limit(8000);
+      if (scopeProduct) q = withRoomHistoryProductEq(q, gatheringProduct);
+      return q;
+    });
+    const { data: fallbackRows, error: fbErr } = fbRes;
     if (!fbErr) {
       geminiLogs = (fallbackRows ?? []).map((r) => {
         const row = r as unknown as GeminiLogRow & { created_at: string };
@@ -280,7 +317,7 @@ export async function persistRoomGatheringSnapshot(
       });
     }
   } else if (geminiErr && geminiErr.code !== '42P01') {
-    return { ok: false, error: geminiErr.message };
+    return { ok: false, error: geminiErr.message ?? 'gemini_usage_logs query failed' };
   }
 
   for (const log of geminiLogs) {
@@ -312,21 +349,31 @@ export async function persistRoomGatheringSnapshot(
     aiCharacterPickCount = pickCount;
   }
 
-  const { data: partRows, error: partErr } = await admin
-    .from('user_room_participation_history')
-    .select('user_id, display_name, joined_at, left_at')
-    .eq('gathering_id', id)
-    .limit(500);
+  const partRes = await runRoomHistoryQueryScoped((scopeProduct) => {
+    let q = admin
+      .from('user_room_participation_history')
+      .select('user_id, display_name, joined_at, left_at')
+      .eq('gathering_id', id)
+      .limit(500);
+    if (scopeProduct) q = withRoomHistoryProductEq(q, gatheringProduct);
+    return q;
+  });
+  const { data: partRows, error: partErr } = partRes;
 
   let participants = (partRows ?? []) as ParticipationRow[];
   if (partErr || participants.length === 0) {
-    const { data: partFallback } = await admin
-      .from('user_room_participation_history')
-      .select('user_id, display_name, joined_at, left_at')
-      .eq('room_id', roomId)
-      .gte('joined_at', startedAt)
-      .lte('joined_at', endedAt)
-      .limit(500);
+    const partFbRes = await runRoomHistoryQueryScoped((scopeProduct) => {
+      let q = admin
+        .from('user_room_participation_history')
+        .select('user_id, display_name, joined_at, left_at')
+        .eq('room_id', roomId)
+        .gte('joined_at', startedAt)
+        .lte('joined_at', endedAt)
+        .limit(500);
+      if (scopeProduct) q = withRoomHistoryProductEq(q, gatheringProduct);
+      return q;
+    });
+    const { data: partFallback } = partFbRes;
     participants = (partFallback ?? []) as ParticipationRow[];
   }
 
@@ -377,7 +424,7 @@ export async function persistRoomGatheringSnapshot(
     });
   }
 
-  const snapshotRow = {
+  const snapshotRow: Record<string, unknown> = {
     gathering_id: id,
     room_id: roomId,
     room_display_title: roomDisplayTitle,
@@ -402,9 +449,15 @@ export async function persistRoomGatheringSnapshot(
     ably_messages_estimated: ablyMessagesEstimated,
     ai_character_pick_count: aiCharacterPickCount,
     snapshot_version: 1,
+    product: gatheringProduct,
   };
 
-  const { error: insErr } = await admin.from('room_gathering_snapshots').insert(snapshotRow);
+  let { error: insErr } = await admin.from('room_gathering_snapshots').insert(snapshotRow);
+  if (insErr && isMissingProductColumnError(insErr)) {
+    const legacy = { ...snapshotRow };
+    delete legacy.product;
+    ({ error: insErr } = await admin.from('room_gathering_snapshots').insert(legacy));
+  }
   if (insErr) {
     if (insErr.code === '42P01') return { ok: false, skipped: true, reason: 'snapshot_table_missing' };
     return { ok: false, error: insErr.message };
@@ -425,6 +478,7 @@ export async function persistRoomGatheringSnapshot(
     ownerUserId: g.created_by,
     startedAt,
     endedAt,
+    product: (g as { product?: string | null }).product,
   });
   if (!playbackSnap.ok) {
     console.error('[room-gathering-snapshot] playback snapshot', playbackSnap.error);

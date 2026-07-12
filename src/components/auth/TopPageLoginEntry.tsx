@@ -10,6 +10,7 @@ import { FROM_START_KEY } from './FromStartMarker';
 import { rememberGuestRoom, readGuestDisplayNameHint } from '@/lib/guest-room-persistence';
 import type { BrowserSupabaseClient } from '@/lib/supabase/load-browser-client';
 import { loadBrowserSupabaseClient } from '@/lib/supabase/load-browser-client';
+import { IS_MC_PRODUCT } from '@/lib/product-branding';
 
 function GoogleBrandIcon({ className }: { className?: string }) {
   return (
@@ -43,6 +44,10 @@ type LazySimpleAuthFormProps = {
   onAwaitingEmailConfirmation?: (email: string) => void;
   emailConfirmRedirectPath?: string;
 };
+
+function mcAuthBtn(base: string, mc: string): string {
+  return IS_MC_PRODUCT ? mc : base;
+}
 
 function EntryLeadCopy({ intent }: { intent?: TopPageLoginEntryIntent }) {
   if (intent === 'new-room') {
@@ -208,14 +213,22 @@ export function TopPageLoginEntry({
 
   return (
     <>
-      <div className="mb-4 rounded-lg border border-gray-700 bg-gray-800/80 p-3">
+      <div
+        className={mcAuthBtn(
+          'mb-4 rounded-lg border border-gray-700 bg-gray-800/80 p-3',
+          'mb-4 rounded-lg border border-gray-300 bg-white p-3 shadow-sm',
+        )}
+      >
         <EntryLeadCopy intent={entryIntent} />
         <div className="flex flex-col gap-2">
           {hasSupabase && (
             <button
               type="button"
               onClick={handleGoogle}
-              className="flex items-center justify-center gap-2 rounded border border-gray-600 bg-gray-800 px-3 py-2 text-sm text-white hover:bg-gray-700"
+              className={mcAuthBtn(
+                'flex items-center justify-center gap-2 rounded border border-gray-600 bg-gray-800 px-3 py-2 text-sm text-white hover:bg-gray-700',
+                'flex items-center justify-center gap-2 rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 hover:bg-gray-50',
+              )}
             >
               <GoogleBrandIcon className="h-4 w-4 shrink-0" />
               Googleでログイン
@@ -229,7 +242,10 @@ export function TopPageLoginEntry({
                 setError(null);
                 setAuthNotice(null);
               }}
-              className="flex items-center justify-center gap-2 rounded border border-gray-600 bg-gray-800 px-3 py-2 text-sm text-white hover:bg-gray-700"
+              className={mcAuthBtn(
+                'flex items-center justify-center gap-2 rounded border border-gray-600 bg-gray-800 px-3 py-2 text-sm text-white hover:bg-gray-700',
+                'flex items-center justify-center gap-2 rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 hover:bg-gray-50',
+              )}
             >
               <EnvelopeIcon className="h-4 w-4 shrink-0 text-gray-300" aria-hidden />
               メールアドレスでログイン
@@ -239,7 +255,10 @@ export function TopPageLoginEntry({
             type="button"
             onClick={openGuestForm}
             disabled={guestJoining}
-            className="flex items-center justify-center gap-2 rounded border border-gray-600 bg-gray-800 px-3 py-2 text-sm text-white hover:bg-gray-700 disabled:opacity-50"
+            className={mcAuthBtn(
+              'flex items-center justify-center gap-2 rounded border border-gray-600 bg-gray-800 px-3 py-2 text-sm text-white hover:bg-gray-700 disabled:opacity-50',
+              'flex items-center justify-center gap-2 rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 hover:bg-gray-50 disabled:opacity-50',
+            )}
           >
             {guestJoining ? 'ゲスト向けの部屋を準備中…' : 'ゲストで参加'}
           </button>
@@ -254,21 +273,31 @@ export function TopPageLoginEntry({
 
       {showGuestForm && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4">
-          <div className="w-full max-w-sm rounded-lg border border-gray-700 bg-gray-900 p-6">
-            <h2 className="mb-4 text-lg font-semibold text-white">ゲストで参加</h2>
-            <p className="mb-3 text-sm text-gray-400">
+          <div
+            className={mcAuthBtn(
+              'w-full max-w-sm rounded-lg border border-gray-700 bg-gray-900 p-6',
+              'w-full max-w-sm rounded-lg border border-gray-300 bg-white p-6 shadow-lg',
+            )}
+          >
+            <h2 className={`mb-4 text-lg font-semibold ${IS_MC_PRODUCT ? 'text-gray-900' : 'text-white'}`}>
+              ゲストで参加
+            </h2>
+            <p className={`mb-3 text-sm ${IS_MC_PRODUCT ? 'text-gray-600' : 'text-gray-400'}`}>
               ハンドルネームを入力してください（未入力の場合は「ゲスト」＋番号が自動で付きます）
             </p>
             <form onSubmit={(e) => void handleGuestSubmit(e)} className="flex flex-col gap-3">
               <label className="flex flex-col gap-1">
-                <span className="text-sm text-gray-300">ハンドルネーム</span>
+                <span className={`text-sm ${IS_MC_PRODUCT ? 'text-gray-700' : 'text-gray-300'}`}>ハンドルネーム</span>
                 <input
                   type="text"
                   value={guestHandle}
                   onChange={(e) => setGuestHandle(e.target.value)}
                   maxLength={30}
                   disabled={guestJoining}
-                  className="rounded border border-gray-600 bg-gray-800 px-3 py-2 text-white placeholder-gray-500 disabled:opacity-50"
+                  className={mcAuthBtn(
+                    'rounded border border-gray-600 bg-gray-800 px-3 py-2 text-white placeholder-gray-500 disabled:opacity-50',
+                    'rounded border border-gray-300 bg-white px-3 py-2 text-gray-900 placeholder-gray-400 disabled:opacity-50',
+                  )}
                   autoComplete="nickname"
                   autoFocus
                 />
@@ -282,7 +311,10 @@ export function TopPageLoginEntry({
                 <button
                   type="submit"
                   disabled={guestJoining}
-                  className="flex-1 rounded-lg bg-amber-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-amber-500 disabled:opacity-50"
+                  className={mcAuthBtn(
+                    'flex-1 rounded-lg bg-amber-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-amber-500 disabled:opacity-50',
+                    'mc-accent-primary flex-1 rounded-lg px-3 py-2 text-sm font-medium transition disabled:opacity-50',
+                  )}
                 >
                   参加する
                 </button>
@@ -290,7 +322,10 @@ export function TopPageLoginEntry({
                   type="button"
                   disabled={guestJoining}
                   onClick={() => setShowGuestForm(false)}
-                  className="rounded-lg border border-gray-600 px-3 py-2 text-sm text-gray-300 hover:bg-gray-800 disabled:opacity-50"
+                  className={mcAuthBtn(
+                    'rounded-lg border border-gray-600 px-3 py-2 text-sm text-gray-300 hover:bg-gray-800 disabled:opacity-50',
+                    'rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-50',
+                  )}
                 >
                   キャンセル
                 </button>
@@ -302,7 +337,12 @@ export function TopPageLoginEntry({
 
       {showSimpleForm && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4">
-          <div className="w-full max-w-sm rounded-lg border border-gray-700 bg-gray-900 p-6">
+          <div
+            className={mcAuthBtn(
+              'w-full max-w-sm rounded-lg border border-gray-700 bg-gray-900 p-6',
+              'w-full max-w-sm rounded-lg border border-gray-300 bg-white p-6 shadow-lg',
+            )}
+          >
             {AuthFormComponent ? (
               <AuthFormComponent
                 emailConfirmRedirectPath="/"
@@ -331,7 +371,9 @@ export function TopPageLoginEntry({
                 フォームを読み込み中…
               </p>
             )}
-            {authNotice && <p className="mt-3 text-sm text-emerald-300/95">{authNotice}</p>}
+            {authNotice && (
+              <p className={`mt-3 text-sm ${IS_MC_PRODUCT ? 'text-gray-700' : 'text-emerald-300/95'}`}>{authNotice}</p>
+            )}
             {error && <p className="mt-3 text-sm text-red-400">{error}</p>}
           </div>
         </div>

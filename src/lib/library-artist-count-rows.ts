@@ -5,6 +5,8 @@ export type SongRowForArtistCount = {
   main_artist: string | null;
   song_title: string | null;
   display_title: string | null;
+  catalog_scope?: string | null;
+  music8_artist_slug?: string | null;
 };
 
 export type SongCreditRowForArtistCount = {
@@ -28,7 +30,7 @@ export async function fetchAllSongRowsForArtistAggregation(
   for (let offset = 0; ; offset += PAGE) {
     const { data, error } = await client
       .from('songs')
-      .select('id, main_artist, song_title, display_title')
+      .select('id, main_artist, song_title, display_title, catalog_scope, music8_artist_slug')
       .order('id', { ascending: true })
       .range(offset, offset + PAGE - 1);
     if (error) throw error;

@@ -2,6 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AdminMenuBar } from '@/components/admin/AdminMenuBar';
+import {
+  AdminProductFilterSelect,
+  productBadgeClass,
+  productBadgeLabel,
+} from '@/components/admin/AdminProductFilterSelect';
 
 type SummaryItem = {
   id: string;
@@ -24,6 +29,7 @@ type SummaryItem = {
   } | null;
   summary_text: string;
   created_at: string;
+  product?: string;
 };
 
 type PlaylistItem = {
@@ -62,6 +68,7 @@ export default function AdminRoomDailySummaryPage() {
   const [roomId, setRoomId] = useState('01');
   const [dateJst, setDateJst] = useState(todayJstYmd());
   const [sessionPart, setSessionPart] = useState<'part1' | 'part2'>('part2');
+  const [productFilter, setProductFilter] = useState<'all' | 'musicaichat' | 'musicchat'>('musicaichat');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -81,6 +88,7 @@ export default function AdminRoomDailySummaryPage() {
     try {
       const q = new URLSearchParams({
         limit: '100',
+        product: productFilter,
         ...(roomId.trim() ? { roomId: roomId.trim() } : {}),
       });
       const res = await fetch(`/api/admin/room-daily-summary?${q.toString()}`, { credentials: 'include' });
@@ -97,7 +105,7 @@ export default function AdminRoomDailySummaryPage() {
     } finally {
       setLoading(false);
     }
-  }, [roomId]);
+  }, [roomId, productFilter]);
 
   useEffect(() => {
     void load();
@@ -109,6 +117,10 @@ export default function AdminRoomDailySummaryPage() {
       setError('roomId を入力してください。');
       return;
     }
+    if (productFilter === 'all') {
+      setError('生成・保存にはプロダクト（ma または mc）を選択してください。');
+      return;
+    }
     setSaving(true);
     setError(null);
     setHint(null);
@@ -117,7 +129,7 @@ export default function AdminRoomDailySummaryPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ roomId: rid, dateJst, sessionPart }),
+        body: JSON.stringify({ roomId: rid, dateJst, sessionPart, product: productFilter }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -131,27 +143,35 @@ export default function AdminRoomDailySummaryPage() {
     } finally {
       setSaving(false);
     }
-  }, [roomId, dateJst, sessionPart, load]);
+  }, [roomId, dateJst, sessionPart, productFilter, load]);
 
   const filtered = useMemo(
     () => items.filter((it) => !dateJst || it.date_jst === dateJst),
     [items, dateJst],
   );
 
+  const playlistProduct = productFilter === 'all' ? 'musicaichat' : productFilter;
   const playlistTextHref =
     playlistRoomId && playlistDateJst
       ? `/api/admin/room-daily-playlist?roomId=${encodeURIComponent(playlistRoomId)}&dateJst=${encodeURIComponent(
           playlistDateJst,
-        )}&format=text&download=1`
+        )}&product=${playlistProduct}&format=text&download=1`
       : '#';
   const playlistCsvHref =
     playlistRoomId && playlistDateJst
       ? `/api/admin/room-daily-playlist?roomId=${encodeURIComponent(playlistRoomId)}&dateJst=${encodeURIComponent(
           playlistDateJst,
-        )}&format=csv&download=1`
+        )}&product=${playlistProduct}&format=csv&download=1`
       : '#';
 
-  const openPlaylistModal = useCallback(async (targetRoomId: string, targetDateJst: string) => {
+  const openPlaylistModal = useCallback(
+    async (targetRoomId: string, targetDateJst: string, itemProduct?: string) => {
+      const playlistProductParam =
+        itemProduct === 'musicchat' || itemProduct === 'musicaichat'
+          ? itemProduct
+          : productFilter === 'all'
+            ? 'musicaichat'
+            : productFilter;
     setPlaylistModalOpen(true);
     setPlaylistLoading(true);
     setPlaylistError(null);
@@ -162,6 +182,7 @@ export default function AdminRoomDailySummaryPage() {
       const q = new URLSearchParams({
         roomId: targetRoomId,
         dateJst: targetDateJst,
+        product: playlistProductParam,
       });
       const res = await fetch(`/api/admin/room-daily-playlist?${q.toString()}`, { credentials: 'include' });
       const data = await res.json().catch(() => ({}));
@@ -175,7 +196,9 @@ export default function AdminRoomDailySummaryPage() {
     } finally {
       setPlaylistLoading(false);
     }
-  }, []);
+    },
+    [productFilter],
+  );
 
   return (
     <main className="min-h-screen bg-gray-950 p-4 text-gray-100">
@@ -212,10 +235,12 @@ export default function AdminRoomDailySummaryPage() {
                 className="ml-2 rounded border border-gray-600 bg-gray-800 px-2 py-1"
               />
             </label>
+            <AdminProductFilterSelect value={productFilter} onChange={setProductFilter} />
             <button
               type="button"
               onClick={() => void onGenerate()}
-              disabled={saving}
+              disabled={saving || productFilter === 'all'}
+              title={productFilter === 'all' ? '生成には ma または mc を選択' : undefined}
               className="rounded bg-amber-600 px-3 py-1 text-sm text-white hover:bg-amber-500 disabled:opacity-50"
             >
               {saving ? '生成中…' : '生成して保存'}
@@ -254,11 +279,16 @@ export default function AdminRoomDailySummaryPage() {
                 <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                   <h2 className="text-sm font-medium text-gray-200">
                     room {it.room_id} / {it.date_jst} / {it.session_part === 'part1' ? '第1部' : '第2部'}
+                    {it.product ? (
+                      <span className={`ml-2 ${productBadgeClass(it.product)}`}>
+                        {productBadgeLabel(it.product)}
+                      </span>
+                    ) : null}
                   </h2>
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => void openPlaylistModal(it.room_id, it.date_jst)}
+                      onClick={() => void openPlaylistModal(it.room_id, it.date_jst, it.product)}
                       className="rounded border border-sky-700 bg-sky-900/20 px-2 py-1 text-xs text-sky-200 hover:bg-sky-900/40"
                     >
                       視聴リスト

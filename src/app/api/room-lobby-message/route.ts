@@ -10,6 +10,14 @@ import {
   ROOM_LOBBY_MESSAGE_MAX_CHARS,
 } from '@/lib/room-lobby-message';
 import { fetchRoomPresenceMembers, resolveRoomOwnerClientId } from '@/lib/room-owner-resolve-server';
+import {
+  getGatheringProductId,
+  isMissingProductColumnError,
+  runGatheringQueryScoped,
+  runLobbyQueryScoped,
+  withGatheringProductEq,
+  withLobbyProductEq,
+} from '@/lib/room-product-scope';
 
 export const dynamic = 'force-dynamic';
 
@@ -66,11 +74,14 @@ export async function GET(request: Request) {
     return NextResponse.json({ message: '' as const });
   }
 
-  const { data, error } = await supabase
-    .from('room_lobby_message')
-    .select('message, display_title')
-    .eq('room_id', roomId)
-    .maybeSingle();
+  const { data, error } = await runLobbyQueryScoped((scopeProduct) => {
+    let q = supabase
+      .from('room_lobby_message')
+      .select('message, display_title')
+      .eq('room_id', roomId);
+    if (scopeProduct) q = withLobbyProductEq(q);
+    return q.maybeSingle();
+  });
 
   if (error) {
     if (error.code === '42P01') {
@@ -80,7 +91,9 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const msg = typeof data?.message === 'string' ? data.message.trim() : '';
+  const msg = typeof (data as { message?: string } | null)?.message === 'string'
+    ? (data as { message: string }).message.trim()
+    : '';
   const displayTitle =
     data && typeof (data as { display_title?: unknown }).display_title === 'string'
       ? String((data as { display_title: string }).display_title).trim()
@@ -89,13 +102,16 @@ export async function GET(request: Request) {
 }
 
 async function isLiveGatheringOrganizer(admin: NonNullable<ReturnType<typeof createAdminClient>>, roomId: string, userId: string): Promise<boolean> {
-  const { data } = await admin
-    .from('room_gatherings')
-    .select('id')
-    .eq('room_id', roomId)
-    .eq('status', 'live')
-    .eq('created_by', userId)
-    .maybeSingle();
+  const { data } = await runGatheringQueryScoped((scopeProduct) => {
+    let q = admin
+      .from('room_gatherings')
+      .select('id')
+      .eq('room_id', roomId)
+      .eq('status', 'live')
+      .eq('created_by', userId);
+    if (scopeProduct) q = withGatheringProductEq(q);
+    return q.maybeSingle();
+  });
   return !!data;
 }
 
@@ -203,15 +219,34 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: '保存できません。' }, { status: 403 });
   }
 
-  const { error } = await admin.from('room_lobby_message').upsert(
-    {
-      room_id: roomId,
-      message,
-      display_title: displayTitle,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: 'room_id' }
-  );
+  const productId = getGatheringProductId();
+  let upsertErr: { code?: string; message?: string } | null = null;
+  {
+    const { error } = await admin.from('room_lobby_message').upsert(
+      {
+        room_id: roomId,
+        message,
+        display_title: displayTitle,
+        updated_at: new Date().toISOString(),
+        product: productId,
+      },
+      { onConflict: 'room_id,product' },
+    );
+    upsertErr = error;
+  }
+  if (upsertErr && isMissingProductColumnError(upsertErr)) {
+    const { error } = await admin.from('room_lobby_message').upsert(
+      {
+        room_id: roomId,
+        message,
+        display_title: displayTitle,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'room_id' },
+    );
+    upsertErr = error;
+  }
+  const error = upsertErr;
 
   if (error) {
     if (error.code === '42P01') {
@@ -238,12 +273,16 @@ export async function POST(request: Request) {
 
   /** トップ「主催者メニュー」は room_gatherings.title を参照するため、開催中の主催者が名前を保存したら会タイトルも揃える */
   if (userId && displayTitle.length > 0 && (await isLiveGatheringOrganizer(admin, roomId, userId))) {
-    const { error: gErr } = await admin
-      .from('room_gatherings')
-      .update({ title: displayTitle })
-      .eq('room_id', roomId)
-      .eq('status', 'live')
-      .eq('created_by', userId);
+    const { error: gErr } = await runGatheringQueryScoped((scopeProduct) => {
+      let q = admin
+        .from('room_gatherings')
+        .update({ title: displayTitle })
+        .eq('room_id', roomId)
+        .eq('status', 'live')
+        .eq('created_by', userId);
+      if (scopeProduct) q = withGatheringProductEq(q);
+      return q;
+    });
     if (gErr) {
       console.error('[room-lobby-message POST] sync room_gatherings.title', gErr);
     }

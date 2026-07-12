@@ -6,6 +6,9 @@ import {
   jstDateKeyFromPlayedAt,
   songRowHasPersistedMusic8,
 } from '@/lib/admin-music8-pending';
+import { parseAdminProductFilter, runAdminHistoryQueryScoped } from '@/lib/room-history-product';
+import { isAdminSongJapaneseDomesticDisplay } from '@/lib/song-catalog-scope';
+import { ensureWesternTreatedJpArtistCache } from '@/lib/western-treated-jp-artists';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,6 +28,7 @@ export type LibraryMusic8PendingItem = {
   sample_room_id: string | null;
   youtube_url: string;
   admin_song_href: string | null;
+  is_japanese_domestic: boolean;
 };
 
 export type LibraryMusic8PendingDay = {
@@ -68,8 +72,8 @@ function parseIsoOrNull(raw: string | null): string | null {
 async function loadVideoMusic8Flags(
   admin: NonNullable<ReturnType<typeof createAdminClient>>,
   videoIds: string[],
-): Promise<Map<string, { songId: string | null; hasMusic8: boolean }>> {
-  const out = new Map<string, { songId: string | null; hasMusic8: boolean }>();
+): Promise<Map<string, { songId: string | null; hasMusic8: boolean; catalog_scope: string | null }>> {
+  const out = new Map<string, { songId: string | null; hasMusic8: boolean; catalog_scope: string | null }>();
   if (videoIds.length === 0) return out;
 
   const vidToSongId = new Map<string, string>();
@@ -90,17 +94,31 @@ async function loadVideoMusic8Flags(
 
   const songIds = [...new Set(vidToSongId.values())];
   const songHasM8 = new Map<string, boolean>();
+  const songCatalogScope = new Map<string, string | null>();
   for (const chunk of chunkArray(songIds, 120)) {
-    const { data: songRows, error: songErr } = await admin
+    const primary = await admin
       .from('songs')
-      .select('id, music8_song_data')
+      .select('id, music8_song_data, catalog_scope')
       .in('id', chunk);
-    if (songErr && songErr.code !== '42P01' && songErr.code !== '42703') {
-      console.error('[admin/library-music8-pending] songs', songErr);
+    let songRows: { id?: string; music8_song_data?: unknown; catalog_scope?: string | null }[];
+    if (primary.error?.code === '42703') {
+      const fallback = await admin.from('songs').select('id, music8_song_data').in('id', chunk);
+      if (fallback.error && fallback.error.code !== '42P01' && fallback.error.code !== '42703') {
+        console.error('[admin/library-music8-pending] songs', fallback.error);
+      }
+      songRows = (fallback.data ?? []) as { id?: string; music8_song_data?: unknown }[];
+    } else {
+      if (primary.error && primary.error.code !== '42P01' && primary.error.code !== '42703') {
+        console.error('[admin/library-music8-pending] songs', primary.error);
+      }
+      songRows = (primary.data ?? []) as { id?: string; music8_song_data?: unknown; catalog_scope?: string | null }[];
     }
-    for (const s of (songRows ?? []) as { id?: string; music8_song_data?: unknown }[]) {
+    for (const s of songRows) {
       const id = typeof s.id === 'string' ? s.id : '';
-      if (id) songHasM8.set(id, songRowHasPersistedMusic8(s.music8_song_data));
+      if (id) {
+        songHasM8.set(id, songRowHasPersistedMusic8(s.music8_song_data));
+        songCatalogScope.set(id, typeof s.catalog_scope === 'string' ? s.catalog_scope : null);
+      }
     }
   }
 
@@ -109,6 +127,7 @@ async function loadVideoMusic8Flags(
     out.set(vid, {
       songId: sid,
       hasMusic8: sid ? (songHasM8.get(sid) ?? false) : false,
+      catalog_scope: sid ? (songCatalogScope.get(sid) ?? null) : null,
     });
   }
   return out;
@@ -133,19 +152,25 @@ export async function GET(request: Request) {
   const fromParam = parseIsoOrNull(searchParams.get('from'));
   const fromIso =
     fromParam ?? new Date(new Date(toIso).getTime() - days * 24 * 60 * 60 * 1000).toISOString();
+  const productFilter = parseAdminProductFilter(searchParams.get('product'));
 
   const rows: PlaybackScanRow[] = [];
   let scanned = 0;
   let truncated = false;
 
   for (let offset = 0; ; offset += PAGE_SIZE) {
-    const { data, error } = await admin
-      .from('room_playback_history')
-      .select('played_at, video_id, title, artist_name, room_id')
-      .gte('played_at', fromIso)
-      .lte('played_at', toIso)
-      .order('played_at', { ascending: false })
-      .range(offset, offset + PAGE_SIZE - 1);
+    const scanRes = await runAdminHistoryQueryScoped((applyProductEq, scopedProduct) => {
+      let q = admin
+        .from('room_playback_history')
+        .select('played_at, video_id, title, artist_name, room_id')
+        .gte('played_at', fromIso)
+        .lte('played_at', toIso)
+        .order('played_at', { ascending: false })
+        .range(offset, offset + PAGE_SIZE - 1);
+      if (applyProductEq && scopedProduct) q = q.eq('product', scopedProduct);
+      return q;
+    }, productFilter);
+    const { data, error } = scanRes;
 
     if (error) {
       if (error.code === '42P01') {
@@ -215,6 +240,7 @@ export async function GET(request: Request) {
   }
 
   const flags = await loadVideoMusic8Flags(admin, [...allVideoIds]);
+  await ensureWesternTreatedJpArtistCache();
 
   const daysOut: LibraryMusic8PendingDay[] = [];
   const sortedDates = [...byDate.keys()].sort((a, b) => (a < b ? 1 : a > b ? -1 : 0));
@@ -237,6 +263,15 @@ export async function GET(request: Request) {
         sample_room_id: cell.sample_room_id,
         youtube_url: `https://www.youtube.com/watch?v=${encodeURIComponent(cell.video_id)}`,
         admin_song_href: f?.songId ? `/admin/songs/${f.songId}` : null,
+        is_japanese_domestic: isAdminSongJapaneseDomesticDisplay({
+          catalog_scope: f?.catalog_scope ?? null,
+          main_artist: cell.artist_name,
+          song_title: cell.title,
+          display_title:
+            cell.artist_name && cell.title
+              ? `${cell.artist_name} - ${cell.title}`
+              : cell.title ?? cell.artist_name,
+        }),
       });
     }
 
@@ -249,6 +284,7 @@ export async function GET(request: Request) {
   const res = NextResponse.json({
     fromIso,
     toIso,
+    product: productFilter,
     truncated,
     scanned_rows: scanned,
     days: daysOut,

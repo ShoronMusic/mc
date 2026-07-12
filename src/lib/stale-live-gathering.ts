@@ -2,6 +2,10 @@ import Ably from 'ably';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { fetchRoomPresenceMembers } from '@/lib/room-owner-resolve-server';
 import { persistRoomGatheringSnapshots } from '@/lib/room-gathering-snapshot';
+import {
+  isMissingProductColumnError,
+  withGatheringProductEq,
+} from '@/lib/room-product-scope';
 
 /** 既定: 在室が一度でもあり、その後 0 が続いた時間がこの値を超えたら live を終了 */
 const DEFAULT_EMPTY_MS = 30 * 60 * 1000;
@@ -87,14 +91,21 @@ async function fetchLiveGathering(
   admin: SupabaseClient,
   roomId: string,
 ): Promise<LiveGatheringRow | null> {
-  const { data, error } = await admin
-    .from('room_gatherings')
-    .select('id, room_id, started_at')
-    .eq('room_id', roomId)
-    .eq('status', 'live')
-    .order('started_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const run = async (scopeProduct: boolean) => {
+    let q = admin
+      .from('room_gatherings')
+      .select('id, room_id, started_at')
+      .eq('room_id', roomId)
+      .eq('status', 'live')
+      .order('started_at', { ascending: false })
+      .limit(1);
+    if (scopeProduct) q = withGatheringProductEq(q);
+    return q.maybeSingle();
+  };
+  let { data, error } = await run(true);
+  if (error && isMissingProductColumnError(error)) {
+    ({ data, error } = await run(false));
+  }
   if (error || !data || typeof data.id !== 'string') return null;
   return {
     id: data.id,
@@ -108,15 +119,22 @@ async function endLiveGatheringRows(
   roomId: string,
   reason: StaleLiveGatheringEndReason,
 ): Promise<EndStaleLiveGatheringResult> {
-  const { data: ended, error: endErr } = await admin
-    .from('room_gatherings')
-    .update({
-      status: 'ended',
-      ended_at: new Date().toISOString(),
-    })
-    .eq('room_id', roomId)
-    .eq('status', 'live')
-    .select('id');
+  const run = async (scopeProduct: boolean) => {
+    let q = admin
+      .from('room_gatherings')
+      .update({
+        status: 'ended',
+        ended_at: new Date().toISOString(),
+      })
+      .eq('room_id', roomId)
+      .eq('status', 'live');
+    if (scopeProduct) q = withGatheringProductEq(q);
+    return q.select('id');
+  };
+  let { data: ended, error: endErr } = await run(true);
+  if (endErr && isMissingProductColumnError(endErr)) {
+    ({ data: ended, error: endErr } = await run(false));
+  }
 
   if (endErr || !ended?.length) {
     return { ended: false, gatheringIds: [] };

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AdminMenuBar } from '@/components/admin/AdminMenuBar';
+import { AdminProductFilterSelect } from '@/components/admin/AdminProductFilterSelect';
 
 type Summary = { calls: number; okCalls: number; ngCalls: number };
 
@@ -27,6 +28,7 @@ function formatTime(iso: string): string {
 
 export default function AdminYouTubeApiUsagePage() {
   const [days, setDays] = useState(7);
+  const [productFilter, setProductFilter] = useState<'all' | 'musicaichat' | 'musicchat'>('all');
   const [roomId, setRoomId] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -40,7 +42,7 @@ export default function AdminYouTubeApiUsagePage() {
     setLoading(true);
     setError(null);
     try {
-      const params = new URLSearchParams({ days: String(days) });
+      const params = new URLSearchParams({ days: String(days), product: productFilter });
       if (roomId.trim()) params.set('roomId', roomId.trim());
       const res = await fetch(`/api/admin/youtube-api-usage?${params.toString()}`, {
         credentials: 'include',
@@ -65,7 +67,7 @@ export default function AdminYouTubeApiUsagePage() {
     } finally {
       setLoading(false);
     }
-  }, [days, roomId]);
+  }, [days, roomId, productFilter]);
 
   useEffect(() => {
     load();
@@ -109,6 +111,7 @@ export default function AdminYouTubeApiUsagePage() {
                 <option value={90}>過去90日</option>
               </select>
             </label>
+            <AdminProductFilterSelect value={productFilter} onChange={setProductFilter} />
             <input
               value={roomId}
               onChange={(e) => setRoomId(e.target.value)}

@@ -4,12 +4,14 @@ import { useCallback, useEffect, useMemo, useState, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { AdminMenuBar } from '@/components/admin/AdminMenuBar';
+import { productBadgeClass, productBadgeLabel } from '@/components/admin/AdminProductFilterSelect';
 
 type RoomAccessLogDetailRow = {
   accessed_at: string;
   display_name: string;
   is_guest: boolean;
   user_id: string | null;
+  product?: string;
 };
 
 type ApiResponse = {
@@ -40,6 +42,7 @@ function AdminRoomAccessLogDetailInner() {
   const searchParams = useSearchParams();
   const roomId = (searchParams.get('roomId') ?? '').trim();
   const dateJst = (searchParams.get('date') ?? '').trim();
+  const product = (searchParams.get('product') ?? 'all').trim() || 'all';
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -59,7 +62,7 @@ function AdminRoomAccessLogDetailInner() {
     setError(null);
     setHint(null);
     try {
-      const q = new URLSearchParams({ roomId, date: dateJst });
+      const q = new URLSearchParams({ roomId, date: dateJst, product });
       const res = await fetch(`/api/admin/room-access-log-detail?${q.toString()}`, {
         credentials: 'include',
       });
@@ -80,7 +83,7 @@ function AdminRoomAccessLogDetailInner() {
     } finally {
       setLoading(false);
     }
-  }, [roomId, dateJst]);
+  }, [roomId, dateJst, product]);
 
   useEffect(() => {
     void load();
@@ -102,6 +105,15 @@ function AdminRoomAccessLogDetailInner() {
         <p className="mb-4 text-sm text-gray-400">
           部屋 <span className="font-mono text-gray-200">{roomId || '—'}</span> ／ 日付（JST）{' '}
           <span className="font-mono text-gray-200">{dateJst || '—'}</span>
+          {product !== 'all' && (
+            <>
+              {' '}
+              ／{' '}
+              <span className={productBadgeClass(product)}>
+                {productBadgeLabel(product)}
+              </span>
+            </>
+          )}
         </p>
 
         {error && (

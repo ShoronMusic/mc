@@ -1,5 +1,11 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { isMissingProductColumnError } from '@/lib/room-product-scope';
+import {
+  buildLegacyRoomAccessLogDedupeKey,
+  buildRoomAccessLogDedupeKey,
+  getRoomHistoryProductId,
+} from '@/lib/room-history-product';
 
 export const dynamic = 'force-dynamic';
 
@@ -71,11 +77,8 @@ export async function POST(request: Request) {
   const displayRaw = typeof body?.displayName === 'string' ? body.displayName.trim() : '';
   const display_name = displayRaw.slice(0, MAX_DISPLAY_NAME) || 'ゲスト';
 
-  const ymd = todayJstYmd();
-  let dedupe_key: string;
-  if (sessionUserId) {
-    dedupe_key = `${roomId}|u:${sessionUserId}|${ymd}`;
-  } else {
+  let visitorKey: string | null = null;
+  if (!sessionUserId) {
     const vk =
       typeof body?.visitorKey === 'string' ? body.visitorKey.trim().toLowerCase() : '';
     if (!UUID_RE.test(vk)) {
@@ -84,13 +87,24 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
-    dedupe_key = `${roomId}|g:${vk}|${ymd}`;
+    visitorKey = vk;
   }
+
+  const ymd = todayJstYmd();
+  const historyProduct = getRoomHistoryProductId();
+  const dedupe_key = buildRoomAccessLogDedupeKey({
+    product: historyProduct,
+    roomId,
+    ymd,
+    sessionUserId,
+    visitorKey,
+  });
 
   const gathering_id = safeGatheringId(body?.gatheringId ?? null);
 
   const row = {
     room_id: roomId,
+    product: historyProduct,
     gathering_id,
     dedupe_key,
     display_name,
@@ -98,14 +112,34 @@ export async function POST(request: Request) {
     user_id: sessionUserId,
   };
 
-  const { error } = await supabase.from('room_access_log').insert(row);
+  let { error } = await supabase.from('room_access_log').insert(row);
+
+  if (error?.code === '23505') {
+    return NextResponse.json({ ok: true, duplicate: true });
+  }
+
+  if (error && (isMissingProductColumnError(error) || error.code === '42703')) {
+    const legacyKey = buildLegacyRoomAccessLogDedupeKey({
+      roomId,
+      ymd,
+      sessionUserId,
+      visitorKey,
+    });
+    ({ error } = await supabase.from('room_access_log').insert({
+      room_id: roomId,
+      gathering_id,
+      dedupe_key: legacyKey,
+      display_name,
+      is_guest: isGuest,
+      user_id: sessionUserId,
+    }));
+    if (error?.code === '23505') {
+      return NextResponse.json({ ok: true, duplicate: true });
+    }
+  }
 
   if (!error) {
     return NextResponse.json({ ok: true, duplicate: false });
-  }
-
-  if (error.code === '23505') {
-    return NextResponse.json({ ok: true, duplicate: true });
   }
 
   if (error.code === '42P01') {

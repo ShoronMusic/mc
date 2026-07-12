@@ -374,6 +374,8 @@ export interface VideoSnippet {
   thumbnailUrl?: string;
   /** YouTube channelId */
   channelId?: string;
+  /** videos.list snippet.categoryId（例: 10=Music） */
+  categoryId?: number;
   /** 音声トラックの言語（例: ja）。未取得時は undefined */
   defaultAudioLanguage?: string;
   /** 統計（数値はAPIの都合で文字列で来るため number に変換） */
@@ -415,6 +417,7 @@ export async function getVideoSnippet(videoId: string, meta?: YouTubeApiLogMeta)
             maxres?: { url?: string };
           };
           channelId?: string;
+          categoryId?: string;
         };
         contentDetails?: { duration?: string };
         statistics?: { viewCount?: string; likeCount?: string; commentCount?: string };
@@ -464,6 +467,12 @@ export async function getVideoSnippet(videoId: string, meta?: YouTubeApiLogMeta)
       title: sn.title ?? '',
       description: sn.description ?? '',
       channelTitle: sn.channelTitle ?? '',
+      categoryId: (() => {
+        const raw = sn.categoryId;
+        if (typeof raw !== 'string' || !raw.trim()) return undefined;
+        const n = Number.parseInt(raw, 10);
+        return Number.isFinite(n) ? n : undefined;
+      })(),
       publishedAt: sn.publishedAt,
       defaultAudioLanguage,
       tags: Array.isArray(sn.tags) ? sn.tags : undefined,

@@ -101,6 +101,7 @@ Chrome Web Store の申告では、「収集して外部送信する」とは別
 
 - ライブラリ一覧・編集 UI は **マイページ**を主とし、拡張はあくまで **YouTube 上の起点**に集中。
 - 既存の視聴履歴（`song-history` 等）との **統合 or 別テーブル**はプロダクト判断で決定。
+- **YouTube 視聴履歴の一括取り込み**（`feed/history` 等）は **保留** — 検討メモ `docs/youtube-watch-history-import-consideration.md`
 
 ## 関連ドキュメント・コード
 

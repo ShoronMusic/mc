@@ -975,3 +975,143 @@ alter table public.song_external_metrics enable row level security;
 - **付与**: メール確認済みユーザーが `GET /api/user/ai-trial` を初めて呼んだとき（Google 等は即）。
 - **消費**: `POST /api/ai/comment-pack` · `packPhase=base` · `aiMode=full` で 1 曲。`@` は `/api/ai/chat` で別枠。
 - **監査ログ**（任意）: `user_ai_trial_consumption_log` — SQL は `docs/supabase-user-ai-trial-table.md` 末尾。
+
+---
+
+## 24. 洋楽扱い日本人アーティスト（`western_treated_jp_artists`）
+
+邦楽判定から除外し、洋楽と同様に扱う日本人アーティスト名を DB で管理します。**STYLE_ADMIN** の管理画面から登録・編集・削除します。照合は **小文字化＋空白除去** 後の完全一致（例: `ONE OK ROCK` → `oneokrock`）。
+
+**反映先:** AI 曲解説の邦楽節約（`comment-pack-jp-economy`）・`resolveJapaneseEconomyWithMusicBrainz`・管理ライブラリの邦楽除外・選曲紹介の「（邦楽）」タグ・`songs.catalog_scope` 推定。
+
+**SQL（SQL Editor で実行）:**
+
+```sql
+create table if not exists public.western_treated_jp_artists (
+  id uuid primary key default gen_random_uuid(),
+  artist_name text not null,
+  name_key text not null,
+  note text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint western_treated_jp_artists_name_key_unique unique (name_key)
+);
+
+create index if not exists western_treated_jp_artists_artist_name_idx
+  on public.western_treated_jp_artists (artist_name);
+
+alter table public.western_treated_jp_artists enable row level security;
+```
+
+**任意（既存挙動の ONE OK ROCK をシード）:**
+
+```sql
+insert into public.western_treated_jp_artists (artist_name, name_key, note)
+values ('ONE OK ROCK', 'oneokrock', 'legacy default')
+on conflict (name_key) do nothing;
+```
+
+- **管理画面**: `/admin/western-treated-jp-artists`（`GET` / `POST` / `PATCH` / `DELETE` → `/api/admin/western-treated-jp-artists`）。
+- **RLS**: ポリシーなし。アプリは **`SUPABASE_SERVICE_ROLE_KEY`** のみ読み書き。
+- テーブル未作成時は **ONE OK ROCK** のみコード内フォールバック（後方互換）。
+
+## 24.1 邦楽扱い英字アーティスト（`domestic_jp_artists`）
+
+英字表記のため洋楽と誤判定されやすい邦楽アーティスト名を DB で管理します。**STYLE_ADMIN** の管理画面から登録・編集・削除します。照合は **小文字化＋空白除去** 後の完全一致（例: `Mr.Children` → `mrchildren`）。YouTube チャンネル名の `Official Channel` 等は除去してから照合します。
+
+**反映先:** 選曲時の邦楽 DB 登録・`resolveJapaneseDomesticWithMusicBrainz`・`songs.catalog_scope` 推定・管理ライブラリの邦楽判定・選曲・DB登録（日別・邦楽）一覧。
+
+**SQL（SQL Editor で実行）:**
+
+```sql
+create table if not exists public.domestic_jp_artists (
+  id uuid primary key default gen_random_uuid(),
+  artist_name text not null,
+  name_key text not null,
+  note text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint domestic_jp_artists_name_key_unique unique (name_key)
+);
+
+create index if not exists domestic_jp_artists_artist_name_idx
+  on public.domestic_jp_artists (artist_name);
+
+alter table public.domestic_jp_artists enable row level security;
+```
+
+**任意（Mr.Children をシード）:**
+
+```sql
+insert into public.domestic_jp_artists (artist_name, name_key, note)
+values ('Mr.Children', 'mrchildren', 'legacy default')
+on conflict (name_key) do nothing;
+```
+
+- **管理画面**: `/admin/domestic-jp-artists`（`GET` / `POST` / `PATCH` / `DELETE` → `/api/admin/domestic-jp-artists`）。
+- **RLS**: ポリシーなし。アプリは **`SUPABASE_SERVICE_ROLE_KEY`** のみ読み書き。
+- テーブル未作成時は **Mr.Children** のみコード内フォールバック（後方互換）。
+
+---
+
+## 25. 選曲履歴・入室ログの product 列（ma / mc 分離）
+
+`room_playback_history` と `room_access_log` に **`product`**（`musicaichat` | `musicchat`）を追加し、同じ `room_id` でも ma / mc を厳密に分離します。曲 DB・ユーザーは共用のままです。
+
+**SQL:** `docs/supabase-room-history-product-column.md` を Supabase SQL Editor で実行してください。
+
+- **部屋 UI**: 視聴履歴 GET / 選曲 POST / 入室 POST は現在の product のみ記録・参照。
+- **管理 API**: `?product=all|musicaichat|musicchat`（既定 all）。
+- **product 列未実行時**: 従来どおり `room_id` のみ（ma 後方互換）。
+
+---
+
+## 26. 会話ログの product 列（ma / mc 分離）
+
+`room_chat_log` に **`product`** を追加し、同じ `room_id` でも ma / mc の会話を分離します。
+
+**SQL:** `docs/supabase-room-chat-log-product-column.md` を Supabase SQL Editor で実行してください。
+
+- **部屋 UI**: ログ POST / GET は現在の product のみ。
+- **管理 API**: `?product=all|musicaichat|musicchat`（既定 all）。
+- **product 列未実行時**: 従来どおり `room_id` のみ（ma 後方互換）。
+
+---
+
+## 27. 課金ログ・API ログ・参加履歴の product 列
+
+`gemini_usage_logs` · `youtube_api_usage_logs` · `user_room_participation_history` に **`product`** を追加します。
+
+**SQL:** `docs/supabase-room-metrics-product-column.md` を Supabase SQL Editor で実行してください。
+
+- **INSERT**: 部屋関連ログは現在デプロイの product を記録。
+- **マイページ参加履歴**: ma / mc で別一覧。
+- **管理 API**（Gemini 使用量・YouTube API・課金集計）: `?product=` フィルタ対応。
+
+---
+
+## 28. 開催履歴スナップショットの product 列
+
+`room_gathering_snapshots` に **`product`** を追加します（会終了時の 1 行保存）。
+
+**SQL:** `docs/supabase-room-gathering-snapshots-table.md` の「product 列」節を Supabase SQL Editor で実行してください。
+
+- **INSERT**: 終了した `room_gatherings.product` を記録。
+- **管理 API** `GET /api/admin/gathering-history`: `?product=` フィルタ対応。
+- **12h スロット画面** `/admin/gathering-history`: 同上（`daily-slot-history` 経由）。
+
+**product 列未実行時**: 従来どおり全件（ma 後方互換）。
+
+---
+
+## 29. 部屋日次サマリーの product 列
+
+`room_daily_summary` に **`product`** を追加します（管理画面の日次サマリー保存）。
+
+**SQL:** `docs/supabase-room-daily-summary-table.md` の「product 列」節を Supabase SQL Editor で実行してください。
+
+- **生成元**: `room_chat_log` · `room_playback_history` · `gemini_usage_logs` を product で絞り込み。
+- **保存**: `(room_id, date_jst, session_part, product)` で upsert。
+- **管理画面** `/admin/room-daily-summary`: プロダクトフィルタ対応。
+
+**product 列未実行時**: 従来どおり ma 扱いの1行保存（後方互換）。

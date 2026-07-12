@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { ProductId } from '@/lib/product-mode';
 import { geminiUsageCategoryForContext } from '@/lib/gemini-usage-categories';
 import { calcGeminiCostJpyApprox, calcGeminiCostUsd } from '@/lib/gemini-pricing';
 import {
@@ -7,6 +8,11 @@ import {
   normalizeChatBodyForMatch,
   type RoomChatLogRow,
 } from '@/lib/room-chat-at-qa-from-log';
+import {
+  getRoomHistoryProductId,
+  runRoomHistoryQueryScoped,
+  withRoomHistoryProductEq,
+} from '@/lib/room-history-product';
 
 const CONTEXT_BEFORE_MS = 60 * 1000;
 const CONTEXT_AFTER_MS = 15 * 60 * 1000;
@@ -153,21 +159,29 @@ function pairLookupKey(roomId: string, userCreatedAt: string, userBody: string):
 export async function fetchUserAtQuestionHistory(
   admin: SupabaseClient,
   userId: string,
-  options?: { limit?: number; roomLabels?: Map<string, string> },
+  options?: { limit?: number; roomLabels?: Map<string, string>; product?: ProductId },
 ): Promise<{ pairs: UserAtQuestionHistoryPair[]; missingTable: boolean }> {
   const limit = Math.min(Math.max(options?.limit ?? 30, 1), 100);
   const roomLabels = options?.roomLabels ?? new Map<string, string>();
+  const historyProduct = options?.product ?? getRoomHistoryProductId();
 
-  const { data: userRows, error } = await admin
-    .from('room_chat_log')
-    .select('room_id, created_at, body')
-    .eq('user_id', userId)
-    .eq('message_type', 'user')
-    .order('created_at', { ascending: false })
-    .limit(MAX_USER_ROWS_SCAN);
+  const userRes = await runRoomHistoryQueryScoped((scopeProduct) => {
+    let q = admin
+      .from('room_chat_log')
+      .select('room_id, created_at, body')
+      .eq('user_id', userId)
+      .eq('message_type', 'user')
+      .order('created_at', { ascending: false })
+      .limit(MAX_USER_ROWS_SCAN);
+    if (scopeProduct) q = withRoomHistoryProductEq(q, historyProduct);
+    return q;
+  });
+  const { data: userRows, error } = userRes;
 
   if (error) {
-    if (isMissingRoomChatLog(error)) return { pairs: [], missingTable: true };
+    if (isMissingRoomChatLog({ code: error.code ?? undefined, message: error.message ?? undefined })) {
+      return { pairs: [], missingTable: true };
+    }
     throw error;
   }
 
@@ -195,17 +209,24 @@ export async function fetchUserAtQuestionHistory(
     const minIso = new Date(Math.min(...times) - CONTEXT_BEFORE_MS).toISOString();
     const maxIso = new Date(Math.max(...times) + CONTEXT_AFTER_MS).toISOString();
 
-    const { data: roomLogs, error: roomErr } = await admin
-      .from('room_chat_log')
-      .select('created_at, message_type, display_name, body')
-      .eq('room_id', roomId)
-      .gte('created_at', minIso)
-      .lte('created_at', maxIso)
-      .order('created_at', { ascending: true })
-      .limit(MAX_ROOM_LOG_ROWS);
+    const roomRes = await runRoomHistoryQueryScoped((scopeProduct) => {
+      let q = admin
+        .from('room_chat_log')
+        .select('created_at, message_type, display_name, body')
+        .eq('room_id', roomId)
+        .gte('created_at', minIso)
+        .lte('created_at', maxIso)
+        .order('created_at', { ascending: true })
+        .limit(MAX_ROOM_LOG_ROWS);
+      if (scopeProduct) q = withRoomHistoryProductEq(q, historyProduct);
+      return q;
+    });
+    const { data: roomLogs, error: roomErr } = roomRes;
 
     if (roomErr) {
-      if (isMissingRoomChatLog(roomErr)) return { pairs: [], missingTable: true };
+      if (isMissingRoomChatLog({ code: roomErr.code ?? undefined, message: roomErr.message ?? undefined })) {
+        return { pairs: [], missingTable: true };
+      }
       throw roomErr;
     }
 

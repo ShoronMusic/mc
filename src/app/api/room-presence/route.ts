@@ -1,6 +1,7 @@
 import Ably from 'ably';
 import { NextResponse } from 'next/server';
 import { allPresenceMembers } from '@/lib/ably-channel-presence';
+import { getAblyRoomChannelName, runLobbyQueryScoped, withLobbyProductEq } from '@/lib/room-product-scope';
 import { createClient } from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
@@ -88,7 +89,7 @@ export async function GET(request: Request) {
   const rest = new Ably.Rest({ key });
   const rooms: RoomPresencePayload[] = await Promise.all(
     unique.map(async (roomId) => {
-      const channelName = `room:${roomId}`;
+      const channelName = getAblyRoomChannelName(roomId);
       try {
         const channel = rest.channels.get(channelName);
         const members = await allPresenceMembers(channel);
@@ -105,24 +106,28 @@ export async function GET(request: Request) {
 
   const supabase = await createClient();
   if (supabase && unique.length > 0) {
-    const { data: lobbyRows, error: lobbyErr } = await supabase
-      .from('room_lobby_message')
-      .select('room_id, message')
-      .in('room_id', unique);
+    const { data: lobbyRows, error: lobbyErr } = await runLobbyQueryScoped((scopeProduct) => {
+      let q = supabase.from('room_lobby_message').select('room_id, message').in('room_id', unique);
+      if (scopeProduct) q = withLobbyProductEq(q);
+      return q;
+    });
     if (lobbyErr && lobbyErr.code !== '42P01') {
       console.error('[room-presence] room_lobby_message', lobbyErr);
     }
-    if (!lobbyErr && lobbyRows?.length) {
-      const byRoom = new Map<string, string>();
-      for (const row of lobbyRows as { room_id?: string; message?: string }[]) {
-        const rid = typeof row.room_id === 'string' ? row.room_id : '';
-        const msg = typeof row.message === 'string' ? row.message.trim() : '';
-        if (rid && msg) byRoom.set(rid, msg);
-      }
-      for (const r of rooms) {
-        const m = byRoom.get(r.roomId);
-        /** 在室 0 のときは表示しない（削除失敗時もゴースト表示を防ぐ） */
-        if (m && r.count > 0 && !r.error) r.lobbyMessage = m;
+    if (!lobbyErr && lobbyRows) {
+      const rows = lobbyRows as { room_id?: string; message?: string }[];
+      if (rows.length) {
+        const byRoom = new Map<string, string>();
+        for (const row of rows) {
+          const rid = typeof row.room_id === 'string' ? row.room_id : '';
+          const msg = typeof row.message === 'string' ? row.message.trim() : '';
+          if (rid && msg) byRoom.set(rid, msg);
+        }
+        for (const r of rooms) {
+          const m = byRoom.get(r.roomId);
+          /** 在室 0 のときは表示しない（削除失敗時もゴースト表示を防ぐ） */
+          if (m && r.count > 0 && !r.error) r.lobbyMessage = m;
+        }
       }
     }
   }

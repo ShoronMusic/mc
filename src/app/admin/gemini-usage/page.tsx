@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { AdminMenuBar } from '@/components/admin/AdminMenuBar';
+import { AdminProductFilterSelect } from '@/components/admin/AdminProductFilterSelect';
 
 type LogRow = {
   id: string;
@@ -76,6 +77,7 @@ function formatTime(iso: string): string {
 
 export default function AdminGeminiUsagePage() {
   const [days, setDays] = useState(7);
+  const [productFilter, setProductFilter] = useState<'all' | 'musicaichat' | 'musicchat'>('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [totals, setTotals] = useState({ calls: 0, promptTokens: 0, outputTokens: 0 });
@@ -90,7 +92,8 @@ export default function AdminGeminiUsagePage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/admin/gemini-usage?days=${days}`, { credentials: 'include' });
+      const q = new URLSearchParams({ days: String(days), product: productFilter });
+      const res = await fetch(`/api/admin/gemini-usage?${q}`, { credentials: 'include' });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setError(data?.error || '読み込みに失敗しました。');
@@ -109,7 +112,7 @@ export default function AdminGeminiUsagePage() {
     } finally {
       setLoading(false);
     }
-  }, [days]);
+  }, [days, productFilter]);
 
   useEffect(() => {
     load();
@@ -167,6 +170,7 @@ export default function AdminGeminiUsagePage() {
                 <option value={90}>過去90日</option>
               </select>
             </label>
+            <AdminProductFilterSelect value={productFilter} onChange={setProductFilter} />
             <button
               type="button"
               onClick={() => load()}

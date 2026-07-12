@@ -16,6 +16,7 @@
 |------|--------|------|
 | `id` | uuid | 内部主キー |
 | `song_title` | text | 曲名（正規化した表記） |
+| `song_title_ja` | text | 日本語読み（カタカナ等）。ライブラリ検索用。英語タイトルの読みなど |
 | `main_artist` | text または `artist_id` FK | **この作品のメイン表記**（Remix 作品ではリミキサーをメインにするかは運用ルールで決める） |
 | `display_title` | text | 一覧・検索用の「Artist - Song」等（一意制約のキーになりやすい） |
 | `created_at` / `updated_at` | timestamptz | 監査用 |
@@ -90,6 +91,7 @@ Music8 ではアーティストがカテゴリ＋ JSON で表現されている�
 | `music8_artist_id` | int | Music8 / WP 上の ID（取れるなら） |
 | `name_sort` | text | ソート用（The 抜き等） |
 | `name_ja` | text | 和名・通称 |
+| `name_en` | text | 英語表記（邦楽登録: Spotify 優先・AI 概要から補完） |
 | `origin_country` | text | 出身・活動基盤 |
 | `active_from` / `active_to` | text または date | 活動期間（文字列「1977–1986」も可） |
 | `youtube_channel_id` | text | 公式チャンネル |

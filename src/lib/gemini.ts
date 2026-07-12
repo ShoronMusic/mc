@@ -20,6 +20,7 @@ import {
   isAiOperationsHaltedSync,
   touchAiMonthlyBudgetRefresh,
 } from '@/lib/ai-monthly-budget';
+import { isMcGeminiDisabled } from '@/lib/product-mode';
 
 export {
   getGeminiGenerationRoutingSummary,
@@ -79,6 +80,7 @@ function readGeneratedText(response: { text: () => string }, usageContext: strin
  */
 export function getGeminiModel(usageContext: string) {
   touchAiMonthlyBudgetRefresh();
+  if (isMcGeminiDisabled()) return null;
   if (isAiOperationsHaltedSync()) return null;
   const apiKey = getApiKey();
   if (!apiKey) return null;

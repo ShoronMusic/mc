@@ -6,6 +6,10 @@ import {
   type RoomChatLogRow,
 } from '@/lib/room-chat-at-qa-from-log';
 import { createAdminClient } from '@/lib/supabase/admin';
+import {
+  parseAdminProductFilter,
+  runAdminHistoryQueryScoped,
+} from '@/lib/room-history-product';
 
 export const dynamic = 'force-dynamic';
 
@@ -54,6 +58,7 @@ export async function GET(request: Request) {
   const dateParam = searchParams.get('date')?.trim();
   const ymd = dateParam && dateParam.length > 0 ? dateParam : todayJstYmd();
   const gatheringId = safeGatheringId(searchParams.get('gatheringId'));
+  const productFilter = parseAdminProductFilter(searchParams.get('product'));
 
   if (!roomId || roomId.length > 128) {
     return NextResponse.json({ error: 'roomId が必要です' }, { status: 400 });
@@ -64,20 +69,20 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'date は YYYY-MM-DD 形式で指定してください' }, { status: 400 });
   }
 
-  let logQuery = admin
-    .from('room_chat_log')
-    .select('created_at, message_type, display_name, body')
-    .eq('room_id', roomId)
-    .gte('created_at', range.startIso)
-    .lt('created_at', range.endIso)
-    .order('created_at', { ascending: true })
-    .limit(MAX_ROWS + 1);
-
-  if (gatheringId) {
-    logQuery = logQuery.eq('gathering_id', gatheringId);
-  }
-
-  const { data: logData, error: logError } = await logQuery;
+  const logRes = await runAdminHistoryQueryScoped((applyProductEq, scopedProduct) => {
+    let logQuery = admin
+      .from('room_chat_log')
+      .select('created_at, message_type, display_name, body')
+      .eq('room_id', roomId)
+      .gte('created_at', range.startIso)
+      .lt('created_at', range.endIso)
+      .order('created_at', { ascending: true })
+      .limit(MAX_ROWS + 1);
+    if (applyProductEq && scopedProduct) logQuery = logQuery.eq('product', scopedProduct);
+    if (gatheringId) logQuery = logQuery.eq('gathering_id', gatheringId);
+    return logQuery;
+  }, productFilter);
+  const { data: logData, error: logError } = logRes;
 
   if (logError) {
     if (logError.code === '42P01') {
@@ -150,6 +155,7 @@ export async function GET(request: Request) {
     roomId,
     dateJst: ymd,
     gatheringId,
+    product: productFilter,
     truncated,
     rowCount: rows.length,
     pairCount: pairs.length,

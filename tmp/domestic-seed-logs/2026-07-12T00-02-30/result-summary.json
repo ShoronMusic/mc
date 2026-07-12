@@ -1,0 +1,15 @@
+{
+  "status": "success",
+  "finishedAt": "2026-07-12T00:10:57.5117826+09:00",
+  "playlistId": "PLb02MaZXm5_OGFGXSV-6U2_9f2MqnDBbm",
+  "playlistUrl": "https://www.youtube.com/watch?v=E8N8CAihLT0&list=PLb02MaZXm5_OGFGXSV-6U2_9f2MqnDBbm",
+  "jsonOut": "E:\\mc\\tmp\\domestic-seed-PLb02MaZXm5_OGFGXSV-6U2_-2026-07-12T00-02-30.json",
+  "logDir": "E:\\mc\\tmp\\domestic-seed-logs\\2026-07-12T00-02-30",
+  "fetchSummary": {
+    "total": 52,
+    "withReleaseDate": 22,
+    "officialOk": 24,
+    "included": 24
+  },
+  "applySummary": null
+}

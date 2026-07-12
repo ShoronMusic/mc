@@ -11,10 +11,28 @@
   }
 }
 
-:root {
-  /* 最背面（body）。純黒に近いグレーではなく濃いグレーにして奥行きを出す */
+:root,
+html[data-theme='dark'] {
+  /* ma — 最背面（body） */
   --background: #222222;
   --foreground: #ededed;
+  --mc-bg-page: #030712;
+  --mc-bg-panel: #111827;
+  --mc-bg-elevated: #1f2937;
+  --mc-text-muted: #9ca3af;
+  --mc-border: #374151;
+}
+
+html[data-theme='light'] {
+  /* mc — 白ベース（Phase 0: body / トークン。コンポーネント置換は Phase 1 以降） */
+  --background: #fafafa;
+  --foreground: #171717;
+  --mc-bg-page: #fafafa;
+  --mc-bg-panel: #ffffff;
+  --mc-bg-elevated: #f3f4f6;
+  --mc-text-muted: #6b7280;
+  /* 可変フレーム・パネル枠（中間グレー・やや薄め） */
+  --mc-border: #e4e7ec;
 }
 
 body {
@@ -141,7 +159,7 @@ html.mc-prevent-pull-refresh .mc-room-viewport {
   min-width: 0;
   flex-direction: column;
   overflow: hidden;
-  border-top: 1px solid rgb(31 41 55);
+  border-top: 1px solid var(--mc-border, rgb(31 41 55));
   padding-top: 0.25rem;
 }
 
@@ -164,7 +182,7 @@ html.mc-prevent-pull-refresh .mc-room-viewport {
     grid-row: 1;
     border-top: none;
     padding-top: 0;
-    border-right: 1px solid rgb(31 41 55);
+    border-right: 1px solid var(--mc-border, rgb(31 41 55));
     padding-right: 0.25rem;
   }
 
@@ -217,7 +235,28 @@ html.mc-prevent-pull-refresh .mc-room-viewport {
   background-color: rgba(0, 0, 0, 0.25);
 }
 
-/* AI解説ブロックの表示時フェードイン */
+html[data-theme='light'] .mc-scrollbar-stable::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.25);
+}
+
+html[data-theme='light'] .mc-scrollbar-stable::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(0, 0, 0, 0.4);
+}
+
+html[data-theme='light'] .mc-scrollbar-stable::-webkit-scrollbar-track {
+  background-color: rgba(0, 0, 0, 0.06);
+}
+
+html[data-theme='light'] .mc-room-mobile-chat {
+  border-top-color: var(--mc-border);
+}
+
+@media (max-width: 1023px) and (orientation: landscape) and (hover: none) and (pointer: coarse) {
+  html[data-theme='light'] .mc-room-mobile-chat {
+    border-right-color: var(--mc-border);
+  }
+}
+
 @keyframes ai-commentary-fade-in {
   0% {
     opacity: 0;
@@ -256,3 +295,1036 @@ html.mc-prevent-pull-refresh .mc-room-viewport {
 .animate-song-line-fade-delayed {
   animation-delay: 420ms;
 }
+
+/**
+ * mc（musicchat）— 白 UI・モノトーン（アクティブのみ緑の仮アクセント）。
+ * html[data-product='musicchat'] は layout.tsx が付与。
+ */
+html[data-product='musicchat'] {
+  color-scheme: light;
+  --mc-accent: #16a34a;
+  --mc-accent-hover: #15803d;
+  --mc-accent-soft: #f0fdf4;
+  --mc-accent-border: #86efac;
+  --mc-accent-text: #166534;
+  --mc-room-frame-border: #95e8ab;
+  --mc-room-frame-border-subtle: color-mix(in srgb, var(--mc-accent-border) 68%, var(--mc-border));
+  --mc-room-frame-bg: #ffffff;
+  --mc-room-frame-edge-width: 2px;
+  --mc-room-frame-accent-width: 4px;
+}
+
+/* キーカラー — テーマ別（既定は green = 上記） */
+html[data-product='musicchat'][data-mc-accent-theme='teal'] {
+  --mc-accent: #0d9488;
+  --mc-accent-hover: #0f766e;
+  --mc-accent-soft: #f0fdfa;
+  --mc-accent-border: #5eead4;
+  --mc-accent-text: #115e59;
+  --mc-room-frame-border: #99f6e4;
+}
+
+html[data-product='musicchat'][data-mc-accent-theme='blue'] {
+  --mc-accent: #2563eb;
+  --mc-accent-hover: #1d4ed8;
+  --mc-accent-soft: #eff6ff;
+  --mc-accent-border: #93c5fd;
+  --mc-accent-text: #1e40af;
+  --mc-room-frame-border: #bfdbfe;
+}
+
+html[data-product='musicchat'][data-mc-accent-theme='navy'] {
+  --mc-accent: #1e3a8a;
+  --mc-accent-hover: #172554;
+  --mc-accent-soft: #eef2ff;
+  --mc-accent-border: #94a3b8;
+  --mc-accent-text: #1e3a8a;
+  --mc-room-frame-border: #cbd5e1;
+}
+
+html[data-product='musicchat'][data-mc-accent-theme='violet'] {
+  --mc-accent: #7c3aed;
+  --mc-accent-hover: #6d28d9;
+  --mc-accent-soft: #f5f3ff;
+  --mc-accent-border: #c4b5fd;
+  --mc-accent-text: #5b21b6;
+  --mc-room-frame-border: #ddd6fe;
+}
+
+html[data-product='musicchat'][data-mc-accent-theme='orange'] {
+  --mc-accent: #ea580c;
+  --mc-accent-hover: #c2410c;
+  --mc-accent-soft: #fff7ed;
+  --mc-accent-border: #fdba74;
+  --mc-accent-text: #9a3412;
+  --mc-room-frame-border: #fed7aa;
+}
+
+html[data-product='musicchat'][data-mc-accent-theme='brown'] {
+  --mc-accent: #92400e;
+  --mc-accent-hover: #78350f;
+  --mc-accent-soft: #fdf8f3;
+  --mc-accent-border: #d6b28a;
+  --mc-accent-text: #78350f;
+  --mc-room-frame-border: #e7c9a8;
+}
+
+html[data-product='musicchat'][data-mc-accent-theme='pink'] {
+  --mc-accent: #db2777;
+  --mc-accent-hover: #be185d;
+  --mc-accent-soft: #fdf2f8;
+  --mc-accent-border: #f9a8d4;
+  --mc-accent-text: #9d174d;
+  --mc-room-frame-border: #fbcfe8;
+}
+
+html[data-product='musicchat'][data-mc-accent-theme='gold'] {
+  --mc-accent: #ca8a04;
+  --mc-accent-hover: #a16207;
+  --mc-accent-soft: #fefce8;
+  --mc-accent-border: #facc15;
+  --mc-accent-text: #854d0e;
+  --mc-room-frame-border: #fde68a;
+}
+
+html[data-product='musicchat'][data-mc-accent-theme='black'] {
+  --mc-accent: #171717;
+  --mc-accent-hover: #0a0a0a;
+  --mc-accent-soft: #f5f5f5;
+  --mc-accent-border: #737373;
+  --mc-accent-text: #262626;
+  --mc-room-frame-border: #d4d4d4;
+}
+
+html[data-product='musicchat'][data-mc-accent-theme='gray'] {
+  --mc-accent: #525252;
+  --mc-accent-hover: #404040;
+  --mc-accent-soft: #f5f5f5;
+  --mc-accent-border: #a3a3a3;
+  --mc-accent-text: #374151;
+  --mc-room-frame-border: #d4d4d4;
+}
+
+/* Tailwind の green 系ユーティリティ → キーカラー変数（mc 部屋・マイページ） */
+html[data-product='musicchat'] :is(.mc-room-viewport, .mc-mypage-modal) .border-green-200,
+html[data-product='musicchat'] :is(.mc-room-viewport, .mc-mypage-modal) .border-green-300 {
+  border-color: var(--mc-accent-border) !important;
+}
+
+html[data-product='musicchat'] :is(.mc-room-viewport, .mc-mypage-modal) .bg-green-50 {
+  background-color: var(--mc-accent-soft) !important;
+}
+
+html[data-product='musicchat'] :is(.mc-room-viewport, .mc-mypage-modal) .ring-green-200 {
+  --tw-ring-color: var(--mc-accent-border) !important;
+}
+
+html[data-product='musicchat'] :is(.mc-room-viewport, .mc-mypage-modal) .text-green-700,
+html[data-product='musicchat'] :is(.mc-room-viewport, .mc-mypage-modal) .text-green-800 {
+  color: var(--mc-accent-text) !important;
+}
+
+html[data-product='musicchat'] :is(.mc-room-viewport, .mc-mypage-modal) .focus\:border-green-500:focus,
+html[data-product='musicchat'] :is(.mc-room-viewport, .mc-mypage-modal) .focus\:border-green-600:focus {
+  border-color: var(--mc-accent) !important;
+}
+
+/* 部屋画面 — 大枠ブロック（2px 薄グリーン + 上 4px アクセント） */
+html[data-product='musicchat'] .mc-room-viewport .mc-room-frame-block {
+  border-style: solid !important;
+  border-width: var(--mc-room-frame-edge-width) !important;
+  border-top-width: var(--mc-room-frame-accent-width) !important;
+  border-color: var(--mc-room-frame-border) !important;
+  border-top-color: var(--mc-accent) !important;
+  background-color: var(--mc-room-frame-bg);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--mc-accent) 7%, transparent);
+}
+
+html[data-product='musicchat'] .mc-room-viewport .mc-room-frame-inner {
+  border-bottom-width: var(--mc-room-frame-edge-width) !important;
+  border-bottom-color: var(--mc-room-frame-border-subtle) !important;
+  background-color: color-mix(in srgb, var(--mc-accent-soft) 42%, white);
+}
+
+html[data-product='musicchat'] .mc-room-viewport .mc-room-player-now-playing {
+  border-top-width: var(--mc-room-frame-edge-width) !important;
+  border-top-color: var(--mc-room-frame-border-subtle) !important;
+  background-color: color-mix(in srgb, var(--mc-accent-soft) 32%, white);
+}
+
+html[data-product='musicchat'] .mc-room-viewport > header.mc-room-frame-header {
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--mc-accent-soft) 62%, white),
+    var(--mc-room-frame-bg) 88%
+  );
+}
+
+html[data-product='musicchat'] .mc-room-mobile-chat {
+  border-top-width: var(--mc-room-frame-edge-width) !important;
+  border-top-color: var(--mc-room-frame-border) !important;
+}
+
+@media (max-width: 1023px) and (orientation: landscape) and (hover: none) and (pointer: coarse) {
+  html[data-product='musicchat'] .mc-room-mobile-chat {
+    border-right-width: var(--mc-room-frame-edge-width) !important;
+    border-right-color: var(--mc-room-frame-border) !important;
+  }
+}
+
+/* 仮アクセント — 選択中・主催中・主ボタン */
+html[data-product='musicchat'] .mc-accent-primary {
+  background-color: var(--mc-accent) !important;
+  border-color: var(--mc-accent-hover) !important;
+  color: #fff !important;
+}
+
+html[data-product='musicchat'] .mc-accent-primary:hover:not(:disabled) {
+  background-color: var(--mc-accent-hover) !important;
+  color: #fff !important;
+}
+
+html[data-product='musicchat'] .mc-accent-selected {
+  border-color: var(--mc-accent-border) !important;
+  background-color: var(--mc-accent-soft) !important;
+}
+
+html[data-product='musicchat'] .mc-accent-selected.ring-2 {
+  --tw-ring-color: color-mix(in srgb, var(--mc-accent) 28%, transparent) !important;
+}
+
+html[data-product='musicchat'] .mc-accent-badge {
+  background-color: color-mix(in srgb, var(--mc-accent) 14%, white) !important;
+  border: 1px solid var(--mc-accent-border) !important;
+  color: var(--mc-accent-text) !important;
+}
+
+html[data-product='musicchat'] .mc-accent-live-bar {
+  border-left-color: var(--mc-accent) !important;
+}
+
+html[data-product='musicchat'] .mc-accent-sort-active {
+  border-color: var(--mc-accent-border) !important;
+  background-color: var(--mc-accent-soft) !important;
+  color: var(--mc-accent-text) !important;
+}
+
+/* mc 部屋ヘッダー ma 導線（黒バナーは mc の text-gray/text-white 上書きを除外） */
+html[data-product='musicchat'] a.mc-ma-promo-header {
+  color: #fff !important;
+}
+
+html[data-product='musicchat'] a.mc-ma-promo-header .mc-ma-promo-header-shell {
+  background-color: #000 !important;
+  box-shadow: inset 0 0 0 1px #374151;
+  transition: background-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+html[data-product='musicchat'] a.mc-ma-promo-header:hover .mc-ma-promo-header-shell,
+html[data-product='musicchat'] a.mc-ma-promo-header:focus-visible .mc-ma-promo-header-shell {
+  background-color: #111827 !important;
+  box-shadow: none;
+}
+
+html[data-product='musicchat'] a.mc-ma-promo-header:focus-visible {
+  outline: none;
+}
+
+/* SongList 由来 — 点線は黒バナー外側（実寸 viewBox・1px = 1px） */
+html[data-product='musicchat'] a.mc-ma-promo-header .mc-ma-promo-header-dashed-border {
+  position: absolute;
+  top: calc(-1 * var(--mc-ma-promo-dash-outset, 4px));
+  left: calc(-1 * var(--mc-ma-promo-dash-outset, 4px));
+  pointer-events: none;
+  z-index: 2;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  overflow: visible;
+}
+
+html[data-product='musicchat'] a.mc-ma-promo-header .mc-ma-promo-header-shell {
+  --mc-ma-promo-dash-outset: 4px;
+}
+
+html[data-product='musicchat'] a.mc-ma-promo-header:hover .mc-ma-promo-header-dashed-border,
+html[data-product='musicchat'] a.mc-ma-promo-header:focus-visible .mc-ma-promo-header-dashed-border {
+  opacity: 1;
+}
+
+html[data-product='musicchat'] a.mc-ma-promo-header .mc-ma-promo-header-dashed-rect {
+  stroke: #1e90ff;
+  animation: mc-ma-promo-move-dashed-border 2s linear infinite;
+  will-change: stroke-dashoffset;
+}
+
+@keyframes mc-ma-promo-move-dashed-border {
+  0% {
+    stroke-dashoffset: 0;
+  }
+  100% {
+    stroke-dashoffset: -36;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-product='musicchat'] a.mc-ma-promo-header .mc-ma-promo-header-dashed-rect {
+    animation: none;
+    stroke-dasharray: none;
+  }
+}
+
+html[data-product='musicchat'] a.mc-ma-promo-header:hover,
+html[data-product='musicchat'] a.mc-ma-promo-header:focus-visible {
+  background-color: transparent !important;
+  border-color: transparent !important;
+  outline: none;
+}
+
+html[data-product='musicchat'] a.mc-ma-promo-header .mc-ma-promo-header-title {
+  color: #fff !important;
+}
+
+html[data-product='musicchat'] a.mc-ma-promo-header .mc-ma-promo-header-sub {
+  color: #e5e7eb !important;
+}
+
+html[data-product='musicchat'] a.mc-ma-promo-header .mc-ma-promo-header-muted {
+  color: #9ca3af !important;
+}
+
+html[data-product='musicchat'] .mc-panel-muted {
+  border-color: var(--mc-border) !important;
+  background-color: var(--mc-bg-elevated) !important;
+  color: #374151 !important;
+}
+
+html[data-product='musicchat'] .bg-gray-950 {
+  background-color: var(--mc-bg-page) !important;
+}
+
+html[data-product='musicchat'] .bg-gray-900 {
+  background-color: var(--mc-bg-panel) !important;
+}
+
+html[data-product='musicchat'] .bg-gray-900\/40,
+html[data-product='musicchat'] .bg-gray-900\/50,
+html[data-product='musicchat'] .bg-gray-900\/60,
+html[data-product='musicchat'] .bg-gray-900\/70,
+html[data-product='musicchat'] .bg-gray-900\/80,
+html[data-product='musicchat'] .bg-gray-900\/95 {
+  background-color: color-mix(in srgb, var(--mc-bg-panel) 92%, var(--mc-bg-elevated)) !important;
+}
+
+html[data-product='musicchat'] .bg-gray-800 {
+  background-color: var(--mc-bg-elevated) !important;
+}
+
+html[data-product='musicchat'] .bg-gray-800\/70,
+html[data-product='musicchat'] .bg-gray-800\/80,
+html[data-product='musicchat'] .bg-gray-800\/25 {
+  background-color: color-mix(in srgb, var(--mc-bg-elevated) 88%, white) !important;
+}
+
+html[data-product='musicchat'] .border-gray-800,
+html[data-product='musicchat'] .border-gray-700,
+html[data-product='musicchat'] .border-gray-600,
+html[data-product='musicchat'] .border-gray-300,
+html[data-product='musicchat'] .border-gray-200 {
+  border-color: var(--mc-border) !important;
+}
+
+/* 可変フレームのリサイズハンドル（左右・上下の境はグレー） */
+html[data-product='musicchat'] button.cursor-col-resize.bg-gray-700,
+html[data-product='musicchat'] button.cursor-row-resize.bg-gray-700 {
+  background-color: var(--mc-border) !important;
+}
+
+html[data-product='musicchat'] button.cursor-col-resize.bg-gray-700:hover,
+html[data-product='musicchat'] button.cursor-row-resize.bg-gray-700:hover,
+html[data-product='musicchat'] button.cursor-col-resize.hover\:bg-gray-600:hover,
+html[data-product='musicchat'] button.cursor-row-resize.hover\:bg-gray-600:hover {
+  background-color: #d1d5db !important;
+}
+
+html[data-product='musicchat'] .text-white:not(.mc-accent-primary):not(.mc-chat-text-color-swatch) {
+  color: var(--foreground) !important;
+}
+
+html[data-product='musicchat'] .mc-chat-text-color-swatch {
+  color: #ffffff !important;
+}
+
+html[data-product='musicchat'] .text-gray-100,
+html[data-product='musicchat'] .text-gray-200 {
+  color: #1f2937 !important;
+}
+
+html[data-product='musicchat'] .text-gray-300 {
+  color: #374151 !important;
+}
+
+html[data-product='musicchat'] .text-gray-400 {
+  color: var(--mc-text-muted) !important;
+}
+
+html[data-product='musicchat'] .text-gray-500 {
+  color: #6b7280 !important;
+}
+
+/* 色付きボタン・バッジは白文字を維持 */
+html[data-product='musicchat'] [class*='bg-sky-'] .text-white,
+html[data-product='musicchat'] [class*='bg-emerald-'] .text-white,
+html[data-product='musicchat'] [class*='bg-amber-'] .text-white,
+html[data-product='musicchat'] [class*='bg-violet-'] .text-white,
+html[data-product='musicchat'] [class*='bg-lime-'] .text-white,
+html[data-product='musicchat'] .bg-sky-600.text-white,
+html[data-product='musicchat'] .bg-sky-700.text-white {
+  color: #fff !important;
+}
+
+/* ライブラリ 洋楽 / 邦楽 / すべてタブ（MC モノトーン上書きの例外） */
+html[data-product='musicchat'] .mc-library-catalog-tab {
+  border-width: 1px;
+  border-style: solid;
+}
+
+html[data-product='musicchat'] .mc-library-catalog-tab--all.mc-library-catalog-tab--idle {
+  background-color: #e0f2fe !important;
+  border-color: #38bdf8 !important;
+  color: #0284c7 !important;
+}
+
+html[data-product='musicchat'] .mc-library-catalog-tab--all.mc-library-catalog-tab--idle:hover {
+  background-color: #bae6fd !important;
+}
+
+html[data-product='musicchat'] .mc-library-catalog-tab--all.mc-library-catalog-tab--active {
+  background-color: #0284c7 !important;
+  border-color: #0284c7 !important;
+  color: #fff !important;
+}
+
+html[data-product='musicchat'] .mc-library-catalog-tab--western.mc-library-catalog-tab--idle {
+  background-color: #ede9fe !important;
+  border-color: #a78bfa !important;
+  color: #5b21b6 !important;
+}
+
+html[data-product='musicchat'] .mc-library-catalog-tab--western.mc-library-catalog-tab--idle:hover {
+  background-color: #ddd6fe !important;
+}
+
+html[data-product='musicchat'] .mc-library-catalog-tab--western.mc-library-catalog-tab--active {
+  background-color: #7c3aed !important;
+  border-color: #7c3aed !important;
+  color: #fff !important;
+}
+
+html[data-product='musicchat'] .mc-library-catalog-tab--domestic.mc-library-catalog-tab--idle {
+  background-color: #fce7f3 !important;
+  border-color: #f472b6 !important;
+  color: #9d174d !important;
+}
+
+html[data-product='musicchat'] .mc-library-catalog-tab--domestic.mc-library-catalog-tab--idle:hover {
+  background-color: #fbcfe8 !important;
+}
+
+html[data-product='musicchat'] .mc-library-catalog-tab--domestic.mc-library-catalog-tab--active {
+  background-color: #ec4899 !important;
+  border-color: #ec4899 !important;
+  color: #fff !important;
+}
+
+html[data-product='musicchat'] .hover\:bg-gray-700:hover,
+html[data-product='musicchat'] .hover\:bg-gray-800:hover {
+  background-color: #e5e7eb !important;
+}
+
+html[data-product='musicchat'] .hover\:text-white:hover {
+  color: var(--foreground) !important;
+}
+
+html[data-product='musicchat'] .fixed.top-0.border-b.bg-gray-900\/95,
+html[data-product='musicchat'] .fixed.left-0.right-0.top-0 {
+  background-color: color-mix(in srgb, var(--mc-bg-panel) 96%, white) !important;
+  border-color: var(--mc-border) !important;
+}
+
+/* slate-*（主催者メニュー・新規作成フォーム等） */
+html[data-product='musicchat'] .bg-slate-900,
+html[data-product='musicchat'] .bg-slate-950 {
+  background-color: var(--mc-bg-panel) !important;
+}
+
+html[data-product='musicchat'] .bg-slate-900\/60,
+html[data-product='musicchat'] .bg-slate-900\/40 {
+  background-color: color-mix(in srgb, var(--mc-bg-panel) 94%, var(--mc-bg-elevated)) !important;
+}
+
+html[data-product='musicchat'] .bg-slate-800,
+html[data-product='musicchat'] .bg-slate-800\/70,
+html[data-product='musicchat'] .bg-slate-800\/80 {
+  background-color: var(--mc-bg-elevated) !important;
+}
+
+html[data-product='musicchat'] .bg-slate-700,
+html[data-product='musicchat'] .bg-slate-700\/90 {
+  background-color: #e5e7eb !important;
+}
+
+html[data-product='musicchat'] .border-slate-600,
+html[data-product='musicchat'] .border-slate-600\/90,
+html[data-product='musicchat'] .border-slate-500 {
+  border-color: var(--mc-border) !important;
+}
+
+html[data-product='musicchat'] .text-slate-100,
+html[data-product='musicchat'] .text-slate-200 {
+  color: #1f2937 !important;
+}
+
+html[data-product='musicchat'] .text-slate-300 {
+  color: #374151 !important;
+}
+
+html[data-product='musicchat'] .text-slate-400,
+html[data-product='musicchat'] .text-slate-500 {
+  color: var(--mc-text-muted) !important;
+}
+
+html[data-product='musicchat'] .hover\:bg-slate-700:hover {
+  background-color: #d1d5db !important;
+}
+
+html[data-product='musicchat'] .hover\:border-slate-500:hover {
+  border-color: #9ca3af !important;
+}
+
+/* テキスト入力・セレクト（黒フォーム対策）。発言欄 .mc-chat-input-field は除外 */
+html[data-product='musicchat'] input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):not([type='button']):not([type='submit']):not([type='reset']):not(.mc-chat-input-field),
+html[data-product='musicchat'] textarea,
+html[data-product='musicchat'] select {
+  background-color: #ffffff !important;
+  color: var(--foreground) !important;
+  border-color: var(--mc-border) !important;
+}
+
+html[data-product='musicchat'] input::placeholder,
+html[data-product='musicchat'] textarea::placeholder {
+  color: #9ca3af !important;
+}
+
+/* 新規作成・主催ブロック — モノトーン（バッジ・live 左線は mc-accent-* で緑） */
+html[data-product='musicchat'] .bg-emerald-950\/10,
+html[data-product='musicchat'] .bg-emerald-950\/40 {
+  background-color: var(--mc-bg-elevated) !important;
+}
+
+html[data-product='musicchat'] .border-emerald-600\/80,
+html[data-product='musicchat'] .border-emerald-700\/50,
+html[data-product='musicchat'] .border-emerald-700\/70,
+html[data-product='musicchat'] .border-emerald-800\/30,
+html[data-product='musicchat'] .border-emerald-800\/40,
+html[data-product='musicchat'] .border-emerald-800\/50 {
+  border-color: var(--mc-border) !important;
+}
+
+html[data-product='musicchat'] .text-emerald-100,
+html[data-product='musicchat'] .text-emerald-200,
+html[data-product='musicchat'] .text-emerald-200\/50,
+html[data-product='musicchat'] .text-emerald-200\/70,
+html[data-product='musicchat'] .text-emerald-200\/80,
+html[data-product='musicchat'] .text-emerald-200\/95 {
+  color: #374151 !important;
+}
+
+html[data-product='musicchat'] .text-emerald-300\/90 {
+  color: var(--mc-accent-text) !important;
+}
+
+html[data-product='musicchat'] .from-emerald-950\/35 {
+  --tw-gradient-from: var(--mc-bg-elevated) var(--tw-gradient-from-position) !important;
+}
+
+/* sky / amber 装飾 → モノトーン */
+html[data-product='musicchat'] .bg-sky-950\/40,
+html[data-product='musicchat'] .bg-sky-950\/50,
+html[data-product='musicchat'] .bg-sky-900\/25,
+html[data-product='musicchat'] .bg-sky-900\/20,
+html[data-product='musicchat'] .bg-sky-50 {
+  background-color: var(--mc-bg-elevated) !important;
+}
+
+html[data-product='musicchat'] .border-sky-300,
+html[data-product='musicchat'] .border-sky-500\/50,
+html[data-product='musicchat'] .border-sky-500\/55,
+html[data-product='musicchat'] .border-sky-600\/50,
+html[data-product='musicchat'] .border-sky-700\/50,
+html[data-product='musicchat'] .border-sky-700\/60 {
+  border-color: var(--mc-border) !important;
+}
+
+html[data-product='musicchat'] .text-sky-100,
+html[data-product='musicchat'] .text-sky-200,
+html[data-product='musicchat'] .text-sky-300,
+html[data-product='musicchat'] .text-sky-700,
+html[data-product='musicchat'] .text-sky-800\/90,
+html[data-product='musicchat'] .text-sky-900,
+html[data-product='musicchat'] .text-sky-950 {
+  color: #374151 !important;
+}
+
+html[data-product='musicchat'] .hover\:bg-sky-900\/40:hover,
+html[data-product='musicchat'] .hover\:bg-sky-900\/35:hover,
+html[data-product='musicchat'] .hover\:border-sky-600\/50:hover,
+html[data-product='musicchat'] .hover\:text-sky-900:hover {
+  background-color: #e5e7eb !important;
+  border-color: #9ca3af !important;
+  color: var(--foreground) !important;
+}
+
+html[data-product='musicchat'] .bg-amber-950\/30,
+html[data-product='musicchat'] .bg-amber-950\/40 {
+  background-color: var(--mc-bg-elevated) !important;
+}
+
+html[data-product='musicchat'] .border-amber-600\/60,
+html[data-product='musicchat'] .border-amber-700\/60 {
+  border-color: var(--mc-border) !important;
+}
+
+html[data-product='musicchat'] .text-amber-100,
+html[data-product='musicchat'] .text-amber-200,
+html[data-product='musicchat'] .text-amber-300,
+html[data-product='musicchat'] .text-amber-300\/90,
+html[data-product='musicchat'] .text-amber-500\/90 {
+  color: var(--mc-text-muted) !important;
+}
+
+html[data-product='musicchat'] .text-amber-700 {
+  color: #374151 !important;
+}
+
+/* 認証フォームの amber 主ボタン → アクティブ緑（ログイン・参加する） */
+html[data-product='musicchat'] .bg-amber-600 {
+  background-color: var(--mc-accent) !important;
+  color: #fff !important;
+}
+
+html[data-product='musicchat'] .hover\:bg-amber-500:hover {
+  background-color: var(--mc-accent-hover) !important;
+}
+
+html[data-product='musicchat'] .border-amber-600,
+html[data-product='musicchat'] .border-amber-700,
+html[data-product='musicchat'] .border-amber-800\/80 {
+  border-color: var(--mc-border) !important;
+}
+
+html[data-product='musicchat'] .bg-amber-900\/50,
+html[data-product='musicchat'] .bg-amber-950\/40,
+html[data-product='musicchat'] .hover\:bg-amber-800\/70:hover {
+  background-color: var(--mc-bg-elevated) !important;
+}
+
+html[data-product='musicchat'] .text-amber-200 {
+  color: #374151 !important;
+}
+
+html[data-product='musicchat'] .text-emerald-300 {
+  color: var(--mc-text-muted) !important;
+}
+
+/* 主催中バッジ（アクティブ緑を維持） */
+html[data-product='musicchat'] .bg-emerald-600\/35 {
+  background-color: color-mix(in srgb, var(--mc-accent) 14%, white) !important;
+}
+
+html[data-product='musicchat'] .bg-emerald-600\/35.text-emerald-200,
+html[data-product='musicchat'] .bg-emerald-600\/35 .text-emerald-200,
+html[data-product='musicchat'] .bg-emerald-600\/35 .text-emerald-200\/90,
+html[data-product='musicchat'] .mc-accent-badge {
+  color: var(--mc-accent-text) !important;
+}
+
+html[data-product='musicchat'] .border-l-emerald-500,
+html[data-product='musicchat'] .mc-accent-live-bar {
+  border-left-color: var(--mc-accent) !important;
+}
+
+html[data-product='musicchat'] .hover\:border-green-600\/40:hover {
+  border-color: var(--mc-accent-border) !important;
+}
+
+/* 部屋選択・入室（sky）— モノトーン。選択中は .mc-accent-selected */
+html[data-product='musicchat'] .bg-blue-600,
+html[data-product='musicchat'] .bg-blue-700 {
+  background-color: var(--mc-accent) !important;
+  color: #fff !important;
+}
+
+html[data-product='musicchat'] .hover\:bg-blue-700:hover,
+html[data-product='musicchat'] .hover\:bg-blue-800:hover {
+  background-color: var(--mc-accent-hover) !important;
+}
+
+html[data-product='musicchat'] .mc-room-viewport {
+  background-color: var(--mc-bg-page) !important;
+}
+
+html[data-product='musicchat'] .border-violet-700,
+html[data-product='musicchat'] .bg-violet-900\/35,
+html[data-product='musicchat'] .bg-violet-950\/25 {
+  border-color: var(--mc-border) !important;
+  background-color: var(--mc-bg-elevated) !important;
+}
+
+html[data-product='musicchat'] .text-violet-100,
+html[data-product='musicchat'] .text-violet-200 {
+  color: #374151 !important;
+}
+
+/* === mc カラー適正化: 緑アクセント以外モノトーン === */
+
+/* アクティブタブ・ライブラリ選択中 */
+html[data-product='musicchat'] .bg-lime-700.text-white,
+html[data-product='musicchat'] .bg-gray-700.text-white {
+  background-color: var(--mc-accent) !important;
+  color: #fff !important;
+}
+
+html[data-product='musicchat'] .hover\:bg-gray-700\/50:hover {
+  background-color: #e5e7eb !important;
+  color: #374151 !important;
+}
+
+/* lime（選択中 .bg-lime-700.text-white は上で緑） */
+html[data-product='musicchat'] [class*='border-lime-'] {
+  border-color: var(--mc-border) !important;
+}
+
+html[data-product='musicchat'] [class*='bg-lime-']:not(.text-white) {
+  background-color: var(--mc-bg-elevated) !important;
+}
+
+html[data-product='musicchat'] [class*='text-lime-'] {
+  color: #374151 !important;
+}
+
+html[data-product='musicchat'] [class*='ring-lime-'] {
+  --tw-ring-color: var(--mc-border) !important;
+}
+
+html[data-product='musicchat'] [class*='shadow-'][class*='lime'] {
+  box-shadow: none !important;
+}
+
+/* cyan / orange / rose / yellow 装飾 */
+html[data-product='musicchat'] [class*='border-cyan-'],
+html[data-product='musicchat'] [class*='border-orange-'],
+html[data-product='musicchat'] [class*='border-rose-'] {
+  border-color: var(--mc-border) !important;
+}
+
+html[data-product='musicchat'] [class*='bg-cyan-'],
+html[data-product='musicchat'] [class*='bg-orange-'],
+html[data-product='musicchat'] [class*='bg-rose-'] {
+  background-color: var(--mc-bg-elevated) !important;
+}
+
+html[data-product='musicchat'] [class*='text-cyan-'],
+html[data-product='musicchat'] [class*='text-orange-'],
+html[data-product='musicchat'] [class*='text-rose-'],
+html[data-product='musicchat'] .text-yellow-300 {
+  color: #374151 !important;
+}
+
+html[data-product='musicchat'] [class*='ring-cyan-'] {
+  --tw-ring-color: var(--mc-border) !important;
+}
+
+html[data-product='musicchat'] .hover\:border-cyan-700\/60:hover {
+  border-color: #9ca3af !important;
+}
+
+/* red（破壊的操作もモノトーン） */
+html[data-product='musicchat'] [class*='border-red-'] {
+  border-color: var(--mc-border) !important;
+}
+
+html[data-product='musicchat'] [class*='bg-red-'] {
+  background-color: #6b7280 !important;
+}
+
+html[data-product='musicchat'] [class*='text-red-'] {
+  color: #374151 !important;
+}
+
+html[data-product='musicchat'] .hover\:bg-red-500:hover,
+html[data-product='musicchat'] .hover\:bg-red-800\/70:hover,
+html[data-product='musicchat'] .hover\:bg-red-900\/50:hover,
+html[data-product='musicchat'] .hover\:bg-red-900\/60:hover {
+  background-color: #4b5563 !important;
+  color: #fff !important;
+}
+
+/* blue 装飾（.bg-blue-600 主ボタンは下のルールで緑） */
+html[data-product='musicchat'] [class*='border-blue-'] {
+  border-color: var(--mc-border) !important;
+}
+
+html[data-product='musicchat'] [class*='bg-blue-9'],
+html[data-product='musicchat'] .bg-blue-900\/30,
+html[data-product='musicchat'] .bg-blue-900\/25,
+html[data-product='musicchat'] .bg-blue-900\/20 {
+  background-color: var(--mc-bg-elevated) !important;
+}
+
+html[data-product='musicchat'] [class*='text-blue-'] {
+  color: #374151 !important;
+}
+
+html[data-product='musicchat'] .hover\:bg-blue-900\/45:hover,
+html[data-product='musicchat'] .hover\:bg-blue-900\/50:hover,
+html[data-product='musicchat'] .hover\:bg-blue-900\/70:hover {
+  background-color: #e5e7eb !important;
+  color: var(--foreground) !important;
+}
+
+html[data-product='musicchat'] .focus\:border-blue-500:focus {
+  border-color: var(--mc-accent) !important;
+}
+
+html[data-product='musicchat'] .hover\:bg-blue-500:hover {
+  background-color: var(--mc-accent-hover) !important;
+}
+
+/* violet リング・背景の漏れ */
+html[data-product='musicchat'] .ring-violet-700\/40,
+html[data-product='musicchat'] .ring-sky-700\/40 {
+  --tw-ring-color: var(--mc-border) !important;
+}
+
+html[data-product='musicchat'] .bg-sky-950\/35,
+html[data-product='musicchat'] .bg-violet-950\/35 {
+  background-color: var(--mc-bg-elevated) !important;
+}
+
+html[data-product='musicchat'] .border-violet-500\/70,
+html[data-product='musicchat'] .border-violet-600\/60,
+html[data-product='musicchat'] .border-violet-700\/60,
+html[data-product='musicchat'] .border-sky-600\/70,
+html[data-product='musicchat'] .border-sky-700\/60 {
+  border-color: var(--mc-border) !important;
+}
+
+html[data-product='musicchat'] .text-sky-300\/95,
+html[data-product='musicchat'] .text-violet-200\/95 {
+  color: var(--mc-text-muted) !important;
+}
+
+/* amber 装飾の漏れ */
+html[data-product='musicchat'] .border-amber-500\/70,
+html[data-product='musicchat'] .border-amber-500\/80,
+html[data-product='musicchat'] .border-amber-700\/50,
+html[data-product='musicchat'] .border-amber-700\/60,
+html[data-product='musicchat'] .border-amber-700\/70,
+html[data-product='musicchat'] .border-amber-700\/80,
+html[data-product='musicchat'] .border-amber-800\/50,
+html[data-product='musicchat'] .border-amber-800\/70,
+html[data-product='musicchat'] .border-amber-800\/80,
+html[data-product='musicchat'] .border-amber-900\/45 {
+  border-color: var(--mc-border) !important;
+}
+
+html[data-product='musicchat'] .bg-amber-900\/20,
+html[data-product='musicchat'] .bg-amber-900\/35,
+html[data-product='musicchat'] .bg-amber-950\/45,
+html[data-product='musicchat'] .bg-amber-950\/50,
+html[data-product='musicchat'] .bg-amber-900\/60 {
+  background-color: var(--mc-bg-elevated) !important;
+}
+
+html[data-product='musicchat'] .text-amber-50,
+html[data-product='musicchat'] .text-amber-800,
+html[data-product='musicchat'] .text-amber-800\/85 {
+  color: #4b5563 !important;
+}
+
+html[data-product='musicchat'] .text-amber-400 {
+  color: #6b7280 !important;
+}
+
+html[data-product='musicchat'] .hover\:bg-amber-800\/40:hover,
+html[data-product='musicchat'] .hover\:bg-amber-800\/70:hover,
+html[data-product='musicchat'] .hover\:bg-amber-900\/30:hover,
+html[data-product='musicchat'] .hover\:bg-amber-900\/50:hover,
+html[data-product='musicchat'] .hover\:bg-amber-900\/55:hover {
+  background-color: #e5e7eb !important;
+  color: var(--foreground) !important;
+}
+
+/* 再生中チップ — アクティブ緑 */
+html[data-product='musicchat'] .bg-amber-900\/40,
+html[data-product='musicchat'] .border-amber-600\/70.bg-amber-950\/45 {
+  background-color: var(--mc-accent-soft) !important;
+  border-color: var(--mc-accent-border) !important;
+}
+
+html[data-product='musicchat'] .ring-amber-600\/50 {
+  --tw-ring-color: color-mix(in srgb, var(--mc-accent) 32%, transparent) !important;
+}
+
+html[data-product='musicchat'] .bg-amber-400 {
+  background-color: var(--mc-accent) !important;
+}
+
+/* NEXT 選曲待ち — アクティブ緑 */
+html[data-product='musicchat'] .bg-emerald-950\/35 {
+  background-color: var(--mc-accent-soft) !important;
+}
+
+html[data-product='musicchat'] .ring-emerald-700\/40 {
+  --tw-ring-color: var(--mc-accent-border) !important;
+}
+
+html[data-product='musicchat'] .text-emerald-200\/95 {
+  color: var(--mc-accent-text) !important;
+}
+
+html[data-product='musicchat'] .border-emerald-700\/60.bg-emerald-950\/35 {
+  border-color: var(--mc-accent-border) !important;
+}
+
+/* 候補リスト・主アクション（emerald ボタン） */
+html[data-product='musicchat'] .border-emerald-600.bg-emerald-900\/40,
+html[data-product='musicchat'] .mc-accent-primary.border-emerald-600 {
+  background-color: var(--mc-accent) !important;
+  border-color: var(--mc-accent-hover) !important;
+  color: #fff !important;
+}
+
+html[data-product='musicchat'] .border-emerald-600.bg-emerald-900\/40:hover,
+html[data-product='musicchat'] .hover\:bg-emerald-800\/70:hover {
+  background-color: var(--mc-accent-hover) !important;
+}
+
+html[data-product='musicchat'] .border-emerald-600.bg-emerald-900\/40 .bg-emerald-700,
+html[data-product='musicchat'] .border-emerald-600.bg-emerald-900\/40 .text-emerald-100 {
+  background-color: color-mix(in srgb, var(--mc-accent-hover) 85%, black) !important;
+  color: #fff !important;
+}
+
+html[data-product='musicchat'] .ring-emerald-300 {
+  --tw-ring-color: var(--mc-accent-border) !important;
+}
+
+/* 視聴履歴フッター等 */
+html[data-product='musicchat'] .bg-amber-900\/20 {
+  background-color: var(--mc-bg-elevated) !important;
+}
+
+html[data-product='musicchat'] .text-amber-200 {
+  color: #374151 !important;
+}
+
+/* アイコンボタン — 薄灰BG＋輪郭 */
+html[data-product='musicchat'] .mc-icon-btn {
+  background-color: #f3f4f6 !important;
+  border-color: #d1d5db !important;
+  color: #6b7280 !important;
+}
+
+html[data-product='musicchat'] .mc-icon-btn:hover:not(:disabled) {
+  background-color: #e5e7eb !important;
+  border-color: #9ca3af !important;
+  color: #374151 !important;
+}
+
+html[data-product='musicchat'] .mc-icon-btn-profile-visible {
+  background-color: var(--mc-accent-soft) !important;
+  border-color: var(--mc-accent-border) !important;
+  color: var(--mc-accent-text) !important;
+}
+
+html[data-product='musicchat'] .mc-icon-btn-profile-visible:hover:not(:disabled) {
+  background-color: color-mix(in srgb, var(--mc-accent-soft) 75%, #e5e7eb) !important;
+  border-color: var(--mc-accent) !important;
+  color: var(--mc-accent-text) !important;
+}
+
+/* チャット発言欄 — 薄いグリーン */
+html[data-product='musicchat'] input.mc-chat-input-field {
+  background-color: var(--mc-accent-soft) !important;
+  border-color: var(--mc-accent-border) !important;
+}
+
+html[data-product='musicchat'] input.mc-chat-input-field:focus {
+  border-color: var(--mc-accent) !important;
+  outline: none;
+}
+
+/* mc 部屋画面・マイページ — 文字サイズ（端末ローカル設定） */
+html[data-product='musicchat'] .mc-room-viewport,
+html[data-product='musicchat'] .mc-mypage-modal {
+  --mc-ui-font-scale: 1;
+}
+
+html[data-product='musicchat'] .mc-room-viewport[data-mc-ui-font-size='large'],
+html[data-product='musicchat'] .mc-mypage-modal[data-mc-ui-font-size='large'] {
+  --mc-ui-font-scale: 1.125;
+}
+
+html[data-product='musicchat'] .mc-room-viewport[data-mc-ui-font-size='xlarge'],
+html[data-product='musicchat'] .mc-mypage-modal[data-mc-ui-font-size='xlarge'] {
+  --mc-ui-font-scale: 1.25;
+}
+
+html[data-product='musicchat'] .mc-room-viewport[data-mc-ui-font-size='large'] .text-xs,
+html[data-product='musicchat'] .mc-mypage-modal[data-mc-ui-font-size='large'] .text-xs,
+html[data-product='musicchat'] .mc-room-viewport[data-mc-ui-font-size='xlarge'] .text-xs,
+html[data-product='musicchat'] .mc-mypage-modal[data-mc-ui-font-size='xlarge'] .text-xs,
+html[data-product='musicchat'] .mc-room-viewport[data-mc-ui-font-size='large'] .sm\:text-xs,
+html[data-product='musicchat'] .mc-mypage-modal[data-mc-ui-font-size='large'] .sm\:text-xs,
+html[data-product='musicchat'] .mc-room-viewport[data-mc-ui-font-size='xlarge'] .sm\:text-xs,
+html[data-product='musicchat'] .mc-mypage-modal[data-mc-ui-font-size='xlarge'] .sm\:text-xs {
+  font-size: calc(0.75rem * var(--mc-ui-font-scale)) !important;
+}
+
+html[data-product='musicchat'] .mc-room-viewport[data-mc-ui-font-size='large'] .text-sm,
+html[data-product='musicchat'] .mc-mypage-modal[data-mc-ui-font-size='large'] .text-sm,
+html[data-product='musicchat'] .mc-room-viewport[data-mc-ui-font-size='xlarge'] .text-sm,
+html[data-product='musicchat'] .mc-mypage-modal[data-mc-ui-font-size='xlarge'] .text-sm,
+html[data-product='musicchat'] .mc-room-viewport[data-mc-ui-font-size='large'] .sm\:text-sm,
+html[data-product='musicchat'] .mc-mypage-modal[data-mc-ui-font-size='large'] .sm\:text-sm,
+html[data-product='musicchat'] .mc-room-viewport[data-mc-ui-font-size='xlarge'] .sm\:text-sm,
+html[data-product='musicchat'] .mc-mypage-modal[data-mc-ui-font-size='xlarge'] .sm\:text-sm {
+  font-size: calc(0.875rem * var(--mc-ui-font-scale)) !important;
+}
+
+html[data-product='musicchat'] .mc-room-viewport[data-mc-ui-font-size='large'] .text-base,
+html[data-product='musicchat'] .mc-mypage-modal[data-mc-ui-font-size='large'] .text-base,
+html[data-product='musicchat'] .mc-room-viewport[data-mc-ui-font-size='xlarge'] .text-base,
+html[data-product='musicchat'] .mc-mypage-modal[data-mc-ui-font-size='xlarge'] .text-base,
+html[data-product='musicchat'] .mc-room-viewport[data-mc-ui-font-size='large'] .sm\:text-base,
+html[data-product='musicchat'] .mc-mypage-modal[data-mc-ui-font-size='large'] .sm\:text-base,
+html[data-product='musicchat'] .mc-room-viewport[data-mc-ui-font-size='xlarge'] .sm\:text-base,
+html[data-product='musicchat'] .mc-mypage-modal[data-mc-ui-font-size='xlarge'] .sm\:text-base {
+  font-size: calc(1rem * var(--mc-ui-font-scale)) !important;
+}
+
+html[data-product='musicchat'] .mc-room-viewport[data-mc-ui-font-size='large'] .text-\[10px\],
+html[data-product='musicchat'] .mc-mypage-modal[data-mc-ui-font-size='large'] .text-\[10px\],
+html[data-product='musicchat'] .mc-room-viewport[data-mc-ui-font-size='xlarge'] .text-\[10px\],
+html[data-product='musicchat'] .mc-mypage-modal[data-mc-ui-font-size='xlarge'] .text-\[10px\] {
+  font-size: calc(10px * var(--mc-ui-font-scale)) !important;
+}
+
+html[data-product='musicchat'] .mc-room-viewport[data-mc-ui-font-size='large'] .text-\[11px\],
+html[data-product='musicchat'] .mc-mypage-modal[data-mc-ui-font-size='large'] .text-\[11px\],
+html[data-product='musicchat'] .mc-room-viewport[data-mc-ui-font-size='xlarge'] .text-\[11px\],
+html[data-product='musicchat'] .mc-mypage-modal[data-mc-ui-font-size='xlarge'] .text-\[11px\] {
+  font-size: calc(11px * var(--mc-ui-font-scale)) !important;
+}
+

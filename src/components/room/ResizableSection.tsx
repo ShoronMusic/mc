@@ -104,7 +104,7 @@ export default function ResizableSection({
       {splitOnLeft ? (
         <>
           {/* 左: プレイヤー + 履歴 */}
-          <div ref={rightColRef} className="flex min-h-0 shrink-0 flex-col overflow-hidden" style={{ width: `${leftPct}%` }}>
+          <div ref={rightColRef} className="flex min-h-0 min-w-0 shrink-0 flex-col overflow-hidden" style={{ width: `${leftPct}%` }}>
             <div
               className="flex min-h-0 shrink-0 flex-col gap-2 overflow-hidden"
               style={{ height: `${rightTopPct}%` }}
@@ -118,7 +118,7 @@ export default function ResizableSection({
               style={{ minHeight: DIVIDER_HEIGHT, height: DIVIDER_HEIGHT }}
               onMouseDown={startVertical}
             />
-            <div className="min-h-0 flex-1 overflow-hidden">
+            <div className="min-h-0 min-w-0 w-full flex-1 overflow-hidden">
               {rightBottom}
             </div>
           </div>
@@ -170,7 +170,7 @@ export default function ResizableSection({
               onMouseDown={startVertical}
             />
 
-            <div className="min-h-0 flex-1 overflow-hidden">
+            <div className="min-h-0 min-w-0 w-full flex-1 overflow-hidden">
               {rightBottom}
             </div>
           </div>

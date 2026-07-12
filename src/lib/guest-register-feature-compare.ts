@@ -1,5 +1,7 @@
 /** ユーザー登録モーダル: ゲスト vs 登録ユーザーの機能比較（単一ソース） */
 
+import { IS_MC_PRODUCT } from '@/lib/product-branding';
+
 export type GuestRegisterFeatureAvailability = 'yes' | 'no' | 'trial';
 
 export type GuestRegisterFeatureRow = {
@@ -47,6 +49,18 @@ export const GUEST_REGISTER_FEATURE_COMPARE_ROWS: GuestRegisterFeatureRow[] = [
     registeredNote: 'AI参加オン時',
   },
 ];
+
+const MC_EXCLUDED_GUEST_COMPARE_FEATURES = new Set([
+  'AI 曲解説',
+  '@ への質問',
+  'AI参加（交互選曲）',
+]);
+
+/** 製品に応じた比較行（MC では AI 関連を除く） */
+export function getGuestRegisterFeatureCompareRows(): GuestRegisterFeatureRow[] {
+  if (!IS_MC_PRODUCT) return GUEST_REGISTER_FEATURE_COMPARE_ROWS;
+  return GUEST_REGISTER_FEATURE_COMPARE_ROWS.filter((row) => !MC_EXCLUDED_GUEST_COMPARE_FEATURES.has(row.feature));
+}
 
 export function formatGuestRegisterFeatureAvailability(
   value: GuestRegisterFeatureAvailability,

@@ -1,10 +1,18 @@
+import {
+  cleanAuthor,
+  cleanTitle,
+  formatArtistTitle,
+  getArtistAndSong,
+} from '@/lib/format-song-display';
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { formatArtistTitle } from '@/lib/format-song-display';
 import { generateChatReply } from '@/lib/gemini';
 import { fetchOEmbed } from '@/lib/youtube-oembed';
 import { getStyleFromDb } from '@/lib/song-style';
 import { upsertSongAndVideo } from '@/lib/song-entities';
+import { buildSongDbRegistrationInput } from '@/lib/song-db-registration-gate';
+import { getVideoSnippet } from '@/lib/youtube-search';
+import { resolveJapaneseDomesticWithMusicBrainz } from '@/lib/resolve-japanese-economy';
 import { insertTidbit } from '../../../../lib/song-tidbits';
 import { checkChatAiRateLimit, getChatAiClientIp } from '@/lib/chat-ai-rate-limit';
 import { fetchUserTasteContextForChat } from '@/lib/user-ai-taste-context';
@@ -14,6 +22,11 @@ import {
   userTextHasAiMention,
 } from '@/lib/user-ai-trial-server';
 import { isAiUnlimitedUserId } from '@/lib/ai-unlimited-user-ids';
+import {
+  getRoomHistoryProductId,
+  runRoomHistoryQueryScoped,
+  withRoomHistoryProductEq,
+} from '@/lib/room-history-product';
 
 export const dynamic = 'force-dynamic';
 
@@ -119,34 +132,44 @@ async function buildRoomTrendSummary(roomId: string, hours: 1 | 2): Promise<stri
   if (!supabase) return null;
 
   const sinceIso = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
-  const { data: playData, error: playError } = await supabase
-    .from('room_playback_history')
-    .select('video_id, title, artist_name, style, played_at')
-    .eq('room_id', roomId)
-    .gte('played_at', sinceIso)
-    .order('played_at', { ascending: false })
-    .limit(500);
-  if (playError) {
-    if (playError.code === '42P01') return null;
-    console.error('[api/ai/chat] trend playback', playError);
+  const historyProduct = getRoomHistoryProductId();
+
+  const playRes = await runRoomHistoryQueryScoped((scopeProduct) => {
+    let q = supabase
+      .from('room_playback_history')
+      .select('video_id, title, artist_name, style, played_at')
+      .eq('room_id', roomId)
+      .gte('played_at', sinceIso)
+      .order('played_at', { ascending: false })
+      .limit(500);
+    if (scopeProduct) q = withRoomHistoryProductEq(q, historyProduct);
+    return q;
+  });
+  if (playRes.error) {
+    if (playRes.error.code === '42P01') return null;
+    console.error('[api/ai/chat] trend playback', playRes.error);
     return null;
   }
-  const plays = (playData ?? []) as PlaybackTrendRow[];
+  const plays = (playRes.data ?? []) as PlaybackTrendRow[];
   if (plays.length === 0) {
     return `直近${hours}時間では再生履歴がまだ少ないです。もう少し曲が流れたら、人気曲や傾向をまとめます。`;
   }
 
-  const { data: chatData, error: chatError } = await supabase
-    .from('room_chat_log')
-    .select('body')
-    .eq('room_id', roomId)
-    .gte('created_at', sinceIso)
-    .order('created_at', { ascending: false })
-    .limit(1200);
-  if (chatError && chatError.code !== '42P01') {
-    console.error('[api/ai/chat] trend chat', chatError);
+  const chatRes = await runRoomHistoryQueryScoped((scopeProduct) => {
+    let q = supabase
+      .from('room_chat_log')
+      .select('body')
+      .eq('room_id', roomId)
+      .gte('created_at', sinceIso)
+      .order('created_at', { ascending: false })
+      .limit(1200);
+    if (scopeProduct) q = withRoomHistoryProductEq(q, historyProduct);
+    return q;
+  });
+  if (chatRes.error && chatRes.error.code !== '42P01') {
+    console.error('[api/ai/chat] trend chat', chatRes.error);
   }
-  const chatBodies = ((chatData ?? []) as ChatTrendRow[])
+  const chatBodies = ((chatRes.data ?? []) as ChatTrendRow[])
     .map((r) => normalizeText(r.body))
     .filter(Boolean);
 
@@ -324,6 +347,7 @@ export async function POST(request: Request) {
     if (videoId) {
       const supabase = await createClient();
       const oembed = await fetchOEmbed(videoId);
+      const snippet = await getVideoSnippet(videoId, { source: 'api/ai/chat' });
       const title = oembed?.title ?? videoId;
       currentSong = formatArtistTitle(title, oembed?.author_name) || null;
       if (supabase) {
@@ -334,12 +358,36 @@ export async function POST(request: Request) {
         try {
           const mainArtist = oembed?.author_name ?? null;
           const songTitle = title;
+          const authorForParse = mainArtist ? cleanAuthor(mainArtist) : null;
+          const parsed = getArtistAndSong(cleanTitle(title), authorForParse);
+          const isJapaneseDomestic = await resolveJapaneseDomesticWithMusicBrainz({
+            title,
+            artistDisplay: parsed?.artistDisplay ?? mainArtist,
+            artist: parsed?.artist ?? mainArtist,
+            song: parsed?.song ?? songTitle,
+            description: snippet?.description ?? null,
+            channelTitle: snippet?.channelTitle ?? null,
+            defaultAudioLanguage: snippet?.defaultAudioLanguage ?? null,
+          });
           songId = await upsertSongAndVideo({
             supabase,
             videoId,
             mainArtist,
             songTitle,
             variant: 'chat',
+            registrationCheck: buildSongDbRegistrationInput({
+              videoId,
+              rawTitle: title,
+              channelTitle: snippet?.channelTitle ?? oembed?.author_name ?? null,
+              channelId: snippet?.channelId ?? null,
+              categoryId: snippet?.categoryId ?? null,
+              description: snippet?.description ?? null,
+              mainArtist,
+              songTitle,
+              isJapaneseDomestic,
+              channelAuthorName: oembed?.author_name ?? null,
+              viewCount: snippet?.viewCount ?? null,
+            }),
           });
         } catch (e) {
           console.error('[api/ai/chat] upsertSongAndVideo', e);

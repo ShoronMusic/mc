@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 1,
+  "playlistUrl": "https://www.youtube.com/playlist?list=PL5XfxmiFda5vynLlCflY36h4d6ZA5n7sW",
+  "playlistId": "PL5XfxmiFda5vynLlCflY36h4d6ZA5n7sW",
+  "fetchedAt": "2026-07-11T15:01:29.862Z",
+  "summary": {
+    "total": 2,
+    "withReleaseDate": 1,
+    "officialOk": 0,
+    "included": 0
+  },
+  "items": [
+    {
+      "index": 1,
+      "videoId": "aF6qA9hCK70",
+      "url": "https://www.youtube.com/watch?v=aF6qA9hCK70",
+      "rawTitle": "「東京 magic hour - Instrumental Version featuring David Spinozza -」MV",
+      "channelTitle": "DREAMS COME TRUE",
+      "channelId": "UC1wu3wlRdRzCFLCO5vKp_nQ",
+      "artist": "DREAMS COME TRUE",
+      "title": "「東京 magic hour - Instrumental Version featuring David Spinozza -」MV",
+      "displayTitle": "DREAMS COME TRUE - 「東京 magic hour - Instrumental Version featuring David Spinozza -」MV",
+      "originalReleaseDate": null,
+      "genres": [],
+      "metadataSource": "youtube_channel",
+      "musicBrainzScore": null,
+      "youtubePublishedAt": "2026-03-20T15:00:01Z",
+      "officialGate": {
+        "persist": false,
+        "reason": "jp_unofficial"
+      },
+      "include": false,
+      "notes": "チャンネル名とアーティスト一致。公式チャンネルMVの可能性が高い → 確認後 include:true、apply は --force-allow",
+      "applyStatus": "pending",
+      "applyError": null,
+      "songId": null
+    },
+    {
+      "index": 2,
+      "videoId": "ZXUXzFvYqeM",
+      "url": "https://www.youtube.com/watch?v=ZXUXzFvYqeM",
+      "rawTitle": "DREAMS COME TRUE「東京 magic hour」",
+      "channelTitle": "DREAMS COME TRUE",
+      "channelId": "UC1wu3wlRdRzCFLCO5vKp_nQ",
+      "artist": "DREAMS COME TRUE",
+      "title": "東京 magic hour",
+      "displayTitle": "DREAMS COME TRUE - 東京 magic hour",
+      "originalReleaseDate": "2026-03-18",
+      "genres": [],
+      "metadataSource": "musicbrainz",
+      "musicBrainzScore": 100,
+      "youtubePublishedAt": "2026-03-17T09:00:45Z",
+      "officialGate": {
+        "persist": false,
+        "reason": "jp_unofficial"
+      },
+      "include": false,
+      "notes": "チャンネル名とアーティスト一致。公式チャンネルMVの可能性が高い → 確認後 include:true、apply は --force-allow",
+      "applyStatus": "pending",
+      "applyError": null,
+      "songId": null
+    }
+  ]
+}

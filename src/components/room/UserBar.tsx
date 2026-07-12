@@ -19,9 +19,109 @@ import {
   favoriteHeartActiveTextClass,
 } from '@/lib/favorite-heart-ui';
 import { useIsLgViewport } from '@/hooks/useLgViewport';
+import {
+  IS_MC_PRODUCT,
+  favoriteHeartIdleIconClass,
+  participantMentionBtnClass,
+  participantProfileIconBtnClass,
+  roomToolbarIconBtnClass,
+  roomUserBarShellClass,
+} from '@/lib/product-branding';
+import { participantChatColorForSurface } from '@/lib/chat-text-color';
 import { SELECTION_ROUND_SESSION_MAX_GAP_MS } from '@/lib/room-selection-round';
 
 const AI_PARTICIPANT_CLIENT_ID = '__ai_character__';
+
+function participantChipStateClass(
+  isCurrentSongPoster: boolean,
+  isQueuedSongPoster: boolean,
+  isPassTurnReserved: boolean,
+  isNextTurnPoster: boolean,
+  mobile = false,
+): string {
+  if (IS_MC_PRODUCT) {
+    if (isCurrentSongPoster) {
+      return mobile
+        ? 'border-amber-300 bg-amber-50'
+        : 'bg-amber-50 ring-1 ring-amber-300/80';
+    }
+    if (isQueuedSongPoster) {
+      return mobile ? 'border-sky-300 bg-sky-50' : 'bg-sky-50 ring-1 ring-sky-300/80';
+    }
+    if (isPassTurnReserved) {
+      return mobile ? 'border-violet-300 bg-violet-50' : 'bg-violet-50 ring-1 ring-violet-300/80';
+    }
+    if (isNextTurnPoster) {
+      return mobile ? 'border-green-300 bg-green-50' : 'bg-green-50 ring-1 ring-green-300/80';
+    }
+    return mobile ? 'border-gray-200 bg-gray-50' : '';
+  }
+  if (isCurrentSongPoster) {
+    return mobile
+      ? 'border-amber-600/70 bg-amber-950/45'
+      : 'bg-amber-900/40 ring-1 ring-amber-600/50';
+  }
+  if (isQueuedSongPoster) {
+    return mobile ? 'border-sky-700/60 bg-sky-950/35' : 'bg-sky-950/35 ring-1 ring-sky-700/40';
+  }
+  if (isPassTurnReserved) {
+    return mobile ? 'border-violet-700/60 bg-violet-950/35' : 'bg-violet-950/35 ring-1 ring-violet-700/40';
+  }
+  if (isNextTurnPoster) {
+    return mobile ? 'border-emerald-700/60 bg-emerald-950/35' : 'bg-emerald-950/35 ring-1 ring-emerald-700/40';
+  }
+  return mobile ? 'border-gray-700 bg-gray-900/70' : '';
+}
+
+function participantIndexClass(): string {
+  return 'text-gray-500';
+}
+
+function participantSubLabelClass(kind: 'queued' | 'pass' | 'next' | 'watchOnly'): string {
+  if (IS_MC_PRODUCT) {
+    if (kind === 'queued') return 'text-sky-700';
+    if (kind === 'pass') return 'text-violet-700';
+    if (kind === 'next') return 'text-green-700';
+    return 'text-gray-500';
+  }
+  if (kind === 'queued') return 'text-sky-300/95';
+  if (kind === 'pass') return 'text-violet-200/95';
+  if (kind === 'next') return 'text-emerald-200/95';
+  return 'text-gray-400';
+}
+
+function userBarShellClass(): string {
+  return roomUserBarShellClass(false);
+}
+
+function userBarShellClassMobile(): string {
+  return roomUserBarShellClass(true);
+}
+
+function desktopSecondaryBtnClass(disabled = false): string {
+  if (IS_MC_PRODUCT) {
+    const base =
+      'inline-flex shrink-0 items-center gap-1 rounded border px-3 py-2 text-sm font-medium sm:px-4';
+    return disabled
+      ? `${base} cursor-not-allowed border-gray-200 bg-gray-50 text-gray-400 opacity-70`
+      : `${base} border-gray-300 bg-gray-50 text-gray-700 hover:bg-gray-100`;
+  }
+  return disabled
+    ? 'inline-flex shrink-0 items-center gap-1 rounded border border-gray-700 bg-gray-800/50 px-3 py-2 text-sm font-medium text-gray-500 cursor-not-allowed sm:px-4'
+    : 'inline-flex shrink-0 items-center gap-1 rounded border border-gray-600 bg-gray-800 px-3 py-2 text-sm font-medium text-gray-200 hover:bg-gray-700 hover:text-white sm:px-4';
+}
+
+function participantDisplayTextClass(away: boolean, inactive = false): string {
+  if (!IS_MC_PRODUCT) {
+    return inactive ? 'text-gray-500' : '';
+  }
+  if (inactive) return 'font-medium text-gray-400';
+  return away ? 'font-medium text-gray-500' : 'font-medium text-gray-900';
+}
+
+function isHumanParticipant(clientId: string): boolean {
+  return clientId !== AI_PARTICIPANT_CLIENT_ID;
+}
 
 export interface ParticipantItem {
   clientId: string;
@@ -133,11 +233,7 @@ function ParticipantProfileIconButton({
         onParticipantPublicProfileClick({ authUserId: uid, displayName: participant.displayName });
         onAfterClick?.();
       }}
-      className={
-        hasVisibleProfile
-          ? 'inline-flex shrink-0 items-center justify-center rounded border border-emerald-800/60 bg-emerald-950/35 p-0.5 text-emerald-200/90 hover:bg-emerald-900/45'
-          : 'inline-flex shrink-0 items-center justify-center rounded border border-gray-600/70 bg-gray-800/50 p-0.5 text-gray-400 hover:bg-gray-700/60 hover:text-gray-300'
-      }
+      className={participantProfileIconBtnClass(hasVisibleProfile)}
       title={
         hasVisibleProfile
           ? `${participant.displayName}さんのプロフィール`
@@ -192,6 +288,10 @@ export default function UserBar({
   const gapHours = Math.round(SELECTION_ROUND_SESSION_MAX_GAP_MS / (60 * 60 * 1000));
   const roundTitle = `選曲ラウンド（ラウンド ${selectionRoundNumber}）。オーナーの番が一周して戻るたびに+1。オーナー引継ぎでは維持し、新しい会が始まると1から。同一ブラウザでは約${gapHours}時間以内に再入室すると続きから復元します。`;
 
+  /** 在室の人間ユーザーが1人だけ（AI・退席中は除く） */
+  const soleHumanInRoom =
+    participants.filter((p) => isHumanParticipant(p.clientId) && p.isAway !== true).length <= 1;
+
   const participantNamesTitle =
     participants.length > 0
       ? participants
@@ -209,7 +309,11 @@ export default function UserBar({
         onClick={() => {
           onGuestRegisterClick?.();
         }}
-        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-emerald-700/60 bg-emerald-950/40 text-emerald-100 hover:bg-emerald-900/50"
+        className={
+          IS_MC_PRODUCT
+            ? 'mc-accent-primary flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border'
+            : 'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-emerald-700/60 bg-emerald-950/40 text-emerald-100 hover:bg-emerald-900/50'
+        }
         aria-label="ユーザー登録"
         title="ユーザー登録"
       >
@@ -224,7 +328,7 @@ export default function UserBar({
         onClick={() => {
           onMyPageClick();
         }}
-        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-600 bg-gray-800 text-gray-200 hover:bg-gray-700"
+        className={roomToolbarIconBtnClass()}
         aria-label="マイページを開く"
         title="マイページ"
       >
@@ -239,7 +343,7 @@ export default function UserBar({
         onClick={() => {
           onPlaybackHistoryClick();
         }}
-        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-600 bg-gray-800 text-gray-200 hover:bg-gray-700"
+        className={roomToolbarIconBtnClass()}
         aria-label="視聴履歴を表示"
         title="視聴履歴"
       >
@@ -254,7 +358,7 @@ export default function UserBar({
         onClick={() => {
           onChatSummaryClick();
         }}
-        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-600 bg-gray-800 text-gray-200 hover:bg-gray-700"
+        className={roomToolbarIconBtnClass()}
         aria-label="チャットサマリーを表示"
         title="チャットサマリー"
       >
@@ -278,9 +382,9 @@ export default function UserBar({
           onFavoriteCurrentClick({ videoId: currentVideoId, isFavorited: currentIsFavorited });
         }}
         disabled={!canToggleCurrentFavorite}
-        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-600 bg-gray-800 text-gray-200 hover:bg-gray-700 disabled:opacity-50 ${
-          currentIsFavorited ? favoriteHeartActiveRingSoftClass : ''
-        }`}
+        className={roomToolbarIconBtnClass(
+          `disabled:opacity-50 ${currentIsFavorited ? favoriteHeartActiveRingSoftClass : ''}`,
+        )}
         aria-label={
           isGuest
             ? 'お気に入り（ログインで利用可）'
@@ -297,7 +401,7 @@ export default function UserBar({
         }
       >
         <HeartIcon
-          className={`h-5 w-5 ${currentIsFavorited ? favoriteHeartActiveTextClass : 'text-gray-400'}`}
+          className={`h-5 w-5 ${currentIsFavorited ? favoriteHeartActiveTextClass : favoriteHeartIdleIconClass()}`}
           aria-hidden
         />
       </button>
@@ -306,14 +410,31 @@ export default function UserBar({
   const roundBadge =
     selectionRoundNumber >= 1 ? (
       <span
-        className="inline-flex shrink-0 flex-col items-center justify-center rounded border border-amber-800/70 bg-amber-950/45 px-1.5 py-0.5 leading-none"
+        className={
+          IS_MC_PRODUCT
+            ? 'inline-flex shrink-0 flex-col items-center justify-center rounded border border-gray-300 bg-gray-100 px-1.5 py-0.5 leading-none'
+            : 'inline-flex shrink-0 flex-col items-center justify-center rounded border border-amber-800/70 bg-amber-950/45 px-1.5 py-0.5 leading-none'
+        }
         title={roundTitle}
         aria-label={roundTitle}
       >
-        <span className="text-[6px] font-semibold tracking-wide text-amber-200/80" aria-hidden>
+        <span
+          className={
+            IS_MC_PRODUCT
+              ? 'text-[6px] font-semibold tracking-wide text-gray-500'
+              : 'text-[6px] font-semibold tracking-wide text-amber-200/80'
+          }
+          aria-hidden
+        >
           ROUND
         </span>
-        <span className="mt-0.5 font-mono text-[11px] font-semibold tabular-nums text-amber-100/95">
+        <span
+          className={
+            IS_MC_PRODUCT
+              ? 'mt-0.5 font-mono text-[11px] font-semibold tabular-nums text-gray-800'
+              : 'mt-0.5 font-mono text-[11px] font-semibold tabular-nums text-amber-100/95'
+          }
+        >
           {selectionRoundNumber}
         </span>
       </span>
@@ -322,13 +443,18 @@ export default function UserBar({
   const participantChips =
     participants.length > 0 ? (
       <span
-        className="flex flex-wrap items-center gap-x-1.5 gap-y-0 text-sm text-gray-200"
+        className={`flex flex-wrap items-center gap-x-1.5 gap-y-0 text-sm ${
+          IS_MC_PRODUCT ? 'text-gray-800' : 'text-gray-200'
+        }`}
         title={participantNamesTitle}
       >
         {participants.map((p, i) => {
           const name = participantDisplayName(p, myClientId, isGuest);
           const away = p.isAway === true;
-          const color = away ? '#9ca3af' : p.textColor ?? '#e5e7eb';
+          const color = participantChatColorForSurface(
+            away ? '#9ca3af' : p.textColor,
+            '#e5e7eb',
+          );
           const isAiParticipant = p.clientId === AI_PARTICIPANT_CLIENT_ID;
           const isCurrentSongPoster = p.clientId === currentSongPosterClientId;
           const isQueuedSongPoster =
@@ -360,21 +486,16 @@ export default function UserBar({
           return (
             <span
               key={p.clientId}
-                className={`inline-flex flex-col items-start gap-0 rounded px-1 ${
-                  isCurrentSongPoster
-                    ? 'bg-amber-900/40 ring-1 ring-amber-600/50'
-                    : isQueuedSongPoster
-                      ? 'bg-sky-950/35 ring-1 ring-sky-700/40'
-                      : isPassTurnReserved
-                        ? 'bg-violet-950/35 ring-1 ring-violet-700/40'
-                      : isNextTurnPoster
-                        ? 'bg-emerald-950/35 ring-1 ring-emerald-700/40'
-                        : ''
-                }`}
+                className={`inline-flex flex-col items-start gap-0 rounded px-1 ${participantChipStateClass(
+                  isCurrentSongPoster,
+                  isQueuedSongPoster,
+                  isPassTurnReserved,
+                  isNextTurnPoster,
+                )}`}
               title={chipTitle}
             >
               <span className="inline-flex items-center gap-0.5">
-                <span className="text-gray-500">[{i + 1}]</span>
+                <span className={participantIndexClass()}>[{i + 1}]</span>
                 {isCurrentSongPoster && (
                   <span
                     className="animate-now-playing-wave inline-flex h-3 items-end gap-0.5"
@@ -392,7 +513,7 @@ export default function UserBar({
                 )}
                 {isRoomOwner && (
                   <span
-                    className="hidden shrink-0 text-amber-400 lg:inline"
+                    className={`hidden shrink-0 lg:inline ${IS_MC_PRODUCT ? 'text-amber-600' : 'text-amber-400'}`}
                     title="チャットオーナー"
                     aria-label="チャットオーナー"
                   >
@@ -413,18 +534,23 @@ export default function UserBar({
                     {'🟨'.repeat(Math.min(2, p.yellowCards ?? 0))}
                   </span>
                 )}
-                {p.clientId !== myClientId && onParticipantClick ? (
+                {p.clientId !== myClientId && onParticipantClick && !soleHumanInRoom ? (
                   <button
                     type="button"
                     onClick={() => onParticipantClick(p.displayName)}
-                    className="cursor-pointer rounded border-0 bg-transparent p-0 text-left underline decoration-dotted underline-offset-1 hover:opacity-90"
-                    style={{ color }}
+                    className={`${participantMentionBtnClass()} ${participantDisplayTextClass(away)}`}
+                    style={IS_MC_PRODUCT ? undefined : { color }}
                     title={`${p.displayName}さんをメンション（発言欄に挿入）`}
                   >
                     {name}
                   </button>
                 ) : (
-                  <span style={{ color }}>{name}</span>
+                  <span
+                    className={participantDisplayTextClass(away, p.clientId !== myClientId && soleHumanInRoom)}
+                    style={IS_MC_PRODUCT ? undefined : { color }}
+                  >
+                    {name}
+                  </span>
                 )}
                 <ParticipantProfileIconButton
                   participant={p}
@@ -432,13 +558,19 @@ export default function UserBar({
                   onParticipantPublicProfileClick={onParticipantPublicProfileClick}
                 />
                 {p.status && (
-                  <span className="ml-0.5 text-xs text-white" title={`ステータス: ${p.status}`}>
+                  <span
+                    className={`ml-0.5 text-xs ${IS_MC_PRODUCT ? 'text-gray-600' : 'text-white'}`}
+                    title={`ステータス: ${p.status}`}
+                  >
                     [{p.status}]
                   </span>
                 )}
               </span>
               {p.participatesInSelection === false ? (
-                <span className="pl-5 text-[10px] leading-tight text-gray-400" title="選曲順に含まれません">
+                <span
+                  className={`pl-5 text-[10px] leading-tight ${participantSubLabelClass('watchOnly')}`}
+                  title="選曲順に含まれません"
+                >
                   視聴専用
                 </span>
               ) : null}
@@ -454,13 +586,19 @@ export default function UserBar({
                     選曲済み
                   </button>
                 ) : (
-                  <span className="pl-5 text-[10px] leading-tight text-sky-300/95">選曲済み</span>
+                  <span className={`pl-5 text-[10px] leading-tight ${participantSubLabelClass('queued')}`}>
+                    選曲済み
+                  </span>
                 ))}
               {isPassTurnReserved ? (
-                <span className="pl-5 text-[10px] leading-tight text-violet-200/95">パス予約</span>
+                <span className={`pl-5 text-[10px] leading-tight ${participantSubLabelClass('pass')}`}>
+                  パス予約
+                </span>
               ) : null}
               {isNextTurnPoster && (
-                <span className="pl-5 text-[10px] leading-tight text-emerald-200/95">NEXT（選曲待ち）</span>
+                <span className={`pl-5 text-[10px] leading-tight ${participantSubLabelClass('next')}`}>
+                  NEXT（選曲待ち）
+                </span>
               )}
               {isCurrentSongPoster && skipCurrentTrackActive && onSkipCurrentTrack ? (
                 <button
@@ -487,7 +625,7 @@ export default function UserBar({
       </span>
     ) : (
       <span className="flex flex-col items-start gap-1">
-        <span className="text-sm text-gray-200">{label}</span>
+        <span className={`text-sm ${IS_MC_PRODUCT ? 'text-gray-800' : 'text-gray-200'}`}>{label}</span>
         {skipCurrentTrackActive && onSkipCurrentTrack ? (
           <button
             type="button"
@@ -521,12 +659,15 @@ export default function UserBar({
           <button
             type="button"
             onClick={onOwnerPickSelector}
-            className="shrink-0 rounded border border-amber-700/70 bg-amber-950/45 px-3 py-2 text-sm font-medium text-amber-100 hover:bg-amber-900/55 sm:px-4"
+            disabled={soleHumanInRoom}
+            className={desktopSecondaryBtnClass(soleHumanInRoom)}
             aria-label={ownerPickSelectorActing ? '選曲者指名（オーナー代理）' : '選曲者指名'}
             title={
-              ownerPickSelectorActing
-                ? 'オーナー不在中の代理として、任意の参加者を次の選曲者として指名'
-                : '任意の参加者を次の選曲者として指名'
+              soleHumanInRoom
+                ? '他の参加者がいるときに使えます'
+                : ownerPickSelectorActing
+                  ? 'オーナー不在中の代理として、任意の参加者を次の選曲者として指名'
+                  : '任意の参加者を次の選曲者として指名'
             }
           >
             選曲者指名{ownerPickSelectorActing ? '（代理）' : ''}
@@ -544,7 +685,11 @@ export default function UserBar({
           <button
             type="button"
             onClick={onGuestRegisterClick}
-            className="shrink-0 rounded border border-emerald-700/60 bg-emerald-950/40 px-3 py-2 text-sm font-medium text-emerald-100 hover:bg-emerald-900/50 sm:px-4"
+            className={
+              IS_MC_PRODUCT
+                ? 'mc-accent-primary shrink-0 rounded border px-3 py-2 text-sm font-medium sm:px-4'
+                : 'shrink-0 rounded border border-emerald-700/60 bg-emerald-950/40 px-3 py-2 text-sm font-medium text-emerald-100 hover:bg-emerald-900/50 sm:px-4'
+            }
             aria-label="ユーザー登録"
             title="ユーザー登録"
           >
@@ -555,7 +700,7 @@ export default function UserBar({
           <button
             type="button"
             onClick={onMyPageClick}
-            className="inline-flex shrink-0 items-center gap-1 rounded border border-gray-600 bg-gray-800 px-3 py-2 text-sm font-medium text-gray-200 hover:bg-gray-700 hover:text-white sm:px-4"
+            className={desktopSecondaryBtnClass()}
             aria-label="マイページを開く"
             title="マイページ"
           >
@@ -567,7 +712,7 @@ export default function UserBar({
           <button
             type="button"
             onClick={onPlaybackHistoryClick}
-            className="inline-flex shrink-0 items-center gap-1 rounded border border-gray-600 bg-gray-800 px-3 py-2 text-sm font-medium text-gray-200 hover:bg-gray-700 hover:text-white"
+            className={desktopSecondaryBtnClass()}
             aria-label="視聴履歴を表示"
             title="視聴履歴を表示"
           >
@@ -579,7 +724,7 @@ export default function UserBar({
           <button
             type="button"
             onClick={onChatSummaryClick}
-            className="shrink-0 rounded border border-gray-600 bg-gray-800 px-3 py-2 text-sm font-medium text-gray-200 hover:bg-gray-700 hover:text-white"
+            className={desktopSecondaryBtnClass()}
             aria-label="チャットサマリーを表示"
             title="途中参加者向けの流れ"
           >
@@ -606,10 +751,12 @@ export default function UserBar({
 
   if (isLg) {
     return (
-      <div className="flex items-center justify-between gap-3 overflow-x-auto rounded-lg border border-gray-700 bg-gray-900/50 px-3 py-2">
+      <div className={userBarShellClass()}>
         <div className="flex min-w-0 flex-1 items-center gap-2">
           {roundBadge}
-          <span className="shrink-0 text-xs text-gray-500">参加者</span>
+          <span className={`shrink-0 text-xs ${IS_MC_PRODUCT ? 'font-medium text-gray-700' : 'text-gray-500'}`}>
+            参加者
+          </span>
           {participantChips}
         </div>
         {desktopTrailing}
@@ -618,19 +765,28 @@ export default function UserBar({
   }
 
   return (
-    <div className="flex min-h-11 shrink-0 items-start gap-1.5 overflow-hidden rounded-lg border border-gray-700 bg-gray-900/50 px-2 py-1.5">
+    <div className={userBarShellClassMobile()}>
       {!hideMobileRoundBadge ? roundBadge : null}
       <div className="mc-scrollbar-stable min-w-0 flex-1 overflow-y-auto max-h-[5.5rem]">
         <div className="flex flex-wrap items-start gap-1 pr-0.5">
           {participants.length === 0 ? (
-            <span className="rounded border border-gray-700 bg-gray-800/70 px-2 py-1 text-xs text-gray-400">
+            <span
+              className={`rounded border px-2 py-1 text-xs ${
+                IS_MC_PRODUCT
+                  ? 'border-gray-200 bg-gray-50 text-gray-600'
+                  : 'border-gray-700 bg-gray-800/70 text-gray-400'
+              }`}
+            >
               参加者なし
             </span>
           ) : (
             participants.map((p, i) => {
               const name = participantDisplayName(p, myClientId, isGuest);
               const away = p.isAway === true;
-              const color = away ? '#9ca3af' : p.textColor ?? '#e5e7eb';
+              const color = participantChatColorForSurface(
+                away ? '#9ca3af' : p.textColor,
+                '#e5e7eb',
+              );
               const isCurrentSongPoster = p.clientId === currentSongPosterClientId;
               const isQueuedSongPoster =
                 queuedSongPublisherClientIds.length > 0 &&
@@ -662,21 +818,17 @@ export default function UserBar({
               return (
                 <span
                   key={p.clientId}
-                  className={`inline-flex max-w-full flex-col items-start gap-0 rounded border px-1.5 py-1 text-xs ${
-                    isCurrentSongPoster
-                      ? 'border-amber-600/70 bg-amber-950/45'
-                      : isQueuedSongPoster
-                        ? 'border-sky-700/60 bg-sky-950/35'
-                        : isPassTurnReserved
-                          ? 'border-violet-700/60 bg-violet-950/35'
-                        : isNextTurnPoster
-                          ? 'border-emerald-700/60 bg-emerald-950/35'
-                          : 'border-gray-700 bg-gray-900/70'
-                  }`}
+                  className={`inline-flex max-w-full flex-col items-start gap-0 rounded border px-1.5 py-1 text-xs ${participantChipStateClass(
+                    isCurrentSongPoster,
+                    isQueuedSongPoster,
+                    isPassTurnReserved,
+                    isNextTurnPoster,
+                    true,
+                  )}`}
                   title={chipTitle}
                 >
                   <span className="inline-flex max-w-full items-center gap-1">
-                    <span className="shrink-0 text-[10px] text-gray-500">[{i + 1}]</span>
+                    <span className={`shrink-0 text-[10px] ${participantIndexClass()}`}>[{i + 1}]</span>
                     {isCurrentSongPoster ? (
                       <span className="animate-now-playing-wave inline-flex h-3 shrink-0 items-end gap-0.5" aria-hidden>
                         {[1, 2, 3].map((j) => (
@@ -693,18 +845,25 @@ export default function UserBar({
                         AI
                       </span>
                     ) : null}
-                    {isRoomOwner ? <span className="shrink-0 text-amber-400">👑</span> : null}
-                    {p.clientId !== myClientId && onParticipantClick ? (
+                    {isRoomOwner ? (
+                      <span className={`shrink-0 ${IS_MC_PRODUCT ? 'text-amber-600' : 'text-amber-400'}`}>
+                        👑
+                      </span>
+                    ) : null}
+                    {p.clientId !== myClientId && onParticipantClick && !soleHumanInRoom ? (
                       <button
                         type="button"
                         onClick={() => onParticipantClick(p.displayName)}
-                        className="min-w-0 truncate underline decoration-dotted underline-offset-1"
-                        style={{ color }}
+                        className={`min-w-0 truncate ${participantMentionBtnClass()} ${participantDisplayTextClass(away)}`}
+                        style={IS_MC_PRODUCT ? undefined : { color }}
                       >
                         {name}
                       </button>
                     ) : (
-                      <span className="min-w-0 truncate" style={{ color }}>
+                      <span
+                        className={`min-w-0 truncate ${participantDisplayTextClass(away, p.clientId !== myClientId && soleHumanInRoom)}`}
+                        style={IS_MC_PRODUCT ? undefined : { color }}
+                      >
                         {name}
                       </span>
                     )}
@@ -725,13 +884,19 @@ export default function UserBar({
                         選曲済み
                       </button>
                     ) : (
-                      <span className="mt-0.5 text-[10px] leading-tight text-sky-300/95">選曲済み</span>
+                      <span className={`mt-0.5 text-[10px] leading-tight ${participantSubLabelClass('queued')}`}>
+                        選曲済み
+                      </span>
                     ))}
                   {isPassTurnReserved ? (
-                    <span className="mt-0.5 text-[10px] leading-tight text-violet-200/95">パス予約</span>
+                    <span className={`mt-0.5 text-[10px] leading-tight ${participantSubLabelClass('pass')}`}>
+                      パス予約
+                    </span>
                   ) : null}
                   {isNextTurnPoster ? (
-                    <span className="mt-0.5 text-[10px] leading-tight text-emerald-200/95">NEXT</span>
+                    <span className={`mt-0.5 text-[10px] leading-tight ${participantSubLabelClass('next')}`}>
+                      NEXT
+                    </span>
                   ) : null}
                   {isCurrentSongPoster && skipCurrentTrackActive && onSkipCurrentTrack ? (
                     <button

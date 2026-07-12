@@ -1,0 +1,27 @@
+﻿**********************
+Windows PowerShell トランスクリプト開始
+開始時刻: 20260712000043
+ユーザー名: LAPTOP-N3TR5NE7\ymap6
+RunAs ユーザー: LAPTOP-N3TR5NE7\ymap6
+構成名: 
+コンピューター: LAPTOP-N3TR5NE7 (Microsoft Windows NT 10.0.26200.0)
+ホスト アプリケーション: C:\windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/run-domestic-playlist-seed.ps1 -PlaylistUrl https://www.youtube.com/watch?v=aF6qA9hCK70&list=PL5XfxmiFda5vynLlCflY36h4d6ZA5n7sW -MaxItems 2 -SkipReviewPause
+プロセス ID: 24060
+PSVersion: 5.1.26100.8737
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.26100.8737
+BuildVersion: 10.0.26100.8737
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+[1/3] fetch (build JSON)
+[log] step -> E:\mc\tmp\domestic-seed-logs\2026-07-12T00-00-43\01-fetch.log
+PS>終了エラー(npx.cmd): "ユーザー設定変数 "ErrorActionPreference" または共通パラメーターが Stop に設定されているため、実行中のコマンドが停止しました。[fetch] playlist PL5XfxmiFda5vynLlCflY36h4d6ZA5n7sW"
+>> 終了エラー(npx.cmd): "ユーザー設定変数 "ErrorActionPreference" または共通パラメーターが Stop に設定されているため、実行中のコマンドが停止しました。[fetch] playlist PL5XfxmiFda5vynLlCflY36h4d6ZA5n7sW"
+[log] failed. see E:\mc\tmp\domestic-seed-logs\2026-07-12T00-00-43\run-errors.log
+**********************
+Windows PowerShell トランスクリプト終了
+終了時刻: 20260712000053
+**********************

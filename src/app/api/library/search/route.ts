@@ -10,7 +10,12 @@ import {
   resolveLibrarySearchPriorityArtistNames,
   songMainArtistIncludesArtist,
 } from '@/lib/library-search-query';
-import { songRowLooksJapaneseDomesticForAdminLibrary } from '@/lib/admin-library-jp-exclude';
+import {
+  defaultLibraryCatalogFilter,
+  filterSongRowsByLibraryCatalog,
+  parseLibraryCatalogFilter,
+} from '@/lib/song-catalog-scope';
+import { ensureWesternTreatedJpArtistCache } from '@/lib/western-treated-jp-artists';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,6 +30,7 @@ type LibrarySongItem = {
   play_count: number | null;
   my_play_count: number | null;
   original_release_date: string | null;
+  youtube_published_at: string | null;
   spotify_popularity: number | null;
   video_id: string | null;
 };
@@ -40,9 +46,14 @@ type SongRow = {
   play_count: number | null;
   original_release_date: string | null;
   spotify_popularity: number | null;
+  catalog_scope?: string | null;
+  music8_artist_slug?: string | null;
 };
 
 const SONG_SELECT =
+  'id, display_title, song_title, main_artist, style, genres, vocal, play_count, original_release_date, spotify_popularity, primary_artist_name_ja, catalog_scope, music8_artist_slug';
+
+const SONG_SELECT_FALLBACK =
   'id, display_title, song_title, main_artist, style, genres, vocal, play_count, original_release_date, spotify_popularity, primary_artist_name_ja';
 
 function clampLimit(raw: string | null): number {
@@ -55,6 +66,7 @@ async function fetchSongsByTextVariants(
   admin: NonNullable<ReturnType<typeof createAdminClient>>,
   variants: string[],
   perVariantLimit: number,
+  catalog: ReturnType<typeof parseLibraryCatalogFilter>,
 ): Promise<SongRow[]> {
   const byId = new Map<string, SongRow>();
   for (const v of variants) {
@@ -64,33 +76,36 @@ async function fetchSongsByTextVariants(
       `song_title.ilike.%${escaped}%`,
       `display_title.ilike.%${escaped}%`,
       `primary_artist_name_ja.ilike.%${escaped}%`,
+      `song_title_ja.ilike.%${escaped}%`,
     ].join(',');
-    const { data, error } = await admin.from('songs').select(SONG_SELECT).or(orFilter).limit(perVariantLimit);
-    if (error) {
-      if (error.code === '42703') {
-        const { data: fallback } = await admin
-          .from('songs')
-          .select(
-            'id, display_title, song_title, main_artist, style, genres, vocal, play_count, original_release_date, spotify_popularity',
-          )
-          .or(
-            [
-              `main_artist.ilike.%${escaped}%`,
-              `song_title.ilike.%${escaped}%`,
-              `display_title.ilike.%${escaped}%`,
-            ].join(','),
-          )
-          .limit(perVariantLimit);
-        for (const row of (fallback ?? []) as SongRow[]) {
-          if (!songRowLooksJapaneseDomesticForAdminLibrary(row)) byId.set(row.id, row);
-        }
+    let { data, error } = await admin.from('songs').select(SONG_SELECT).or(orFilter).limit(perVariantLimit);
+    if (error?.code === '42703') {
+      const fallback = await admin
+        .from('songs')
+        .select(SONG_SELECT_FALLBACK)
+        .or(
+          [
+            `main_artist.ilike.%${escaped}%`,
+            `song_title.ilike.%${escaped}%`,
+            `display_title.ilike.%${escaped}%`,
+          ].join(','),
+        )
+        .limit(perVariantLimit);
+      if (fallback.error) {
+        console.warn('[api/library/search] songs variant fallback', v, fallback.error.message);
         continue;
       }
+      for (const row of filterSongRowsByLibraryCatalog((fallback.data ?? []) as SongRow[], catalog)) {
+        byId.set(row.id, row);
+      }
+      continue;
+    }
+    if (error) {
       console.warn('[api/library/search] songs variant', v, error.message);
       continue;
     }
-    for (const row of (data ?? []) as SongRow[]) {
-      if (!songRowLooksJapaneseDomesticForAdminLibrary(row)) byId.set(row.id, row);
+    for (const row of filterSongRowsByLibraryCatalog((data ?? []) as SongRow[], catalog)) {
+      byId.set(row.id, row);
     }
   }
   return [...byId.values()];
@@ -100,17 +115,31 @@ async function fetchSongsByMainArtists(
   admin: NonNullable<ReturnType<typeof createAdminClient>>,
   mainArtists: string[],
   limit: number,
+  catalog: ReturnType<typeof parseLibraryCatalogFilter>,
 ): Promise<SongRow[]> {
   const byId = new Map<string, SongRow>();
   for (const name of mainArtists) {
     try {
       const rows = await fetchSongsForLibraryArtistSelection<SongRow>(admin, name, SONG_SELECT, limit);
-      for (const row of rows) {
-        if (!songRowLooksJapaneseDomesticForAdminLibrary(row)) byId.set(row.id, row);
+      for (const row of filterSongRowsByLibraryCatalog(rows, catalog)) {
+        byId.set(row.id, row);
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       console.warn('[api/library/search] songs by artist', name, msg);
+      try {
+        const rows = await fetchSongsForLibraryArtistSelection<SongRow>(
+          admin,
+          name,
+          SONG_SELECT_FALLBACK,
+          limit,
+        );
+        for (const row of filterSongRowsByLibraryCatalog(rows, catalog)) {
+          byId.set(row.id, row);
+        }
+      } catch (retryErr) {
+        console.warn('[api/library/search] songs by artist fallback', name, retryErr);
+      }
     }
   }
   return [...byId.values()];
@@ -151,6 +180,9 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const q = (url.searchParams.get('q') ?? '').trim();
   const limit = clampLimit(url.searchParams.get('limit'));
+  const catalog = parseLibraryCatalogFilter(url.searchParams.get('catalog'), defaultLibraryCatalogFilter());
+
+  await ensureWesternTreatedJpArtistCache(admin);
 
   let songs: SongRow[] = [];
 
@@ -162,10 +194,10 @@ export async function GET(request: Request) {
       ...resolveLibrarySearchPriorityArtistNames(q),
     ]);
     const perVariant = Math.min(limit, 80);
-    const fromText = await fetchSongsByTextVariants(admin, variants, perVariant);
+    const fromText = await fetchSongsByTextVariants(admin, variants, perVariant, catalog);
     const fromArtists =
       priorityArtists.length > 0
-        ? await fetchSongsByMainArtists(admin, priorityArtists, perVariant)
+        ? await fetchSongsByMainArtists(admin, priorityArtists, perVariant, catalog)
         : [];
     const merged = new Map<string, SongRow>();
     for (const row of [...fromText, ...fromArtists]) merged.set(row.id, row);
@@ -181,17 +213,18 @@ export async function GET(request: Request) {
       console.error('[api/library/search] songs', songErr);
       return NextResponse.json({ error: '曲一覧の取得に失敗しました。' }, { status: 500 });
     }
-    songs = ((songRows ?? []) as SongRow[]).filter((r) => !songRowLooksJapaneseDomesticForAdminLibrary(r));
+    songs = filterSongRowsByLibraryCatalog((songRows ?? []) as SongRow[], catalog);
   }
 
   const ids = songs.map((s) => s.id).filter(Boolean);
   const videoBySong = new Map<string, string>();
+  const ytPublishedBySong = new Map<string, string | null>();
   const songIdByVideo = new Map<string, string>();
 
   if (ids.length > 0) {
     const { data: videoRows, error: videoErr } = await admin
       .from('song_videos')
-      .select('song_id, video_id, variant, created_at')
+      .select('song_id, video_id, variant, created_at, youtube_published_at')
       .in('song_id', ids)
       .order('created_at', { ascending: true });
     if (videoErr && videoErr.code !== '42P01') {
@@ -206,18 +239,35 @@ export async function GET(request: Request) {
         if (v) return 4;
         return 5;
       };
-      const rankedBySong = new Map<string, { videoId: string; rank: number }>();
-      for (const row of videoRows as { song_id: string; video_id: string; variant?: string | null }[]) {
+      const rankedBySong = new Map<
+        string,
+        { videoId: string; rank: number; youtubePublishedAt: string | null }
+      >();
+      for (const row of videoRows as {
+        song_id: string;
+        video_id: string;
+        variant?: string | null;
+        youtube_published_at?: string | null;
+      }[]) {
         if (!row.song_id || !row.video_id) continue;
         if (!songIdByVideo.has(row.video_id)) songIdByVideo.set(row.video_id, row.song_id);
         const nextRank = rank(row.variant);
+        const yt =
+          typeof row.youtube_published_at === 'string' && row.youtube_published_at.trim()
+            ? row.youtube_published_at.trim()
+            : null;
         const cur = rankedBySong.get(row.song_id);
         if (!cur || nextRank < cur.rank) {
-          rankedBySong.set(row.song_id, { videoId: row.video_id, rank: nextRank });
+          rankedBySong.set(row.song_id, {
+            videoId: row.video_id,
+            rank: nextRank,
+            youtubePublishedAt: yt,
+          });
         }
       }
       for (const [songId, picked] of rankedBySong) {
         videoBySong.set(songId, picked.videoId);
+        ytPublishedBySong.set(songId, picked.youtubePublishedAt);
       }
     }
   }
@@ -285,6 +335,7 @@ export async function GET(request: Request) {
     play_count: s.play_count,
     my_play_count: myPlayBySong.get(s.id) ?? null,
     original_release_date: s.original_release_date,
+    youtube_published_at: ytPublishedBySong.get(s.id) ?? null,
     spotify_popularity:
       typeof s.spotify_popularity === 'number' && Number.isFinite(s.spotify_popularity)
         ? s.spotify_popularity
@@ -296,5 +347,6 @@ export async function GET(request: Request) {
     items,
     query: q,
     limit,
+    catalog,
   });
 }

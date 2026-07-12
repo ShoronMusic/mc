@@ -8,8 +8,12 @@ import {
   indexLetterForArtist,
   stripLeadingArticleForSort,
 } from '@/lib/admin-library-index';
-import { songRowLooksJapaneseDomesticForAdminLibrary } from '@/lib/admin-library-jp-exclude';
 import { primaryArtistForLibraryIndex, mergeLibraryArtistIndexItems } from '@/lib/library-search-query';
+import {
+  filterSongRowsByLibraryCatalog,
+  type LibraryCatalogFilter,
+} from '@/lib/song-catalog-scope';
+import { ensureWesternTreatedJpArtistCache } from '@/lib/western-treated-jp-artists';
 
 export type LibraryArtistIndexItem = {
   main_artist: string;
@@ -29,10 +33,13 @@ type ArtistIndexBucket = {
 
 const INDEX_CACHE_TTL_MS = 15 * 60 * 1000;
 
-let indexCache: { builtAt: number; payload: LibraryArtistIndexPayload } | null = null;
+const indexCache = new Map<
+  LibraryCatalogFilter,
+  { builtAt: number; payload: LibraryArtistIndexPayload }
+>();
 
 export function clearLibraryArtistIndexCache(): void {
-  indexCache = null;
+  indexCache.clear();
 }
 
 function artistIndexKey(name: string): string {
@@ -54,10 +61,12 @@ function mergeArtistDisplayName(existing: string, candidate: string): string {
   return e;
 }
 
-/** `songs` 全行を走査してアーティスト索引を構築（邦楽寄り除外あり） */
+/** `songs` 全行を走査してアーティスト索引を構築（`catalog` で洋楽 / 邦楽 / すべて） */
 export async function buildLibraryArtistIndex(
   client: SupabaseClient,
+  catalog: LibraryCatalogFilter = 'western',
 ): Promise<LibraryArtistIndexPayload> {
+  await ensureWesternTreatedJpArtistCache();
   const songIdsByArtist = new Map<string, ArtistIndexBucket>();
   const registerSong = (artistLabel: string, songId: string) => {
     const primary = primaryArtistForLibraryIndex(artistLabel);
@@ -74,24 +83,16 @@ export async function buildLibraryArtistIndex(
     bucket.songIds.add(songId);
   };
 
-  const rows = await fetchAllSongRowsForArtistAggregation(client);
+  const rows = filterSongRowsByLibraryCatalog(await fetchAllSongRowsForArtistAggregation(client), catalog);
+  const catalogSongIds = new Set(rows.map((r) => r.id));
   for (const r of rows) {
-    if (songRowLooksJapaneseDomesticForAdminLibrary(r)) continue;
     registerSong(r.main_artist ?? '', r.id);
   }
 
   try {
     const creditRows = await fetchAllSongCreditRowsForArtistAggregation(client);
     for (const r of creditRows) {
-      if (
-        songRowLooksJapaneseDomesticForAdminLibrary({
-          main_artist: r.main_artist,
-          song_title: r.song_title,
-          display_title: r.display_title,
-        })
-      ) {
-        continue;
-      }
+      if (!catalogSongIds.has(r.song_id)) continue;
       registerSong(r.artist_name, r.song_id);
     }
   } catch (e) {
@@ -132,12 +133,14 @@ export async function buildLibraryArtistIndex(
 /** 部屋ライブラリ用: プロセス内メモリキャッシュ（全曲走査の頻度を下げる） */
 export async function getLibraryArtistIndexCached(
   client: SupabaseClient,
+  catalog: LibraryCatalogFilter = 'western',
 ): Promise<LibraryArtistIndexPayload> {
   const now = Date.now();
-  if (indexCache && now - indexCache.builtAt < INDEX_CACHE_TTL_MS) {
-    return indexCache.payload;
+  const cached = indexCache.get(catalog);
+  if (cached && now - cached.builtAt < INDEX_CACHE_TTL_MS) {
+    return cached.payload;
   }
-  const payload = await buildLibraryArtistIndex(client);
-  indexCache = { builtAt: now, payload };
+  const payload = await buildLibraryArtistIndex(client, catalog);
+  indexCache.set(catalog, { builtAt: now, payload });
   return payload;
 }

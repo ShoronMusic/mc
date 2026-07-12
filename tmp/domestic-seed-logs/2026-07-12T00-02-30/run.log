@@ -1,0 +1,6 @@
+2026-07-12T00:02:30.8502957+09:00 projectRoot=E:\mc
+2026-07-12T00:09:03.9523897+09:00 playlistId=PLb02MaZXm5_OGFGXSV-6U2_9f2MqnDBbm
+2026-07-12T00:09:04.5424934+09:00 jsonOut=E:\mc\tmp\domestic-seed-PLb02MaZXm5_OGFGXSV-6U2_-2026-07-12T00-02-30.json
+2026-07-12T00:09:05.0373376+09:00 === 01-fetch ===
+2026-07-12T00:09:05.6081720+09:00 npx tsx scripts/domestic-playlist-seed.ts fetch --playlist-id=PLb02MaZXm5_OGFGXSV-6U2_9f2MqnDBbm --out=E:\mc\tmp\domestic-seed-PLb02MaZXm5_OGFGXSV-6U2_-2026-07-12T00-02-30.json
+2026-07-12T00:10:57.6842390+09:00 status=success summary=E:\mc\tmp\domestic-seed-logs\2026-07-12T00-02-30\result-summary.json

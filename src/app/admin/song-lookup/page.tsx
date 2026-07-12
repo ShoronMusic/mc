@@ -258,6 +258,9 @@ function SelectionRow({ s }: { s: SongReportSelectionRow }) {
         部屋: <span className="text-sky-200/90">「{s.room_display_title}」</span>
         <code className="ml-1 text-xs text-gray-500">({s.room_id})</code>
       </div>
+      {s.room_lobby_subtitle ? (
+        <div className="mt-0.5 text-[10px] text-gray-500">{s.room_lobby_subtitle}</div>
+      ) : null}
       <div className="mt-0.5">
         選曲者: <strong className="text-gray-100">{s.selector_display_name}</strong>
       </div>

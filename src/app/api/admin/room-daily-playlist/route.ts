@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getStyleAdminUserIds } from '@/lib/style-admin';
+import { parseAdminProductFilter, runAdminHistoryQueryScoped } from '@/lib/room-history-product';
 
 export const dynamic = 'force-dynamic';
 
@@ -134,6 +135,7 @@ export async function GET(request: Request) {
   const dateJst = searchParams.get('dateJst')?.trim() ?? '';
   const format = searchParams.get('format')?.trim().toLowerCase() ?? 'json';
   const download = searchParams.get('download') === '1' || searchParams.get('download') === 'true';
+  const productFilter = parseAdminProductFilter(searchParams.get('product'));
 
   if (!roomId || !dateJst) {
     return NextResponse.json({ error: 'roomId and dateJst are required' }, { status: 400 });
@@ -143,13 +145,18 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'dateJst は YYYY-MM-DD 形式で指定してください' }, { status: 400 });
   }
 
-  const { data, error } = await supabase
-    .from('room_playback_history')
-    .select('played_at, display_name, video_id, title, artist_name, style')
-    .eq('room_id', roomId)
-    .gte('played_at', range.startIso)
-    .lt('played_at', range.endIso)
-    .order('played_at', { ascending: true });
+  const historyRes = await runAdminHistoryQueryScoped((applyProductEq, scopedProduct) => {
+    let q = supabase
+      .from('room_playback_history')
+      .select('played_at, display_name, video_id, title, artist_name, style')
+      .eq('room_id', roomId)
+      .gte('played_at', range.startIso)
+      .lt('played_at', range.endIso)
+      .order('played_at', { ascending: true });
+    if (applyProductEq && scopedProduct) q = q.eq('product', scopedProduct);
+    return q;
+  }, productFilter);
+  const { data, error } = historyRes;
   if (error) {
     if (error.code === '42P01') {
       return NextResponse.json(
@@ -211,6 +218,6 @@ export async function GET(request: Request) {
     return new NextResponse(csv, { status: 200, headers });
   }
 
-  return NextResponse.json({ items });
+  return NextResponse.json({ items, product: productFilter });
 }
 

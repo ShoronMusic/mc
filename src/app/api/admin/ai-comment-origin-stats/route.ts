@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getStyleAdminUserIds } from '@/lib/style-admin';
+import { parseAdminProductFilter, runAdminHistoryQueryScoped } from '@/lib/room-history-product';
 
 export const dynamic = 'force-dynamic';
 
@@ -93,6 +94,7 @@ export async function GET(request: Request) {
 
   const daysParam = new URL(request.url).searchParams.get('days');
   const days = Math.min(120, Math.max(1, parseInt(daysParam || '30', 10) || 30));
+  const productFilter = parseAdminProductFilter(new URL(request.url).searchParams.get('product'));
   const sinceIso = new Date(Date.now() - days * 86400000).toISOString();
 
   // --- room_chat_log: AI 発言の [NEW]/[DB] ---
@@ -103,13 +105,18 @@ export async function GET(request: Request) {
   let utterOffset = 0;
 
   for (;;) {
-    const { data, error } = await admin
-      .from('room_chat_log')
-      .select('body, created_at')
-      .eq('message_type', 'ai')
-      .gte('created_at', sinceIso)
-      .order('created_at', { ascending: false })
-      .range(utterOffset, utterOffset + PAGE_SIZE - 1);
+    const scanRes = await runAdminHistoryQueryScoped((applyProductEq, scopedProduct) => {
+      let q = admin
+        .from('room_chat_log')
+        .select('body, created_at')
+        .eq('message_type', 'ai')
+        .gte('created_at', sinceIso)
+        .order('created_at', { ascending: false })
+        .range(utterOffset, utterOffset + PAGE_SIZE - 1);
+      if (applyProductEq && scopedProduct) q = q.eq('product', scopedProduct);
+      return q;
+    }, productFilter);
+    const { data, error } = scanRes;
 
     if (error) {
       if (error.code === '42P01') {

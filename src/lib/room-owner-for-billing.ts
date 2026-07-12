@@ -3,6 +3,10 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import {
+  runAdminHistoryQueryScoped,
+  type AdminProductFilter,
+} from '@/lib/room-history-product';
 
 export type GatheringOwnerRow = {
   room_id: string;
@@ -51,13 +55,19 @@ export function resolveOwnerUserIdAtTime(
 export async function loadGatheringsForBillingWindow(
   admin: SupabaseClient,
   fromIso: string,
+  productFilter: AdminProductFilter = 'all',
 ): Promise<GatheringOwnerRow[]> {
-  const { data, error } = await admin
-    .from('room_gatherings')
-    .select('room_id, created_by, started_at, ended_at, status')
-    .or(`started_at.gte.${fromIso},ended_at.gte.${fromIso},status.eq.live`)
-    .order('started_at', { ascending: false })
-    .limit(500);
+  const scanRes = await runAdminHistoryQueryScoped((applyProductEq, scopedProduct) => {
+    let q = admin
+      .from('room_gatherings')
+      .select('room_id, created_by, started_at, ended_at, status')
+      .or(`started_at.gte.${fromIso},ended_at.gte.${fromIso},status.eq.live`)
+      .order('started_at', { ascending: false })
+      .limit(500);
+    if (applyProductEq && scopedProduct) q = q.eq('product', scopedProduct);
+    return q;
+  }, productFilter);
+  const { data, error } = scanRes;
 
   if (error?.code === '42P01') return [];
   if (error) {

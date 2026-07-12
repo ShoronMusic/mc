@@ -52,4 +52,55 @@ const picked = pickBestSpotifyCandidate(
 assert.equal(picked.decision.action, 'apply');
 assert.equal(picked.best?.spotifyTrackId, 'real');
 
+// 邦楽: main_artist 日本語 vs Spotify 英語名 → name_en ヒントで apply
+const yonezu: SpotifyTrackCandidate = {
+  spotifyTrackId: 'y1',
+  spotifyName: '月を見ていた - Moongazing',
+  spotifyArtists: 'Kenshi Yonezu',
+  artistRefs: [{ id: '1snhtMLeb2DYoMOcVbb8iB', name: 'Kenshi Yonezu' }],
+  popularity: 55,
+};
+const dMismatch = scoreSpotifyTrackCandidate(yonezu, '米津玄師', '月を見ていた');
+assert.equal(dMismatch.action, 'review');
+if (dMismatch.action === 'review') assert.equal(dMismatch.reason, 'artist_mismatch');
+
+const dAlias = scoreSpotifyTrackCandidate(yonezu, '米津玄師', '月を見ていた', {
+  alternateArtistNames: ['Kenshi Yonezu'],
+});
+assert.equal(dAlias.action, 'apply');
+
+const dById = scoreSpotifyTrackCandidate(yonezu, '米津玄師', '月を見ていた', {
+  expectedSpotifyArtistIds: ['1snhtMLeb2DYoMOcVbb8iB'],
+});
+assert.equal(dById.action, 'apply');
+
+// 英訳付き / ANIME edit → spotify_artist_id 一致なら apply
+const sayonara: SpotifyTrackCandidate = {
+  spotifyTrackId: 'y2',
+  spotifyName: 'さよーならまたいつか！ - Sayonara',
+  spotifyArtists: 'Kenshi Yonezu',
+  artistRefs: [{ id: '1snhtMLeb2DYoMOcVbb8iB', name: 'Kenshi Yonezu' }],
+  popularity: 40,
+};
+assert.equal(
+  scoreSpotifyTrackCandidate(sayonara, '米津玄師', 'さよーならまたいつか！', {
+    expectedSpotifyArtistIds: ['1snhtMLeb2DYoMOcVbb8iB'],
+  }).action,
+  'apply',
+);
+
+const kickBack: SpotifyTrackCandidate = {
+  spotifyTrackId: 'y3',
+  spotifyName: 'KICK BACK -ANIME edit',
+  spotifyArtists: 'Kenshi Yonezu',
+  artistRefs: [{ id: '1snhtMLeb2DYoMOcVbb8iB', name: 'Kenshi Yonezu' }],
+  popularity: 50,
+};
+assert.equal(
+  scoreSpotifyTrackCandidate(kickBack, '米津玄師', 'Kickback', {
+    expectedSpotifyArtistIds: ['1snhtMLeb2DYoMOcVbb8iB'],
+  }).action,
+  'apply',
+);
+
 console.log('spotify-track-match.unit-test: ok');

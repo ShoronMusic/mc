@@ -5,6 +5,8 @@
 
 import { createAdminClient } from '@/lib/supabase/admin';
 import { resolveGenerationModelId } from '@/lib/gemini-model-routing';
+import { getRoomHistoryProductId } from '@/lib/room-history-product';
+import { isMissingProductColumnError } from '@/lib/room-product-scope';
 import {
   resolveGeminiBillingUserId,
   resolveGeminiUsageBillingKind,
@@ -107,15 +109,15 @@ export async function persistGeminiUsageLog(
     billing_user_id: billingUserId,
     trigger_user_id: triggerUserId,
     is_guest_trigger: meta?.isGuestTrigger === true,
+    product: getRoomHistoryProductId(),
   };
 
-  const { error } = await admin.from('gemini_usage_logs').insert(row);
+  let { error } = await admin.from('gemini_usage_logs').insert(row);
 
-  if (error?.code === '42P01' && !missingTableLogged) {
-    missingTableLogged = true;
-    console.warn(
-      '[gemini-usage-log] テーブル gemini_usage_logs がありません。docs/supabase-gemini-usage-logs-table.md の SQL を実行してください。',
-    );
+  if (error && isMissingProductColumnError(error)) {
+    const legacy = { ...row };
+    delete legacy.product;
+    ({ error } = await admin.from('gemini_usage_logs').insert(legacy));
   } else if (error?.code === '42703') {
     // 旧スキーマ: 新列なしでも最低限 INSERT
     const legacyRow = {
@@ -133,6 +135,11 @@ export async function persistGeminiUsageLog(
     if (legacyErr && legacyErr.code !== '42P01') {
       console.error('[gemini-usage-log] insert legacy', legacyErr.message);
     }
+  } else if (error?.code === '42P01' && !missingTableLogged) {
+    missingTableLogged = true;
+    console.warn(
+      '[gemini-usage-log] テーブル gemini_usage_logs がありません。docs/supabase-gemini-usage-logs-table.md の SQL を実行してください。',
+    );
   } else if (error && error.code !== '42P01') {
     console.error('[gemini-usage-log] insert', error.message);
   }

@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { loadBrowserSupabaseClient } from '@/lib/supabase/load-browser-client';
 import { startRoomGatheringClient } from '@/lib/start-room-gathering-client';
 import { hasGuestRoomPersistence } from '@/lib/guest-room-persistence';
+import { IS_MC_PRODUCT } from '@/lib/product-branding';
 
 const DEFAULT_ROOM_COUNT = 90;
 const MAX_LIVE_GATHERINGS_PER_USER = 2;
@@ -57,7 +58,9 @@ function GatheringsLoadingCard() {
       </p>
       <div className="relative mt-4 h-1.5 w-full overflow-hidden rounded-full bg-slate-700/90">
         <div
-          className="absolute inset-y-0 left-0 w-2/5 rounded-full bg-sky-500/90 motion-safe:animate-[gatherings-load-bar_1.4s_ease-in-out_infinite]"
+          className={`absolute inset-y-0 left-0 w-2/5 rounded-full motion-safe:animate-[gatherings-load-bar_1.4s_ease-in-out_infinite] ${
+            IS_MC_PRODUCT ? 'bg-gray-400' : 'bg-sky-500/90'
+          }`}
           aria-hidden
         />
       </div>
@@ -302,20 +305,26 @@ export function MeetingStartPanel() {
               )}
             </p>
             {liveOrganizingCount > 0 && (
-              <p className="rounded-md border border-emerald-800/50 bg-emerald-950/40 px-2 py-1.5 text-[11px] font-medium text-emerald-200/95">
+              <p
+                className={`rounded-md border px-2 py-1.5 text-[11px] font-medium ${
+                  IS_MC_PRODUCT
+                    ? 'mc-panel-muted border-gray-300'
+                    : 'border-emerald-800/50 bg-emerald-950/40 text-emerald-200/95'
+                }`}
+              >
                 主催中: {liveOrganizingCount} / {MAX_LIVE_GATHERINGS_PER_USER} 部屋
               </p>
             )}
             <p className="text-[10px] leading-relaxed text-slate-500">
               補足：同時主催は最大2部屋です。例として、1つは個人で使う専用・もう1つは招待用のオープンルーム、と分けると整理しやすいです（
-              <Link href="/guide/service" className="text-sky-400/90 underline-offset-2 hover:underline">
+              <Link href="/guide/service" className={IS_MC_PRODUCT ? 'text-gray-600 underline-offset-2 hover:underline' : 'text-sky-400/90 underline-offset-2 hover:underline'}>
                 ご利用上の注意・サービス全般
               </Link>
               ）。
             </p>
             <p className="text-[10px] leading-relaxed text-slate-500">
               全員が退室しても会はすぐには終わりません。「この部屋の開催を終了」を押すか、在室ゼロが約30分続くと自動終了します。詳しくは
-              <Link href="/guide/service" className="text-sky-400/90 underline-offset-2 hover:underline">
+              <Link href="/guide/service" className={IS_MC_PRODUCT ? 'text-gray-600 underline-offset-2 hover:underline' : 'text-sky-400/90 underline-offset-2 hover:underline'}>
                 サービス全般
               </Link>
               を参照してください。
@@ -325,9 +334,11 @@ export function MeetingStartPanel() {
             <div
               className={`rounded-lg border bg-slate-800/70 p-3 sm:p-4 ${
                 soleOrganizerRoom.isLive
-                  ? 'border-sky-500/55 ring-2 ring-sky-500/45'
+                  ? IS_MC_PRODUCT
+                    ? 'mc-accent-selected border-gray-300 ring-2'
+                    : 'border-sky-500/55 ring-2 ring-sky-500/45'
                   : 'border-slate-600'
-              } ${soleOrganizerRoom.isLive ? 'border-l-4 border-l-emerald-500' : ''}`}
+              } ${soleOrganizerRoom.isLive ? (IS_MC_PRODUCT ? 'border-l-4 mc-accent-live-bar' : 'border-l-4 border-l-emerald-500') : ''}`}
             >
               <div className="mb-3 flex items-center justify-between gap-2">
                 <span className="font-mono text-sm font-semibold text-white">
@@ -335,7 +346,9 @@ export function MeetingStartPanel() {
                 </span>
                 {soleOrganizerRoom.isLive ? (
                   <span className="inline-flex items-center gap-1.5">
-                    <span className="shrink-0 rounded-full bg-emerald-600/35 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-200">
+                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
+                      IS_MC_PRODUCT ? 'mc-accent-badge' : 'bg-emerald-600/35 text-emerald-200'
+                    }`}>
                       主催中
                     </span>
                     {liveElapsedDaysLabel(soleOrganizerRoom.lastStartedAt) ? (
@@ -367,7 +380,11 @@ export function MeetingStartPanel() {
                   type="button"
                   onClick={() => void enterRoom()}
                   disabled={busy}
-                  className="block w-full rounded-md border border-sky-500/50 bg-sky-900/25 px-4 py-2.5 text-center text-sm font-medium text-sky-100 hover:bg-sky-900/40"
+                  className={`block w-full rounded-md border px-4 py-2.5 text-center text-sm font-medium ${
+                    IS_MC_PRODUCT
+                      ? 'mc-accent-primary'
+                      : 'border border-sky-500/50 bg-sky-900/25 text-sky-100 hover:bg-sky-900/40'
+                  }`}
                 >
                   {soleOrganizerRoom.isLive ? 'この部屋へ入る' : '開催を再開して入室'}
                 </button>
@@ -399,15 +416,19 @@ export function MeetingStartPanel() {
                         }}
                         className={`flex w-full flex-col gap-1 rounded-lg border px-3 py-2.5 text-left transition ${
                           selected
-                            ? 'border-sky-500 bg-sky-950/50 ring-2 ring-sky-500/60'
+                            ? IS_MC_PRODUCT
+                              ? 'mc-accent-selected ring-2'
+                              : 'border-sky-500 bg-sky-950/50 ring-2 ring-sky-500/60'
                             : 'border-slate-600 bg-slate-800/80 hover:border-slate-500'
-                        } ${r.isLive ? 'border-l-4 border-l-emerald-500' : ''}`}
+                        } ${r.isLive ? (IS_MC_PRODUCT ? 'border-l-4 mc-accent-live-bar' : 'border-l-4 border-l-emerald-500') : ''}`}
                       >
                         <div className="flex items-center justify-between gap-2">
                           <span className="font-mono text-sm font-medium text-white">部屋 {r.roomId}</span>
                           {r.isLive ? (
                             <span className="inline-flex items-center gap-1.5">
-                              <span className="shrink-0 rounded-full bg-emerald-600/35 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-200">
+                              <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
+                      IS_MC_PRODUCT ? 'mc-accent-badge' : 'bg-emerald-600/35 text-emerald-200'
+                    }`}>
                                 主催中
                               </span>
                               {liveElapsedDaysLabel(r.lastStartedAt) ? (
@@ -424,7 +445,7 @@ export function MeetingStartPanel() {
                         </div>
                         <span className="line-clamp-2 text-xs text-slate-300">{r.title}</span>
                         {selected && (
-                          <span className="text-[10px] font-medium text-sky-300">
+                          <span className={`text-[10px] font-medium ${IS_MC_PRODUCT ? 'text-green-800' : 'text-sky-300'}`}>
                             選択中 · 下のボタンで入室・終了
                           </span>
                         )}
@@ -452,7 +473,11 @@ export function MeetingStartPanel() {
                   type="button"
                   onClick={() => void enterRoom()}
                   disabled={busy}
-                  className="block w-full rounded-md border border-sky-500/50 bg-sky-900/20 px-4 py-2 text-center text-sm font-medium text-sky-200 hover:bg-sky-900/35"
+                  className={`block w-full rounded-md border px-4 py-2 text-center text-sm font-medium ${
+                    IS_MC_PRODUCT
+                      ? 'mc-accent-primary'
+                      : 'border border-sky-500/50 bg-sky-900/20 text-sky-200 hover:bg-sky-900/35'
+                  }`}
                 >
                   {selectedRoom?.isLive ? 'この部屋へ入る' : '開催を再開して入室'}
                 </button>
@@ -475,8 +500,18 @@ export function MeetingStartPanel() {
         </div>
       ) : null}
 
-      <div className="rounded-xl border border-dashed border-emerald-600/80 bg-emerald-950/10 p-3 sm:p-4">
-        <p className="mb-3 text-center text-xs font-semibold tracking-wide text-emerald-200">新規作成（空きの部屋の自動割当）</p>
+      <div
+        className={`rounded-xl border border-dashed p-3 sm:p-4 ${
+          IS_MC_PRODUCT ? 'border-gray-400 bg-gray-50' : 'border-emerald-600/80 bg-emerald-950/10'
+        }`}
+      >
+        <p
+          className={`mb-3 text-center text-xs font-semibold tracking-wide ${
+            IS_MC_PRODUCT ? 'text-gray-700' : 'text-emerald-200'
+          }`}
+        >
+          新規作成（空きの部屋の自動割当）
+        </p>
         <form
           className="grid grid-cols-1 gap-2.5"
           onSubmit={(e) => {
@@ -484,7 +519,13 @@ export function MeetingStartPanel() {
             createNewRoom();
           }}
         >
-          <p className="rounded-md border border-emerald-700/50 bg-slate-900/40 px-3 py-2 text-center text-xs text-emerald-100">
+          <p
+            className={`rounded-md border px-3 py-2 text-center text-xs ${
+              IS_MC_PRODUCT
+                ? 'mc-panel-muted border-gray-300'
+                : 'border-emerald-700/50 bg-slate-900/40 text-emerald-100'
+            }`}
+          >
             割当予定の部屋: {createRoomOptions[0] ?? '空きの部屋なし'}
           </p>
           <label className="flex min-w-0 flex-col gap-1 text-xs text-slate-300">
@@ -497,7 +538,11 @@ export function MeetingStartPanel() {
               maxLength={120}
               required
               autoComplete="off"
-              className="w-full rounded-md border border-emerald-700/70 bg-slate-800 px-2.5 py-2 text-sm text-white"
+              className={`w-full rounded-md border px-2.5 py-2 text-sm ${
+                IS_MC_PRODUCT
+                  ? 'border-gray-300 bg-white text-gray-900'
+                  : 'border-emerald-700/70 bg-slate-800 text-white'
+              }`}
               disabled={busy || createRoomOptions.length === 0}
               placeholder="例: 土曜洋楽会"
             />
@@ -505,7 +550,11 @@ export function MeetingStartPanel() {
           <button
             type="submit"
             disabled={busy || createRoomOptions.length === 0}
-            className="mt-1 w-full rounded-md border border-emerald-700/70 bg-slate-800 px-4 py-2 text-sm font-medium text-emerald-200 hover:bg-slate-700 disabled:opacity-50"
+            className={`mt-1 w-full rounded-md border px-4 py-2 text-sm font-medium disabled:opacity-50 ${
+              IS_MC_PRODUCT
+                ? 'mc-accent-primary'
+                : 'border-emerald-700/70 bg-slate-800 text-emerald-200 hover:bg-slate-700'
+            }`}
           >
             部屋を新規作成
           </button>

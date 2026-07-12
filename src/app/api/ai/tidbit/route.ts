@@ -16,6 +16,8 @@ import {
   insertTidbitToLibrary,
 } from '@/lib/tidbit-library';
 import { upsertSongAndVideo } from '@/lib/song-entities';
+import { buildSongDbRegistrationInput } from '@/lib/song-db-registration-gate';
+import { resolveJapaneseDomesticWithMusicBrainz } from '@/lib/resolve-japanese-economy';
 import { insertTidbit } from '../../../../lib/song-tidbits';
 
 export const dynamic = 'force-dynamic';
@@ -52,20 +54,34 @@ export async function POST(request: Request) {
     let artistName: string | null = null;
     let songTitle: string | null = null;
     let currentSong: string | null = null;
+    let snippetForRegistration: Awaited<ReturnType<typeof getVideoSnippet>> = null;
+    let channelAuthorForRegistration: string | null = null;
+    let isJapaneseDomesticForRegistration = false;
 
     if (videoId && !preferGeneralTidbit) {
       const [oembed, snippet] = await Promise.all([
         fetchOEmbed(videoId),
         getVideoSnippet(videoId),
       ]);
+      snippetForRegistration = snippet;
       const title = oembed?.title ?? videoId;
       const rawAuthor = oembed?.author_name ?? null;
+      channelAuthorForRegistration = rawAuthor;
       artistName = rawAuthor ? (cleanAuthor(rawAuthor) || null) : null;
       songTitle = title;
       const authorForParse = rawAuthor ? cleanAuthor(rawAuthor) : null;
       const cleaned = cleanTitle(title);
       const parsed = getArtistAndSong(cleaned, authorForParse);
-      const songForPromoCheck = (parsed.song ?? title).trim();
+      const songForPromoCheck = (parsed?.song ?? title).trim();
+      isJapaneseDomesticForRegistration = await resolveJapaneseDomesticWithMusicBrainz({
+        title,
+        artistDisplay: parsed?.artistDisplay ?? artistName,
+        artist: parsed?.artist ?? artistName,
+        song: parsed?.song ?? songForPromoCheck,
+        description: snippet?.description ?? null,
+        channelTitle: snippet?.channelTitle ?? null,
+        defaultAudioLanguage: snippet?.defaultAudioLanguage ?? null,
+      });
       if (
         shouldSkipAiCommentaryForPromotionalOrProseMetadata({
           rawYouTubeTitle: title,
@@ -99,6 +115,19 @@ export async function POST(request: Request) {
           mainArtist,
           songTitle: songTitleForMaster ?? undefined,
           variant: 'tidbit',
+          registrationCheck: buildSongDbRegistrationInput({
+            videoId,
+            rawTitle: songTitleForMaster,
+            channelTitle: snippetForRegistration?.channelTitle ?? null,
+            channelId: snippetForRegistration?.channelId ?? null,
+            categoryId: snippetForRegistration?.categoryId ?? null,
+            description: snippetForRegistration?.description ?? null,
+            mainArtist,
+            songTitle: songTitleForMaster,
+            isJapaneseDomestic: isJapaneseDomesticForRegistration,
+            channelAuthorName: channelAuthorForRegistration,
+            viewCount: snippetForRegistration?.viewCount ?? null,
+          }),
         });
       } catch (e) {
         console.error('[api/ai/tidbit] upsertSongAndVideo', e);

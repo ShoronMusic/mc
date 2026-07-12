@@ -2,7 +2,8 @@
 
 部屋で YouTube URL を選曲（またはライブラリから動画を選ぶ）したとき、**曲マスタ `songs`**・**動画対応 `song_videos`**・任意で **アーティストマスタ `artists`** に何が書かれるかを整理する。
 
-スキーマの SQL 定義は `docs/supabase-songs-and-performances-tables.md`。項目の横断一覧は `docs/recorded-data-fields.md`。Music8 一括取り込み（2万曲）とは別経路。
+スキーマの SQL 定義は `docs/supabase-songs-and-performances-tables.md`。項目の横断一覧は `docs/recorded-data-fields.md`。Music8 一括取り込み（2万曲）とは別経路。  
+**邦楽ライト曲 DB**（mc・公式邦楽のみ・Music8 非依存・選曲で蓄積）の設計は `docs/domestic-light-song-db-project.md`。
 
 ---
 
@@ -21,6 +22,8 @@
 **ライブラリから選曲**でも、クライアントは通常 **視聴履歴 POST** を送るため、上記「主経路」と同じ `upsertSongAndVideo` が再度走る（既存 `video_id` なら `song_id` を再利用）。
 
 実装の中心: `src/lib/song-entities.ts` の `upsertSongAndVideo`。
+
+**音楽以外は曲 DB に載せない**（2026-07）: 映画・ゲーム実況・ニュース等の YouTube URL は `registrationCheck` 経由で `shouldPersistVideoToSongDatabase`（`src/lib/song-db-registration-gate.ts`）が弾く。**邦楽**（`isJapaneseDomestic`）は MV/PV 表記の有無に関わらず **公式シグナル必須**（既知公式 channelId・`(Official Video)`＋チャンネル一致・`Provided to YouTube by` 等。再生数フォールバックは使わない）。Music8 一致は少数の邦楽（ONE OK ROCK 等）向け例外。`room_playback_history` への記録は従来どおり。無効化: `SONG_DB_REGISTRATION_GATE=0` / `SONG_DB_JP_OFFICIAL_ONLY=0`。
 
 ---
 

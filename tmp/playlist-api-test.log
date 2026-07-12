@@ -1,0 +1,72 @@
+[test] fetch maxItems=2
+[resolveArtistSongForPackAsync] heuristic {
+  title: '邀ｳ豢･邇・ｸｫ,螳・､夂伐繝偵き繝ｫ縲繰ANE DOE縲催励弱メ繧ｧ繝ｳ繧ｽ繝ｼ繝槭Φ 繝ｬ繧ｼ遽・舟V/KenshiYonezu,HikaruUtada-JANE DOEﾃ佑hainsawMan窶典heMovie:RezeArc',
+  authorName: 'Kenshi Yonezu  邀ｳ豢･邇・ｸｫ',
+  artistDisplay: '邀ｳ豢･邇・ｸｫ, 螳・､夂伐繝偵き繝ｫ縲繰ANE DOE縲催励弱メ繧ｧ繝ｳ繧ｽ繝ｼ繝槭Φ 繝ｬ繧ｼ遽・舟V/KenshiYonezu, HikaruUtada',
+  song: 'JANE DOEﾃ佑hainsawMan - TheMovie:RezeArc'
+}
+[resolveArtistSongForPackAsync] heuristic {
+  title: '邀ｳ豢･邇・ｸｫ  Kenshi Yonezu -  1991',
+  authorName: 'Kenshi Yonezu  邀ｳ豢･邇・ｸｫ',
+  artistDisplay: '邀ｳ豢･邇・ｸｫ Kenshi Yonezu',
+  song: '1991'
+}
+[test] fetch done in 7.0s
+{
+  "summary": {
+    "total": 2,
+    "included": 0,
+    "gateOk": 0,
+    "artistMatched": 2,
+    "withReleaseDate": 0,
+    "existingVideos": 0
+  },
+  "items": [
+    {
+      "index": 1,
+      "url": "https://www.youtube.com/watch?v=E8N8CAihLT0",
+      "existingSongId": null,
+      "videoId": "E8N8CAihLT0",
+      "artist": "邀ｳ豢･邇・ｸｫ",
+      "title": "KenshiYonezu,HikaruUtada-JANE DOEﾃ佑hainsawMan窶典heMovie:RezeArc",
+      "displayTitle": "邀ｳ豢･邇・ｸｫ - KenshiYonezu,HikaruUtada-JANE DOEﾃ佑hainsawMan窶典heMovie:RezeArc",
+      "rawTitle": "邀ｳ豢･邇・ｸｫ,螳・､夂伐繝偵き繝ｫ縲繰ANE DOE縲催励弱メ繧ｧ繝ｳ繧ｽ繝ｼ繝槭Φ 繝ｬ繧ｼ遽・舟V/KenshiYonezu,HikaruUtada-JANE DOEﾃ佑hainsawMan窶典heMovie:RezeArc",
+      "channelTitle": "Kenshi Yonezu  邀ｳ豢･邇・ｸｫ",
+      "channelId": "UCUCeZaZeJbEYAAzvMgrKOPQ",
+      "releaseDate": null,
+      "youtubeDate": "2025-11-18",
+      "genres": [],
+      "metadataSource": "youtube_slash",
+      "officialGate": {
+        "persist": false,
+        "reason": "jp_unofficial"
+      },
+      "include": false,
+      "note": "MV陦ｨ險倥≠繧翫ょ・螳ｹ遒ｺ隱榊ｾ・include 繧呈､懆ｨ・,
+      "artistMatch": "name"
+    },
+    {
+      "index": 2,
+      "url": "https://www.youtube.com/watch?v=1cnndBdzCAk",
+      "existingSongId": null,
+      "videoId": "1cnndBdzCAk",
+      "artist": "邀ｳ豢･邇・ｸｫ",
+      "title": "邀ｳ豢･邇・ｸｫ Kenshi Yonezu - 1991",
+      "displayTitle": "邀ｳ豢･邇・ｸｫ - 邀ｳ豢･邇・ｸｫ Kenshi Yonezu - 1991",
+      "rawTitle": "邀ｳ豢･邇・ｸｫ  Kenshi Yonezu -  1991",
+      "channelTitle": "Kenshi Yonezu  邀ｳ豢･邇・ｸｫ",
+      "channelId": "UCUCeZaZeJbEYAAzvMgrKOPQ",
+      "releaseDate": null,
+      "youtubeDate": "2025-10-15",
+      "genres": [],
+      "metadataSource": "youtube_channel",
+      "officialGate": {
+        "persist": false,
+        "reason": "jp_unofficial"
+      },
+      "include": false,
+      "note": null,
+      "artistMatch": "name"
+    }
+  ]
+}

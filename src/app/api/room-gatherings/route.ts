@@ -5,6 +5,14 @@ import { clearRoomLivePresenceWatch } from '@/lib/empty-live-gathering-cron';
 import { endStaleLiveGatheringIfNeeded } from '@/lib/stale-live-gathering';
 import { persistRoomGatheringSnapshots } from '@/lib/room-gathering-snapshot';
 import { ROOM_DISPLAY_TITLE_MAX_CHARS } from '@/lib/room-lobby-message';
+import {
+  getGatheringProductId,
+  isMissingProductColumnError,
+  runGatheringQueryScoped,
+  runLobbyQueryScoped,
+  withGatheringProductEq,
+  withLobbyProductEq,
+} from '@/lib/room-product-scope';
 
 export const dynamic = 'force-dynamic';
 
@@ -40,17 +48,21 @@ async function lobbyDisplayTitleByRoomIds(
 ): Promise<Map<string, string>> {
   const map = new Map<string, string>();
   if (roomIds.length === 0) return map;
-  const { data, error } = await supabase
-    .from('room_lobby_message')
-    .select('room_id, display_title')
-    .in('room_id', roomIds);
+  const { data, error } = await runLobbyQueryScoped((scopeProduct) => {
+    let q = supabase
+      .from('room_lobby_message')
+      .select('room_id, display_title')
+      .in('room_id', roomIds);
+    if (scopeProduct) q = withLobbyProductEq(q);
+    return q;
+  });
   if (error) {
     if (error.code === '42P01') return map;
     if (error.message?.includes('display_title') || error.code === '42703') return map;
     console.error('[room-gatherings GET] room_lobby_message', error);
     return map;
   }
-  for (const row of data ?? []) {
+  for (const row of (data as { room_id?: string; display_title?: string }[] | null) ?? []) {
     const rid = typeof (row as { room_id?: string }).room_id === 'string' ? (row as { room_id: string }).room_id : '';
     const dt =
       row && typeof (row as { display_title?: unknown }).display_title === 'string'
@@ -104,11 +116,15 @@ export async function POST(request: Request) {
     }
 
     if (!roomId && autoAssign) {
-      const { data: liveRows, error: liveErr } = await supabase
-        .from('room_gatherings')
-        .select('room_id')
-        .eq('status', 'live')
-        .in('room_id', DEFAULT_ROOM_IDS);
+      const { data: liveRows, error: liveErr } = await runGatheringQueryScoped((scopeProduct) => {
+        let q = supabase
+          .from('room_gatherings')
+          .select('room_id')
+          .eq('status', 'live')
+          .in('room_id', DEFAULT_ROOM_IDS);
+        if (scopeProduct) q = withGatheringProductEq(q);
+        return q;
+      });
       if (liveErr) {
         if (liveErr.code === '42P01') {
           return NextResponse.json(
@@ -120,7 +136,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: liveErr.message }, { status: 500 });
       }
       const liveSet = new Set(
-        (liveRows ?? [])
+        ((liveRows as { room_id?: string }[] | null) ?? [])
           .map((r) => safeRoomId(String(r.room_id ?? '')))
           .filter((id): id is string => !!id),
       );
@@ -133,12 +149,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'roomId が不正です。' }, { status: 400 });
     }
 
-    const { data: existing, error: selErr } = await supabase
-      .from('room_gatherings')
-      .select('id')
-      .eq('room_id', roomId)
-      .eq('status', 'live')
-      .limit(1);
+    const { data: existingRaw, error: selErr } = await runGatheringQueryScoped((scopeProduct) => {
+      let q = supabase
+        .from('room_gatherings')
+        .select('id')
+        .eq('room_id', roomId)
+        .eq('status', 'live')
+        .limit(1);
+      if (scopeProduct) q = withGatheringProductEq(q);
+      return q;
+    });
+    const existing = (existingRaw as { id?: string }[] | null) ?? [];
 
     if (selErr) {
       if (selErr.code === '42P01') {
@@ -150,7 +171,7 @@ export async function POST(request: Request) {
       console.error('[room-gatherings start] select', selErr);
       return NextResponse.json({ error: selErr.message }, { status: 500 });
     }
-    if (existing?.length) {
+    if (existing.length) {
       const adminStale = createAdminClient();
       if (adminStale) {
         const stale = await endStaleLiveGatheringIfNeeded(adminStale, roomId);
@@ -168,11 +189,20 @@ export async function POST(request: Request) {
       }
     }
 
-    const { count: myLiveCount, error: myLiveErr } = await supabase
-      .from('room_gatherings')
-      .select('*', { count: 'exact', head: true })
-      .eq('created_by', user.id)
-      .eq('status', 'live');
+    const countMyLiveGatherings = async (scopeProduct: boolean) => {
+      let q = supabase
+        .from('room_gatherings')
+        .select('*', { count: 'exact', head: true })
+        .eq('created_by', user.id)
+        .eq('status', 'live');
+      if (scopeProduct) q = withGatheringProductEq(q);
+      return q;
+    };
+    let myLiveRes = await countMyLiveGatherings(true);
+    if (myLiveRes.error && isMissingProductColumnError(myLiveRes.error)) {
+      myLiveRes = await countMyLiveGatherings(false);
+    }
+    const { count: myLiveCount, error: myLiveErr } = myLiveRes;
     if (myLiveErr) {
       if (myLiveErr.code === '42P01') {
         return NextResponse.json(
@@ -192,17 +222,40 @@ export async function POST(request: Request) {
       );
     }
 
-    const { data: inserted, error: insErr } = await supabase
-      .from('room_gatherings')
-      .insert({
-        room_id: roomId,
-        title,
-        status: 'live',
-        started_at: new Date().toISOString(),
-        created_by: user.id,
-      })
-      .select('id, room_id, title, started_at')
-      .maybeSingle();
+    const productId = getGatheringProductId();
+    let inserted: { id: string; room_id: string; title: string; started_at: string } | null = null;
+    let insErr: { code?: string; message?: string } | null = null;
+    {
+      const res = await supabase
+        .from('room_gatherings')
+        .insert({
+          room_id: roomId,
+          title,
+          status: 'live',
+          started_at: new Date().toISOString(),
+          created_by: user.id,
+          product: productId,
+        })
+        .select('id, room_id, title, started_at')
+        .maybeSingle();
+      inserted = res.data;
+      insErr = res.error;
+    }
+    if (insErr && isMissingProductColumnError(insErr)) {
+      const res = await supabase
+        .from('room_gatherings')
+        .insert({
+          room_id: roomId,
+          title,
+          status: 'live',
+          started_at: new Date().toISOString(),
+          created_by: user.id,
+        })
+        .select('id, room_id, title, started_at')
+        .maybeSingle();
+      inserted = res.data;
+      insErr = res.error;
+    }
 
     if (insErr) {
       if (insErr.code === '42P01') {
@@ -228,15 +281,20 @@ export async function POST(request: Request) {
     if (!roomId) {
       return NextResponse.json({ error: 'roomId が不正です。' }, { status: 400 });
     }
-    const { data: updated, error: updErr } = await supabase
-      .from('room_gatherings')
-      .update({
-        status: 'ended',
-        ended_at: new Date().toISOString(),
-      })
-      .eq('room_id', roomId)
-      .eq('status', 'live')
-      .select('id');
+    const { data: updatedRaw, error: updErr } = await runGatheringQueryScoped((scopeProduct) => {
+      let q = supabase
+        .from('room_gatherings')
+        .update({
+          status: 'ended',
+          ended_at: new Date().toISOString(),
+        })
+        .eq('room_id', roomId)
+        .eq('status', 'live')
+        .select('id');
+      if (scopeProduct) q = withGatheringProductEq(q);
+      return q;
+    });
+    const updated = (updatedRaw as { id?: string }[] | null) ?? [];
 
     if (updErr) {
       if (updErr.code === '42P01') {
@@ -249,7 +307,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: updErr.message }, { status: 500 });
     }
 
-    if (!updated?.length) {
+    if (!updated.length) {
       return NextResponse.json({ error: '開催中の会がありません。' }, { status: 404 });
     }
 
@@ -280,13 +338,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'title を入力してください。' }, { status: 400 });
     }
 
-    const { data: updated, error: updErr } = await supabase
-      .from('room_gatherings')
-      .update({ title })
-      .eq('room_id', roomId)
-      .eq('status', 'live')
-      .select('id, room_id, title')
-      .limit(1);
+    const { data: renamedRaw, error: updErr } = await runGatheringQueryScoped((scopeProduct) => {
+      let q = supabase
+        .from('room_gatherings')
+        .update({ title })
+        .eq('room_id', roomId)
+        .eq('status', 'live')
+        .select('id, room_id, title')
+        .limit(1);
+      if (scopeProduct) q = withGatheringProductEq(q);
+      return q;
+    });
+    const updated = (renamedRaw as { id: string; room_id: string; title: string }[] | null) ?? [];
 
     if (updErr) {
       if (updErr.code === '42P01') {
@@ -298,27 +361,42 @@ export async function POST(request: Request) {
       console.error('[room-gatherings rename] update', updErr);
       return NextResponse.json({ error: updErr.message }, { status: 500 });
     }
-    if (!updated?.length) {
+    if (!updated.length) {
       return NextResponse.json({ error: '開催中の会がありません。' }, { status: 404 });
     }
     const admin = createAdminClient();
     if (admin) {
       const lobbyTitle = title.slice(0, ROOM_DISPLAY_TITLE_MAX_CHARS);
-      const { data: existingLobby } = await admin
-        .from('room_lobby_message')
-        .select('message')
-        .eq('room_id', roomId)
-        .maybeSingle();
-      const existingMsg = typeof existingLobby?.message === 'string' ? existingLobby.message : '';
-      const { error: lobbyErr } = await admin.from('room_lobby_message').upsert(
-        {
-          room_id: roomId,
-          display_title: lobbyTitle,
-          message: existingMsg,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'room_id' },
-      );
+      const productId = getGatheringProductId();
+      const { data: existingLobby } = await runLobbyQueryScoped((scopeProduct) => {
+        let q = admin.from('room_lobby_message').select('message').eq('room_id', roomId);
+        if (scopeProduct) q = withLobbyProductEq(q);
+        return q.maybeSingle();
+      });
+      const existingMsg = typeof (existingLobby as { message?: string } | null)?.message === 'string'
+        ? (existingLobby as { message: string }).message
+        : '';
+      const lobbyRow = {
+        room_id: roomId,
+        display_title: lobbyTitle,
+        message: existingMsg,
+        updated_at: new Date().toISOString(),
+        product: productId,
+      };
+      let { error: lobbyErr } = await admin.from('room_lobby_message').upsert(lobbyRow, {
+        onConflict: 'room_id,product',
+      });
+      if (lobbyErr && isMissingProductColumnError(lobbyErr)) {
+        ({ error: lobbyErr } = await admin.from('room_lobby_message').upsert(
+          {
+            room_id: roomId,
+            display_title: lobbyTitle,
+            message: existingMsg,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'room_id' },
+        ));
+      }
       if (lobbyErr) {
         console.error('[room-gatherings rename] lobby sync', lobbyErr);
       }
@@ -335,13 +413,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'locked は boolean を指定してください。' }, { status: 400 });
     }
 
-    const { data: updated, error: updErr } = await supabase
-      .from('room_gatherings')
-      .update({ join_locked: body.locked })
-      .eq('room_id', roomId)
-      .eq('status', 'live')
-      .select('id, room_id, join_locked')
-      .limit(1);
+    const { data: lockUpdatedRaw, error: updErr } = await runGatheringQueryScoped((scopeProduct) => {
+      let q = supabase
+        .from('room_gatherings')
+        .update({ join_locked: body.locked })
+        .eq('room_id', roomId)
+        .eq('status', 'live')
+        .select('id, room_id, join_locked')
+        .limit(1);
+      if (scopeProduct) q = withGatheringProductEq(q);
+      return q;
+    });
+    const updated = (lockUpdatedRaw as { id?: string }[] | null) ?? [];
 
     if (updErr) {
       if (updErr.code === '42P01') {
@@ -362,7 +445,7 @@ export async function POST(request: Request) {
       console.error('[room-gatherings set_lock] update', updErr);
       return NextResponse.json({ error: updErr.message }, { status: 500 });
     }
-    if (!updated?.length) {
+    if (!updated.length) {
       return NextResponse.json({ error: '開催中の会がありません。' }, { status: 404 });
     }
 
@@ -387,12 +470,17 @@ export async function GET() {
     return NextResponse.json({ error: 'ログインしていません。' }, { status: 401 });
   }
 
-  const { data, error } = await supabase
-    .from('room_gatherings')
-    .select('room_id, title, status, started_at')
-    .eq('created_by', user.id)
-    .order('started_at', { ascending: false })
-    .limit(CREATED_ROOMS_LIMIT);
+  const { data: rowsRaw, error } = await runGatheringQueryScoped((scopeProduct) => {
+    let q = supabase
+      .from('room_gatherings')
+      .select('room_id, title, status, started_at')
+      .eq('created_by', user.id)
+      .order('started_at', { ascending: false })
+      .limit(CREATED_ROOMS_LIMIT);
+    if (scopeProduct) q = withGatheringProductEq(q);
+    return q;
+  });
+  const data = (rowsRaw as { room_id?: string; title?: string; status?: string; started_at?: string }[] | null) ?? [];
 
   if (error) {
     if (error.code === '42P01') {
@@ -406,7 +494,7 @@ export async function GET() {
   }
 
   const map = new Map<string, { roomId: string; title: string; isLive: boolean; lastStartedAt: string | null }>();
-  for (const row of data ?? []) {
+  for (const row of data) {
     const roomId = safeRoomId(String(row.room_id ?? ''));
     if (!roomId) continue;
     const title = typeof row.title === 'string' && row.title.trim() ? row.title.trim() : '未設定の会';
@@ -433,14 +521,19 @@ export async function GET() {
       .filter((id): id is string => !!id);
 
     if (safeExtraRoomIds.length > 0) {
-      const { data: extraRows, error: extraErr } = await supabase
-        .from('room_gatherings')
-        .select('room_id, title, status, started_at')
-        .in('room_id', safeExtraRoomIds)
-        .order('started_at', { ascending: false })
-        .limit(CREATED_ROOMS_LIMIT);
+      const { data: extraRowsRaw, error: extraErr } = await runGatheringQueryScoped((scopeProduct) => {
+        let q = supabase
+          .from('room_gatherings')
+          .select('room_id, title, status, started_at')
+          .in('room_id', safeExtraRoomIds)
+          .order('started_at', { ascending: false })
+          .limit(CREATED_ROOMS_LIMIT);
+        if (scopeProduct) q = withGatheringProductEq(q);
+        return q;
+      });
+      const extraRows = (extraRowsRaw as { room_id?: string; title?: string; status?: string; started_at?: string }[] | null) ?? [];
       if (!extraErr) {
-        for (const row of extraRows ?? []) {
+        for (const row of extraRows) {
           const roomId = safeRoomId(String(row.room_id ?? ''));
           if (!roomId) continue;
           const title = typeof row.title === 'string' && row.title.trim() ? row.title.trim() : '未設定の会';

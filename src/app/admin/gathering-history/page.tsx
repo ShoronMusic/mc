@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { downloadCsvFile } from '@/lib/admin-csv-download';
 import { AdminMenuBar } from '@/components/admin/AdminMenuBar';
+import { AdminProductFilterSelect } from '@/components/admin/AdminProductFilterSelect';
 import { GeminiUsageCategoryBreakdown } from '@/components/mypage/GeminiUsageCategoryBreakdown';
 import { formatGeminiCostJpyApprox, type GeminiUsageTokenSummary } from '@/lib/gemini-pricing';
 import { formatInfraCostJpyApprox } from '@/lib/infra-cost-estimates';
@@ -56,6 +57,7 @@ const BILLING_KIND_LABEL: Record<GeminiUsageBillingKind, string> = {
 export default function AdminGatheringHistoryPage() {
   const [days, setDays] = useState(14);
   const [roomFilter, setRoomFilter] = useState('');
+  const [productFilter, setProductFilter] = useState<'all' | 'musicaichat' | 'musicchat'>('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [hint, setHint] = useState<string | null>(null);
@@ -82,7 +84,7 @@ export default function AdminGatheringHistoryPage() {
     setError(null);
     setHint(null);
     try {
-      const params = new URLSearchParams({ days: String(days) });
+      const params = new URLSearchParams({ days: String(days), product: productFilter });
       if (roomFilter.trim()) params.set('roomId', roomFilter.trim());
       const res = await fetch(`/api/admin/daily-slot-history?${params}`, { credentials: 'include' });
       const data = await res.json().catch(() => ({}));
@@ -106,15 +108,18 @@ export default function AdminGatheringHistoryPage() {
     } finally {
       setLoading(false);
     }
-  }, [days, roomFilter]);
+  }, [days, roomFilter, productFilter]);
 
   const loadDetail = useCallback(async (slotKey: string) => {
     setDetailLoading(true);
     setSelectedKey(slotKey);
     try {
-      const res = await fetch(`/api/admin/daily-slot-history?slotKey=${encodeURIComponent(slotKey)}`, {
-        credentials: 'include',
-      });
+      const res = await fetch(
+        `/api/admin/daily-slot-history?slotKey=${encodeURIComponent(slotKey)}&product=${productFilter}`,
+        {
+          credentials: 'include',
+        },
+      );
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data?.summary) {
         setDetailSummary(null);
@@ -126,7 +131,7 @@ export default function AdminGatheringHistoryPage() {
     } finally {
       setDetailLoading(false);
     }
-  }, []);
+  }, [productFilter]);
 
   useEffect(() => {
     void loadList();
@@ -205,6 +210,7 @@ export default function AdminGatheringHistoryPage() {
             className="ml-2 w-20 rounded border border-gray-700 bg-gray-900 px-2 py-1 text-gray-100"
           />
         </label>
+        <AdminProductFilterSelect value={productFilter} onChange={setProductFilter} />
         <button
           type="button"
           onClick={() => void loadList()}
@@ -393,7 +399,9 @@ export default function AdminGatheringHistoryPage() {
                             </span>
                           ) : null}
                           <Link
-                            href={`/admin/user-billing-usage?userId=${encodeURIComponent(u.userId)}`}
+                            href={`/admin/user-billing-usage?userId=${encodeURIComponent(u.userId)}${
+                              productFilter !== 'all' ? `&product=${productFilter}` : ''
+                            }`}
                             className="mt-1 inline-block text-[10px] text-blue-400/80 hover:underline"
                             onClick={(e) => e.stopPropagation()}
                           >

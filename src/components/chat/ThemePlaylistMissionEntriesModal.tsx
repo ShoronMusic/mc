@@ -12,6 +12,7 @@ import {
   favoriteHeartActiveTextClass,
   favoriteHeartOutlineHoverClass,
 } from '@/lib/favorite-heart-ui';
+import { showRoomStyleUi } from '@/lib/product-branding';
 
 const COL_NO = 'No';
 const COL_PARTICIPANT = '選曲者';
@@ -187,6 +188,7 @@ export default function ThemePlaylistMissionEntriesModal({ open, onClose, themeI
   const currentVideoId = room?.currentVideoId ?? null;
   const roomId = (room?.roomId ?? '').trim();
   const roomClientId = typeof room?.roomClientId === 'string' ? room.roomClientId.trim() : '';
+  const showStyleUi = showRoomStyleUi();
 
   const participantColorByDisplayName = useMemo(() => {
     const m = new Map<string, string>();
@@ -379,13 +381,15 @@ export default function ThemePlaylistMissionEntriesModal({ open, onClose, themeI
                     >
                       <span className="block truncate">{COL_ERA}</span>
                     </th>
-                    <th
-                      className="border-b border-gray-600 py-1 pr-1 font-medium text-gray-400"
-                      style={{ width: COL_WIDTH_STYLE, minWidth: COL_WIDTH_STYLE, maxWidth: COL_WIDTH_STYLE }}
-                      scope="col"
-                    >
-                      <span className="block truncate">{COL_STYLE}</span>
-                    </th>
+                    {showStyleUi && (
+                      <th
+                        className="border-b border-gray-600 py-1 pr-1 font-medium text-gray-400"
+                        style={{ width: COL_WIDTH_STYLE, minWidth: COL_WIDTH_STYLE, maxWidth: COL_WIDTH_STYLE }}
+                        scope="col"
+                      >
+                        <span className="block truncate">{COL_STYLE}</span>
+                      </th>
+                    )}
                     <th
                       className="border-b border-gray-600 py-1 pr-1 font-medium text-gray-400"
                       style={{ minWidth: COL_MIN_WIDTH_ARTIST_TITLE }}
@@ -482,18 +486,20 @@ export default function ThemePlaylistMissionEntriesModal({ open, onClose, themeI
                           >
                             {era ?? '—'}
                           </td>
-                          <td
-                            className="truncate border-b border-gray-700/80 py-0.5 pr-1 text-gray-400"
-                            style={{
-                              width: COL_WIDTH_STYLE,
-                              minWidth: COL_WIDTH_STYLE,
-                              maxWidth: COL_WIDTH_STYLE,
-                              color: getStyleTextColor(style),
-                            }}
-                            title={style ?? '視聴履歴にないか、スタイル未設定'}
-                          >
-                            {style ?? '—'}
-                          </td>
+                          {showStyleUi && (
+                            <td
+                              className="truncate border-b border-gray-700/80 py-0.5 pr-1 text-gray-400"
+                              style={{
+                                width: COL_WIDTH_STYLE,
+                                minWidth: COL_WIDTH_STYLE,
+                                maxWidth: COL_WIDTH_STYLE,
+                                color: getStyleTextColor(style),
+                              }}
+                              title={style ?? '視聴履歴にないか、スタイル未設定'}
+                            >
+                              {style ?? '—'}
+                            </td>
+                          )}
                           <td
                             className="truncate border-b border-gray-700/80 py-0.5 pr-1 text-gray-200"
                             style={{ minWidth: COL_MIN_WIDTH_ARTIST_TITLE }}

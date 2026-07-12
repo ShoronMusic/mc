@@ -1,5 +1,7 @@
 'use client';
 
+import { showRoomStyleUi } from '@/lib/product-branding';
+
 function formatJstHm(iso: string): string {
   return new Intl.DateTimeFormat('ja-JP', {
     timeZone: 'Asia/Tokyo',
@@ -43,14 +45,18 @@ export default function ChatSummaryModalBody({ summary }: { summary: RoomSession
   const style = distLine(summary.styleDistribution, (v) => `${v.style}(${v.count})`);
   const artists = distLine(summary.popularArtists, (v) => `${v.artist}(${v.count})`);
 
+  const tendencyLines = [
+    `・時代：${era}`,
+    ...(showRoomStyleUi() ? [`・スタイル：${style}`] : []),
+    `・アーティスト：${artists}`,
+  ];
+
   const text = `対象枠： ${summary.sessionWindowLabel || '—'}
 実利用時間： ${summary.activeUsageTimeLabel || '—'}
 参加者(選曲数)：${participantSong}
 
 選曲傾向
-・時代：${era}
-・スタイル：${style}
-・アーティスト：${artists}`;
+${tendencyLines.join('\n')}`;
 
   return <div className="whitespace-pre-line text-sm leading-relaxed text-gray-200">{text}</div>;
 }

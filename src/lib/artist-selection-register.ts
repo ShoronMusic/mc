@@ -7,9 +7,51 @@ import {
   displayNameFromArtistRow,
   lowerNameKeyForArtistUnique,
 } from '@/lib/music8-artist-import';
+import { artistNameToMusic8Slug } from '@/lib/music8-artist-display';
 import { splitArtistNameForM8Storage } from '@/lib/song-registration-normalize';
 import { resolveArtistIdFromIndex, type ArtistLookupIndex } from '@/lib/song-credits-resolve';
 import { loadArtistLookupIndex, clearArtistLookupIndexCache } from '@/lib/song-credits-sync';
+
+/** ローマ字 slug が無い邦楽アーティスト向けの決定的フォールバック */
+function fallbackDomesticArtistSlug(displayName: string): string {
+  let h = 0;
+  for (let i = 0; i < displayName.length; i++) {
+    h = (Math.imul(31, h) + displayName.charCodeAt(i)) >>> 0;
+  }
+  return `jp-${h.toString(36)}`;
+}
+
+async function patchArtistOriginCountryIfUnset(
+  supabase: SupabaseClient,
+  artistId: string,
+  countryCode: string,
+): Promise<void> {
+  const code = countryCode.trim().toUpperCase();
+  if (!code) return;
+
+  const { data, error } = await supabase
+    .from('artists')
+    .select('origin_country')
+    .eq('id', artistId)
+    .maybeSingle();
+  if (error) {
+    if (error.code === '42703' || error.code === '42P01') return;
+    console.warn('[artist-selection-register] patchArtistOriginCountry select', error.message);
+    return;
+  }
+
+  const cur = (data as { origin_country?: string | null } | null)?.origin_country;
+  if (cur != null && String(cur).trim() !== '') return;
+
+  const { error: uErr } = await supabase
+    .from('artists')
+    .update({ origin_country: code })
+    .eq('id', artistId);
+  if (uErr?.code === '42703' || uErr?.code === '42P01') return;
+  if (uErr) {
+    console.warn('[artist-selection-register] patchArtistOriginCountry update', uErr.message);
+  }
+}
 
 export type EnsureArtistForRegistrationResult = {
   artistId: string;
@@ -210,4 +252,150 @@ export function isSelectionRegisteredArtistPendingWp(row: {
 
 export function artistRowSortKey(name: string): string {
   return lowerNameKeyForArtistUnique(name);
+}
+
+/**
+ * 邦楽ライト DB 向け: 日本語表示名 + チャンネル英字 slug ヒントで artists を確保。
+ * `origin_country` が空なら `JP` を補完する。
+ */
+export async function ensureDomesticArtistForSongRegistration(
+  supabase: SupabaseClient,
+  artistDisplayName: string,
+  opts?: { slugHint?: string | null; index?: ArtistLookupIndex },
+): Promise<EnsureArtistForRegistrationResult | null> {
+  const displayName = artistDisplayName.trim();
+  if (!displayName) return null;
+
+  const slugHint = (opts?.slugHint ?? '').trim();
+  const slug = slugHint || artistNameToMusic8Slug(displayName) || fallbackDomesticArtistSlug(displayName);
+
+  const bySlug = await findArtistRowBySlug(supabase, slug);
+  if (bySlug) {
+    await patchArtistOriginCountryIfUnset(supabase, bySlug.id, 'JP');
+    return {
+      artistId: bySlug.id,
+      displayName: bySlug.displayName || displayName,
+      slug,
+      nameBase: displayName,
+      thePrefix: null,
+      created: false,
+    };
+  }
+
+  const idx = opts?.index ?? (await loadArtistLookupIndex(supabase));
+  const hitId = resolveArtistIdFromIndex(idx, displayName, null);
+  if (hitId) {
+    const { data } = await supabase
+      .from('artists')
+      .select('id, name, name_base, the_prefix')
+      .eq('id', hitId)
+      .maybeSingle();
+    const resolvedDisplay =
+      displayNameFromArtistRow(data as { name?: string; name_base?: string; the_prefix?: string }) ??
+      displayName;
+    await patchArtistOriginCountryIfUnset(supabase, hitId, 'JP');
+    return {
+      artistId: hitId,
+      displayName: resolvedDisplay,
+      slug,
+      nameBase: displayName,
+      thePrefix: null,
+      created: false,
+    };
+  }
+
+  const payload: Record<string, unknown> = {
+    name: displayName,
+    name_base: displayName,
+    the_prefix: null,
+    name_sort: buildNameSort(displayName),
+    music8_artist_slug: slug,
+    origin_country: 'JP',
+  };
+
+  const { data: inserted, error } = await supabase.from('artists').insert(payload).select('id').single();
+
+  if (error?.code === '23505') {
+    clearArtistLookupIndexCache();
+    const raceId = await findArtistIdBySlug(supabase, slug);
+    if (raceId) {
+      await patchArtistOriginCountryIfUnset(supabase, raceId, 'JP');
+      const row = await findArtistRowBySlug(supabase, slug);
+      return {
+        artistId: raceId,
+        displayName: row?.displayName ?? displayName,
+        slug,
+        nameBase: displayName,
+        thePrefix: null,
+        created: false,
+      };
+    }
+    const ilikePattern = escapeIlikeExact(displayName);
+    const { data: byName } = await supabase
+      .from('artists')
+      .select('id, name, name_base, the_prefix')
+      .ilike('name', ilikePattern)
+      .limit(1)
+      .maybeSingle();
+    const nid = (byName as { id?: string } | undefined)?.id?.trim();
+    if (nid) {
+      await patchArtistOriginCountryIfUnset(supabase, nid, 'JP');
+      return {
+        artistId: nid,
+        displayName:
+          displayNameFromArtistRow(byName as { name?: string; name_base?: string; the_prefix?: string }) ??
+          displayName,
+        slug,
+        nameBase: displayName,
+        thePrefix: null,
+        created: false,
+      };
+    }
+    return null;
+  }
+
+  if (error?.code === '42703' || error?.code === '42P01') {
+    const fallbackPayload = {
+      name: displayName,
+      music8_artist_slug: slug,
+    };
+    const { data: ins2, error: err2 } = await supabase
+      .from('artists')
+      .insert(fallbackPayload)
+      .select('id')
+      .single();
+    if (err2) {
+      console.warn('[artist-selection-register] ensureDomestic insert fallback', err2.message);
+      return null;
+    }
+    const id = (ins2 as { id?: string }).id?.trim();
+    if (!id) return null;
+    clearArtistLookupIndexCache();
+    await patchArtistOriginCountryIfUnset(supabase, id, 'JP');
+    return {
+      artistId: id,
+      displayName,
+      slug,
+      nameBase: displayName,
+      thePrefix: null,
+      created: true,
+    };
+  }
+
+  if (error) {
+    console.warn('[artist-selection-register] ensureDomestic insert', error.message);
+    return null;
+  }
+
+  const id = (inserted as { id?: string }).id?.trim();
+  if (!id) return null;
+  clearArtistLookupIndexCache();
+  return {
+    artistId: id,
+    displayName,
+    slug,
+    nameBase: displayName,
+    thePrefix: null,
+    created: true,
+  };
 }

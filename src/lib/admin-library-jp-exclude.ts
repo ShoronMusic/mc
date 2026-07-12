@@ -5,6 +5,8 @@
  */
 
 import { textHasJapaneseScript } from '@/lib/comment-pack-jp-economy';
+import { matchesDomesticJpArtist } from '@/lib/domestic-jp-artists';
+import { matchesWesternTreatedJpArtist } from '@/lib/western-treated-jp-artists';
 
 function primaryMetadataLooksWesternLatin(opts: {
   title: string;
@@ -44,6 +46,11 @@ export function songRowLooksJapaneseDomesticForAdminLibrary(row: {
     artist: row.main_artist,
     song: row.song_title,
   };
+
+  if (matchesWesternTreatedJpArtist(row.main_artist)) return false;
+  if (matchesDomesticJpArtist(row.main_artist, row.display_title, row.song_title)) {
+    return true;
+  }
 
   const primaryBlob = [opts.title, opts.artistDisplay, opts.artist, opts.song]
     .filter((x): x is string => typeof x === 'string' && x.length > 0)

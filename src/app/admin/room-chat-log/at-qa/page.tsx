@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { AdminMenuBar } from '@/components/admin/AdminMenuBar';
+import { productBadgeClass, productBadgeLabel } from '@/components/admin/AdminProductFilterSelect';
 
 type AtPair = {
   userDisplayName: string;
@@ -54,6 +55,7 @@ export default function AdminRoomChatAtQaPage() {
   const searchParams = useSearchParams();
   const roomId = (searchParams.get('roomId') ?? '').trim();
   const dateJst = (searchParams.get('date') ?? '').trim();
+  const product = (searchParams.get('product') ?? 'all').trim() || 'all';
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -68,7 +70,7 @@ export default function AdminRoomChatAtQaPage() {
     setError(null);
     setHint(null);
     try {
-      const q = new URLSearchParams({ roomId, date: dateJst });
+      const q = new URLSearchParams({ roomId, date: dateJst, product });
       const res = await fetch(`/api/admin/room-chat-log-at-qa?${q}`, { credentials: 'include' });
       const json = (await res.json().catch(() => ({}))) as ApiOk & { error?: string; hint?: string };
       if (!res.ok) {
@@ -84,7 +86,7 @@ export default function AdminRoomChatAtQaPage() {
     } finally {
       setLoading(false);
     }
-  }, [canLoad, roomId, dateJst]);
+  }, [canLoad, roomId, dateJst, product]);
 
   useEffect(() => {
     void load();
@@ -156,6 +158,15 @@ export default function AdminRoomChatAtQaPage() {
             <p className="mb-4 text-sm text-gray-500">
               部屋 <span className="font-mono text-gray-300">{data.roomId}</span> / {data.dateJst}{' '}
               <span className="text-gray-600">（JST）</span>
+              {product !== 'all' && (
+                <>
+                  {' '}
+                  /{' '}
+                  <span className={productBadgeClass(product)}>
+                    {productBadgeLabel(product)}
+                  </span>
+                </>
+              )}
               <span className="ml-2">保存行数: {data.rowCount}</span>
               <span className="ml-2">@ ペア数: {data.pairCount}</span>
               {data.truncated && (

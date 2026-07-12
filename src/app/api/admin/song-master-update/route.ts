@@ -13,6 +13,7 @@ type ReqBody = {
   displayTitle?: unknown;
   mainArtist?: unknown;
   songTitle?: unknown;
+  songTitleJa?: unknown;
   style?: unknown;
   originalReleaseDate?: unknown;
 };
@@ -47,6 +48,7 @@ export async function POST(request: Request) {
   const displayTitle = toNullableTrimmed(body.displayTitle);
   const mainArtist = toNullableTrimmed(body.mainArtist);
   const songTitle = toNullableTrimmed(body.songTitle);
+  const songTitleJa = toNullableTrimmed(body.songTitleJa);
   const style = toNullableTrimmed(body.style);
   const originalReleaseDate = toNullableTrimmed(body.originalReleaseDate);
 
@@ -61,12 +63,41 @@ export async function POST(request: Request) {
     display_title: displayTitle,
     main_artist: mainArtist,
     song_title: songTitle,
+    song_title_ja: songTitleJa,
     style,
     original_release_date: originalReleaseDate,
   };
 
   const { error } = await admin.from('songs').update(patch).eq('id', songId);
   if (error) {
+    if (error.code === '42703') {
+      const { error: retryErr } = await admin
+        .from('songs')
+        .update({
+          display_title: displayTitle,
+          main_artist: mainArtist,
+          song_title: songTitle,
+          style,
+          original_release_date: originalReleaseDate,
+        })
+        .eq('id', songId);
+      if (retryErr) {
+        console.error('[admin/song-master-update] update songs failed', retryErr);
+        return NextResponse.json(
+          {
+            error:
+              retryErr.message +
+              '（song_title_ja 列が未作成の可能性があります。docs の ALTER を実行してください）',
+          },
+          { status: 500 },
+        );
+      }
+      return NextResponse.json({
+        ok: true,
+        songId,
+        warning: 'song_title_ja 列が無いため、他項目のみ保存しました。',
+      });
+    }
     console.error('[admin/song-master-update] update songs failed', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

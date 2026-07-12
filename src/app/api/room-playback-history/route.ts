@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { isMcProduct } from '@/lib/product-mode';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getStyleAdminUserIds } from '@/lib/style-admin';
@@ -18,12 +19,16 @@ import { fetchMusic8SongDataForPlaybackRow } from '@/lib/music8-song-lookup';
 import { extractMusic8SongFields, music8ReleaseYearMonthToPostgresDate } from '@/lib/music8-song-fields';
 import { buildPersistableMusic8SongSnapshot } from '@/lib/music8-song-persist';
 import { getVideoSnippet } from '@/lib/youtube-search';
-import { resolveJapaneseEconomyWithMusicBrainz } from '@/lib/resolve-japanese-economy';
+import { resolveJapaneseDomesticWithMusicBrainz } from '@/lib/resolve-japanese-economy';
 import { isJpDomesticOfficialChannelAiException } from '@/lib/jp-official-channel-exception';
 import { isRoomJpAiUnlockEnabled } from '@/lib/room-jp-ai-unlock-server';
 import { getOrAssignEra } from '@/lib/song-era';
 import { getOrAssignStyle, setStyleInDb } from '@/lib/song-style';
 import { upsertSongAndVideo, updateSongStyle, incrementSongPlayCount } from '@/lib/song-entities';
+import { resolveSongCatalogScope } from '@/lib/song-catalog-scope';
+import { buildSongDbRegistrationInput } from '@/lib/song-db-registration-gate';
+import { resolveDomesticSongMetadataForRegistration } from '@/lib/domestic-song-registration';
+import { latinArtistSlugHintFromChannel } from '@/lib/jp-domestic-youtube-title';
 import {
   fetchPlaybackDisplayOverride,
   upsertPlaybackDisplayOverride,
@@ -36,6 +41,11 @@ import {
   parseRoomPlaybackHistoryOffset,
   ROOM_PLAYBACK_HISTORY_PAGE_SIZE,
 } from '@/lib/room-playback-history-pagination';
+import {
+  getRoomHistoryProductId,
+  runRoomHistoryQueryScoped,
+  withRoomHistoryProductEq,
+} from '@/lib/room-history-product';
 
 export const dynamic = 'force-dynamic';
 
@@ -142,18 +152,29 @@ export async function GET(request: Request) {
     }
   }
 
-  let historyQuery = supabase
-    .from('room_playback_history')
-    .select('id, room_id, video_id, display_name, is_guest, played_at, title, artist_name, style, selection_round')
-    .eq('room_id', roomId);
-  if (sinceIso) {
-    historyQuery = historyQuery.gte('played_at', sinceIso);
-  }
-  const fetchCount = limit + 1;
-  const { data, error } = await historyQuery
-    .order('played_at', { ascending: false })
-    .order('id', { ascending: false })
-    .range(offset, offset + fetchCount - 1);
+  const historyProduct = getRoomHistoryProductId();
+
+  const historyRes = await runRoomHistoryQueryScoped((scopeProduct) => {
+    let historyQuery = supabase
+      .from('room_playback_history')
+      .select(
+        'id, room_id, video_id, display_name, is_guest, played_at, title, artist_name, style, selection_round',
+      )
+      .eq('room_id', roomId);
+    if (scopeProduct) {
+      historyQuery = withRoomHistoryProductEq(historyQuery, historyProduct);
+    }
+    if (sinceIso) {
+      historyQuery = historyQuery.gte('played_at', sinceIso);
+    }
+    const fetchCount = limit + 1;
+    return historyQuery
+      .order('played_at', { ascending: false })
+      .order('id', { ascending: false })
+      .range(offset, offset + fetchCount - 1);
+  });
+
+  const { data, error } = historyRes;
 
   if (error) {
     if (error.code === '42P01') {
@@ -248,34 +269,41 @@ export async function POST(request: Request) {
   const userId = user?.id ?? null;
 
   const cutoff = new Date(Date.now() - TWO_MINUTES_MS).toISOString();
+  const historyProduct = getRoomHistoryProductId();
 
   if (userId) {
-    const { data: existing } = await supabase
-      .from('room_playback_history')
-      .select('id')
-      .eq('room_id', roomId)
-      .eq('video_id', videoId)
-      .eq('user_id', userId)
-      .gte('played_at', cutoff)
-      .limit(1)
-      .maybeSingle();
+    const dupRes = await runRoomHistoryQueryScoped((scopeProduct) => {
+      let q = supabase
+        .from('room_playback_history')
+        .select('id')
+        .eq('room_id', roomId)
+        .eq('video_id', videoId)
+        .eq('user_id', userId)
+        .gte('played_at', cutoff);
+      if (scopeProduct) q = withRoomHistoryProductEq(q, historyProduct);
+      return q.limit(1).maybeSingle();
+    });
+    const existing = dupRes.data as { id?: string } | null;
 
-    if (existing) {
+    if (existing?.id) {
       return NextResponse.json({ ok: true, skipped: 'duplicate' });
     }
   } else {
-    const { data: existing } = await supabase
-      .from('room_playback_history')
-      .select('id')
-      .eq('room_id', roomId)
-      .eq('video_id', videoId)
-      .eq('display_name', displayNameToStore)
-      .eq('is_guest', true)
-      .gte('played_at', cutoff)
-      .limit(1)
-      .maybeSingle();
+    const dupRes = await runRoomHistoryQueryScoped((scopeProduct) => {
+      let q = supabase
+        .from('room_playback_history')
+        .select('id')
+        .eq('room_id', roomId)
+        .eq('video_id', videoId)
+        .eq('display_name', displayNameToStore)
+        .eq('is_guest', true)
+        .gte('played_at', cutoff);
+      if (scopeProduct) q = withRoomHistoryProductEq(q, historyProduct);
+      return q.limit(1).maybeSingle();
+    });
+    const existing = dupRes.data as { id?: string } | null;
 
-    if (existing) {
+    if (existing?.id) {
       return NextResponse.json({ ok: true, skipped: 'duplicate' });
     }
   }
@@ -305,7 +333,7 @@ export async function POST(request: Request) {
   let { artist, artistDisplay, song } = resolved;
 
   /** announce-song の邦楽判定と同じ。邦楽かつ未解禁（公式チャ例外なし）なら視聴履歴に載せない */
-  const isJapaneseDomestic = await resolveJapaneseEconomyWithMusicBrainz({
+  const isJapaneseDomestic = await resolveJapaneseDomesticWithMusicBrainz({
     title: title ?? videoId,
     artistDisplay,
     artist,
@@ -317,7 +345,7 @@ export async function POST(request: Request) {
   const jpOfficialChannelException = isJpDomesticOfficialChannelAiException(snippet?.channelId);
   const jpAiUnlockEnabled = await isRoomJpAiUnlockEnabled(roomId);
   const skipHistoryForJpDomestic =
-    isJapaneseDomestic && !jpOfficialChannelException && !jpAiUnlockEnabled;
+    !isMcProduct() && isJapaneseDomestic && !jpOfficialChannelException && !jpAiUnlockEnabled;
   if (skipHistoryForJpDomestic) {
     return NextResponse.json({ ok: true, skipped: 'jp_domestic' });
   }
@@ -329,33 +357,95 @@ export async function POST(request: Request) {
 
   let originalReleaseDateIso: string | null = null;
   let music8SongData: Record<string, unknown> | null = null;
-  try {
-    const music8Json = await fetchMusic8SongDataForPlaybackRow(
-      (artist ?? effectiveAuthor ?? '').trim() || 'Unknown',
-      title ?? videoId,
-    );
-    if (music8Json) {
-      const m8 = extractMusic8SongFields(music8Json);
-      if (m8.releaseDate?.trim()) {
-        originalReleaseDateIso = music8ReleaseYearMonthToPostgresDate(m8.releaseDate);
+  let domesticGenres: string[] = [];
+  let domesticDisplayTitle: string | null = null;
+
+  if (isJapaneseDomestic) {
+    try {
+      const domesticMeta = await resolveDomesticSongMetadataForRegistration({
+        rawTitle: title ?? videoId,
+        channelTitle: snippet?.channelTitle ?? null,
+        channelAuthor: authorName ?? effectiveAuthor ?? null,
+        resolvedArtist: artist,
+        resolvedSong: song,
+        preferJapaneseScriptDisplay: isMcProduct(),
+      });
+      if (domesticMeta) {
+        artist = domesticMeta.mainArtist;
+        artistDisplay = domesticMeta.artistDisplay;
+        song = domesticMeta.songTitle;
+        domesticDisplayTitle = domesticMeta.displayTitle;
+        originalReleaseDateIso = domesticMeta.originalReleaseDate;
+        domesticGenres = domesticMeta.genres;
+        if (process.env.DEBUG_YT_ARTIST === '1') {
+          console.info('[room-playback-history POST] domestic metadata', {
+            videoId,
+            source: domesticMeta.source,
+            displayTitle: domesticMeta.displayTitle,
+            musicBrainzScore: domesticMeta.musicBrainzScore,
+          });
+        }
       }
-      music8SongData = buildPersistableMusic8SongSnapshot(music8Json);
+    } catch (e) {
+      console.warn('[room-playback-history] domestic metadata resolve', e);
     }
-  } catch (e) {
-    console.warn('[room-playback-history] music8 snapshot / release for songs', e);
+  } else {
+    try {
+      const music8Json = await fetchMusic8SongDataForPlaybackRow(
+        (artist ?? effectiveAuthor ?? '').trim() || 'Unknown',
+        title ?? videoId,
+      );
+      if (music8Json) {
+        const m8 = extractMusic8SongFields(music8Json);
+        if (m8.releaseDate?.trim()) {
+          originalReleaseDateIso = music8ReleaseYearMonthToPostgresDate(m8.releaseDate);
+        }
+        music8SongData = buildPersistableMusic8SongSnapshot(music8Json);
+      }
+    } catch (e) {
+      console.warn('[room-playback-history] music8 snapshot / release for songs', e);
+    }
   }
 
+  const artistSlugHint = latinArtistSlugHintFromChannel(
+    snippet?.channelTitle ?? authorName ?? effectiveAuthor ?? null,
+  );
+
   let songId: string | null = null;
+  const songDbClient = createAdminClient() ?? supabase;
   try {
     songId = await upsertSongAndVideo({
-      supabase,
+      supabase: songDbClient,
       videoId,
       mainArtist: artist ?? effectiveAuthor ?? null,
       songTitle: song ?? (title ?? videoId),
       variant: 'official',
       youtubePublishedAtIso: snippet?.publishedAt ?? null,
       originalReleaseDateIso,
-      music8SongData: music8SongData ?? undefined,
+      music8SongData: isJapaneseDomestic ? undefined : music8SongData ?? undefined,
+      genres: domesticGenres.length > 0 ? domesticGenres : undefined,
+      domesticLightDb: isJapaneseDomestic,
+      artistSlugHint,
+      catalogScope: resolveSongCatalogScope({
+        mainArtist: artist ?? effectiveAuthor ?? null,
+        songTitle: song ?? (title ?? videoId),
+        displayTitle: domesticDisplayTitle ?? title ?? undefined,
+        isJapaneseEconomy: isJapaneseDomestic,
+      }),
+      registrationCheck: buildSongDbRegistrationInput({
+        videoId,
+        rawTitle: title ?? videoId,
+        channelTitle: snippet?.channelTitle ?? null,
+        channelId: snippet?.channelId ?? null,
+        categoryId: snippet?.categoryId ?? null,
+        description: snippetDescription,
+        mainArtist: artist ?? effectiveAuthor ?? null,
+        songTitle: song ?? (title ?? videoId),
+        hasMusic8Match: isJapaneseDomestic ? false : Boolean(music8SongData),
+        isJapaneseDomestic: isJapaneseDomestic,
+        channelAuthorName: authorName ?? effectiveAuthor ?? null,
+        viewCount: snippet?.viewCount ?? null,
+      }),
     });
   } catch (e) {
     console.error('[room-playback-history] upsertSongAndVideo', e);
@@ -386,7 +476,8 @@ export async function POST(request: Request) {
 
   /** 一覧・スタイル変更モーダル用。oEmbed 生タイトルが「曲名 - アーティスト」のまま残らないようにする */
   const titleForDb =
-    artistDisplay && song
+    domesticDisplayTitle ??
+    (artistDisplay && song
       ? `${artistDisplay} - ${song}`
       : formatArtistTitle(
           title ?? videoId,
@@ -394,7 +485,7 @@ export async function POST(request: Request) {
           snippetDescription,
           snippet?.channelTitle ?? null,
         ) ||
-        (title ?? videoId);
+        (title ?? videoId));
 
   let style: string | null = null;
   try {
@@ -428,6 +519,9 @@ export async function POST(request: Request) {
   /** 管理者が保存した video_id 単位の表記があれば、履歴行の表示に優先 */
   let historyTitle = titleForDb;
   let historyArtistName: string | null = artist ?? effectiveAuthor ?? null;
+  if (domesticDisplayTitle && song?.trim() && historyArtistName) {
+    historyTitle = song.trim();
+  }
   const overrideReader = createAdminClient() ?? supabase;
   const displayOverride = await fetchPlaybackDisplayOverride(overrideReader, videoId);
   if (displayOverride) {
@@ -437,6 +531,7 @@ export async function POST(request: Request) {
 
   const insertPlayback: Record<string, unknown> = {
     room_id: roomId,
+    product: historyProduct,
     video_id: videoId,
     display_name: displayNameToStore,
     is_guest: isGuest,
@@ -449,7 +544,13 @@ export async function POST(request: Request) {
     insertPlayback.selection_round = selectionRound;
   }
 
-  const { error } = await supabase.from('room_playback_history').insert(insertPlayback);
+  let { error } = await supabase.from('room_playback_history').insert(insertPlayback);
+
+  if (error && (error.code === '42703' || error.message?.includes('product'))) {
+    const legacy = { ...insertPlayback };
+    delete legacy.product;
+    ({ error } = await supabase.from('room_playback_history').insert(legacy));
+  }
 
   if (!error && songId) {
     await incrementSongPlayCount(supabase, songId);

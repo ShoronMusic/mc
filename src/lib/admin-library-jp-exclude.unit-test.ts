@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import { songRowLooksJapaneseDomesticForAdminLibrary } from '@/lib/admin-library-jp-exclude';
+import {
+  resetWesternTreatedJpArtistCacheForTests,
+  setWesternTreatedJpArtistKeysForTests,
+} from '@/lib/western-treated-jp-artists';
 
 function run() {
+  resetWesternTreatedJpArtistCacheForTests();
   assert.equal(
     songRowLooksJapaneseDomesticForAdminLibrary({
       main_artist: '米津玄師',
@@ -25,6 +30,16 @@ function run() {
       display_title: 'ONE OK ROCK - The Beginning',
     }),
     false,
+  );
+  setWesternTreatedJpArtistKeysForTests(['ado']);
+  assert.equal(
+    songRowLooksJapaneseDomesticForAdminLibrary({
+      main_artist: 'Ado',
+      song_title: '【Ado】踊',
+      display_title: 'Ado - 【Ado】踊',
+    }),
+    false,
+    'listed ado is western-treated',
   );
   console.log('admin-library-jp-exclude.unit-test: ok');
 }

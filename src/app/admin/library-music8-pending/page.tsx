@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { AdminMenuBar } from '@/components/admin/AdminMenuBar';
+import { AdminDomesticSongBadge } from '@/components/admin/AdminDomesticSongBadge';
 import type {
   LibraryMusic8PendingDay,
   LibraryMusic8PendingItem,
@@ -155,6 +156,11 @@ export default function AdminLibraryMusic8PendingPage() {
                 <li key={`${group.date}-${item.video_id}`} className="flex flex-col gap-2 px-3 py-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium text-white">
+                      {item.is_japanese_domestic ? (
+                        <span className="mr-2 inline-block align-middle">
+                          <AdminDomesticSongBadge />
+                        </span>
+                      ) : null}
                       {item.title ?? '（タイトル不明）'}
                       {item.artist_name ? (
                         <span className="font-normal text-gray-400"> · {item.artist_name}</span>

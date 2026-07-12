@@ -9,6 +9,7 @@
 
 # next.js
 /.next/
+/.next-mc/
 /.next.broken/
 /.next_corrupt_backup/
 /out/

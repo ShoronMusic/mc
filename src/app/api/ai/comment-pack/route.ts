@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { fetchOEmbed } from '@/lib/youtube-oembed';
 import { isJpDomesticOfficialChannelAiException } from '@/lib/jp-official-channel-exception';
-import { resolveJapaneseEconomyWithMusicBrainz } from '@/lib/resolve-japanese-economy';
+import { resolveJapaneseEconomyWithMusicBrainz, resolveJapaneseDomesticWithMusicBrainz } from '@/lib/resolve-japanese-economy';
 import {
   buildAiCommentaryPromptLabels,
   colorsStudiosTrustsOembedArtistFirst,
@@ -35,6 +35,8 @@ import { resolveGenerationModelId } from '@/lib/gemini-model-routing';
 import { persistGeminiUsageLog, buildGeminiUsagePersistMeta } from '@/lib/gemini-usage-log';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { attachMusic8SongDataIfFetched, upsertSongAndVideo } from '@/lib/song-entities';
+import { resolveSongCatalogScope } from '@/lib/song-catalog-scope';
+import { buildSongDbRegistrationInput } from '@/lib/song-db-registration-gate';
 import { isDevMinimalSongAi } from '@/lib/dev-minimal-song-ai';
 import {
   COMMENT_PACK_MAX_FREE_COMMENTS,
@@ -397,6 +399,15 @@ export async function POST(request: Request) {
     });
 
     const devMinimalSongAi = isDevMinimalSongAi();
+    const isJpDomestic = await resolveJapaneseDomesticWithMusicBrainz({
+      title,
+      artistDisplay,
+      artist,
+      song,
+      description: snippet?.description ?? null,
+      channelTitle: snippet?.channelTitle ?? null,
+      defaultAudioLanguage: snippet?.defaultAudioLanguage ?? null,
+    });
     const isJpEconomy = await resolveJapaneseEconomyWithMusicBrainz({
       title,
       artistDisplay,
@@ -430,6 +441,25 @@ export async function POST(request: Request) {
         mainArtist: artist ?? authorName ?? null,
         songTitle: song ?? title,
         variant: 'tidbit',
+        catalogScope: resolveSongCatalogScope({
+          mainArtist: artist ?? authorName ?? null,
+          songTitle: song ?? title,
+          displayTitle: title,
+          isJapaneseEconomy: isJpDomestic,
+        }),
+        registrationCheck: buildSongDbRegistrationInput({
+          videoId,
+          rawTitle: title,
+          channelTitle: snippet?.channelTitle ?? null,
+          channelId: snippet?.channelId ?? null,
+          categoryId: snippet?.categoryId ?? null,
+          description: snippet?.description ?? null,
+          mainArtist: artist ?? authorName ?? null,
+          songTitle: song ?? title,
+          isJapaneseDomestic: isJpDomestic,
+          channelAuthorName: authorName ?? null,
+          viewCount: snippet?.viewCount ?? null,
+        }),
       });
     } catch (e) {
       console.error('[api/ai/comment-pack] upsertSongAndVideo', e);

@@ -51,12 +51,15 @@ alter table public.songs add column if not exists music8_song_slug text null;
 alter table public.songs add column if not exists primary_artist_name_ja text null;
 alter table public.songs add column if not exists vocal text null;
 alter table public.songs add column if not exists structured_style text null;
+-- 曲名の日本語読み（英語タイトルのカタカナ等・ライブラリ検索用）
+alter table public.songs add column if not exists song_title_ja text null;
 -- アーティスト基本マスタ（Music8ベースで将来拡張）
 create table if not exists public.artists (
   id uuid primary key default gen_random_uuid(),
   name text not null,
   music8_artist_slug text null,
   name_ja text null,
+  name_en text null,
   kind text null,                    -- band / solo など
   origin_country text null,          -- 例: UK
   active_period text null,           -- 例: 1977-1986
@@ -84,6 +87,7 @@ alter table public.songs add column if not exists spotify_images text null;     
 alter table public.songs add column if not exists spotify_popularity smallint null;     -- 0–100
 -- 既存 artists テーブルがある環境向け（不足列の後付け）
 alter table public.artists add column if not exists kind text null;
+alter table public.artists add column if not exists name_en text null;
 alter table public.artists add column if not exists origin_country text null;
 alter table public.artists add column if not exists active_period text null;
 alter table public.artists add column if not exists members text null;
@@ -97,6 +101,27 @@ alter table public.artists add column if not exists spotify_artist_images text n
 alter table public.artists add column if not exists spotify_artist_popularity smallint null; -- 0–100
 alter table public.artists add column if not exists wikipedia_page text null;           -- Wikipedia スラッグ（例: "The_Police"）
 ```
+
+### 洋楽 / 邦楽スコープ（`catalog_scope`・2026-07）
+
+部屋ライブラリの「洋楽 DB / 邦楽 DB」切替用。物理 DB は1本のまま、行単位で分類する。
+
+```sql
+alter table public.songs add column if not exists catalog_scope text not null default 'unknown';
+
+alter table public.songs drop constraint if exists songs_catalog_scope_check;
+alter table public.songs add constraint songs_catalog_scope_check
+  check (catalog_scope in ('western', 'domestic', 'unknown'));
+
+create index if not exists idx_songs_catalog_scope on public.songs (catalog_scope);
+```
+
+- **`western`**: 洋楽寄り（ライブラリ「洋楽」に載せる）
+- **`domestic`**: 邦楽寄り（ライブラリ「邦楽」に載せる）
+- **`unknown`**: 未分類（ライブラリ API は従来ヒューリスティックでフォールバック）
+
+既存行の推定バックフィル: `npx tsx scripts/backfill-song-catalog-scope.ts --apply`  
+（`artists.origin_country=JP`・`admin-library-jp-exclude` 相当・英字主体メタを参照）
 
 ### 曲クレジット（共演・複数アーティスト・2026-05）
 

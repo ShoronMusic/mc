@@ -9,8 +9,13 @@
  * 主要メタが英字主体の洋楽と分かるときは、YouTube の defaultAudioLanguage が ja だけでは節約にしない。
  *（公式 MV でメタが誤って ja になる例がある。Billie Eilish 等の US アーティストを邦楽扱いしない）
  *
+ * 管理画面で登録した「洋楽扱い日本人アーティスト」は邦楽節約対象外。
+ * 「邦楽扱い英字アーティスト」（domestic_jp_artists）は resolveJapaneseDomestic 側で邦楽強制。
+ *
  * COMMENT_PACK_JP_ECONOMY=0 で無効（常に基本＋自由4本）。
  */
+
+import { matchesWesternTreatedJpArtist } from '@/lib/western-treated-jp-artists';
 
 const JAPANESE_SCRIPT_RE =
   /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\u3400-\u4DBF]/;
@@ -39,7 +44,7 @@ function primaryMetadataLooksWesternLatin(opts: {
   return !textHasJapaneseScript(primaryBlob);
 }
 
-export function shouldUseJapaneseEconomyCommentPack(opts: {
+export type JapaneseDomesticMetadataInput = {
   title: string;
   artistDisplay: string | null | undefined;
   artist: string | null | undefined;
@@ -47,8 +52,11 @@ export function shouldUseJapaneseEconomyCommentPack(opts: {
   description: string | null | undefined;
   channelTitle: string | null | undefined;
   defaultAudioLanguage: string | null | undefined;
-}): boolean {
-  if (process.env.COMMENT_PACK_JP_ECONOMY === '0') return false;
+};
+
+/** 主要メタ・音声言語から邦楽とみなすか（COMMENT_PACK_JP_ECONOMY には依存しない）。 */
+export function metadataIndicatesJapaneseDomestic(opts: JapaneseDomesticMetadataInput): boolean {
+  if (matchesWesternTreatedJpArtist(opts.artist, opts.artistDisplay)) return false;
 
   const lang = opts.defaultAudioLanguage?.trim().toLowerCase();
   if (lang && (lang === 'ja' || lang.startsWith('ja-'))) {
@@ -69,4 +77,9 @@ export function shouldUseJapaneseEconomyCommentPack(opts: {
   }
 
   return false;
+}
+
+export function shouldUseJapaneseEconomyCommentPack(opts: JapaneseDomesticMetadataInput): boolean {
+  if (process.env.COMMENT_PACK_JP_ECONOMY === '0') return false;
+  return metadataIndicatesJapaneseDomestic(opts);
 }

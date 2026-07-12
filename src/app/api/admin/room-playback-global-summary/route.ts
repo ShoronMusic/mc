@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getStyleAdminUserIds } from '@/lib/style-admin';
+import { parseAdminProductFilter, runAdminHistoryQueryScoped } from '@/lib/room-history-product';
 
 export const dynamic = 'force-dynamic';
 
@@ -93,19 +94,25 @@ export async function GET(request: Request) {
   const toIsoRaw = searchParams.get('to')?.trim();
   const fromIso = fromIsoRaw ? new Date(fromIsoRaw).toISOString() : defaultFromIso();
   const toIso = toIsoRaw ? new Date(toIsoRaw).toISOString() : new Date().toISOString();
+  const productFilter = parseAdminProductFilter(searchParams.get('product'));
 
   const rows: PlaybackRow[] = [];
   let scanned = 0;
   let truncated = false;
   let offset = 0;
   for (;;) {
-    const { data, error } = await admin
-      .from('room_playback_history')
-      .select('played_at, video_id, artist_name, title, style, room_id')
-      .gte('played_at', fromIso)
-      .lte('played_at', toIso)
-      .order('played_at', { ascending: false })
-      .range(offset, offset + PAGE_SIZE - 1);
+    const scanRes = await runAdminHistoryQueryScoped((applyProductEq, scopedProduct) => {
+      let q = admin
+        .from('room_playback_history')
+        .select('played_at, video_id, artist_name, title, style, room_id')
+        .gte('played_at', fromIso)
+        .lte('played_at', toIso)
+        .order('played_at', { ascending: false })
+        .range(offset, offset + PAGE_SIZE - 1);
+      if (applyProductEq && scopedProduct) q = q.eq('product', scopedProduct);
+      return q;
+    }, productFilter);
+    const { data, error } = scanRes;
     if (error) {
       if (error.code === '42P01') {
         return NextResponse.json(
@@ -171,6 +178,7 @@ export async function GET(request: Request) {
     granularity,
     fromIso,
     toIso,
+    product: productFilter,
     totals: {
       selections: rows.length,
       artists: byArtist.size,

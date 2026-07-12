@@ -17,6 +17,16 @@ import {
   type SongReportQuizDb,
   type SongReportSelectionRow,
 } from '@/lib/admin-song-lookup';
+import {
+  loadAdminRoomLabelMaps,
+  resolveAdminRoomDisplayTitle,
+  resolveAdminRoomLobbySubtitle,
+} from '@/lib/admin-room-display-label';
+import {
+  normalizeRoomHistoryProduct,
+  parseAdminProductFilter,
+  runAdminHistoryQueryScoped,
+} from '@/lib/room-history-product';
 import { buildAtChatPairsFromLogRows } from '@/lib/room-chat-at-qa-from-log';
 import { coerceSongQuizCorrectIndex, isValidSongQuizPayload } from '@/lib/song-quiz-types';
 
@@ -94,6 +104,7 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const q = (searchParams.get('q') ?? '').trim();
   const days = Math.min(365, Math.max(1, parseInt(searchParams.get('days') || '120', 10) || 120));
+  const productFilter = parseAdminProductFilter(searchParams.get('product'));
 
   const resolved = await resolveVideoIdAndLabel(admin, q);
   if ('error' in resolved) {
@@ -166,13 +177,18 @@ export async function GET(request: Request) {
     /* noop */
   }
 
-  const { data: playData, error: playErr } = await admin
-    .from('room_playback_history')
-    .select('room_id, played_at, title, artist_name, display_name')
-    .eq('video_id', videoId)
-    .gte('played_at', sinceIso)
-    .order('played_at', { ascending: false })
-    .limit(MAX_PLAYBACK_ROWS);
+  const playRes = await runAdminHistoryQueryScoped((applyProductEq, scopedProduct) => {
+    let q = admin
+      .from('room_playback_history')
+      .select('room_id, played_at, title, artist_name, display_name, product')
+      .eq('video_id', videoId)
+      .gte('played_at', sinceIso)
+      .order('played_at', { ascending: false })
+      .limit(MAX_PLAYBACK_ROWS);
+    if (applyProductEq && scopedProduct) q = q.eq('product', scopedProduct);
+    return q;
+  }, productFilter);
+  const { data: playData, error: playErr } = playRes;
 
   if (playErr) {
     if (playErr.code === '42P01') {
@@ -191,6 +207,7 @@ export async function GET(request: Request) {
     title: string | null;
     artist_name: string | null;
     display_name: string | null;
+    product?: string;
   }[];
 
   if (!artist && !songTitle && plays[0]) {
@@ -203,31 +220,29 @@ export async function GET(request: Request) {
   }
 
   const roomIds = [...new Set(plays.map((p) => p.room_id).filter(Boolean))];
-  const roomTitleMap = new Map<string, string>();
-  if (roomIds.length > 0) {
-    const { data: lobbyRows, error: lobbyErr } = await admin
-      .from('room_lobby_message')
-      .select('room_id, display_title')
-      .in('room_id', roomIds);
-    if (!lobbyErr && Array.isArray(lobbyRows)) {
-      for (const row of lobbyRows as { room_id: string; display_title: string | null }[]) {
-        const rid = (row.room_id ?? '').trim();
-        if (!rid) continue;
-        const t = (row.display_title ?? '').trim();
-        roomTitleMap.set(rid, t || rid);
-      }
-    }
-  }
+  const toIso = new Date().toISOString();
+  const roomLabelMaps = await loadAdminRoomLabelMaps(admin, roomIds, { fromIso: sinceIso, toIso });
 
-  const selectionHistory: SongReportSelectionRow[] = plays.map((p) => ({
-    played_at: p.played_at,
-    date_jst: jstYmdFromIso(p.played_at),
-    room_id: p.room_id,
-    room_display_title: roomTitleMap.get(p.room_id) ?? p.room_id,
-    selector_display_name: (p.display_name ?? '').trim() || '—',
-    snapshot_title: p.title,
-    snapshot_artist: p.artist_name,
-  }));
+  const selectionHistory: SongReportSelectionRow[] = plays.map((p) => {
+    const roomProduct = normalizeRoomHistoryProduct(p.product);
+    const roomDisplayTitle = resolveAdminRoomDisplayTitle(
+      roomLabelMaps,
+      p.room_id,
+      p.played_at,
+      roomProduct,
+    );
+    return {
+      played_at: p.played_at,
+      date_jst: jstYmdFromIso(p.played_at),
+      room_id: p.room_id,
+      room_product: roomProduct,
+      room_display_title: roomDisplayTitle,
+      room_lobby_subtitle: resolveAdminRoomLobbySubtitle(roomLabelMaps, p.room_id, roomDisplayTitle),
+      selector_display_name: (p.display_name ?? '').trim() || '—',
+      snapshot_title: p.title,
+      snapshot_artist: p.artist_name,
+    };
+  });
 
   let quizzesDb: SongReportQuizDb[] = [];
   const { data: qzRows, error: qzErr } = await admin
@@ -292,14 +307,16 @@ export async function GET(request: Request) {
   }
   const sortedDates = [...playsByDate.keys()].sort((a, b) => (a < b ? 1 : a > b ? -1 : 0));
 
-  type RoomDayKey = `${string}\t${string}`;
+  type RoomDayKey = `${string}\t${string}\t${string}`;
   const roomDayKeys: RoomDayKey[] = [];
   const seenKey = new Set<string>();
   for (const dateJst of sortedDates) {
     const dayPlays = playsByDate.get(dateJst) ?? [];
-    const rooms = [...new Set(dayPlays.map((x) => x.room_id).filter(Boolean))];
-    for (const roomId of rooms) {
-      const k = `${roomId}\t${dateJst}` as RoomDayKey;
+    for (const p of dayPlays) {
+      const roomId = p.room_id?.trim();
+      if (!roomId) continue;
+      const roomProduct = normalizeRoomHistoryProduct(p.product);
+      const k = `${roomProduct}\t${roomId}\t${dateJst}` as RoomDayKey;
       if (seenKey.has(k)) continue;
       seenKey.add(k);
       roomDayKeys.push(k);
@@ -312,17 +329,22 @@ export async function GET(request: Request) {
 
   const chatCache = new Map<string, RoomChatLogRow[]>();
   for (const key of keysLimited) {
-    const [roomId, dateJst] = key.split('\t') as [string, string];
+    const [roomProduct, roomId, dateJst] = key.split('\t') as [string, string, string];
     const range = jstDayRangeUtc(dateJst);
     if (!range) continue;
-    const { data: logData, error: logErr } = await admin
-      .from('room_chat_log')
-      .select('created_at, message_type, display_name, body')
-      .eq('room_id', roomId)
-      .gte('created_at', range.startIso)
-      .lt('created_at', range.endIso)
-      .order('created_at', { ascending: true })
-      .limit(MAX_CHAT_ROWS_PER_DAY + 1);
+    const logRes = await runAdminHistoryQueryScoped((applyProductEq, scopedProduct) => {
+      let q = admin
+        .from('room_chat_log')
+        .select('created_at, message_type, display_name, body')
+        .eq('room_id', roomId)
+        .gte('created_at', range.startIso)
+        .lt('created_at', range.endIso)
+        .order('created_at', { ascending: true })
+        .limit(MAX_CHAT_ROWS_PER_DAY + 1);
+      if (applyProductEq && scopedProduct) q = q.eq('product', scopedProduct);
+      return q;
+    }, parseAdminProductFilter(roomProduct));
+    const { data: logData, error: logErr } = logRes;
 
     if (logErr) {
       if (logErr.code !== '42P01') console.warn('[admin/song-lookup] room_chat_log', logErr.message);
@@ -336,11 +358,14 @@ export async function GET(request: Request) {
   const atFlat: AtQaPairWithRoom[] = [];
   for (const dateJst of sortedDates) {
     const dayPlays = playsByDate.get(dateJst) ?? [];
-    const rooms = [...new Set(dayPlays.map((p) => p.room_id).filter(Boolean))];
-    for (const roomId of rooms) {
-      const cacheKey = `${roomId}\t${dateJst}` as const;
+    const rooms = [...new Set(dayPlays.map((p) => `${normalizeRoomHistoryProduct(p.product)}\t${p.room_id}`))];
+    for (const roomKey of rooms) {
+      const [roomProduct, roomId] = roomKey.split('\t') as [string, string];
+      const cacheKey = `${roomProduct}\t${roomId}\t${dateJst}` as const;
       const rows = chatCache.get(cacheKey) ?? [];
-      const playsThisRoom = dayPlays.filter((p) => p.room_id === roomId);
+      const playsThisRoom = dayPlays.filter(
+        (p) => p.room_id === roomId && normalizeRoomHistoryProduct(p.product) === roomProduct,
+      );
       const pairs = buildAtChatPairsFromLogRows(rows);
       const filtered = filterAtPairsByPlayWindows(pairs, playsThisRoom);
       for (const pr of filtered) {
@@ -360,7 +385,7 @@ export async function GET(request: Request) {
       user_created_at: p.userCreatedAt,
       ai_created_at: p.aiCreatedAt,
       room_id: p.room_id,
-      room_display_title: roomTitleMap.get(p.room_id) ?? p.room_id,
+      room_display_title: resolveAdminRoomDisplayTitle(roomLabelMaps, p.room_id, p.userCreatedAt),
       questioner: p.userDisplayName,
       question: p.userBody,
       answer: p.aiBody,

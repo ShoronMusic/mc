@@ -8,6 +8,7 @@ import {
   isDevMockActiveRoomsEnabled,
 } from '@/lib/dev-mock-active-rooms';
 import { HOME_EXCLUDED_LIVE_ROOM_IDS } from '@/lib/home-excluded-live-room-ids';
+import { IS_MC_PRODUCT } from '@/lib/product-branding';
 
 const POLL_MS = 20_000;
 
@@ -107,7 +108,9 @@ function LiveRoomSortButton({
       aria-pressed={active}
       className={
         active
-          ? 'rounded-md border border-emerald-500/60 bg-emerald-900/45 px-2.5 py-1 text-[11px] font-medium text-emerald-100'
+          ? IS_MC_PRODUCT
+            ? 'mc-accent-sort-active rounded-md px-2.5 py-1 text-[11px] font-medium'
+            : 'rounded-md border border-emerald-500/60 bg-emerald-900/45 px-2.5 py-1 text-[11px] font-medium text-emerald-100'
           : 'rounded-md border border-gray-600 bg-gray-800/70 px-2.5 py-1 text-[11px] font-medium text-gray-400 transition hover:border-gray-500 hover:text-gray-200'
       }
     >
@@ -164,10 +167,10 @@ function RoomRow({
   const prLine =
     lobby || payload?.jpAiUnlockEnabled ? (
       <p className="text-left text-xs leading-snug text-gray-300 break-words whitespace-pre-wrap">
-        {payload?.jpAiUnlockEnabled && (
+        {payload?.jpAiUnlockEnabled && !IS_MC_PRODUCT && (
           <span className="font-medium text-emerald-300">邦楽解禁</span>
         )}
-        {payload?.jpAiUnlockEnabled && lobby ? (
+        {payload?.jpAiUnlockEnabled && !IS_MC_PRODUCT && lobby ? (
           <span className="text-gray-600"> · </span>
         ) : null}
         {lobby}
@@ -218,7 +221,9 @@ function RoomRow({
   return (
     <Link
       href={`/${room.roomId}`}
-      className="flex flex-col gap-1.5 rounded-lg border border-gray-600 bg-gray-800 px-4 py-3 text-white transition hover:bg-gray-700 hover:border-sky-600/50"
+      className={`flex flex-col gap-1.5 rounded-lg border border-gray-600 bg-gray-800 px-4 py-3 text-white transition hover:bg-gray-700 ${
+        IS_MC_PRODUCT ? 'hover:border-green-600/40' : 'hover:border-sky-600/50'
+      }`}
     >
       {body}
     </Link>
@@ -329,25 +334,45 @@ export function HomeRoomLinks({ viewOnly = false }: { viewOnly?: boolean }) {
       )}
       {activeRooms.length > 0 && (
         <section
-          className="rounded-xl border border-emerald-800/40 bg-gradient-to-b from-emerald-950/35 to-gray-900/40 p-3 shadow-inner sm:p-4"
+          className={`rounded-xl border p-3 shadow-inner sm:p-4 ${
+            IS_MC_PRODUCT
+              ? 'border-gray-300 bg-gray-50'
+              : 'border-emerald-800/40 bg-gradient-to-b from-emerald-950/35 to-gray-900/40'
+          }`}
           aria-labelledby="home-live-rooms-heading"
         >
-          <div className="mb-3 flex flex-col gap-2 border-b border-emerald-800/30 pb-3">
+          <div
+            className={`mb-3 flex flex-col gap-2 border-b pb-3 ${
+              IS_MC_PRODUCT ? 'border-gray-200' : 'border-emerald-800/30'
+            }`}
+          >
             <div className="flex flex-col items-center gap-1">
               <h2
                 id="home-live-rooms-heading"
-                className="text-center text-sm font-semibold text-emerald-100"
+                className={`text-center text-sm font-semibold ${
+                  IS_MC_PRODUCT ? 'text-gray-900' : 'text-emerald-100'
+                }`}
               >
                 開催中の部屋（参加中）
               </h2>
-              <p className="text-center text-[11px] leading-relaxed text-emerald-200/70">
+              <p
+                className={`text-center text-[11px] leading-relaxed ${
+                  IS_MC_PRODUCT ? 'text-gray-600' : 'text-emerald-200/70'
+                }`}
+              >
                 {viewOnly
                   ? 'いま誰かが入室している会の一覧です（閲覧のみ・入室はできません）。'
                   : 'いま誰かが入室している会です。タップするとその部屋へ入れます。'}
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-1.5" aria-label="並び替え">
-              <span className="text-[11px] font-medium text-emerald-200/80">開始時間</span>
+              <span
+                className={`text-[11px] font-medium ${
+                  IS_MC_PRODUCT ? 'text-gray-600' : 'text-emerald-200/80'
+                }`}
+              >
+                開始時間
+              </span>
               <LiveRoomSortButton
                 active={sortKey === 'new'}
                 label="NEW"
@@ -358,7 +383,13 @@ export function HomeRoomLinks({ viewOnly = false }: { viewOnly?: boolean }) {
                 label="OLD"
                 onClick={() => setSortKey('old')}
               />
-              <span className="ml-0.5 text-[11px] font-medium text-emerald-200/80">参加者</span>
+              <span
+                className={`ml-0.5 text-[11px] font-medium ${
+                  IS_MC_PRODUCT ? 'text-gray-600' : 'text-emerald-200/80'
+                }`}
+              >
+                参加者
+              </span>
               <LiveRoomSortButton
                 active={sortKey === 'participantsMany'}
                 label="多い"
@@ -384,7 +415,11 @@ export function HomeRoomLinks({ viewOnly = false }: { viewOnly?: boolean }) {
               </li>
             ))}
           </ul>
-          <p className="mt-3 text-center text-[11px] text-emerald-200/50">
+          <p
+            className={`mt-3 text-center text-[11px] ${
+              IS_MC_PRODUCT ? 'text-gray-500' : 'text-emerald-200/50'
+            }`}
+          >
             参加人数・表示名は約{POLL_MS / 1000}秒ごとに更新されます
           </p>
           <p className="mt-3 text-center text-[11px] leading-relaxed text-amber-300/90">

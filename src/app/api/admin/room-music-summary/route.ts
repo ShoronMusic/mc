@@ -2,6 +2,11 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getStyleAdminUserIds } from '@/lib/style-admin';
+import {
+  parseAdminProductFilter,
+  runAdminHistoryQueryScoped,
+  type AdminProductFilter,
+} from '@/lib/room-history-product';
 
 export const dynamic = 'force-dynamic';
 
@@ -96,37 +101,46 @@ async function requireAdmin() {
 async function buildSummary(
   supabase: NonNullable<Awaited<ReturnType<typeof createClient>>>,
   roomId: string,
-  hours: 1 | 2
+  hours: 1 | 2,
+  productFilter: AdminProductFilter = 'all',
 ) {
   const since = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
   const now = new Date().toISOString();
 
-  const { data: playData, error: playError } = await supabase
-    .from('room_playback_history')
-    .select('video_id, title, artist_name, style, played_at')
-    .eq('room_id', roomId)
-    .gte('played_at', since)
-    .order('played_at', { ascending: false })
-    .limit(600);
-  if (playError) {
-    if (playError.code === '42P01') {
+  const playRes = await runAdminHistoryQueryScoped((applyProductEq, scopedProduct) => {
+    let q = supabase
+      .from('room_playback_history')
+      .select('video_id, title, artist_name, style, played_at')
+      .eq('room_id', roomId)
+      .gte('played_at', since)
+      .order('played_at', { ascending: false })
+      .limit(600);
+    if (applyProductEq && scopedProduct) q = q.eq('product', scopedProduct);
+    return q;
+  }, productFilter);
+  if (playRes.error) {
+    if (playRes.error.code === '42P01') {
       throw new Error('room_playback_history テーブルがありません。');
     }
-    throw new Error(playError.message);
+    throw new Error(playRes.error.message ?? 'playback query failed');
   }
-  const plays = (playData ?? []) as PlaybackRow[];
+  const plays = (playRes.data ?? []) as PlaybackRow[];
 
-  const { data: chatData, error: chatError } = await supabase
-    .from('room_chat_log')
-    .select('body')
-    .eq('room_id', roomId)
-    .gte('created_at', since)
-    .order('created_at', { ascending: false })
-    .limit(1500);
-  if (chatError && chatError.code !== '42P01') {
-    throw new Error(chatError.message);
+  const chatRes = await runAdminHistoryQueryScoped((applyProductEq, scopedProduct) => {
+    let q = supabase
+      .from('room_chat_log')
+      .select('body')
+      .eq('room_id', roomId)
+      .gte('created_at', since)
+      .order('created_at', { ascending: false })
+      .limit(1500);
+    if (applyProductEq && scopedProduct) q = q.eq('product', scopedProduct);
+    return q;
+  }, productFilter);
+  if (chatRes.error && chatRes.error.code !== '42P01') {
+    throw new Error(chatRes.error.message ?? 'chat query failed');
   }
-  const chatBodies = ((chatData ?? []) as ChatRow[])
+  const chatBodies = ((chatRes.data ?? []) as ChatRow[])
     .map((r) => normalizeText(r.body))
     .filter(Boolean);
 
@@ -253,7 +267,7 @@ export async function POST(request: Request) {
   if ('error' in auth) return auth.error;
   const { admin, supabase, uid } = auth;
 
-  let body: { roomId?: string; hours?: number };
+  let body: { roomId?: string; hours?: number; product?: string };
   try {
     body = await request.json();
   } catch {
@@ -262,13 +276,14 @@ export async function POST(request: Request) {
   const roomId = typeof body?.roomId === 'string' ? body.roomId.trim() : '';
   const hoursRaw = Number(body?.hours ?? 2);
   const hours: 1 | 2 = hoursRaw === 1 ? 1 : 2;
+  const productFilter = parseAdminProductFilter(body?.product);
   if (!roomId) {
     return NextResponse.json({ error: 'roomId is required' }, { status: 400 });
   }
 
   let summary;
   try {
-    summary = await buildSummary(supabase, roomId, hours);
+    summary = await buildSummary(supabase, roomId, hours, productFilter);
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : 'summary generation failed' },

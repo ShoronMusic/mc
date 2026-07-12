@@ -1,9 +1,15 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
-import { songRowLooksJapaneseDomesticForAdminLibrary } from '@/lib/admin-library-jp-exclude';
 import { fetchMyPlayCountByVideoIds } from '@/lib/library-my-play-count';
 import { fetchSongsForLibraryArtistSelection } from '@/lib/library-search-query';
+import { compareLibraryReleaseSort } from '@/lib/library-release-sort-date';
+import {
+  defaultLibraryCatalogFilter,
+  filterSongRowsByLibraryCatalog,
+  parseLibraryCatalogFilter,
+} from '@/lib/song-catalog-scope';
+import { ensureWesternTreatedJpArtistCache } from '@/lib/western-treated-jp-artists';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,6 +24,8 @@ export type LibrarySongByArtistItem = {
   play_count: number | null;
   my_play_count: number | null;
   original_release_date: string | null;
+  /** 代表 video の YouTube 公開日（原盤日が無いときの新旧ソート用） */
+  youtube_published_at: string | null;
   spotify_popularity: number | null;
   video_id: string | null;
 };
@@ -55,9 +63,12 @@ export async function GET(request: Request) {
   }
 
   const sort = parseSort(searchParams.get('sort'));
+  const catalog = parseLibraryCatalogFilter(searchParams.get('catalog'), defaultLibraryCatalogFilter());
+
+  await ensureWesternTreatedJpArtistCache(admin);
 
   const SONG_SELECT =
-    'id, display_title, main_artist, song_title, style, genres, vocal, play_count, original_release_date, spotify_popularity';
+    'id, display_title, main_artist, song_title, style, genres, vocal, play_count, original_release_date, spotify_popularity, catalog_scope, music8_artist_slug, primary_artist_name_ja';
 
   let songsRaw: {
     id: string;
@@ -80,33 +91,51 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 
-  const songs = songsRaw.filter((s) => !songRowLooksJapaneseDomesticForAdminLibrary(s));
+  const songs = filterSongRowsByLibraryCatalog(songsRaw, catalog);
   const ids = songs.map((s) => s.id).filter(Boolean);
   const videoBySong = new Map<string, string>();
+  const ytPublishedBySong = new Map<string, string | null>();
   const songIdByVideo = new Map<string, string>();
 
   if (ids.length > 0) {
     const { data: vidRows, error: vidErr } = await admin
       .from('song_videos')
-      .select('song_id, video_id, variant, created_at')
+      .select('song_id, video_id, variant, created_at, youtube_published_at')
       .in('song_id', ids)
       .order('created_at', { ascending: true });
 
     if (vidErr && vidErr.code !== '42P01') {
       console.error('[api/library/songs-by-artist] song_videos', vidErr);
     } else if (Array.isArray(vidRows)) {
-      const rankedBySong = new Map<string, { videoId: string; rank: number }>();
-      for (const row of vidRows as { song_id: string; video_id: string; variant?: string | null }[]) {
+      const rankedBySong = new Map<
+        string,
+        { videoId: string; rank: number; youtubePublishedAt: string | null }
+      >();
+      for (const row of vidRows as {
+        song_id: string;
+        video_id: string;
+        variant?: string | null;
+        youtube_published_at?: string | null;
+      }[]) {
         if (!row.song_id || !row.video_id) continue;
         if (!songIdByVideo.has(row.video_id)) songIdByVideo.set(row.video_id, row.song_id);
         const nextRank = rankVariant(row.variant);
+        const yt =
+          typeof row.youtube_published_at === 'string' && row.youtube_published_at.trim()
+            ? row.youtube_published_at.trim()
+            : null;
         const cur = rankedBySong.get(row.song_id);
         if (!cur || nextRank < cur.rank) {
-          rankedBySong.set(row.song_id, { videoId: row.video_id, rank: nextRank });
+          rankedBySong.set(row.song_id, {
+            videoId: row.video_id,
+            rank: nextRank,
+            youtubePublishedAt: yt,
+          });
         }
       }
       for (const [songId, picked] of rankedBySong) {
         videoBySong.set(songId, picked.videoId);
+        ytPublishedBySong.set(songId, picked.youtubePublishedAt);
       }
     }
   }
@@ -148,14 +177,13 @@ export async function GET(request: Request) {
     play_count: s.play_count,
     my_play_count: myPlayBySong.get(s.id) ?? null,
     original_release_date: s.original_release_date,
+    youtube_published_at: ytPublishedBySong.get(s.id) ?? null,
     spotify_popularity:
       typeof s.spotify_popularity === 'number' && Number.isFinite(s.spotify_popularity)
         ? s.spotify_popularity
         : null,
     video_id: videoBySong.get(s.id) ?? null,
   }));
-
-  const nullsLast = (v: string | null | undefined) => (v == null || v === '' ? null : v);
 
   items.sort((a, b) => {
     if (sort === 'popularity') {
@@ -167,18 +195,23 @@ export async function GET(request: Request) {
       const pb = b.play_count ?? 0;
       if (pb !== pa) return pb - pa;
     } else {
-      const da = nullsLast(a.original_release_date);
-      const db = nullsLast(b.original_release_date);
-      if (da && db) {
-        const c = db.localeCompare(da);
-        if (c !== 0) return c;
-      } else if (db && !da) return 1;
-      else if (da && !db) return -1;
+      const c = compareLibraryReleaseSort(
+        {
+          originalReleaseDate: a.original_release_date,
+          youtubePublishedAt: a.youtube_published_at,
+        },
+        {
+          originalReleaseDate: b.original_release_date,
+          youtubePublishedAt: b.youtube_published_at,
+        },
+        'desc',
+      );
+      if (c !== 0) return c;
     }
     const ta = (a.display_title ?? a.song_title ?? '').trim();
     const tb = (b.display_title ?? b.song_title ?? '').trim();
     return ta.localeCompare(tb, 'en', { sensitivity: 'base' });
   });
 
-  return NextResponse.json({ items, sort });
+  return NextResponse.json({ items, sort, catalog });
 }

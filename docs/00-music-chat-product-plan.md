@@ -4,7 +4,7 @@
 > **目的**: 集客（基本無料プレイ）→ **ma** への利用促進 → 課金ユーザー増。  
 > **ステータス**: 企画進行中 — **認証: 案 A 確定**（2026-07-07）
 
-**関連**: `docs/00-ai-trial-and-billing-implementation.md`（お試し・課金） · `docs/00-prepaid-pricing-summary.md`（価格） · `docs/サービス基本情報.md` · `AGENTS.md`
+**関連**: `docs/musicchat-mc-handoff.md`（**実装進捗・別 PC 引き継ぎ**） · `docs/00-ai-trial-and-billing-implementation.md`（お試し・課金） · `docs/00-prepaid-pricing-summary.md`（価格） · `docs/サービス基本情報.md` · `AGENTS.md`
 
 ---
 
@@ -34,13 +34,27 @@
 | 項目 | **mc**（Music Chat） | **ma**（Music AI Chat） |
 |------|----------------------|-------------------------|
 | **ドメイン** | **musicchat.jp**（候補） | **musicai.jp**（本番稼働中） |
-| **訴求** | みんなで洋楽を聴く・選曲する同期チャット | AI が曲を解説・選曲を助ける |
+| **訴求** | 邦楽・洋楽 — みんなで聴く同期チャット（**完全無料**） | AI が洋楽を解説・選曲を助ける（**AI 有料**） |
 | **AI** | **一切なし** | お試し 10 曲 → プリペイド |
 | **UI トーン** | **白ベース**（予定） | **黒ベース**（現状） |
-| **料金** | 基本無料 | AI 利用で課金 |
 | **役割** | ファネル上段（集客） | ファネル下段（体験・課金） |
+| **曲種** | **邦楽 OK**（洋楽も可）。AI 解説なしのため ma より制限緩 | **洋楽中心**（邦楽は部屋設定・AI 原価都合で従来どおり） |
+| **料金** | **完全無料**（AI・課金 UI なし） | AI 利用で有料（お試し後プリペイド） |
+| **ma 導線** | **常に目立つ位置**に CTA（部屋・トップ・マイページ） | — |
 
-**ma** はすでに AI なしでも選曲・同期再生・通常チャットは無料（U1/U3）。**mc** はその体験を別ブランド・別ドメインで打ち出し、**ma** の課金ストーリーを汚さず集客する。
+**ma** はすでに AI なしでも選曲・同期再生・通常チャットは無料（U1/U3）。**mc** はその体験を **邦楽含む無料同期視聴**として別ブランドで打ち出し、**ma**（有料 AI）へ目立つ導線で送客する。
+
+### 1.1 確定事項（2026-07-07）
+
+| 項目 | 決定 |
+|------|------|
+| ルーム | **案2 — プロダクト別に部屋を分離**（§3.2）※案1は不採用 |
+| mc MVP UI | **白テーマ必須**（初版から） |
+| ドメイン | **musicchat.jp 取得予定** |
+| mc 料金 | **完全無料** |
+| ma 料金 | AI 有料（現行方針） |
+| 邦楽 | **mc は解禁**（日本普及・利用者規模を優先） |
+| ma 導線 | **常に目立つ表示**（控えめ CTA ではない） |
 
 ---
 
@@ -94,8 +108,11 @@
 | 項目 | mc | ma |
 |------|-----|-----|
 | `/api/ai/*` 等 | **404** | フル |
+| **Gemini（サーバー全体）** | **`getGeminiModel` が常に null**（視聴履歴の style/era 含む） | 通常 |
 | 部屋 AI UI · 課金 UI | 非表示 | 表示 |
 | LP · manifest · テーマ | 白・musicchat | 黒・musicaichat |
+
+mc の視聴履歴 **スタイル**: Music8 → キャッシュ → 取れなければ `Other`（Gemini なし）。**年代**: キャッシュ → YouTube 公開日の十年ラベル → 取れなければ `Other`。
 
 ### 2.3 禁止事項（レビュー時）
 
@@ -118,9 +135,59 @@ NEXT_PUBLIC_PRODUCT=musicchat     → mc（3003 / musicchat.jp）
 - **Git / Cursor**: **`E:\mc`**
 - **Vercel**: プロジェクト **2 本**（同一 Git、env のみ差替え）
 
-### 3.2 ルーム・Ably
+### 3.2 ルーム・Ably — **確定: 案2（プロダクト別・同時利用可）**
 
-**案1（推奨）**: ルーム ID 共用。mc で作った部屋は ma からも同 URL（AI は ma のみ）。
+> **2026-07-07 方針変更**: 案1（ルーム ID 共用）は **不採用**。実機で「ma の部屋 02 に mc 入室 → 追い出し・部屋名の強制同期」が起き、**別ブランドとして独立利用できない**ため。
+
+#### 起きていたこと（案1の問題）
+
+| 現象 | 原因 |
+|------|------|
+| mc で 02 に入ると ma から追い出される | 同一 Ably `room:02` + `room-session-takeover` が **プロダクトを区別しない** |
+| mc の部屋名が ma と同じになる | `room_gatherings` · `display_title` が **product 列なしで 1 本** |
+| 「同じ部屋が再度開かれたため…退室」 | 同一 `user_id` が **同じ roomId** を ma / mc で開いた |
+
+ユーザーは **アカウントは 1 つ**のまま、**ma の部屋と mc の部屋を同時に・自由に**使いたい。別アカウントは現実的でない。
+
+#### 案2の意味（確定）
+
+| レイヤ | ma | mc |
+|--------|-----|-----|
+| **アカウント** | 共通（同一 `user_id`） | 共通 |
+| **開催・参加の部屋** | **ma 用の会**（例: ma で部屋 02 主催） | **mc 用の会**（例: mc で部屋 09 主催） |
+| **同時利用** | **可** — ma/02 と mc/09 を **同じブラウザ・同じログイン**で並行 |
+| **Ably** | チャンネルに **product 接頭**（例: `musicaichat:room:02`） | `musicchat:room:09` |
+| **DB** | `room_gatherings` 等に **`product`** 列（`musicaichat` \| `musicchat`） |
+| **数字 ID** | 01〜09 等は **各プロダクト内で独立割当**（mc の 02 ≠ ma の 02 の中身） |
+
+**例（理想）**
+
+```
+ろん（1 アカウント）
+  ma  … localhost:3002/02  「開発中デバッグ」  AI あり
+  mc  … localhost:3003/09  「土曜オフ会」      無料・邦楽 OK
+        ↓ 同時に開いても追い出しなし・名前も連動しない
+```
+
+#### ma への導線（案2でも維持）
+
+- mc から **「AI 解説は ma で」** CTA は継続
+- **同じ room 番号への deep link は任意**（基本は ma トップ or 自分の ma 主催部屋へ誘導）
+- ユーザーが望めば ma で **別の部屋**を選んで AI 体験
+
+#### 実装タスク（Phase 1 — 未着手）
+
+- [x] `room_gatherings.product`（+ ロビー `display_title` も product スコープ）
+- [x] Ably チャンネル名を `getAblyRoomChannel(roomId)` で product 付与
+- [x] `room-session-takeover` · `SessionReplacedNotice` を **product 内のみ**有効
+- [x] トップの開催中一覧・主催 API を **product でフィルタ**（Step 1 で `room-gatherings` / `room-live-status`）
+- [x] 既存 ma データは `product = musicaichat` として移行
+
+**邦楽（mc）**: mc 集会のみ邦楽スキップ緩和（product-mode + 履歴 API）。
+
+#### 案1（記録・不採用理由）
+
+同一 `room/03` URL で ma・mc が同じチャット — クロスプロモは楽だが、**同一ユーザー・同時利用と両立しない**ため撤回。
 
 ### 3.3 認証 — **確定: 案 A**
 
@@ -144,12 +211,23 @@ Redirect URLs: 本番 **musicai.jp + musicchat.jp** · 開発 **localhost:3002 +
 
 ---
 
-## 4. ma への転換導線（mc から）
+## 4. ma への転換導線（mc から）— **常時・目立つ表示（確定）**
 
-1. 部屋内 CTA — 「AI 解説 → musicai.jp で無料 10 曲」
-2. 登録後 — 同一アカウントで **ma** のお試しが使える旨
-3. `https://musicai.jp/room/03?from=musicchat&promo=trial`
-4. お試し 10 曲 · AI API は **ma のみ**
+| 置き場所 | 内容 |
+|----------|------|
+| **部屋ヘッダー / UserBar 付近** | 常時バナー or 目立つボタン — 「AI が曲を解説 → Music AI Chat（無料 10 曲）」 |
+| **トップ / LP** | mc＝完全無料 · ma＝AI 有料 の対比を明示 |
+| **マイページ** | 同一アカウントで ma が使える旨 + ma リンク |
+| **深リンク** | `https://musicai.jp/room/{同じroomId}?from=musicchat&promo=trial` |
+
+**すみ分けメッセージ（案）**
+
+- **mc**: 邦楽も洋楽も、同期視聴・チャットは **ずっと無料**
+- **ma**: AI 解説・@ 質問は **お試し 10 曲 → 有料**。選曲だけなら mc で十分
+
+お試し 10 曲 · AI API は **ma のみ**。mc 側で AI UI / API を出さない。
+
+計測: `from=musicchat` · analytics · 将来 `referral_source` 等。
 
 ---
 
@@ -161,14 +239,17 @@ Ably / YouTube / Supabase 共用 · ブランド明示 · SEO 役割分担（mc�
 
 ## 6. ローカル開発
 
-| 略称 | コマンド（実装後） | URL |
-|:----:|-------------------|-----|
-| **ma** | `npm run dev` | http://localhost:3002 |
-| **mc** | `npm run dev:chat`（予定） | http://localhost:3003 |
+| 略称 | コマンド | URL |
+|:----:|----------|-----|
+| **ma** | `npm run dev` | http://localhost:**3002** |
+| **mc** | `npm run dev:chat` | http://localhost:**3003** |
+| **両方** | `npm run dev:both` | 3002 + 3003（**ターミナル 1 本**） |
 
-- **ディレクトリは常に `E:\mc`**
-- 共用機能の変更 → **3002 と 3003 両方**でプレビュー推奨
-- AI のみの変更 → 3002 のみで可
+- **mc を見るときは 3003**（`dev:chat` / `dev:both` が `NEXT_PUBLIC_PRODUCT=musicchat` を付与）
+- **ma は 3002** のまま（env 未設定＝ma）
+- いま **3002 だけ動いている** → 3003 は `ERR_CONNECTION_REFUSED`（mc サーバー未起動）
+- **ターミナル 1 本**: 既存の `npm run dev` を **Ctrl+C** で止めてから `npm run dev:both`
+- Phase 0 済: `product-mode.ts` · middleware AI/admin 404 · `data-theme=light`（body 白。部屋内 gray 直書きは Phase 1）
 
 ---
 
@@ -185,3 +266,12 @@ Phase 0〜3 は初版 §7・§8 と同旨（`product-mode` · Redirect URL · mc
 | 2026-07-07 | 初版 |
 | 2026-07-07 | §2.0 共通化 · §3.3 認証案 A · §3.4 デプロイ |
 | 2026-07-07 | **§0 呼称確定 — ma＝musicaichat、mc＝musicchat、`E:\mc` は作業 dir のまま** |
+| 2026-07-07 | §1.1 確定 — 邦楽 OK・mc 完全無料・白テーマ MVP 必須・案1 ルーム共用・ma 導線常時目立つ · musicchat.jp 取得予定 |
+| 2026-07-07 | **Phase 0 実装** — `product-mode` · `npm run dev:chat`（3003）· middleware · 白テーマ土台 |
+| 2026-07-07 | `dev:both` · mc 用 `distDir=.next-mc`（同時 dev の 404 回避） |
+| 2026-07-07 | **§3.2 方針変更 — 案1 撤回 → 案2（プロダクト別部屋・同時利用可）** |
+| 2026-07-07 | **案2 Step 1** — `room-product-scope` · SQL 手順 `docs/supabase-room-gatherings-product-column.md` · 集会 API / live 一覧 / Ably チャンネル接頭 · stale 終了の product スコープ |
+| 2026-07-07 | **案2 Step 2** — `room-presence` / `room-auth-session` / `room-lobby-message` · セッション奪取ストレージの product 分離 |
+| 2026-07-07 | **案2 Step 3** — `room-session-takeover` · 入室復元・claim/replaced ストレージの product 分離 · `SessionReplacedNotice` mc スタイル |
+| 2026-07-07 | **案2 Step 4** — mc 部屋内 AI UI 非表示 · 白テーマ · ma 誘導バナー · チャットバブルライト化 · 邦楽視聴履歴の product スコープ緩和 |
+| 2026-07-08 | **mc AI 原価ゼロ** — `isMcGeminiDisabled()` + `getGeminiModel` 一括オフ（視聴履歴 style/era の Gemini 含む） |

@@ -1,5 +1,14 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import {
+  getRoomHistoryProductId,
+  runRoomHistoryQueryScoped,
+  withRoomHistoryProductEq,
+} from '@/lib/room-history-product';
+import {
+  runGatheringQueryScoped,
+  withGatheringProductEq,
+} from '@/lib/room-product-scope';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,7 +29,7 @@ function safeParticipationDisplayName(raw: unknown): string | null {
 }
 
 /**
- * GET: ログインユーザーの参加履歴
+ * GET: ログインユーザーの参加履歴（現在 product のみ）
  */
 export async function GET() {
   const supabase = await createClient();
@@ -35,11 +44,18 @@ export async function GET() {
     return NextResponse.json({ items: [] as unknown[] });
   }
 
-  const { data, error } = await supabase
-    .from('user_room_participation_history')
-    .select('id, room_id, gathering_id, gathering_title, display_name, joined_at, left_at')
-    .order('joined_at', { ascending: false })
-    .limit(200);
+  const historyProduct = getRoomHistoryProductId();
+  const listRes = await runRoomHistoryQueryScoped((scopeProduct) => {
+    let q = supabase
+      .from('user_room_participation_history')
+      .select('id, room_id, gathering_id, gathering_title, display_name, joined_at, left_at, product')
+      .eq('user_id', user.id)
+      .order('joined_at', { ascending: false })
+      .limit(200);
+    if (scopeProduct) q = withRoomHistoryProductEq(q, historyProduct);
+    return q;
+  });
+  const { data, error } = listRes;
 
   if (error) {
     if (error.code === '42P01') {
@@ -52,16 +68,14 @@ export async function GET() {
       );
     }
     console.error('[user-room-participation GET]', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: error.message ?? 'query failed' }, { status: 500 });
   }
 
-  return NextResponse.json({ items: data ?? [] });
+  return NextResponse.json({ items: data ?? [], product: historyProduct });
 }
 
 /**
  * POST body: { action: 'join' | 'leave', roomId: string, displayName?: string }
- * - join: 未終了の同一 room + gathering の行がなければ1件作成
- * - leave: 直近の未終了行を終了
  */
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -90,27 +104,38 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'roomId が不正です。' }, { status: 400 });
   }
 
+  const historyProduct = getRoomHistoryProductId();
+
   if (action === 'join') {
-    const { data: live } = await supabase
-      .from('room_gatherings')
-      .select('id, title')
-      .eq('room_id', roomId)
-      .eq('status', 'live')
-      .order('started_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    const liveRes = await runGatheringQueryScoped((scopeProduct) => {
+      let q = supabase
+        .from('room_gatherings')
+        .select('id, title')
+        .eq('room_id', roomId)
+        .eq('status', 'live')
+        .order('started_at', { ascending: false })
+        .limit(1);
+      if (scopeProduct) q = withGatheringProductEq(q);
+      return q.maybeSingle();
+    });
+    const live = liveRes.data as { id?: string; title?: string } | null;
 
     const gatheringId = typeof live?.id === 'string' ? live.id : null;
     const gatheringTitle = typeof live?.title === 'string' ? live.title : null;
 
-    const { data: openRows, error: openErr } = await supabase
-      .from('user_room_participation_history')
-      .select('id')
-      .eq('user_id', user.id)
-      .eq('room_id', roomId)
-      .is('left_at', null)
-      .eq('gathering_id', gatheringId)
-      .limit(1);
+    const openRes = await runRoomHistoryQueryScoped((scopeProduct) => {
+      let q = supabase
+        .from('user_room_participation_history')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('room_id', roomId)
+        .is('left_at', null)
+        .eq('gathering_id', gatheringId)
+        .limit(1);
+      if (scopeProduct) q = withRoomHistoryProductEq(q, historyProduct);
+      return q;
+    });
+    const { data: openRows, error: openErr } = openRes;
 
     if (openErr && openErr.code !== '42P01') {
       console.error('[user-room-participation join] open check', openErr);
@@ -128,7 +153,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true, skipped: true });
     }
 
-    const { error: insErr } = await supabase.from('user_room_participation_history').insert({
+    const insertRow = {
       user_id: user.id,
       room_id: roomId,
       gathering_id: gatheringId,
@@ -136,7 +161,13 @@ export async function POST(request: Request) {
       display_name: participationDisplayName,
       joined_at: new Date().toISOString(),
       left_at: null,
-    });
+      product: historyProduct,
+    };
+    let { error: insErr } = await supabase.from('user_room_participation_history').insert(insertRow);
+    if (insErr && (insErr.code === '42703' || insErr.message?.includes('product'))) {
+      const { product: _p, ...legacy } = insertRow;
+      ({ error: insErr } = await supabase.from('user_room_participation_history').insert(legacy));
+    }
 
     if (insErr) {
       if (insErr.code === '42P01') {
@@ -155,14 +186,19 @@ export async function POST(request: Request) {
   }
 
   if (action === 'leave') {
-    const { data: openRows, error: selErr } = await supabase
-      .from('user_room_participation_history')
-      .select('id')
-      .eq('user_id', user.id)
-      .eq('room_id', roomId)
-      .is('left_at', null)
-      .order('joined_at', { ascending: false })
-      .limit(1);
+    const openRes = await runRoomHistoryQueryScoped((scopeProduct) => {
+      let q = supabase
+        .from('user_room_participation_history')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('room_id', roomId)
+        .is('left_at', null)
+        .order('joined_at', { ascending: false })
+        .limit(1);
+      if (scopeProduct) q = withRoomHistoryProductEq(q, historyProduct);
+      return q;
+    });
+    const { data: openRows, error: selErr } = openRes;
 
     if (selErr) {
       if (selErr.code === '42P01') {
@@ -175,7 +211,7 @@ export async function POST(request: Request) {
         );
       }
       console.error('[user-room-participation leave] select', selErr);
-      return NextResponse.json({ error: selErr.message }, { status: 500 });
+      return NextResponse.json({ error: selErr.message ?? 'query failed' }, { status: 500 });
     }
     const targetId = openRows?.[0]?.id;
     if (!targetId) return NextResponse.json({ ok: true, skipped: true });

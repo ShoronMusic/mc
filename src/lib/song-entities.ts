@@ -21,10 +21,19 @@ import {
   resolveSongStyleForOverwriteFromMusic8,
   type Music8SongExtract,
 } from '@/lib/music8-song-fields';
-import { ensureArtistForSongRegistration } from '@/lib/artist-selection-register';
+import { ensureArtistForSongRegistration, ensureDomesticArtistForSongRegistration } from '@/lib/artist-selection-register';
 import { normalizeArtistAndTitleForRegistration } from '@/lib/song-registration-normalize';
 import { scheduleSongSelectionSpotifyEnrich } from '@/lib/song-selection-spotify-enrich';
 import { syncSongCreditsFromSongId } from '@/lib/song-credits-sync';
+import {
+  normalizeSongCatalogScope,
+  resolveSongCatalogScope,
+  type SongCatalogScope,
+} from '@/lib/song-catalog-scope';
+import {
+  shouldPersistVideoToSongDatabase,
+  type SongDbRegistrationInput,
+} from '@/lib/song-db-registration-gate';
 
 export interface UpsertSongAndVideoParams {
   supabase: SupabaseClient | null;
@@ -37,8 +46,20 @@ export interface UpsertSongAndVideoParams {
   youtubePublishedAtIso?: string | null;
   /** 原盤リリース日 `YYYY-MM-DD` → `songs.original_release_date`（既に値がある行は更新しない） */
   originalReleaseDateIso?: string | null;
+  /** 曲名の日本語読み → `songs.song_title_ja`（空欄のときのみ補完） */
+  songTitleJa?: string | null;
   /** Music8 曲 JSON の軽量スナップショット → `songs.music8_song_data`（取得できたときのみ上書き更新） */
   music8SongData?: Record<string, unknown> | null;
+  /** 洋楽 / 邦楽スコープ（`songs.catalog_scope`）。未指定時はメタから推定。 */
+  catalogScope?: SongCatalogScope | null;
+  /** 新規登録前の音楽判定（映画・ゲーム等は曲 DB に載せない） */
+  registrationCheck?: SongDbRegistrationInput | null;
+  /** 邦楽ライト DB 経路: Music8 同期・Spotify enrich をスキップ */
+  domesticLightDb?: boolean;
+  /** 邦楽: チャンネル英字表記からの slug ヒント（例: sakanaction） */
+  artistSlugHint?: string | null;
+  /** MB 等から取得したジャンル（空欄時のみ songs.genres に補完） */
+  genres?: string[] | null;
 }
 
 type ParsedArtistInfo = {
@@ -108,6 +129,66 @@ async function patchSongOriginalReleaseDateIfUnset(
   await patchSongOriginalReleaseDate(supabase, songId, d);
 }
 
+/** 空欄のときだけ `song_title_ja` を補完 */
+async function patchSongTitleJaIfUnset(
+  supabase: SupabaseClient,
+  songId: string,
+  songTitleJa: string | null | undefined,
+): Promise<void> {
+  const v = (songTitleJa ?? '').trim();
+  if (!v) return;
+
+  const { data, error } = await supabase
+    .from('songs')
+    .select('song_title_ja')
+    .eq('id', songId)
+    .maybeSingle();
+
+  if (error) {
+    if (error.code === '42703' || error.code === '42P01') return;
+    console.error('[song-entities] patchSongTitleJaIfUnset select', error.code, error.message);
+    return;
+  }
+
+  const cur = (data as { song_title_ja?: string | null } | null)?.song_title_ja;
+  if (cur != null && String(cur).trim() !== '') return;
+
+  const { error: u } = await supabase.from('songs').update({ song_title_ja: v }).eq('id', songId);
+  if (u?.code === '42703' || u?.code === '42P01') return;
+  if (u) {
+    console.error('[song-entities] patchSongTitleJaIfUnset update', u.code, u.message);
+  }
+}
+
+async function patchSongGenresIfUnset(
+  supabase: SupabaseClient,
+  songId: string,
+  genres: string[] | null | undefined,
+): Promise<void> {
+  const list = (genres ?? []).map((g) => g.trim().toLowerCase()).filter(Boolean);
+  if (list.length === 0) return;
+
+  const { data, error } = await supabase
+    .from('songs')
+    .select('genres')
+    .eq('id', songId)
+    .maybeSingle();
+  if (error) {
+    if (error.code === '42703' || error.code === '42P01') return;
+    console.error('[song-entities] patchSongGenresIfUnset select', error.code, error.message);
+    return;
+  }
+
+  const cur = (data as { genres?: string[] | null } | null)?.genres;
+  if (Array.isArray(cur) && cur.length > 0) return;
+
+  const { error: uErr } = await supabase.from('songs').update({ genres: list }).eq('id', songId);
+  if (uErr?.code === '42703' || uErr?.code === '42P01') return;
+  if (uErr) {
+    console.error('[song-entities] patchSongGenresIfUnset update', uErr.code, uErr.message);
+  }
+}
+
 async function patchSongMusic8SongData(
   supabase: SupabaseClient,
   songId: string,
@@ -119,6 +200,38 @@ async function patchSongMusic8SongData(
   if (error?.code === '42703' || error?.code === '42P01') return;
   if (error) {
     console.error('[song-entities] patchSongMusic8SongData update', error.code, error.message);
+  }
+}
+
+/** `unknown` の行だけ `catalog_scope` を補完（確定値は上書きしない）。 */
+async function patchSongCatalogScopeIfUpgradeable(
+  supabase: SupabaseClient,
+  songId: string,
+  scope: SongCatalogScope | null | undefined,
+): Promise<void> {
+  const next = scope ? normalizeSongCatalogScope(scope) : null;
+  if (!next || next === 'unknown') return;
+
+  const { data, error } = await supabase
+    .from('songs')
+    .select('catalog_scope')
+    .eq('id', songId)
+    .maybeSingle();
+  if (error) {
+    if (error.code === '42703' || error.code === '42P01') return;
+    console.error('[song-entities] patchSongCatalogScope select', error.code, error.message);
+    return;
+  }
+
+  const cur = normalizeSongCatalogScope(
+    (data as { catalog_scope?: string | null } | null)?.catalog_scope,
+  );
+  if (cur !== 'unknown') return;
+
+  const { error: uErr } = await supabase.from('songs').update({ catalog_scope: next }).eq('id', songId);
+  if (uErr?.code === '42703' || uErr?.code === '42P01') return;
+  if (uErr) {
+    console.error('[song-entities] patchSongCatalogScope update', uErr.code, uErr.message);
   }
 }
 
@@ -563,13 +676,21 @@ export async function upsertSongAndVideo(params: UpsertSongAndVideoParams): Prom
     performanceId,
     youtubePublishedAtIso,
     originalReleaseDateIso,
+    songTitleJa,
     music8SongData,
+    catalogScope,
+    registrationCheck,
+    domesticLightDb,
+    artistSlugHint,
+    genres,
   } = params;
   if (!supabase || !videoId || !videoId.trim()) return null;
 
+  const isDomesticLight = domesticLightDb === true;
+
   let effectiveMainArtist = (mainArtist ?? '').trim() || null;
   let effectiveSongTitle = (songTitle ?? '').trim() || null;
-  if (effectiveMainArtist || music8SongData) {
+  if (!isDomesticLight && (effectiveMainArtist || music8SongData)) {
     const resolved = await resolveMainArtistForNewSongRegistration({
       youtubeMainArtist: effectiveMainArtist,
       music8SongSnapshot: music8SongData ?? null,
@@ -579,15 +700,26 @@ export async function upsertSongAndVideo(params: UpsertSongAndVideoParams): Prom
   }
 
   let registrationArtistId: string | null = null;
-  const normalized = normalizeArtistAndTitleForRegistration(effectiveMainArtist, effectiveSongTitle);
-  if (normalized) {
-    effectiveMainArtist = normalized.displayArtist;
-    effectiveSongTitle = normalized.songTitle;
+  if (isDomesticLight && effectiveMainArtist && effectiveSongTitle) {
     try {
-      const ensured = await ensureArtistForSongRegistration(supabase, normalized.displayArtist);
+      const ensured = await ensureDomesticArtistForSongRegistration(supabase, effectiveMainArtist, {
+        slugHint: artistSlugHint,
+      });
       if (ensured) registrationArtistId = ensured.artistId;
     } catch (e) {
-      console.warn('[song-entities] ensureArtistForSongRegistration', e);
+      console.warn('[song-entities] ensureDomesticArtistForSongRegistration', e);
+    }
+  } else {
+    const normalized = normalizeArtistAndTitleForRegistration(effectiveMainArtist, effectiveSongTitle);
+    if (normalized) {
+      effectiveMainArtist = normalized.displayArtist;
+      effectiveSongTitle = normalized.songTitle;
+      try {
+        const ensured = await ensureArtistForSongRegistration(supabase, normalized.displayArtist);
+        if (ensured) registrationArtistId = ensured.artistId;
+      } catch (e) {
+        console.warn('[song-entities] ensureArtistForSongRegistration', e);
+      }
     }
   }
 
@@ -596,6 +728,14 @@ export async function upsertSongAndVideo(params: UpsertSongAndVideoParams): Prom
 
   const trimmedVideoId = videoId.trim();
   const canonicalTitle = normalizeDisplayTitle(displayTitle);
+  const resolvedCatalogScope =
+    catalogScope != null
+      ? normalizeSongCatalogScope(catalogScope)
+      : resolveSongCatalogScope({
+          mainArtist: effectiveMainArtist,
+          songTitle: effectiveSongTitle,
+          displayTitle: canonicalTitle,
+        });
 
   // 1) まず既存の song_videos から song_id を再利用（同じ videoId で songs の重複作成を防ぐ）
   let songId: string | null = null;
@@ -640,17 +780,36 @@ export async function upsertSongAndVideo(params: UpsertSongAndVideoParams): Prom
     }
   }
 
+  if (!songId && registrationCheck) {
+    const gate = shouldPersistVideoToSongDatabase(registrationCheck);
+    if (!gate.persist) {
+      if (process.env.DEBUG_SONG_DB_REGISTRATION_GATE === '1') {
+        console.info('[song-entities] skip song DB registration', {
+          videoId: trimmedVideoId,
+          reason: gate.reason,
+          title: registrationCheck.rawTitle?.slice(0, 120),
+          categoryId: registrationCheck.categoryId,
+        });
+      }
+      return null;
+    }
+  }
+
   if (!songId) {
     // 3) どちらにも無ければ insert（正規化したタイトルで1曲1行）
     const [canonArtist, ...canonTitleParts] = canonicalTitle.split(' - ');
     const canonSongTitle = canonTitleParts.join(' - ').trim() || (effectiveSongTitle ?? '').trim();
+    const insertPayload: Record<string, unknown> = {
+      main_artist: (canonArtist ?? effectiveMainArtist ?? '').trim() || null,
+      song_title: canonSongTitle || null,
+      display_title: canonicalTitle,
+    };
+    if (resolvedCatalogScope !== 'unknown') {
+      insertPayload.catalog_scope = resolvedCatalogScope;
+    }
     const { data: insertedSong, error: songInsertError } = await supabase
       .from('songs')
-      .insert({
-        main_artist: (canonArtist ?? effectiveMainArtist ?? '').trim() || null,
-        song_title: canonSongTitle || null,
-        display_title: canonicalTitle,
-      })
+      .insert(insertPayload)
       .select('id')
       .single();
 
@@ -699,25 +858,29 @@ export async function upsertSongAndVideo(params: UpsertSongAndVideoParams): Prom
   }
 
   await patchSongOriginalReleaseDateIfUnset(supabase, songId, originalReleaseDateIso);
-  await patchSongMusic8SongData(supabase, songId, music8SongData ?? null);
-  if (music8SongData && typeof music8SongData === 'object') {
-    const ex = extractMusic8SongFieldsFromPersistedSnapshot(music8SongData);
-    if (ex) {
-      try {
-        await syncSongLibraryColumnsFromMusic8Extract(supabase, songId, ex, music8SongData);
-        await patchSongFutureColumnsFromMusic8(supabase, songId, ex, music8SongData);
-      } catch (e) {
-        console.warn('[song-entities] syncSongLibraryColumnsFromMusic8Extract (upsert)', e);
+  await patchSongTitleJaIfUnset(supabase, songId, songTitleJa);
+  await patchSongGenresIfUnset(supabase, songId, genres);
+  if (!isDomesticLight) {
+    await patchSongMusic8SongData(supabase, songId, music8SongData ?? null);
+    if (music8SongData && typeof music8SongData === 'object') {
+      const ex = extractMusic8SongFieldsFromPersistedSnapshot(music8SongData);
+      if (ex) {
+        try {
+          await syncSongLibraryColumnsFromMusic8Extract(supabase, songId, ex, music8SongData);
+          await patchSongFutureColumnsFromMusic8(supabase, songId, ex, music8SongData);
+        } catch (e) {
+          console.warn('[song-entities] syncSongLibraryColumnsFromMusic8Extract (upsert)', e);
+        }
       }
     }
+    try {
+      await syncArtistMasterFromMusic8(supabase, songId, effectiveMainArtist, music8SongData ?? null);
+    } catch (e) {
+      console.warn('[song-entities] syncArtistMasterFromMusic8 (upsert)', e);
+    }
   }
-  try {
-    await syncArtistMasterFromMusic8(supabase, songId, effectiveMainArtist, music8SongData ?? null);
-  } catch (e) {
-    console.warn('[song-entities] syncArtistMasterFromMusic8 (upsert)', e);
-  }
-  if (process.env.MUSIC8_BULK_SKIP_SONG_CREDITS?.trim() === '1') {
-    // 一括取り込み: 全 artists 索引 + Spotify API で1曲目が長時間ブロックするのを避ける
+  if (process.env.MUSIC8_BULK_SKIP_SONG_CREDITS?.trim() === '1' || isDomesticLight) {
+    // 一括取り込み / 邦楽ライト DB: Spotify・credits 同期はスキップ
   } else {
     try {
       await syncSongCreditsFromSongId(supabase, songId, true);
@@ -736,7 +899,23 @@ export async function upsertSongAndVideo(params: UpsertSongAndVideoParams): Prom
     }
   }
 
-  scheduleSongSelectionSpotifyEnrich(songId);
+  if (isDomesticLight && artistSlugHint?.trim() && songId) {
+    const slug = artistSlugHint.trim().toLowerCase();
+    const { error: slugErr } = await supabase
+      .from('songs')
+      .update({ music8_artist_slug: slug })
+      .eq('id', songId)
+      .is('music8_artist_slug', null);
+    if (slugErr?.code !== '42703' && slugErr?.code !== '42P01' && slugErr) {
+      console.warn('[song-entities] patch domestic music8_artist_slug', slugErr.message);
+    }
+  }
+
+  if (!isDomesticLight) {
+    scheduleSongSelectionSpotifyEnrich(songId);
+  }
+
+  await patchSongCatalogScopeIfUpgradeable(supabase, songId, resolvedCatalogScope);
 
   return songId;
 }

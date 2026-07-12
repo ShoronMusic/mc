@@ -8,6 +8,7 @@ import {
   toggleCommentPackSlot,
   type CommentPackSlotSelection,
 } from '@/lib/comment-pack-slots';
+import { IS_MC_PRODUCT } from '@/lib/product-branding';
 
 export type OwnerRoomAiSettingsPanelProps = {
   ownerAiCharacterJoinEnabled: boolean;
@@ -43,6 +44,8 @@ export function OwnerRoomAiSettingsPanel({
   useEffect(() => {
     setOwnerAiCharacterNameInput(ownerAiCharacterName);
   }, [ownerAiCharacterName]);
+
+  if (IS_MC_PRODUCT) return null;
 
   const hasAnyControl =
     onOwnerAiCharacterJoinToggle ||

@@ -61,5 +61,16 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     );
   }
 
-  return <>{children}</>;
+  return (
+    <div
+      className={
+        // PC では管理画面コンテンツを広めに（各ページの max-w-3xl〜7xl を上書き）
+        'min-h-screen w-full ' +
+        '[&_main.mx-auto]:w-full [&_main.mx-auto]:max-w-[1600px] ' +
+        '[&_div.mx-auto]:w-full [&_div.mx-auto]:max-w-[1600px]'
+      }
+    >
+      {children}
+    </div>
+  );
 }

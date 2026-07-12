@@ -2,6 +2,11 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getStyleAdminUserIds } from '@/lib/style-admin';
+import {
+  normalizeRoomHistoryProduct,
+  parseAdminProductFilter,
+  runAdminHistoryQueryScoped,
+} from '@/lib/room-history-product';
 
 export const dynamic = 'force-dynamic';
 
@@ -75,6 +80,7 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const roomId = safeRoomId(searchParams.get('roomId') ?? '');
   const dateJst = (searchParams.get('date') ?? '').trim();
+  const productFilter = parseAdminProductFilter(searchParams.get('product'));
   if (!roomId) {
     return NextResponse.json({ error: 'roomId が必要です。' }, { status: 400 });
   }
@@ -83,14 +89,19 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'date は YYYY-MM-DD（JST の暦日）で指定してください。' }, { status: 400 });
   }
 
-  const { data, error } = await admin
-    .from('room_access_log')
-    .select('accessed_at, display_name, is_guest, user_id')
-    .eq('room_id', roomId)
-    .gte('accessed_at', range.startIso)
-    .lt('accessed_at', range.endIso)
-    .order('accessed_at', { ascending: true })
-    .limit(MAX_ROWS + 1);
+  const detailRes = await runAdminHistoryQueryScoped((applyProductEq, scopedProduct) => {
+    let q = admin
+      .from('room_access_log')
+      .select('accessed_at, display_name, is_guest, user_id, product')
+      .eq('room_id', roomId)
+      .gte('accessed_at', range.startIso)
+      .lt('accessed_at', range.endIso)
+      .order('accessed_at', { ascending: true })
+      .limit(MAX_ROWS + 1);
+    if (applyProductEq && scopedProduct) q = q.eq('product', scopedProduct);
+    return q;
+  }, productFilter);
+  const { data, error } = detailRes;
 
   if (error) {
     if (error.code === '42P01') {
@@ -111,13 +122,18 @@ export async function GET(request: Request) {
     display_name: string;
     is_guest: boolean;
     user_id: string | null;
+    product?: string;
   }[];
   const truncated = list.length > MAX_ROWS;
-  const rows = truncated ? list.slice(0, MAX_ROWS) : list;
+  const rows = (truncated ? list.slice(0, MAX_ROWS) : list).map((r) => ({
+    ...r,
+    product: normalizeRoomHistoryProduct(r.product),
+  }));
 
   return NextResponse.json({
     roomId,
     date_jst: dateJst,
+    product: productFilter,
     rows,
     truncated,
     maxRows: MAX_ROWS,

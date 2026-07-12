@@ -3,6 +3,7 @@
  */
 
 import { createAdminClient } from '@/lib/supabase/admin';
+import { runGatheringQueryScoped, withGatheringProductEq } from '@/lib/room-product-scope';
 
 export type LiveGatheringRef = {
   id: string;
@@ -16,14 +17,18 @@ export async function fetchLiveGatheringForRoom(roomId: string): Promise<LiveGat
   const admin = createAdminClient();
   if (!admin) return null;
 
-  const { data, error } = await admin
-    .from('room_gatherings')
-    .select('id, created_by, title')
-    .eq('room_id', rid)
-    .eq('status', 'live')
-    .order('started_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const liveRes = await runGatheringQueryScoped((scopeProduct) => {
+    let q = admin
+      .from('room_gatherings')
+      .select('id, created_by, title')
+      .eq('room_id', rid)
+      .eq('status', 'live')
+      .order('started_at', { ascending: false })
+      .limit(1);
+    if (scopeProduct) q = withGatheringProductEq(q);
+    return q.maybeSingle();
+  });
+  const { data, error } = liveRes;
 
   if (error) {
     if (error.code !== '42P01') {
@@ -31,14 +36,9 @@ export async function fetchLiveGatheringForRoom(roomId: string): Promise<LiveGat
     }
     return null;
   }
-  if (!data || typeof data.id !== 'string') return null;
-  const createdBy =
-    typeof (data as { created_by?: unknown }).created_by === 'string'
-      ? (data as { created_by: string }).created_by
-      : null;
-  const title =
-    typeof (data as { title?: unknown }).title === 'string'
-      ? (data as { title: string }).title
-      : null;
-  return { id: data.id, createdBy, title };
+  if (!data || typeof (data as { id?: unknown }).id !== 'string') return null;
+  const row = data as { id: string; created_by?: string | null; title?: string | null };
+  const createdBy = typeof row.created_by === 'string' ? row.created_by : null;
+  const title = typeof row.title === 'string' ? row.title : null;
+  return { id: row.id, createdBy, title };
 }

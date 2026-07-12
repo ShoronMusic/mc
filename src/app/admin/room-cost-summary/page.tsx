@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { downloadCsvFile } from '@/lib/admin-csv-download';
 import { AdminMenuBar } from '@/components/admin/AdminMenuBar';
+import { AdminProductFilterSelect } from '@/components/admin/AdminProductFilterSelect';
 import { formatGeminiCostJpyApprox, type GeminiUsageTokenSummary } from '@/lib/gemini-pricing';
 import { formatInfraCostJpyApprox } from '@/lib/infra-cost-estimates';
 
@@ -49,6 +50,7 @@ type OwnerCostRow = {
 export default function AdminRoomCostSummaryPage() {
   const [days, setDays] = useState(30);
   const [roomFilter, setRoomFilter] = useState('');
+  const [productFilter, setProductFilter] = useState<'all' | 'musicaichat' | 'musicchat'>('all');
   const [view, setView] = useState<'rooms' | 'owners'>('rooms');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -72,7 +74,7 @@ export default function AdminRoomCostSummaryPage() {
     setLoading(true);
     setError(null);
     try {
-      const params = new URLSearchParams({ days: String(days) });
+      const params = new URLSearchParams({ days: String(days), product: productFilter });
       if (roomFilter.trim()) params.set('roomId', roomFilter.trim());
       const res = await fetch(`/api/admin/room-cost-summary?${params}`, { credentials: 'include' });
       const data = await res.json().catch(() => ({}));
@@ -92,7 +94,7 @@ export default function AdminRoomCostSummaryPage() {
     } finally {
       setLoading(false);
     }
-  }, [days, roomFilter]);
+  }, [days, roomFilter, productFilter]);
 
   useEffect(() => {
     void loadList();
@@ -206,6 +208,7 @@ export default function AdminRoomCostSummaryPage() {
             className="ml-2 w-20 rounded border border-gray-700 bg-gray-900 px-2 py-1 text-gray-100"
           />
         </label>
+        <AdminProductFilterSelect value={productFilter} onChange={setProductFilter} />
         <div className="flex rounded border border-gray-700 text-sm">
           <button
             type="button"

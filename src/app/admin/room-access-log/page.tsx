@@ -3,10 +3,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { AdminMenuBar } from '@/components/admin/AdminMenuBar';
+import {
+  AdminProductFilterSelect,
+  productBadgeClass,
+  productBadgeLabel,
+} from '@/components/admin/AdminProductFilterSelect';
 
 type RoomAccessLogSummaryRow = {
   date_jst: string;
   room_id: string;
+  product: string;
   total: number;
   guests: number;
   members: number;
@@ -21,13 +27,14 @@ type ApiResponse = {
   truncated?: boolean;
 };
 
-function detailHref(roomId: string, dateJst: string): string {
-  const q = new URLSearchParams({ roomId, date: dateJst });
+function detailHref(roomId: string, dateJst: string, product: string): string {
+  const q = new URLSearchParams({ roomId, date: dateJst, product });
   return `/admin/room-access-log/detail?${q.toString()}`;
 }
 
 export default function AdminRoomAccessLogPage() {
   const [days, setDays] = useState(30);
+  const [productFilter, setProductFilter] = useState<'all' | 'musicaichat' | 'musicchat'>('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [hint, setHint] = useState<string | null>(null);
@@ -40,7 +47,9 @@ export default function AdminRoomAccessLogPage() {
     setError(null);
     setHint(null);
     try {
-      const res = await fetch(`/api/admin/room-access-log-summary?days=${days}`, {
+      const q = new URLSearchParams({ days: String(days) });
+      if (productFilter !== 'all') q.set('product', productFilter);
+      const res = await fetch(`/api/admin/room-access-log-summary?${q.toString()}`, {
         credentials: 'include',
       });
       const data = (await res.json().catch(() => ({}))) as ApiResponse;
@@ -61,7 +70,7 @@ export default function AdminRoomAccessLogPage() {
     } finally {
       setLoading(false);
     }
-  }, [days]);
+  }, [days, productFilter]);
 
   useEffect(() => {
     void load();
@@ -97,6 +106,7 @@ export default function AdminRoomAccessLogPage() {
                 <option value={120}>過去120日</option>
               </select>
             </label>
+            <AdminProductFilterSelect value={productFilter} onChange={setProductFilter} />
             <button
               type="button"
               onClick={() => load()}
@@ -154,6 +164,7 @@ export default function AdminRoomAccessLogPage() {
                       <table className="w-full min-w-[720px] text-left text-sm">
                         <thead className="border-b border-gray-700 bg-gray-800/80">
                           <tr>
+                            <th className="px-3 py-2">product</th>
                             <th className="px-3 py-2">部屋ID</th>
                             <th className="px-3 py-2 text-right">入室数</th>
                             <th className="px-3 py-2 text-right">うちゲスト</th>
@@ -163,7 +174,15 @@ export default function AdminRoomAccessLogPage() {
                         </thead>
                         <tbody>
                           {list.map((r) => (
-                            <tr key={`${r.date_jst}-${r.room_id}`} className="border-b border-gray-800/80">
+                            <tr
+                              key={`${r.date_jst}-${r.product}-${r.room_id}`}
+                              className="border-b border-gray-800/80"
+                            >
+                              <td className="px-3 py-2">
+                                <span className={productBadgeClass(r.product)}>
+                                  {productBadgeLabel(r.product)}
+                                </span>
+                              </td>
                               <td className="px-3 py-2 font-mono text-gray-200">{r.room_id}</td>
                               <td className="px-3 py-2 text-right tabular-nums text-gray-300">
                                 {r.total.toLocaleString()}
@@ -176,7 +195,7 @@ export default function AdminRoomAccessLogPage() {
                               </td>
                               <td className="px-3 py-2">
                                 <Link
-                                  href={detailHref(r.room_id, r.date_jst)}
+                                  href={detailHref(r.room_id, r.date_jst, r.product)}
                                   className="text-sky-400 hover:underline"
                                 >
                                   一覧

@@ -1,13 +1,24 @@
 import { createClient } from '@/lib/supabase/server';
+import Link from 'next/link';
 import { AdminMenuBar } from '@/components/admin/AdminMenuBar';
+import { AdminDomesticSongBadge } from '@/components/admin/AdminDomesticSongBadge';
+import { isAdminSongJapaneseDomesticDisplay } from '@/lib/song-catalog-scope';
+import { ensureWesternTreatedJpArtistCache } from '@/lib/western-treated-jp-artists';
 import { AdminSongMasterDeletePanel } from '@/components/admin/AdminSongMasterDeletePanel';
 import { AdminSongMusic8RefreshPanel } from '@/components/admin/AdminSongMusic8RefreshPanel';
 import { AdminSongMusic8JsonImportPanel } from '@/components/admin/AdminSongMusic8JsonImportPanel';
+import { AdminSongSpotifyEnrichPanel } from '@/components/admin/AdminSongSpotifyEnrichPanel';
 import { AdminSongBasicInfoEditPanel } from '@/components/admin/AdminSongBasicInfoEditPanel';
+import {
+  AdminSongCreditsPanel,
+  type AdminSongCreditRow,
+} from '@/components/admin/AdminSongCreditsPanel';
 import { music8SongJsonUrl, resolveMusic8SongsBaseUrl } from '@/lib/music8-data-urls';
+import { createAdminClient } from '@/lib/supabase/admin';
 
 interface SongDetailPageProps {
   params: { songId: string };
+  searchParams?: { q?: string };
 }
 
 interface SongRow {
@@ -15,8 +26,10 @@ interface SongRow {
   display_title: string | null;
   main_artist: string | null;
   song_title: string | null;
+  song_title_ja?: string | null;
   style: string | null;
   play_count: number | null;
+  catalog_scope?: string | null;
   original_release_date?: string | null;
   music8_song_data?: Record<string, unknown> | null;
   created_at: string;
@@ -141,7 +154,8 @@ function isDetailFeedbackRow(row: CommentFeedbackRow): boolean {
   return fc.length > 0;
 }
 
-export default async function SongDetailPage({ params }: SongDetailPageProps) {
+export default async function SongDetailPage({ params, searchParams }: SongDetailPageProps) {
+  const listQuery = typeof searchParams?.q === 'string' ? searchParams.q.trim() : '';
   const supabase = await createClient();
   if (!supabase) {
     return (
@@ -151,17 +165,33 @@ export default async function SongDetailPage({ params }: SongDetailPageProps) {
     );
   }
 
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from('songs')
     .select(
-      'id, display_title, main_artist, song_title, style, play_count, original_release_date, music8_song_data, created_at,' +
-      'genres, vocal, primary_artist_name_ja, structured_style,' +
-      'music8_song_id, music8_artist_slug, music8_song_slug, music8_video_id,' +
-      'spotify_track_id, spotify_release_date, spotify_name, spotify_artists, spotify_images, spotify_popularity,' +
-      'artist_id',
+      'id, display_title, main_artist, song_title, song_title_ja, style, play_count, catalog_scope, original_release_date, music8_song_data, created_at,' +
+        'genres, vocal, primary_artist_name_ja, structured_style,' +
+        'music8_song_id, music8_artist_slug, music8_song_slug, music8_video_id,' +
+        'spotify_track_id, spotify_release_date, spotify_name, spotify_artists, spotify_images, spotify_popularity,' +
+        'artist_id',
     )
     .eq('id', params.songId)
     .maybeSingle();
+
+  if (error?.code === '42703') {
+    const fallback = await supabase
+      .from('songs')
+      .select(
+        'id, display_title, main_artist, song_title, style, play_count, catalog_scope, original_release_date, music8_song_data, created_at,' +
+          'genres, vocal, primary_artist_name_ja, structured_style,' +
+          'music8_song_id, music8_artist_slug, music8_song_slug, music8_video_id,' +
+          'spotify_track_id, spotify_release_date, spotify_name, spotify_artists, spotify_images, spotify_popularity,' +
+          'artist_id',
+      )
+      .eq('id', params.songId)
+      .maybeSingle();
+    data = fallback.data;
+    error = fallback.error;
+  }
 
   if (error) {
     return (
@@ -188,6 +218,52 @@ export default async function SongDetailPage({ params }: SongDetailPageProps) {
   }
 
   const song = data;
+  await ensureWesternTreatedJpArtistCache();
+  const isJapaneseDomestic = isAdminSongJapaneseDomesticDisplay({
+    catalog_scope: song.catalog_scope ?? null,
+    main_artist: song.main_artist,
+    song_title: song.song_title,
+    display_title: song.display_title,
+  });
+
+  let songCredits: AdminSongCreditRow[] = [];
+  try {
+    const admin = createAdminClient();
+    if (admin) {
+      const { data: creditRows, error: creditErr } = await admin
+        .from('song_credits')
+        .select('artist_id, role, display_order, artists(name)')
+        .eq('song_id', song.id)
+        .order('display_order', { ascending: true });
+      if (!creditErr && Array.isArray(creditRows)) {
+        songCredits = creditRows
+          .map((row) => {
+            const r = row as {
+              artist_id?: string;
+              role?: string;
+              display_order?: number;
+              artists?: { name?: string } | { name?: string }[] | null;
+            };
+            const artistId = r.artist_id?.trim() ?? '';
+            const artistsJoin = r.artists;
+            const artistName = Array.isArray(artistsJoin)
+              ? artistsJoin[0]?.name?.trim()
+              : artistsJoin?.name?.trim();
+            if (!artistId || !artistName) return null;
+            return {
+              artistId,
+              artistName,
+              role: r.role?.trim() || 'main',
+              displayOrder:
+                typeof r.display_order === 'number' ? Math.floor(r.display_order) : 0,
+            };
+          })
+          .filter((r): r is AdminSongCreditRow => r != null);
+      }
+    }
+  } catch (e) {
+    console.error('[admin/song-detail] song_credits', e);
+  }
 
   // Spotify アーティスト ID を取得（優先順位: artists テーブル → music8_song_data スナップショット）
   let spotifyArtistId: string | null = null;
@@ -364,7 +440,24 @@ export default async function SongDetailPage({ params }: SongDetailPageProps) {
   return (
     <main className="mx-auto max-w-4xl bg-gray-950 p-4 text-gray-100">
       <AdminMenuBar />
-      <h1 className="mb-4 text-xl font-semibold">管理者: 曲詳細</h1>
+      <p className="mb-2">
+        {listQuery ? (
+          <Link
+            href={`/admin/songs?q=${encodeURIComponent(listQuery)}`}
+            className="text-sm text-sky-300 hover:underline"
+          >
+            ← 「{listQuery}」の曲一覧に戻る
+          </Link>
+        ) : (
+          <Link href="/admin/songs" className="text-sm text-sky-300 hover:underline">
+            ← 曲ダッシュボード（検索）
+          </Link>
+        )}
+      </p>
+      <h1 className="mb-4 flex flex-wrap items-center gap-2 text-xl font-semibold">
+        <span>管理者: 曲詳細</span>
+        {isJapaneseDomestic ? <AdminDomesticSongBadge /> : null}
+      </h1>
 
       {/* 曲メイン情報 */}
       <section className="mb-4 space-y-2 rounded border border-gray-700 bg-gray-900 p-4 text-sm">
@@ -376,6 +469,11 @@ export default async function SongDetailPage({ params }: SongDetailPageProps) {
         <p>
           <span className="text-gray-500">display_title：</span>
           {song.display_title || '(なし)'}
+          {isJapaneseDomestic ? (
+            <span className="ml-2 inline-block align-middle">
+              <AdminDomesticSongBadge />
+            </span>
+          ) : null}
         </p>
         <p>
           <span className="text-gray-500">メインアーティスト：</span>
@@ -384,6 +482,10 @@ export default async function SongDetailPage({ params }: SongDetailPageProps) {
         <p>
           <span className="text-gray-500">曲タイトル：</span>
           {song.song_title || '(なし)'}
+        </p>
+        <p>
+          <span className="text-gray-500">日本語読み（song_title_ja）：</span>
+          {song.song_title_ja || '—'}
         </p>
         <p>
           <span className="text-gray-500">スタイル：</span>
@@ -480,6 +582,12 @@ export default async function SongDetailPage({ params }: SongDetailPageProps) {
           ) : null}
         </div>
 
+        <AdminSongSpotifyEnrichPanel
+          songId={song.id}
+          hasTrackId={Boolean((song.spotify_track_id ?? '').trim())}
+          hasPopularity={song.spotify_popularity != null}
+        />
+
         <AdminSongMusic8RefreshPanel songId={song.id} />
         <AdminSongMusic8JsonImportPanel
           songId={song.id}
@@ -492,8 +600,14 @@ export default async function SongDetailPage({ params }: SongDetailPageProps) {
           initialDisplayTitle={song.display_title ?? null}
           initialMainArtist={song.main_artist ?? null}
           initialSongTitle={song.song_title ?? null}
+          initialSongTitleJa={song.song_title_ja ?? null}
           initialStyle={song.style ?? null}
           initialOriginalReleaseDate={song.original_release_date ?? null}
+        />
+        <AdminSongCreditsPanel
+          songId={song.id}
+          mainArtist={song.main_artist ?? null}
+          initialCredits={songCredits}
         />
         <p>
           <span className="text-gray-500">作成日時：</span>

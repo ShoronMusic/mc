@@ -6,6 +6,7 @@ import {
 } from '@/lib/room-owner';
 import { OWNER_STATE_EVENT, type OwnerStatePayload } from '@/types/room-owner';
 import { allPresenceMembers } from '@/lib/ably-channel-presence';
+import { getAblyRoomChannelName } from '@/lib/room-product-scope';
 
 function presenceTimestamp(m: PresenceMessage): number {
   return typeof m.timestamp === 'number' ? m.timestamp : 0;
@@ -36,7 +37,7 @@ export async function resolveRoomOwnerClientId(
 
   let latest: OwnerStatePayload | null = null;
   try {
-    const channel = rest.channels.get(`room:${roomId}`);
+    const channel = rest.channels.get(getAblyRoomChannelName(roomId));
     /** Ably REST の history が環境によっては応答しないことがあるためタイムアウトする */
     const HISTORY_MS = 5_000;
     const page = await Promise.race([
@@ -82,6 +83,6 @@ export async function resolveRoomOwnerClientId(
 }
 
 export async function fetchRoomPresenceMembers(rest: Ably.Rest, roomId: string): Promise<PresenceMessage[]> {
-  const channel = rest.channels.get(`room:${roomId}`);
+  const channel = rest.channels.get(getAblyRoomChannelName(roomId));
   return allPresenceMembers(channel);
 }

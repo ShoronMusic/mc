@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { allPresenceMembers } from '@/lib/ably-channel-presence';
 import { hasLiveAuthClientInPresence } from '@/lib/room-auth-session-presence';
 import { buildAuthRoomClientId } from '@/lib/room-owner';
+import { getAblyRoomChannelName } from '@/lib/room-product-scope';
 import { createClient } from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
@@ -51,7 +52,7 @@ export async function GET(request: Request) {
   const authClientId = buildAuthRoomClientId(user.id);
   try {
     const rest = new Ably.Rest({ key });
-    const channel = rest.channels.get(`room:${roomId}`);
+    const channel = rest.channels.get(getAblyRoomChannelName(roomId));
     const members = await allPresenceMembers(channel);
     const sameAccountInRoom = hasLiveAuthClientInPresence(members, authClientId);
     return NextResponse.json(

@@ -1,6 +1,11 @@
 import { isAuthBasedRoomClientId } from '@/lib/room-owner';
 import type { RoomSessionClaim } from '@/lib/room-session-instance';
 
+/**
+ * 同一 auth clientId の操作権奪取（product 付き Ably チャンネル内のみ有効）。
+ * @see room-session-instance · room-product-scope · docs/supabase-room-gatherings-product-column.md Step 3
+ */
+
 export type RoomSessionTakeoverState = 'guest' | 'connecting' | 'active' | 'supplanted';
 
 export type PresenceAuthRow = {

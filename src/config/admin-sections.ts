@@ -216,7 +216,14 @@ export const ADMIN_SECTIONS: AdminSection[] = [
     href: '/admin/songs-newly-registered',
     title: '選曲・DB登録（日別）',
     description:
-      'room_playback_history を JST 日別に一覧。新規 insert と既存曲の再選曲を区別（部屋名・選曲者付き）',
+      'room_playback_history を JST 日別に一覧（洋楽向け・邦楽は除外）。新規 insert と既存曲の再選曲を区別（部屋名・選曲者付き）',
+    category: 'library',
+  },
+  {
+    href: '/admin/songs-newly-registered-domestic',
+    title: '選曲・DB登録（日別・邦楽）',
+    description:
+      '邦楽ライト曲 DB 向け。catalog_scope / メタで邦楽と判定された選曲のみ JST 日別（洋楽扱い邦楽は除外）',
     category: 'library',
   },
   {
@@ -229,6 +236,27 @@ export const ADMIN_SECTIONS: AdminSection[] = [
     href: '/admin/spotify-review-queue',
     title: 'Spotify 要確認（日別）',
     description: '選曲時 Spotify 自動照合で確定できなかった曲（候補 track ID 付き）',
+    category: 'library',
+  },
+  {
+    href: '/admin/western-treated-jp-artists',
+    title: '洋楽扱い邦楽アーティスト',
+    description:
+      '邦楽判定から除外する日本人アーティスト名の登録・編集・削除（AI・ライブラリ・選曲紹介に反映）',
+    category: 'library',
+  },
+  {
+    href: '/admin/domestic-artist-register',
+    title: '邦楽アーティスト登録',
+    description:
+      'アーティスト名 → Gemini AI 生成 → 確認 → artists マスタ保存（Music8 WP カテゴリー編集相当）',
+    category: 'library',
+  },
+  {
+    href: '/admin/domestic-jp-artists',
+    title: '邦楽扱い英字アーティスト',
+    description:
+      '英字表記で洋楽誤判定されやすい邦楽アーティストの登録（catalog_scope・邦楽 DB・管理一覧に反映）',
     category: 'library',
   },
   {

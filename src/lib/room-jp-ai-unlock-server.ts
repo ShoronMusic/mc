@@ -1,5 +1,6 @@
 import Ably from 'ably';
 import { allPresenceMembers } from '@/lib/ably-channel-presence';
+import { getAblyRoomChannelName } from '@/lib/room-product-scope';
 
 function getAblyKey(): string {
   return process.env.NEXT_PUBLIC_ABLY_API_KEY?.trim() ?? '';
@@ -35,7 +36,7 @@ export async function isRoomJpAiUnlockEnabled(roomId: string | null | undefined)
   if (!key) return false;
   try {
     const rest = new Ably.Rest({ key });
-    const channel = rest.channels.get(`room:${rid}`);
+    const channel = rest.channels.get(getAblyRoomChannelName(rid));
     const members = await allPresenceMembers(channel);
     return members.some((m) => jpAiUnlockFromPresenceData(m.data));
   } catch (e) {

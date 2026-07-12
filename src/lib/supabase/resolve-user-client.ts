@@ -5,10 +5,6 @@ async function readUserOnce(): Promise<User | null> {
   const { client } = await loadBrowserSupabaseClient();
   if (!client) return null;
   const {
-    data: { session },
-  } = await client.auth.getSession();
-  if (session?.user) return session.user;
-  const {
     data: { user },
   } = await client.auth.getUser();
   return user ?? null;
@@ -75,6 +71,6 @@ export async function resolveSupabaseUserClient(options?: {
 
 /** 共有受け口で部屋へ飛ぶ前に cookie セッションを温める */
 export async function warmSupabaseSessionClient(): Promise<void> {
-  await readUserOnce();
-  await tryRefreshSession();
+  const user = await readUserOnce();
+  if (!user) await tryRefreshSession();
 }

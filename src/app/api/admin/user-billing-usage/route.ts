@@ -7,6 +7,7 @@ import {
   aggregateUserBillingDetail,
   aggregateUserBillingSummaries,
 } from '@/lib/admin-user-billing-aggregate';
+import { parseAdminProductFilter } from '@/lib/room-history-product';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,10 +28,14 @@ export async function GET(request: Request) {
   const userId = url.searchParams.get('userId')?.trim() || '';
   const days = Math.min(90, Math.max(1, parseInt(url.searchParams.get('days') || '30', 10) || 30));
   const roomId = url.searchParams.get('roomId')?.trim() || '';
+  const productFilter = parseAdminProductFilter(url.searchParams.get('product'));
 
   if (userId) {
     try {
-      const detail = await aggregateUserBillingDetail(admin, userId, { lookbackDays: days });
+      const detail = await aggregateUserBillingDetail(admin, userId, {
+        lookbackDays: days,
+        productFilter,
+      });
       if (!detail.summary) {
         return NextResponse.json({ enabled: true, summary: null, slots: [] });
       }
@@ -45,6 +50,7 @@ export async function GET(request: Request) {
     const rows = await aggregateUserBillingSummaries(admin, {
       lookbackDays: days,
       roomId: roomId || null,
+      productFilter,
     });
 
     const totals = rows.reduce(

@@ -8,6 +8,7 @@ import {
 import { HomeRoomLinks } from '@/components/home/HomeRoomLinks';
 import type { BrowserSupabaseClient } from '@/lib/supabase/load-browser-client';
 import { loadBrowserSupabaseClient } from '@/lib/supabase/load-browser-client';
+import { IS_MC_PRODUCT } from '@/lib/product-branding';
 
 type TopPageLoginAndLiveRoomsProps = {
   /** all=従来どおり / live=開催中一覧のみ / auth=ログイン・ゲスト導線のみ */
@@ -71,13 +72,27 @@ export function TopPageLoginAndLiveRooms({ part = 'all' }: TopPageLoginAndLiveRo
     }
     if (authIntent === null) {
       return (
-        <div className="mb-4 flex flex-col gap-2 rounded-lg border border-gray-700 bg-gray-800/80 p-3">
+        <div
+          className={`mb-4 flex flex-col gap-2 rounded-lg border p-3 ${
+            IS_MC_PRODUCT ? 'border-gray-300 bg-white shadow-sm' : 'border-gray-700 bg-gray-800/80'
+          }`}
+        >
           <button
             type="button"
             onClick={() => setAuthIntent('new-room')}
-            className="flex w-full items-center justify-center gap-2 rounded border border-gray-600 bg-gray-800 px-3 py-2.5 text-sm font-medium text-white hover:bg-gray-700"
+            className={`flex w-full items-center justify-center gap-2 rounded border px-3 py-2.5 text-sm font-medium ${
+              IS_MC_PRODUCT
+                ? 'border-gray-300 bg-white text-gray-900 hover:bg-gray-50'
+                : 'border-gray-600 bg-gray-800 text-white hover:bg-gray-700'
+            }`}
           >
-            <span className="inline-flex shrink-0 items-center rounded border border-emerald-700/50 bg-emerald-950/50 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-emerald-200">
+            <span
+              className={`inline-flex shrink-0 items-center rounded border px-1.5 py-0.5 text-[10px] font-semibold leading-none ${
+                IS_MC_PRODUCT
+                  ? 'border-gray-400 bg-gray-100 text-gray-700'
+                  : 'border-emerald-700/50 bg-emerald-950/50 text-emerald-200'
+              }`}
+            >
               NEW
             </span>
             新規で部屋を立ち上げる
@@ -85,9 +100,19 @@ export function TopPageLoginAndLiveRooms({ part = 'all' }: TopPageLoginAndLiveRo
           <button
             type="button"
             onClick={() => setAuthIntent('resume-host')}
-            className="flex w-full items-center justify-center gap-2 rounded border border-gray-600 bg-gray-800 px-3 py-2.5 text-sm font-medium text-white hover:bg-gray-700"
+            className={`flex w-full items-center justify-center gap-2 rounded border px-3 py-2.5 text-sm font-medium ${
+              IS_MC_PRODUCT
+                ? 'border-gray-300 bg-white text-gray-900 hover:bg-gray-50'
+                : 'border-gray-600 bg-gray-800 text-white hover:bg-gray-700'
+            }`}
           >
-            <span className="inline-flex shrink-0 items-center rounded border border-sky-700/50 bg-sky-950/50 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-sky-200">
+            <span
+              className={`inline-flex shrink-0 items-center rounded border px-1.5 py-0.5 text-[10px] font-semibold leading-none ${
+                IS_MC_PRODUCT
+                  ? 'border-gray-400 bg-gray-100 text-gray-700'
+                  : 'border-sky-700/50 bg-sky-950/50 text-sky-200'
+              }`}
+            >
               継続
             </span>
             ログインして主催した部屋を再開

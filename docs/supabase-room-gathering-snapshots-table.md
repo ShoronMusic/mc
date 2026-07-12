@@ -37,6 +37,9 @@ create table if not exists public.room_gathering_snapshots (
   created_at timestamptz not null default now()
 );
 
+-- ma / mc 分離（追記 SQL は下記「product 列」も参照）
+-- product text not null default 'musicaichat',
+
 create index if not exists idx_room_gathering_snapshots_room_ended
   on public.room_gathering_snapshots (room_id, ended_at desc nulls last);
 
@@ -102,3 +105,32 @@ alter table public.room_gathering_playback_snapshots enable row level security;
 | Gemini | `gemini_usage_logs`（`gathering_id` 優先、なければ時刻 + `room_id`） |
 | AI エージェント | `ai_character_song_pick_logs` + `billing_kind = ai_agent` |
 | チャット / Ably 推定 | `room_chat_log` 件数（`gathering_id` または時刻窓） |
+
+## product 列（ma / mc 分離）
+
+会終了スナップショットを product ごとに管理画面で絞り込む。**テーブル作成済みの環境**は追記 SQL のみ実行。
+
+```sql
+alter table public.room_gathering_snapshots
+  add column if not exists product text not null default 'musicaichat';
+
+alter table public.room_gathering_snapshots
+  drop constraint if exists room_gathering_snapshots_product_check;
+
+alter table public.room_gathering_snapshots
+  add constraint room_gathering_snapshots_product_check
+  check (product in ('musicaichat', 'musicchat'));
+
+update public.room_gathering_snapshots
+  set product = 'musicaichat'
+  where product is null or product = '';
+
+create index if not exists idx_room_gathering_snapshots_product_ended
+  on public.room_gathering_snapshots (product, ended_at desc nulls last);
+```
+
+- **INSERT**: `room_gatherings.product` をコピー（`src/lib/room-gathering-snapshot.ts`）
+- **管理 API**: `GET /api/admin/gathering-history?product=all|musicaichat|musicchat`
+- **12h スロット UI**（`/admin/gathering-history`）: `GET /api/admin/daily-slot-history?product=`（オンザフライ集計）
+
+**product 列未実行時**: 従来どおり全件（ma 後方互換）。

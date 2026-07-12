@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getStyleAdminUserIds } from '@/lib/style-admin';
+import { parseAdminProductFilter, runAdminHistoryQueryScoped } from '@/lib/room-history-product';
 
 export const dynamic = 'force-dynamic';
 
@@ -80,20 +81,21 @@ export async function GET(request: Request) {
   const searchParams = new URL(request.url).searchParams;
   const days = Math.min(90, Math.max(1, parseInt(searchParams.get('days') || '7', 10) || 7));
   const roomId = (searchParams.get('roomId') || '').trim();
+  const productFilter = parseAdminProductFilter(searchParams.get('product'));
   const since = new Date(Date.now() - days * 86400000).toISOString();
 
-  let query = admin
-    .from('youtube_api_usage_logs')
-    .select('*')
-    .gte('created_at', since)
-    .order('created_at', { ascending: false })
-    .limit(5000);
-
-  if (roomId) {
-    query = query.eq('room_id', roomId);
-  }
-
-  const { data: rows, error } = await query;
+  const scanRes = await runAdminHistoryQueryScoped((applyProductEq, scopedProduct) => {
+    let q = admin
+      .from('youtube_api_usage_logs')
+      .select('*')
+      .gte('created_at', since)
+      .order('created_at', { ascending: false })
+      .limit(5000);
+    if (roomId) q = q.eq('room_id', roomId);
+    if (applyProductEq && scopedProduct) q = q.eq('product', scopedProduct);
+    return q;
+  }, productFilter);
+  const { data: rows, error } = scanRes;
 
   if (error) {
     if (error.code === '42P01') {
@@ -149,6 +151,7 @@ export async function GET(request: Request) {
   return NextResponse.json({
     days,
     roomId: roomId || null,
+    product: productFilter,
     totals: { calls: list.length, okCalls, ngCalls },
     byEndpoint,
     bySource,

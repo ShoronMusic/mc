@@ -10,6 +10,9 @@ import {
 import { TopPageLoginAndLiveRooms } from '@/components/home/TopPageLoginAndLiveRooms';
 import { hasGuestRoomPersistence } from '@/lib/guest-room-persistence';
 import { loadBrowserSupabaseClient } from '@/lib/supabase/load-browser-client';
+import { McMaPromoBanner } from '@/components/home/McMaPromoBanner';
+import { MusicChatTitleBrand } from '@/components/home/MusicChatTitleLogo';
+import { getProductDisplayName, IS_MC_PRODUCT } from '@/lib/product-branding';
 import { useEffect, useState } from 'react';
 
 function StartPageTitle() {
@@ -17,14 +20,27 @@ function StartPageTitle() {
 
   return (
     <>
-      <h1 className="mb-2 text-center text-xl font-bold text-white lg:text-left">
-        洋楽AIチャット（β版）
+      <h1
+        className={`mb-2 flex justify-center lg:justify-start ${
+          IS_MC_PRODUCT ? '' : 'text-center text-xl font-bold lg:text-left text-white'
+        }`}
+      >
+        {IS_MC_PRODUCT ? (
+          <MusicChatTitleBrand className="mx-auto lg:mx-0" />
+        ) : (
+          getProductDisplayName()
+        )}
       </h1>
+      {IS_MC_PRODUCT ? <McMaPromoBanner className="mb-4" /> : null}
       <p className="mb-6 text-center text-sm lg:text-left">
         <button
           type="button"
           onClick={() => setFirstReadOpen(true)}
-          className="text-amber-400 underline-offset-2 hover:underline"
+          className={
+            IS_MC_PRODUCT
+              ? 'text-gray-700 underline-offset-2 hover:text-gray-900 hover:underline'
+              : 'text-amber-400 underline-offset-2 hover:underline'
+          }
         >
           はじめにお読みください
         </button>
@@ -37,8 +53,14 @@ function StartPageTitle() {
 function StartPageRoomEntryIntro({ showLoginHint = true }: { showLoginHint?: boolean }) {
   return (
     <>
-      <p className="mb-6 text-center text-sm text-gray-400 lg:text-left">
-        部屋を選んで入室してください
+      <p
+        className={`mb-6 text-center text-sm lg:text-left ${
+          IS_MC_PRODUCT ? 'text-gray-600' : 'text-gray-400'
+        }`}
+      >
+        {IS_MC_PRODUCT
+          ? '邦楽も洋楽も OK。部屋を選んで入室してください'
+          : '部屋を選んで入室してください'}
       </p>
       {showLoginHint ? (
         <p className="mb-4 text-center text-xs text-gray-500 lg:text-left">

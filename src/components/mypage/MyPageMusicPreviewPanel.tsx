@@ -2,6 +2,17 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { libraryVariantLabel } from '@/lib/library-variant-label';
+import {
+  IS_MC_PRODUCT,
+  libraryChipBtnClass,
+  librarySecondaryBtnClass,
+  librarySelectSongBtnClass,
+  librarySongSubtitleLine,
+  libraryTitleCardClass,
+  libraryTitleTextClass,
+  mypagePreviewShellClass,
+  showRoomStyleUi,
+} from '@/lib/product-branding';
 
 export type MyPageMusicPreviewSelection = {
   videoId: string;
@@ -143,7 +154,7 @@ export function MyPageMusicPreviewPanel({
 
   if (!selection) {
     return (
-      <div className="rounded border border-gray-700/80 bg-gray-900/40 p-3">
+      <div className={mypagePreviewShellClass()}>
         <p className="text-[11px] text-gray-500">
           曲一覧の「再生」を押すと、ライブラリと同じ形式でここにプレビューが表示されます。
         </p>
@@ -152,14 +163,14 @@ export function MyPageMusicPreviewPanel({
   }
 
   return (
-    <div className="rounded border border-lime-900/50 bg-gray-900/30 p-3">
-      <p className="mb-2 text-[11px] text-gray-400">
+    <div className={mypagePreviewShellClass()}>
+      <p className="mb-2 text-[11px] text-gray-500">
         曲一覧で選ぶと、動画バージョン（公式優先）を選べます。
       </p>
-      <div className="mb-2 rounded border border-gray-800 bg-gray-900/60 px-3 py-2">
-        <p className="text-sm font-medium text-gray-100">{headerTitle}</p>
-        <p className="mt-1 text-xs text-gray-400">
-          {headerArtist} / {headerStyle}
+      <div className={libraryTitleCardClass()}>
+        <p className={libraryTitleTextClass()}>{headerTitle}</p>
+        <p className={`mt-1 text-xs ${IS_MC_PRODUCT ? 'text-gray-600' : 'text-gray-400'}`}>
+          {librarySongSubtitleLine(headerArtist, headerStyle === '—' ? null : headerStyle)}
         </p>
       </div>
       <div className="mb-2">
@@ -182,11 +193,7 @@ export function MyPageMusicPreviewPanel({
                     setSelectedVideoId(v.video_id);
                     setCopyState('idle');
                   }}
-                  className={`rounded px-2 py-1 text-xs ${
-                    active
-                      ? 'bg-lime-700 text-white'
-                      : 'border border-gray-700 bg-gray-900 text-gray-300 hover:bg-gray-800'
-                  }`}
+                  className={libraryChipBtnClass(active)}
                 >
                   {libraryVariantLabel(v.variant)}
                 </button>
@@ -215,7 +222,7 @@ export function MyPageMusicPreviewPanel({
         <button
           type="button"
           disabled={!selectedUrl}
-          className="h-11 rounded border border-lime-500/70 bg-lime-900/40 px-3 text-sm font-semibold text-lime-100 hover:bg-lime-900/70 disabled:opacity-50"
+          className={librarySelectSongBtnClass()}
           onClick={() => {
             if (selectedUrl) onPickSong(selectedUrl);
           }}
@@ -225,7 +232,7 @@ export function MyPageMusicPreviewPanel({
         <button
           type="button"
           disabled={!selectedUrl}
-          className="h-11 rounded border border-gray-600 bg-gray-800 px-3 text-sm text-gray-100 hover:bg-gray-700 disabled:opacity-50"
+          className={librarySecondaryBtnClass()}
           onClick={() => void handleCopyUrl()}
         >
           URLをコピー
@@ -234,7 +241,7 @@ export function MyPageMusicPreviewPanel({
           <button
             type="button"
             disabled={!selectedUrl || myListAddBusy}
-            className="h-11 rounded border border-violet-600/60 bg-violet-900/40 px-3 text-sm font-semibold text-violet-100 hover:bg-violet-900/60 disabled:cursor-not-allowed disabled:opacity-50"
+            className={librarySecondaryBtnClass()}
             title="マイページのマイリストに追加"
             onClick={() =>
               void onAddToMyList({
@@ -250,16 +257,18 @@ export function MyPageMusicPreviewPanel({
         ) : null}
       </div>
       {copyState !== 'idle' ? (
-        <p className="mt-2 text-xs text-gray-300">
+        <p className={`mt-2 text-xs ${IS_MC_PRODUCT ? 'text-gray-600' : 'text-gray-300'}`}>
           {copyState === 'ok' ? 'URLをコピーしました。' : 'URLコピーに失敗しました。'}
         </p>
       ) : null}
-      <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-2 gap-y-1 text-xs text-gray-300">
+      <dl className={`mt-3 grid grid-cols-[auto_1fr] gap-x-2 gap-y-1 text-xs ${IS_MC_PRODUCT ? 'text-gray-700' : 'text-gray-300'}`}>
         {(
           [
             ['メインアーティスト', song?.main_artist ?? selection.artist],
             ['曲タイトル', song?.song_title ?? selection.title],
-            ['スタイル', song?.style ?? selection.style],
+            ...(showRoomStyleUi()
+              ? [['スタイル', song?.style ?? selection.style] as const]
+              : []),
             ['ジャンル', song?.genres ?? null],
             [
               '公開日',

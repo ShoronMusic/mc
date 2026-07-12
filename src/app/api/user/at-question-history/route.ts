@@ -3,6 +3,11 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { fetchUserAtQuestionHistory, attachAtQuestionCostEstimates, fetchGeminiLogsForAtQuestionPairs } from '@/lib/user-at-question-history';
 import type { ParticipationHistoryRow } from '@/lib/participation-summary';
+import {
+  getRoomHistoryProductId,
+  runRoomHistoryQueryScoped,
+  withRoomHistoryProductEq,
+} from '@/lib/room-history-product';
 
 export const dynamic = 'force-dynamic';
 
@@ -45,11 +50,18 @@ export async function GET(request: Request) {
     const limitRaw = Number(searchParams.get('limit') ?? '30');
     const limit = Number.isFinite(limitRaw) ? limitRaw : 30;
 
-    const { data: participationRows } = await supabase
-      .from('user_room_participation_history')
-      .select('room_id, gathering_title')
-      .order('joined_at', { ascending: false })
-      .limit(200);
+    const historyProduct = getRoomHistoryProductId();
+    const partRes = await runRoomHistoryQueryScoped((scopeProduct) => {
+      let q = supabase
+        .from('user_room_participation_history')
+        .select('room_id, gathering_title')
+        .eq('user_id', user.id)
+        .order('joined_at', { ascending: false })
+        .limit(200);
+      if (scopeProduct) q = withRoomHistoryProductEq(q, historyProduct);
+      return q;
+    });
+    const { data: participationRows } = partRes;
 
     const roomLabels = resolveRoomLabelMap((participationRows ?? []) as ParticipationHistoryRow[]);
 

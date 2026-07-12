@@ -3,6 +3,8 @@
  */
 
 import { createAdminClient } from '@/lib/supabase/admin';
+import { getRoomHistoryProductId } from '@/lib/room-history-product';
+import { isMissingProductColumnError } from '@/lib/room-product-scope';
 
 type YouTubeApiUsageRow = {
   endpoint: string;
@@ -25,7 +27,7 @@ export async function persistYouTubeApiUsageLog(row: YouTubeApiUsageRow): Promis
   const admin = createAdminClient();
   if (!admin) return;
 
-  const { error } = await admin.from('youtube_api_usage_logs').insert({
+  const payload = {
     endpoint: row.endpoint.slice(0, 80),
     query_text: row.queryText?.trim().slice(0, 300) || null,
     video_id: row.videoId?.trim().slice(0, 32) || null,
@@ -37,7 +39,14 @@ export async function persistYouTubeApiUsageLog(row: YouTubeApiUsageRow): Promis
     result_count: Number.isFinite(row.resultCount) ? row.resultCount : null,
     room_id: row.roomId?.trim().slice(0, 120) || null,
     source: row.source?.trim().slice(0, 120) || null,
-  });
+    product: getRoomHistoryProductId(),
+  };
+
+  let { error } = await admin.from('youtube_api_usage_logs').insert(payload);
+  if (error && isMissingProductColumnError(error)) {
+    const { product: _p, ...legacy } = payload;
+    ({ error } = await admin.from('youtube_api_usage_logs').insert(legacy));
+  }
 
   if (error?.code === '42P01' && !missingTableLogged) {
     missingTableLogged = true;

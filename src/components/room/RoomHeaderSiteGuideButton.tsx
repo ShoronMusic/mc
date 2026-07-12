@@ -2,6 +2,7 @@
 
 import { Squares2X2Icon, StarIcon } from '@heroicons/react/24/outline';
 import { SiteTreeOutlineIcon } from '@/components/icons/SiteTreeOutlineIcon';
+import { roomHeaderActionBtnClass, roomHeaderMenuItemClass } from '@/lib/product-branding';
 import { SITE_GUIDE_TAB_LABELS, type SiteGuideTab } from '@/lib/site-guide-modal';
 
 function tabIcon(tab: SiteGuideTab) {
@@ -30,10 +31,6 @@ export function RoomHeaderSiteGuideButton({
 }: RoomHeaderSiteGuideButtonProps) {
   const label = SITE_GUIDE_TAB_LABELS[tab];
   const Icon = tabIcon(tab);
-  const tone =
-    tab === 'enjoy'
-      ? 'border-violet-700 bg-violet-900/35 text-violet-100 hover:bg-violet-800/55'
-      : 'border-emerald-700/80 bg-emerald-950/35 text-emerald-100 hover:bg-emerald-900/50';
 
   const handleOpen = () => {
     onNavigate?.();
@@ -45,9 +42,7 @@ export function RoomHeaderSiteGuideButton({
       <button
         type="button"
         onClick={handleOpen}
-        className={`flex w-full items-center justify-between rounded px-3 py-2 text-left text-sm hover:bg-gray-800/80 ${
-          tab === 'enjoy' ? 'text-violet-200 hover:bg-violet-900/30' : 'text-emerald-200 hover:bg-emerald-900/30'
-        }`}
+        className={roomHeaderMenuItemClass()}
       >
         <span>{label}</span>
         <Icon className="h-4 w-4" aria-hidden />
@@ -59,7 +54,7 @@ export function RoomHeaderSiteGuideButton({
     <button
       type="button"
       onClick={handleOpen}
-      className={`inline-flex h-10 w-10 items-center justify-center gap-0 rounded border px-0 py-0 sm:w-auto sm:gap-1 sm:px-2.5 sm:py-1.5 ${tone}`}
+      className={roomHeaderActionBtnClass()}
       title={label}
       aria-label={label}
     >

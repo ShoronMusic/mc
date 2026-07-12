@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { IS_MC_PRODUCT } from '@/lib/product-branding';
 import {
   AI_USAGE_DISCLOSURE_CURRENT_FREE,
   AI_USAGE_DISCLOSURE_ROOM_DETAIL_LINES,
@@ -19,6 +20,10 @@ type AiUsageBillingNoticeProps = {
 };
 
 export function AiUsageBillingNotice({ isGuest = false, className = '' }: AiUsageBillingNoticeProps) {
+  if (IS_MC_PRODUCT) {
+    return null;
+  }
+
   const [open, setOpen] = useState(false);
   const { status, state } = useAiTrialStatus(isGuest);
 

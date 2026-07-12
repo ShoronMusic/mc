@@ -13,6 +13,8 @@ import {
 import { resolveGuestDisplayNameForJoin, roomDisplayNameValidationMessage } from '@/lib/room-display-name';
 import { setOAuthReturnPathCookie } from '@/lib/oauth-return-path';
 import { getBrowserAppOrigin } from '@/lib/app-origin';
+import { getProductDisplayName, IS_MC_PRODUCT } from '@/lib/product-branding';
+import { MusicChatTitleBrand } from '@/components/home/MusicChatTitleLogo';
 import { rememberGuestRoom, readGuestDisplayNameHint } from '@/lib/guest-room-persistence';
 import { SimpleAuthForm } from './SimpleAuthForm';
 import { AuthErrorBanner } from './AuthErrorBanner';
@@ -216,7 +218,17 @@ export function JoinChoice({ onJoin, roomId, joinVerifying = false }: JoinChoice
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-gray-950 p-4">
       <div className="w-full max-w-md rounded-xl border border-gray-700 bg-gray-900 p-8 shadow-lg">
-        <h1 className="mb-2 text-center text-xl font-bold text-white">洋楽AIチャット（β版）</h1>
+        <h1
+          className={`mb-2 flex justify-center ${
+            IS_MC_PRODUCT ? '' : 'text-center text-xl font-bold text-white'
+          }`}
+        >
+          {IS_MC_PRODUCT ? (
+            <MusicChatTitleBrand logoClassName="h-20 w-20" />
+          ) : (
+            getProductDisplayName()
+          )}
+        </h1>
         <p className="mb-6 text-center text-sm text-gray-400">
           チャットに参加する方法を選んでください
         </p>

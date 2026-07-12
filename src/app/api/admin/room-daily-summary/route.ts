@@ -2,6 +2,14 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getStyleAdminUserIds } from '@/lib/style-admin';
+import {
+  normalizeRoomHistoryProduct,
+  parseAdminProductFilter,
+  runAdminHistoryQueryScoped,
+  type AdminProductFilter,
+  type ProductId,
+} from '@/lib/room-history-product';
+import { isMissingProductColumnError } from '@/lib/room-product-scope';
 
 export const dynamic = 'force-dynamic';
 
@@ -56,6 +64,11 @@ function todayJstYmd(): string {
 }
 
 type SessionPart = 'part1' | 'part2';
+
+function resolveGenerateProductFilter(productFilter: AdminProductFilter): ProductId | 'invalid' {
+  if (productFilter === 'all') return 'invalid';
+  return productFilter;
+}
 
 function jstSessionRangeUtc(ymd: string, sessionPart: SessionPart): { startIso: string; endIso: string } | null {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return null;
@@ -134,41 +147,56 @@ async function generateDailySummary(
   roomId: string,
   ymd: string,
   sessionPart: SessionPart,
+  productFilter: AdminProductFilter = 'all',
 ) {
   const range = jstSessionRangeUtc(ymd, sessionPart);
   if (!range) throw new Error('dateJst は YYYY-MM-DD 形式で指定してください。');
 
-  const { data: chatData, error: chatError } = await supabase
-    .from('room_chat_log')
-    .select('created_at, message_type, display_name')
-    .eq('room_id', roomId)
-    .gte('created_at', range.startIso)
-    .lt('created_at', range.endIso)
-    .order('created_at', { ascending: true })
-    .limit(10000);
-  if (chatError) throw new Error(chatError.message);
-  const chats = (chatData ?? []) as ChatLogRow[];
+  const chatRes = await runAdminHistoryQueryScoped((applyProductEq, scopedProduct) => {
+    let q = supabase
+      .from('room_chat_log')
+      .select('created_at, message_type, display_name')
+      .eq('room_id', roomId)
+      .gte('created_at', range.startIso)
+      .lt('created_at', range.endIso)
+      .order('created_at', { ascending: true })
+      .limit(10000);
+    if (applyProductEq && scopedProduct) q = q.eq('product', scopedProduct);
+    return q;
+  }, productFilter);
+  if (chatRes.error) throw new Error(chatRes.error.message ?? 'chat query failed');
+  const chats = (chatRes.data ?? []) as ChatLogRow[];
 
-  const { data: playData, error: playError } = await supabase
-    .from('room_playback_history')
-    .select('played_at, display_name, video_id, style, artist_name')
-    .eq('room_id', roomId)
-    .gte('played_at', range.startIso)
-    .lt('played_at', range.endIso)
-    .order('played_at', { ascending: true })
-    .limit(5000);
-  if (playError) throw new Error(playError.message);
-  const plays = (playData ?? []) as PlaybackRow[];
+  const playRes = await runAdminHistoryQueryScoped((applyProductEq, scopedProduct) => {
+    let q = supabase
+      .from('room_playback_history')
+      .select('played_at, display_name, video_id, style, artist_name')
+      .eq('room_id', roomId)
+      .gte('played_at', range.startIso)
+      .lt('played_at', range.endIso)
+      .order('played_at', { ascending: true })
+      .limit(5000);
+    if (applyProductEq && scopedProduct) q = q.eq('product', scopedProduct);
+    return q;
+  }, productFilter);
+  if (playRes.error) throw new Error(playRes.error.message ?? 'playback query failed');
+  const plays = (playRes.data ?? []) as PlaybackRow[];
 
-  const { data: usageData, error: usageError } = await supabase
-    .from('gemini_usage_logs')
-    .select('context, model, prompt_token_count, output_token_count')
-    .eq('room_id', roomId)
-    .gte('created_at', range.startIso)
-    .lt('created_at', range.endIso)
-    .limit(20000);
-  if (usageError && usageError.code !== '42P01') throw new Error(usageError.message);
-  const usages = ((usageData ?? []) as UsageRow[]) || [];
+  const usageRes = await runAdminHistoryQueryScoped((applyProductEq, scopedProduct) => {
+    let q = supabase
+      .from('gemini_usage_logs')
+      .select('context, model, prompt_token_count, output_token_count')
+      .eq('room_id', roomId)
+      .gte('created_at', range.startIso)
+      .lt('created_at', range.endIso)
+      .limit(20000);
+    if (applyProductEq && scopedProduct) q = q.eq('product', scopedProduct);
+    return q;
+  }, productFilter);
+  if (usageRes.error && usageRes.error.code !== '42P01') {
+    throw new Error(usageRes.error.message ?? 'gemini query failed');
+  }
+  const usages = ((usageRes.data ?? []) as UsageRow[]) || [];
 
   const allTimes: string[] = [];
   chats.forEach((r) => allTimes.push(r.created_at));
@@ -321,21 +349,25 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const roomId = searchParams.get('roomId')?.trim() ?? '';
   const limit = Math.min(200, Math.max(1, Number(searchParams.get('limit') ?? 50) || 50));
+  const productFilter = parseAdminProductFilter(searchParams.get('product'));
 
-  let q = admin
-    .from('room_daily_summary')
-    .select(
-      'id, room_id, date_jst, session_part, window_start_at, window_end_at, active_from_at, active_to_at, participants, participant_song_counts, era_distribution, style_distribution, gemini_usage, summary_text, created_by_user_id, created_at',
-    )
-    .order('date_jst', { ascending: false })
-    .order('session_part', { ascending: true })
-    .order('created_at', { ascending: false })
-    .limit(limit);
-  if (roomId) q = q.eq('room_id', roomId);
-
-  const { data, error } = await q;
+  const listRes = await runAdminHistoryQueryScoped((applyProductEq, scopedProduct) => {
+    let q = admin
+      .from('room_daily_summary')
+      .select(
+        'id, room_id, date_jst, session_part, window_start_at, window_end_at, active_from_at, active_to_at, participants, participant_song_counts, era_distribution, style_distribution, gemini_usage, summary_text, created_by_user_id, created_at, product',
+      )
+      .order('date_jst', { ascending: false })
+      .order('session_part', { ascending: true })
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    if (roomId) q = q.eq('room_id', roomId);
+    if (applyProductEq && scopedProduct) q = q.eq('product', scopedProduct);
+    return q;
+  }, productFilter);
+  const { data, error } = listRes;
   if (error) {
-    if (error.code === '42703' || /session_part/i.test(error.message)) {
+    if (error.code === '42703' || /session_part/i.test(error.message ?? '')) {
       return NextResponse.json(
         {
           error: 'room_daily_summary に session_part カラムがありません。',
@@ -346,7 +378,7 @@ export async function GET(request: Request) {
     }
     if (
       error.code === '42P01' ||
-      /could not find the table\s+public\.room_daily_summary/i.test(error.message)
+      /could not find the table\s+public\.room_daily_summary/i.test(error.message ?? '')
     ) {
       return NextResponse.json(
         {
@@ -358,7 +390,7 @@ export async function GET(request: Request) {
     }
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
-  return NextResponse.json({ items: data ?? [] });
+  return NextResponse.json({ items: data ?? [], productFilter });
 }
 
 export async function POST(request: Request) {
@@ -366,7 +398,7 @@ export async function POST(request: Request) {
   if ('error' in auth) return auth.error;
   const { admin, supabase, uid } = auth;
 
-  let body: { roomId?: string; dateJst?: string; sessionPart?: SessionPart };
+  let body: { roomId?: string; dateJst?: string; sessionPart?: SessionPart; product?: string };
   try {
     body = await request.json();
   } catch {
@@ -375,43 +407,65 @@ export async function POST(request: Request) {
   const roomId = typeof body?.roomId === 'string' ? body.roomId.trim() : '';
   const dateJst = typeof body?.dateJst === 'string' && body.dateJst.trim() ? body.dateJst.trim() : todayJstYmd();
   const sessionPart: SessionPart = body?.sessionPart === 'part1' ? 'part1' : 'part2';
+  const productFilter = parseAdminProductFilter(body?.product);
+  const generateProduct = resolveGenerateProductFilter(productFilter);
+  if (generateProduct === 'invalid') {
+    return NextResponse.json(
+      { error: '生成・保存にはプロダクト（ma または mc）を選択してください。' },
+      { status: 400 },
+    );
+  }
   if (!roomId) return NextResponse.json({ error: 'roomId is required' }, { status: 400 });
 
   let payload;
   try {
-    payload = await generateDailySummary(supabase, roomId, dateJst, sessionPart);
+    payload = await generateDailySummary(supabase, roomId, dateJst, sessionPart, generateProduct);
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'summary generation failed' }, { status: 500 });
   }
 
-  const { data, error } = await admin
+  const summaryRow: Record<string, unknown> = {
+    room_id: payload.roomId,
+    date_jst: payload.dateJst,
+    session_part: payload.sessionPart,
+    window_start_at: payload.windowStartAt,
+    window_end_at: payload.windowEndAt,
+    active_from_at: payload.activeFromAt,
+    active_to_at: payload.activeToAt,
+    participants: payload.participants,
+    participant_song_counts: payload.participantSongCounts,
+    era_distribution: payload.eraDistribution,
+    style_distribution: payload.styleDistribution,
+    gemini_usage: payload.geminiUsage,
+    summary_text: payload.summaryText,
+    created_by_user_id: uid,
+    product: normalizeRoomHistoryProduct(generateProduct),
+  };
+
+  let upsertRes = await admin
     .from('room_daily_summary')
-    .upsert(
-      {
-        room_id: payload.roomId,
-        date_jst: payload.dateJst,
-        session_part: payload.sessionPart,
-        window_start_at: payload.windowStartAt,
-        window_end_at: payload.windowEndAt,
-        active_from_at: payload.activeFromAt,
-        active_to_at: payload.activeToAt,
-        participants: payload.participants,
-        participant_song_counts: payload.participantSongCounts,
-        era_distribution: payload.eraDistribution,
-        style_distribution: payload.styleDistribution,
-        gemini_usage: payload.geminiUsage,
-        summary_text: payload.summaryText,
-        created_by_user_id: uid,
-      },
-      { onConflict: 'room_id,date_jst,session_part' },
-    )
+    .upsert(summaryRow, { onConflict: 'room_id,date_jst,session_part,product' })
     .select(
-      'id, room_id, date_jst, session_part, window_start_at, window_end_at, active_from_at, active_to_at, participants, participant_song_counts, era_distribution, style_distribution, gemini_usage, summary_text, created_by_user_id, created_at',
+      'id, room_id, date_jst, session_part, window_start_at, window_end_at, active_from_at, active_to_at, participants, participant_song_counts, era_distribution, style_distribution, gemini_usage, summary_text, created_by_user_id, created_at, product',
     )
     .single();
 
+  if (upsertRes.error && isMissingProductColumnError(upsertRes.error)) {
+    const legacy = { ...summaryRow };
+    delete legacy.product;
+    upsertRes = await admin
+      .from('room_daily_summary')
+      .upsert(legacy, { onConflict: 'room_id,date_jst,session_part' })
+      .select(
+        'id, room_id, date_jst, session_part, window_start_at, window_end_at, active_from_at, active_to_at, participants, participant_song_counts, era_distribution, style_distribution, gemini_usage, summary_text, created_by_user_id, created_at',
+      )
+      .single();
+  }
+
+  const { data, error } = upsertRes;
+
   if (error) {
-    if (error.code === '42703' || /session_part/i.test(error.message)) {
+    if (error.code === '42703' || /session_part/i.test(error.message ?? '')) {
       return NextResponse.json(
         {
           error: 'room_daily_summary に session_part カラムがありません。',
@@ -422,7 +476,7 @@ export async function POST(request: Request) {
     }
     if (
       error.code === '42P01' ||
-      /could not find the table\s+public\.room_daily_summary/i.test(error.message)
+      /could not find the table\s+public\.room_daily_summary/i.test(error.message ?? '')
     ) {
       return NextResponse.json(
         {

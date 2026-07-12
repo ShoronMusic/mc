@@ -22,6 +22,11 @@ import {
   loadGatheringsForBillingWindow,
 } from '@/lib/room-owner-for-billing';
 import {
+  parseAdminProductFilter,
+  runAdminHistoryQueryScoped,
+  type AdminProductFilter,
+} from '@/lib/room-history-product';
+import {
   enrichYoutubeApiStats,
   estimateAblyCost,
   type AblyCostEstimate,
@@ -206,16 +211,20 @@ async function ingestYoutubeApiToOwnerBuckets(
   buckets: Map<string, UserBillingBucket>,
   fromIso: string,
   roomFilter: string,
+  productFilter: AdminProductFilter = 'all',
 ): Promise<void> {
-  const gatherings = await loadGatheringsForBillingWindow(admin, fromIso);
-  let query = admin
-    .from('youtube_api_usage_logs')
-    .select('room_id, endpoint, ok, created_at')
-    .gte('created_at', fromIso)
-    .limit(8000);
-  if (roomFilter) query = query.eq('room_id', roomFilter);
-
-  const { data, error } = await query;
+  const gatherings = await loadGatheringsForBillingWindow(admin, fromIso, productFilter);
+  const scanRes = await runAdminHistoryQueryScoped((applyProductEq, scopedProduct) => {
+    let q = admin
+      .from('youtube_api_usage_logs')
+      .select('room_id, endpoint, ok, created_at')
+      .gte('created_at', fromIso)
+      .limit(8000);
+    if (roomFilter) q = q.eq('room_id', roomFilter);
+    if (applyProductEq && scopedProduct) q = q.eq('product', scopedProduct);
+    return q;
+  }, productFilter);
+  const { data, error } = scanRes;
   if (error?.code === '42P01') return;
   if (error) {
     console.error('[admin-user-billing] youtube_api', error.message);
@@ -242,16 +251,20 @@ async function ingestChatLogsToOwnerBuckets(
   buckets: Map<string, UserBillingBucket>,
   fromIso: string,
   roomFilter: string,
+  productFilter: AdminProductFilter = 'all',
 ): Promise<void> {
-  const gatherings = await loadGatheringsForBillingWindow(admin, fromIso);
-  let query = admin
-    .from('room_chat_log')
-    .select('room_id, message_type, created_at')
-    .gte('created_at', fromIso)
-    .limit(8000);
-  if (roomFilter) query = query.eq('room_id', roomFilter);
-
-  const { data, error } = await query;
+  const gatherings = await loadGatheringsForBillingWindow(admin, fromIso, productFilter);
+  const scanRes = await runAdminHistoryQueryScoped((applyProductEq, scopedProduct) => {
+    let q = admin
+      .from('room_chat_log')
+      .select('room_id, message_type, created_at')
+      .gte('created_at', fromIso)
+      .limit(8000);
+    if (roomFilter) q = q.eq('room_id', roomFilter);
+    if (applyProductEq && scopedProduct) q = q.eq('product', scopedProduct);
+    return q;
+  }, productFilter);
+  const { data, error } = scanRes;
   if (error?.code === '42P01') return;
   if (error) {
     console.error('[admin-user-billing] room_chat_log', error.message);
@@ -274,26 +287,38 @@ async function ingestChatLogsToOwnerBuckets(
 
 export async function aggregateUserBillingSummaries(
   admin: SupabaseClient,
-  options: { lookbackDays?: number; roomId?: string | null; nowMs?: number } = {},
+  options: {
+    lookbackDays?: number;
+    roomId?: string | null;
+    nowMs?: number;
+    productFilter?: AdminProductFilter;
+  } = {},
 ): Promise<UserBillingSummaryRow[]> {
   const lookbackDays = Math.min(90, Math.max(1, options.lookbackDays ?? 30));
   const fromIso = new Date((options.nowMs ?? Date.now()) - lookbackDays * 86400000).toISOString();
   const roomFilter = options.roomId?.trim() || '';
+  const productFilter = options.productFilter ?? parseAdminProductFilter(null);
   const buckets = new Map<string, UserBillingBucket>();
 
-  let geminiQuery = admin.from('gemini_usage_logs').select(GEMINI_SELECT).gte('created_at', fromIso).limit(15000);
-  if (roomFilter) geminiQuery = geminiQuery.eq('room_id', roomFilter);
-
-  const { data: geminiRows, error: geminiErr } = await geminiQuery;
+  const geminiRes = await runAdminHistoryQueryScoped((applyProductEq, scopedProduct) => {
+    let q = admin.from('gemini_usage_logs').select(GEMINI_SELECT).gte('created_at', fromIso).limit(15000);
+    if (roomFilter) q = q.eq('room_id', roomFilter);
+    if (applyProductEq && scopedProduct) q = q.eq('product', scopedProduct);
+    return q;
+  }, productFilter);
+  const { data: geminiRows, error: geminiErr } = geminiRes;
   if (geminiErr?.code === '42703') {
-    let legacyQuery = admin
-      .from('gemini_usage_logs')
-      .select('room_id, context, model, prompt_token_count, output_token_count, user_id, created_at')
-      .gte('created_at', fromIso)
-      .limit(15000);
-    if (roomFilter) legacyQuery = legacyQuery.eq('room_id', roomFilter);
-    const { data: legacyRows } = await legacyQuery;
-    for (const raw of legacyRows ?? []) {
+    const legacyRes = await runAdminHistoryQueryScoped((applyProductEq, scopedProduct) => {
+      let q = admin
+        .from('gemini_usage_logs')
+        .select('room_id, context, model, prompt_token_count, output_token_count, user_id, created_at')
+        .gte('created_at', fromIso)
+        .limit(15000);
+      if (roomFilter) q = q.eq('room_id', roomFilter);
+      if (applyProductEq && scopedProduct) q = q.eq('product', scopedProduct);
+      return q;
+    }, productFilter);
+    for (const raw of legacyRes.data ?? []) {
       const row = raw as GeminiBillingLogRow;
       ingestGeminiLogIntoUserBuckets(buckets, {
         ...row,
@@ -303,21 +328,24 @@ export async function aggregateUserBillingSummaries(
       });
     }
   } else if (geminiErr && geminiErr.code !== '42P01') {
-    throw new Error(geminiErr.message);
+    throw new Error(geminiErr.message ?? 'gemini_usage_logs query failed');
   } else {
     for (const raw of (geminiRows ?? []) as GeminiBillingLogRow[]) {
       ingestGeminiLogIntoUserBuckets(buckets, raw);
     }
   }
 
-  let playQuery = admin
-    .from('room_playback_history')
-    .select('room_id, played_at, user_id')
-    .gte('played_at', fromIso)
-    .limit(10000);
-  if (roomFilter) playQuery = playQuery.eq('room_id', roomFilter);
-
-  const { data: playRows } = await playQuery;
+  const playRes = await runAdminHistoryQueryScoped((applyProductEq, scopedProduct) => {
+    let q = admin
+      .from('room_playback_history')
+      .select('room_id, played_at, user_id')
+      .gte('played_at', fromIso)
+      .limit(10000);
+    if (roomFilter) q = q.eq('room_id', roomFilter);
+    if (applyProductEq && scopedProduct) q = q.eq('product', scopedProduct);
+    return q;
+  }, productFilter);
+  const { data: playRows } = playRes;
   for (const raw of playRows ?? []) {
     const uid = typeof raw.user_id === 'string' ? raw.user_id.trim() : '';
     if (!uid) continue;
@@ -327,8 +355,8 @@ export async function aggregateUserBillingSummaries(
     if (roomId) b.roomIds.add(roomId);
   }
 
-  await ingestYoutubeApiToOwnerBuckets(admin, buckets, fromIso, roomFilter);
-  await ingestChatLogsToOwnerBuckets(admin, buckets, fromIso, roomFilter);
+  await ingestYoutubeApiToOwnerBuckets(admin, buckets, fromIso, roomFilter, productFilter);
+  await ingestChatLogsToOwnerBuckets(admin, buckets, fromIso, roomFilter, productFilter);
 
   const userIds = Array.from(buckets.keys());
   const labels = await resolveAdminUserDisplayLabels(admin, userIds);
@@ -344,26 +372,30 @@ export async function aggregateUserBillingSummaries(
 export async function aggregateUserBillingDetail(
   admin: SupabaseClient,
   userId: string,
-  options: { lookbackDays?: number; nowMs?: number } = {},
+  options: { lookbackDays?: number; nowMs?: number; productFilter?: AdminProductFilter } = {},
 ): Promise<{ summary: UserBillingSummaryRow | null; slots: UserBillingSlotRow[] }> {
   const uid = userId.trim();
   if (!uid) return { summary: null, slots: [] };
 
   const lookbackDays = Math.min(90, Math.max(1, options.lookbackDays ?? 30));
   const fromIso = new Date((options.nowMs ?? Date.now()) - lookbackDays * 86400000).toISOString();
+  const productFilter = options.productFilter ?? parseAdminProductFilter(null);
   const mainBucket = getUserBucket(new Map(), uid);
   const slotBuckets = new Map<string, UserBillingBucket>();
 
-  let geminiQuery = admin
-    .from('gemini_usage_logs')
-    .select(GEMINI_SELECT)
-    .gte('created_at', fromIso)
-    .or(`billing_user_id.eq.${uid},trigger_user_id.eq.${uid},user_id.eq.${uid}`)
-    .limit(8000);
-
-  const { data: geminiRows, error: geminiErr } = await geminiQuery;
+  const geminiRes = await runAdminHistoryQueryScoped((applyProductEq, scopedProduct) => {
+    let q = admin
+      .from('gemini_usage_logs')
+      .select(GEMINI_SELECT)
+      .gte('created_at', fromIso)
+      .or(`billing_user_id.eq.${uid},trigger_user_id.eq.${uid},user_id.eq.${uid}`)
+      .limit(8000);
+    if (applyProductEq && scopedProduct) q = q.eq('product', scopedProduct);
+    return q;
+  }, productFilter);
+  const { data: geminiRows, error: geminiErr } = geminiRes;
   if (geminiErr && geminiErr.code !== '42P01' && geminiErr.code !== '42703') {
-    throw new Error(geminiErr.message);
+    throw new Error(geminiErr.message ?? 'gemini_usage_logs query failed');
   }
 
   for (const raw of (geminiRows ?? []) as GeminiBillingLogRow[]) {
@@ -383,12 +415,17 @@ export async function aggregateUserBillingDetail(
     if (!slotB.roomIds.has(roomId)) slotB.roomIds.add(roomId);
   }
 
-  const { data: playRows } = await admin
-    .from('room_playback_history')
-    .select('room_id, played_at, user_id')
-    .eq('user_id', uid)
-    .gte('played_at', fromIso)
-    .limit(5000);
+  const playRes = await runAdminHistoryQueryScoped((applyProductEq, scopedProduct) => {
+    let q = admin
+      .from('room_playback_history')
+      .select('room_id, played_at, user_id')
+      .eq('user_id', uid)
+      .gte('played_at', fromIso)
+      .limit(5000);
+    if (applyProductEq && scopedProduct) q = q.eq('product', scopedProduct);
+    return q;
+  }, productFilter);
+  const { data: playRows } = playRes;
 
   for (const raw of playRows ?? []) {
     mainBucket.songCount += 1;

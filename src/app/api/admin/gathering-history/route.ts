@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { requireStyleAdminApi } from '@/lib/admin-access';
 import { formatGeminiCostJpyApprox } from '@/lib/gemini-pricing';
+import { parseAdminProductFilter, runAdminHistoryQueryScoped } from '@/lib/room-history-product';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,6 +28,7 @@ type SnapshotRow = {
   ably_messages_estimated: number;
   ai_character_pick_count: number;
   created_at: string;
+  product?: string | null;
 };
 
 type ParticipantRow = {
@@ -59,13 +61,15 @@ export async function GET(request: Request) {
   const gatheringId = url.searchParams.get('gatheringId')?.trim() || '';
   const days = Math.min(180, Math.max(1, parseInt(url.searchParams.get('days') || '60', 10) || 60));
   const since = new Date(Date.now() - days * 86400000).toISOString();
+  const productFilter = parseAdminProductFilter(url.searchParams.get('product'));
 
   if (gatheringId) {
-    const { data: snapshot, error: snapErr } = await admin
-      .from('room_gathering_snapshots')
-      .select('*')
-      .eq('gathering_id', gatheringId)
-      .maybeSingle();
+    const snapRes = await runAdminHistoryQueryScoped((applyProductEq, scopedProduct) => {
+      let q = admin.from('room_gathering_snapshots').select('*').eq('gathering_id', gatheringId);
+      if (applyProductEq && scopedProduct) q = q.eq('product', scopedProduct);
+      return q.maybeSingle();
+    }, productFilter);
+    const { data: snapshot, error: snapErr } = snapRes;
 
     if (snapErr) {
       if (snapErr.code === '42P01') {
@@ -96,14 +100,19 @@ export async function GET(request: Request) {
     });
   }
 
-  const { data: rows, error } = await admin
-    .from('room_gathering_snapshots')
-    .select(
-      'gathering_id, room_id, room_display_title, gathering_title, owner_display_name, started_at, ended_at, duration_ms, end_reason, song_count_total, participant_count, gemini_calls, gemini_cost_jpy_approx, ably_messages_estimated, ai_character_pick_count, created_at',
-    )
-    .gte('ended_at', since)
-    .order('ended_at', { ascending: false })
-    .limit(200);
+  const listRes = await runAdminHistoryQueryScoped((applyProductEq, scopedProduct) => {
+    let q = admin
+      .from('room_gathering_snapshots')
+      .select(
+        'gathering_id, room_id, room_display_title, gathering_title, owner_display_name, started_at, ended_at, duration_ms, end_reason, song_count_total, participant_count, gemini_calls, gemini_cost_jpy_approx, ably_messages_estimated, ai_character_pick_count, created_at, product',
+      )
+      .gte('ended_at', since)
+      .order('ended_at', { ascending: false })
+      .limit(200);
+    if (applyProductEq && scopedProduct) q = q.eq('product', scopedProduct);
+    return q;
+  }, productFilter);
+  const { data: rows, error } = listRes;
 
   if (error) {
     if (error.code === '42P01') {
@@ -131,6 +140,7 @@ export async function GET(request: Request) {
   return NextResponse.json({
     enabled: true,
     lookbackDays: days,
+    productFilter,
     totals: {
       ...totals,
       geminiJpyLabel: formatGeminiCostJpyApprox(totals.geminiJpy),

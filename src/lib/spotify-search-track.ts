@@ -2,6 +2,8 @@
  * Spotify Client Credentials — トラック検索・取得（管理 import と backfill スクリプト共用）
  */
 
+import { extractEnglishArtistNameFromDescription } from '@/lib/artist-english-name';
+
 type TokenCache = { token: string; expiresAtMs: number };
 
 let tokenCache: TokenCache | null = null;
@@ -44,11 +46,193 @@ export type SpotifyArtistMeta = {
   images: string | null;
 };
 
+export type SpotifyArtistSearchResult =
+  | { ok: true; selected: SpotifyArtistMeta & { url: string | null }; query: string }
+  | { ok: false; error: string };
+
+type SpotifyArtistSearchItem = {
+  id?: string;
+  name?: string;
+  popularity?: number;
+  images?: Array<{ url?: string; height?: number | null; width?: number | null }>;
+  external_urls?: { spotify?: string };
+};
+
+type SpotifyImageLike = { url?: string; height?: number | null; width?: number | null };
+
+/** Spotify CDN の最小サムネ（64px 級・Music8 互換） */
+const SPOTIFY_ARTIST_IMAGE_SMALL_HASH = '00005174';
+
+/** Spotify アーティスト画像から表示用の小さめ URL を選ぶ（64〜160px 級） */
+export function pickSpotifyArtistImageUrl(
+  images: SpotifyImageLike[] | null | undefined,
+  opts?: { maxHeight?: number },
+): string | null {
+  const maxHeight = opts?.maxHeight ?? 160;
+  if (!Array.isArray(images) || images.length === 0) return null;
+  const valid = images
+    .map((img) => ({
+      url: trim(img?.url),
+      height: typeof img?.height === 'number' && img.height > 0 ? img.height : null,
+    }))
+    .filter((x) => x.url);
+  if (valid.length === 0) return null;
+
+  const tiny = valid.find((x) => x.url.includes(SPOTIFY_ARTIST_IMAGE_SMALL_HASH));
+  if (tiny) return tiny.url;
+
+  const withHeight = valid.filter((x) => x.height != null);
+  if (withHeight.length > 0) {
+    const within = withHeight
+      .filter((x) => x.height! <= maxHeight)
+      .sort((a, b) => a.height! - b.height!);
+    if (within.length > 0) return within[0]!.url;
+    return withHeight.sort((a, b) => a.height! - b.height!)[0]!.url;
+  }
+  return valid[valid.length - 1]!.url;
+}
+
+function mapSpotifyArtistItem(item: SpotifyArtistSearchItem | undefined): SpotifyArtistMeta | null {
+  const id = trim(item?.id);
+  const name = trim(item?.name);
+  if (!id || !name) return null;
+  const pop =
+    typeof item?.popularity === 'number' && Number.isFinite(item.popularity)
+      ? Math.round(item.popularity)
+      : null;
+  const images = pickSpotifyArtistImageUrl(item?.images);
+  return { id, name, popularity: pop, images };
+}
+
+type SpotifyArtistSearchJson = { artists?: { items?: SpotifyArtistSearchItem[] } };
+
+function normalizeArtistCompareKey(s: string): string {
+  return s.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function scoreSpotifyArtistCandidate(
+  artist: SpotifyArtistMeta,
+  artistName: string,
+  nameJa: string | null,
+  englishName: string | null,
+): number {
+  const nameKey = normalizeArtistCompareKey(artist.name);
+  const qKey = normalizeArtistCompareKey(artistName);
+  const jaKey = nameJa ? normalizeArtistCompareKey(nameJa) : '';
+  const enKey = englishName ? normalizeArtistCompareKey(englishName) : '';
+  let score = artist.popularity ?? 0;
+  if (qKey && nameKey === qKey) score += 120;
+  if (jaKey && nameKey === jaKey) score += 120;
+  if (enKey && nameKey === enKey) score += 100;
+  if (qKey && nameKey.includes(qKey)) score += 40;
+  if (jaKey && nameKey.includes(jaKey)) score += 40;
+  if (enKey && nameKey.includes(enKey)) score += 30;
+  return score;
+}
+
+function buildSpotifyArtistSearchQueries(params: {
+  artistName: string;
+  nameJa?: string | null;
+  descriptionEn?: string | null;
+}): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const push = (q: string) => {
+    const t = q.trim();
+    if (!t) return;
+    const key = t.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push(t);
+  };
+
+  push(params.artistName);
+  if (params.nameJa?.trim()) push(params.nameJa.trim());
+  const en = extractEnglishArtistNameFromDescription(params.descriptionEn);
+  if (en) push(en);
+  return out;
+}
+
+/** アーティスト名から Spotify アーティスト ID を検索（管理画面・Music8 WP 同目的） */
+export async function searchSpotifyArtistByName(params: {
+  artistName: string;
+  nameJa?: string | null;
+  descriptionEn?: string | null;
+}): Promise<SpotifyArtistSearchResult> {
+  const artistName = params.artistName.trim();
+  if (!artistName) {
+    return { ok: false, error: 'アーティスト名が空です。' };
+  }
+
+  const token = await getSpotifyAccessToken();
+  if (!token) {
+    return {
+      ok: false,
+      error: 'SPOTIFY_CLIENT_ID / SPOTIFY_CLIENT_SECRET が未設定です。',
+    };
+  }
+
+  const englishName = extractEnglishArtistNameFromDescription(params.descriptionEn);
+  const queries = buildSpotifyArtistSearchQueries(params);
+  const collected = new Map<string, SpotifyArtistMeta>();
+
+  for (const q of queries) {
+    const url = new URL('https://api.spotify.com/v1/search');
+    url.searchParams.set('q', q);
+    url.searchParams.set('type', 'artist');
+    url.searchParams.set('limit', '10');
+    url.searchParams.set('market', spotifyMarket());
+
+    try {
+      const res = await spotifyFetchJson(url.toString(), token);
+      if (!res?.ok) continue;
+      const data = (await res.json()) as SpotifyArtistSearchJson;
+      for (const item of data.artists?.items ?? []) {
+        const mapped = mapSpotifyArtistItem(item);
+        if (!mapped) continue;
+        const prev = collected.get(mapped.id);
+        if (!prev || (mapped.popularity ?? 0) > (prev.popularity ?? 0)) {
+          collected.set(mapped.id, mapped);
+        }
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  const candidates = [...collected.values()];
+  if (candidates.length === 0) {
+    return { ok: false, error: 'Spotify アーティストが見つかりませんでした。' };
+  }
+
+  const selected = [...candidates].sort(
+    (a, b) =>
+      scoreSpotifyArtistCandidate(b, artistName, params.nameJa ?? null, englishName) -
+      scoreSpotifyArtistCandidate(a, artistName, params.nameJa ?? null, englishName),
+  )[0]!;
+
+  const details = await fetchSpotifyArtistsByIds([selected.id]);
+  const detail = details[0];
+  const images = detail?.images ?? selected.images;
+  const popularity = detail?.popularity ?? selected.popularity;
+
+  return {
+    ok: true,
+    query: queries[0] ?? artistName,
+    selected: {
+      ...selected,
+      popularity,
+      images,
+      url: `https://open.spotify.com/artist/${selected.id}`,
+    },
+  };
+}
+
 type SpotifyArtistsBatchJson = { artists?: Array<{
   id?: string;
   name?: string;
   popularity?: number;
-  images?: Array<{ url?: string }>;
+  images?: Array<{ url?: string; height?: number | null; width?: number | null }>;
 }> };
 
 function trim(s: unknown): string {
@@ -215,7 +399,7 @@ export async function fetchSpotifyArtistsByIds(ids: string[]): Promise<SpotifyAr
         if (!id || !name) continue;
         const pop =
           typeof a.popularity === 'number' && Number.isFinite(a.popularity) ? Math.round(a.popularity) : null;
-        const images = Array.isArray(a.images) ? trim(a.images[0]?.url) || null : null;
+        const images = pickSpotifyArtistImageUrl(a.images);
         out.push({ id, name, popularity: pop, images });
       }
     } catch {

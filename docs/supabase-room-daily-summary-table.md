@@ -22,7 +22,8 @@ create table if not exists public.room_daily_summary (
   summary_text text not null,
   created_by_user_id uuid references auth.users(id) on delete set null,
   created_at timestamptz not null default now(),
-  unique (room_id, date_jst, session_part)
+  product text not null default 'musicaichat',
+  unique (room_id, date_jst, session_part, product)
 );
 
 create index if not exists idx_room_daily_summary_room_date
@@ -38,8 +39,8 @@ alter table public.room_daily_summary enable row level security;
 
 - 管理画面: `/admin/room-daily-summary`
 - API: `/api/admin/room-daily-summary`
-  - `POST`: `{ roomId, dateJst }` で生成して保存（upsert）
-  - `GET`: 保存済み一覧取得
+  - `POST`: `{ roomId, dateJst, sessionPart, product }` で生成して保存（upsert）
+  - `GET`: `?product=all|musicaichat|musicchat` で保存済み一覧取得
 
 ## 集計ウィンドウ（現在仕様）
 
@@ -74,4 +75,36 @@ alter table public.room_daily_summary
   add constraint room_daily_summary_room_date_part_key
   unique (room_id, date_jst, session_part);
 ```
+
+## product 列（ma / mc 分離）
+
+同じ `room_id` でも ma / mc で別サマリーとして保存します。
+
+```sql
+alter table public.room_daily_summary
+  add column if not exists product text not null default 'musicaichat';
+
+alter table public.room_daily_summary
+  drop constraint if exists room_daily_summary_product_check;
+
+alter table public.room_daily_summary
+  add constraint room_daily_summary_product_check
+  check (product in ('musicaichat', 'musicchat'));
+
+update public.room_daily_summary
+  set product = 'musicaichat'
+  where product is null or product = '';
+
+alter table public.room_daily_summary
+  drop constraint if exists room_daily_summary_room_date_part_key;
+
+alter table public.room_daily_summary
+  add constraint room_daily_summary_room_date_part_product_key
+  unique (room_id, date_jst, session_part, product);
+
+create index if not exists idx_room_daily_summary_product_date
+  on public.room_daily_summary (product, date_jst desc);
+```
+
+**product 列未実行時**: 従来どおり `room_id` + 日付 + 枠のみ（ma 後方互換）。
 

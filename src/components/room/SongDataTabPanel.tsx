@@ -6,6 +6,7 @@
  */
 
 import { useEffect, useState } from 'react';
+import { showRoomStyleUi } from '@/lib/product-branding';
 import {
   resolveSongTitleForMusic8,
 } from '@/lib/music8-song-lookup';
@@ -196,7 +197,7 @@ export default function SongDataTabPanel({
 
   const hasAny =
     fields.releaseDate ||
-    fields.styleNames.length > 0 ||
+    (showRoomStyleUi() && fields.styleNames.length > 0) ||
     fields.genres.length > 0 ||
     fields.description;
 
@@ -207,13 +208,30 @@ export default function SongDataTabPanel({
           {artistName}
           {displaySong ? ` - ${displaySong}` : ''}
         </p>
-        <p className="text-xs text-gray-500">リリース・スタイル・ジャンル・説明文はいずれもありません</p>
+        <p className="text-xs text-gray-500">
+          {showRoomStyleUi()
+            ? 'リリース・スタイル・ジャンル・説明文はいずれもありません'
+            : 'リリース・ジャンル・説明文はいずれもありません'}
+        </p>
         <ReferencedMusicDataDisclaimer />
       </div>
     );
   }
 
   const hideAggregatedStyleGenre = descriptionImpliesStructuredGenreOrStyle(fields.description);
+  const showStyleUi = showRoomStyleUi();
+  const descriptionForDisplay =
+    showStyleUi || !fields.description
+      ? fields.description
+      : fields.description
+          .replace(/\r\n/g, '\n')
+          .split('\n')
+          .filter(
+            (line) =>
+              !/^\s*スタイル\s*(?:\([^)]*\))?\s*[:：]/.test(line) && !/^\s*Style\s*(?:\([^)]*\))?\s*[:：]/i.test(line),
+          )
+          .join('\n')
+          .trim();
 
   return (
     <div className="flex h-full flex-col gap-3 overflow-auto p-4 text-sm">
@@ -223,7 +241,7 @@ export default function SongDataTabPanel({
           {fields.releaseDate}
         </p>
       )}
-      {!hideAggregatedStyleGenre && fields.styleNames.length > 0 && (
+      {showStyleUi && !hideAggregatedStyleGenre && fields.styleNames.length > 0 && (
         <p className="text-gray-200">
           <span className="text-gray-500">スタイル：</span>
           {fields.styleNames.join(', ')}
@@ -235,10 +253,10 @@ export default function SongDataTabPanel({
           {fields.genres.join(', ')}
         </p>
       )}
-      {fields.description && (
+      {descriptionForDisplay && (
         <div
           className="prose prose-invert max-w-none whitespace-pre-wrap text-gray-300 prose-strong:text-gray-500 prose-p:my-1 prose-p:leading-relaxed prose-a:text-blue-400"
-          dangerouslySetInnerHTML={{ __html: formatSongDataDescriptionMarkup(fields.description) }}
+          dangerouslySetInnerHTML={{ __html: formatSongDataDescriptionMarkup(descriptionForDisplay) }}
         />
       )}
       <ReferencedMusicDataDisclaimer />

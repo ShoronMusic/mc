@@ -1,0 +1,374 @@
+**********************
+PowerShell transcript start
+Start time: 20260712000905
+Username: LAPTOP-N3TR5NE7\ymap6
+RunAs User: LAPTOP-N3TR5NE7\ymap6
+Configuration Name: 
+Machine: LAPTOP-N3TR5NE7 (Microsoft Windows NT 10.0.26200.0)
+Host Application: C:\Program Files\PowerShell\7\pwsh.dll -WorkingDirectory ~
+Process ID: 26436
+PSVersion: 7.6.0
+PSEdition: Core
+GitCommitId: 7.6.0
+OS: Microsoft Windows 10.0.26200
+Platform: Win32NT
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1, 6.0, 7.0
+PSRemotingProtocolVersion: 2.4
+SerializationVersion: 1.1.0.1
+WSManStackVersion: 3.0
+**********************
+[1/3] fetch (build JSON)
+[log] step -> E:\mc\tmp\domestic-seed-logs\2026-07-12T00-02-30\01-fetch.log
+[fetch] playlist PLb02MaZXm5_OGFGXSV-6U2_9f2MqnDBbm
+[fetch] 52 videos 窶・resolving metadata (MB 1req/s 縺ｮ縺溘ａ謨ｰ蛻・°縺九ｊ縺ｾ縺・
+[fetch] 5/52
+[fetch] 10/52
+[fetch] 15/52
+[fetch] 20/52
+[fetch] 25/52
+[fetch] 30/52
+[fetch] 35/52
+[fetch] 40/52
+[fetch] 45/52
+[fetch] 50/52
+[fetch] 52/52
+[fetch] 菫晏ｭ・ E:\mc\tmp\domestic-seed-PLb02MaZXm5_OGFGXSV-6U2_-2026-07-12T00-02-30.json
+  蜈ｨ 52 莉ｶ / 蜴溽乢譌･ 22 / 蜈ｬ蠑衆K 24 / include 24
+[fetch] JSON 繧堤｢ｺ隱阪＠縲∝ｿ・ｦ√↑繧・artist/title/譌･莉・include 繧堤ｷｨ髮・＠縺ｦ縺九ｉ apply 繧貞ｮ溯｡後＠縺ｦ縺上□縺輔＞縲・
+[resolveArtistSongForPackAsync] heuristic {
+  title: '米津玄師,宇多田ヒカル「JANE DOE」×『チェンソーマン レゼ篇』MV/KenshiYonezu,HikaruUtada-JANE DOE×ChainsawMan–TheMovie:RezeArc',
+  authorName: 'Kenshi Yonezu  米津玄師',
+  artistDisplay: '米津玄師, 宇多田ヒカル「JANE DOE」×『チェンソーマン レゼ篇』MV/KenshiYonezu, HikaruUtada',
+  song: 'JANE DOE×ChainsawMan - TheMovie:RezeArc'
+}
+[resolveArtistSongForPackAsync] heuristic {
+  title: '米津玄師  Kenshi Yonezu -  1991',
+  authorName: 'Kenshi Yonezu  米津玄師',
+  artistDisplay: '米津玄師 Kenshi Yonezu',
+  song: '1991'
+}
+[resolveArtistSongForPackAsync] heuristic {
+  title: '劇場版『チェンソーマン レゼ篇』オープニングムービー 　主題歌：米津玄師「IRIS OUT」“Chainsaw Man – The Movie: Reze Arc” – Opening Movie',
+  authorName: 'Kenshi Yonezu  米津玄師',
+  artistDisplay: '劇場版『チェンソーマン レゼ篇』オープニングムービー 主題歌：米津玄師「IRIS OUT」"Chainsaw Man',
+  song: 'The Movie: Reze Arc" - Opening Movie'
+}
+[resolveArtistSongForPackAsync] heuristic {
+  title: '米津玄師, 宇多田ヒカル Kenshi Yonezu, Hikaru Utada -  JANE DOE',
+  authorName: 'Kenshi Yonezu  米津玄師',
+  artistDisplay: '米津玄師, 宇多田ヒカル Kenshi Yonezu, Hikaru Utada',
+  song: 'JANE DOE'
+}
+[resolveArtistSongForPackAsync] heuristic {
+  title: '米津玄師  Kenshi Yonezu - IRIS OUT',
+  authorName: 'Kenshi Yonezu  米津玄師',
+  artistDisplay: '米津玄師 Kenshi Yonezu',
+  song: 'IRIS OUT'
+}
+[resolveArtistSongForPackAsync] heuristic {
+  title: '米津玄師 Kenshi Yonezu - KICK BACK  (Frost Children Remix)',
+  authorName: 'Kenshi Yonezu  米津玄師',
+  artistDisplay: '米津玄師 Kenshi Yonezu',
+  song: 'KICK BACK (Frost Children Remix)'
+}
+[resolveArtistSongForPackAsync] heuristic {
+  title: '米津玄師「Plazma」×『機動戦士Gundam GQuuuuuuX』　Kenshi Yonezu - Plazma × Mobile Suit Gundam GQuuuuuuX',
+  authorName: 'Kenshi Yonezu  米津玄師',
+  artistDisplay: '米津玄師「Plazma」×『機動戦士Gundam GQuuuuuuX』 Kenshi Yonezu',
+  song: 'Plazma × Mobile Suit Gundam GQuuuuuuX'
+}
+[resolveArtistSongForPackAsync] heuristic {
+  title: '米津玄師 Kenshi Yonezu - BOW AND ARROW / 羽生結弦 Yuzuru Hanyu Short Program ver.',
+  authorName: 'Kenshi Yonezu  米津玄師',
+  artistDisplay: '米津玄師 Kenshi Yonezu',
+  song: 'BOW AND ARROW / 羽生結弦 Yuzuru Hanyu Short Program ver.'
+}
+[resolveArtistSongForPackAsync] heuristic {
+  title: '米津玄師 Kenshi Yonezu - BOW AND ARROW',
+  authorName: 'Kenshi Yonezu  米津玄師',
+  artistDisplay: '米津玄師 Kenshi Yonezu',
+  song: 'BOW AND ARROW'
+}
+[resolveArtistSongForPackAsync] heuristic {
+  title: '米津玄師  Kenshi Yonezu - Plazma',
+  authorName: 'Kenshi Yonezu  米津玄師',
+  artistDisplay: '米津玄師 Kenshi Yonezu',
+  song: 'Plazma'
+}
+[resolveArtistSongForPackAsync] heuristic {
+  title: '米津玄師 - さよーならまたいつか！「虎に翼」OPタイトルバック・フル　Kenshi Yonezu - Sayonara, Mata Itsuka !',
+  authorName: 'Kenshi Yonezu  米津玄師',
+  artistDisplay: '米津玄師',
+  song: 'さよーならまたいつか！「虎に翼」OPタイトルバック・フル Kenshi Yonezu - Sayonara, Mata Itsuka !'
+}
+[resolveArtistSongForPackAsync] heuristic {
+  title: '米津玄師 - がらくた　Kenshi Yonezu - Garakuta JUNK',
+  authorName: 'Kenshi Yonezu  米津玄師',
+  artistDisplay: '米津玄師',
+  song: 'がらくた Kenshi Yonezu - Garakuta JUNK'
+}
+[resolveArtistSongForPackAsync] heuristic {
+  title: '米津玄師  Kenshi Yonezu - RED OUT',
+  authorName: 'Kenshi Yonezu  米津玄師',
+  artistDisplay: '米津玄師 Kenshi Yonezu',
+  song: 'RED OUT'
+}
+[resolveArtistSongForPackAsync] heuristic {
+  title: '米津玄師 - 毎日　Kenshi Yonezu - Mainichi ( Every Day )',
+  authorName: 'Kenshi Yonezu  米津玄師',
+  artistDisplay: '米津玄師',
+  song: '毎日 Kenshi Yonezu - Mainichi ( Every Day )'
+}
+[resolveArtistSongForPackAsync] heuristic {
+  title: '米津玄師 - さよーならまたいつか！ Kenshi Yonezu - Sayonara, Mata Itsuka !',
+  authorName: 'Kenshi Yonezu  米津玄師',
+  artistDisplay: '米津玄師',
+  song: 'さよーならまたいつか！ Kenshi Yonezu - Sayonara, Mata Itsuka !'
+}
+[resolveArtistSongForPackAsync] heuristic {
+  title: '米津玄師「地球儀」× 宮﨑駿「君たちはどう生きるか」Kenshi Yonezu - Spinning Globe (Hayao Miyazaki, The Boy and The Heron)',
+  authorName: 'Kenshi Yonezu  米津玄師',
+  artistDisplay: '米津玄師「地球儀」× 宮﨑駿「君たちはどう生きるか」Kenshi Yonezu',
+  song: 'Spinning Globe (Hayao Miyazaki, The Boy and The Heron)'
+}
+[resolveArtistSongForPackAsync] heuristic {
+  title: '米津玄師  - 地球儀　Kenshi Yonezu - Spinning Globe',
+  authorName: 'Kenshi Yonezu  米津玄師',
+  artistDisplay: '米津玄師',
+  song: '地球儀 Kenshi Yonezu - Spinning Globe'
+}
+[resolveArtistSongForPackAsync] heuristic {
+  title: '米津玄師 - 月を見ていた Kenshi Yonezu - Tsuki Wo Miteita / Moongazing',
+  authorName: 'Kenshi Yonezu  米津玄師',
+  artistDisplay: '米津玄師',
+  song: '月を見ていた Kenshi Yonezu - Tsuki Wo Miteita / Moongazing'
+}
+[resolveArtistSongForPackAsync] heuristic {
+  title: '米津玄師  Kenshi Yonezu - LADY',
+  authorName: 'Kenshi Yonezu  米津玄師',
+  artistDisplay: '米津玄師 Kenshi Yonezu',
+  song: 'LADY'
+}
+[resolveArtistSongForPackAsync] heuristic {
+  title: '米津玄師 Kenshi Yonezu - KICKBACK',
+  authorName: 'Kenshi Yonezu  米津玄師',
+  artistDisplay: '米津玄師 Kenshi Yonezu',
+  song: 'KICKBACK'
+}
+[resolveArtistSongForPackAsync] heuristic {
+  title: '米津玄師  - M八七 　Kenshi Yonezu - M87',
+  authorName: 'Kenshi Yonezu  米津玄師',
+  artistDisplay: '米津玄師',
+  song: 'M八七 Kenshi Yonezu - M87'
+}
+[resolveArtistSongForPackAsync] heuristic {
+  title: '米津玄師  - POP SONG / Kenshi Yonezu',
+  authorName: 'Kenshi Yonezu  米津玄師',
+  artistDisplay: '米津玄師',
+  song: 'POP SONG / Kenshi Yonezu'
+}
+[resolveArtistSongForPackAsync] heuristic {
+  title: '米津玄師  - Pale Blue / Kenshi Yonezu',
+  authorName: 'Kenshi Yonezu  米津玄師',
+  artistDisplay: '米津玄師',
+  song: 'Pale Blue / Kenshi Yonezu'
+}
+[resolveArtistSongForPackAsync] heuristic {
+  title: '米津玄師 - 死神　 Kenshi Yonezu - Shinigami',
+  authorName: 'Kenshi Yonezu  米津玄師',
+  artistDisplay: '米津玄師',
+  song: '死神 Kenshi Yonezu - Shinigami'
+}
+[resolveArtistSongForPackAsync] heuristic {
+  title: '米津玄師 - カナリヤ  Kenshi Yonezu - Canary',
+  authorName: 'Kenshi Yonezu  米津玄師',
+  artistDisplay: '米津玄師',
+  song: 'カナリヤ Kenshi Yonezu - Canary'
+}
+[resolveArtistSongForPackAsync] heuristic {
+  title: '米津玄師 - カムパネルラ  Kenshi Yonezu - Campanella',
+  authorName: 'Kenshi Yonezu  米津玄師',
+  artistDisplay: '米津玄師',
+  song: 'カムパネルラ Kenshi Yonezu - Campanella'
+}
+[resolveArtistSongForPackAsync] heuristic {
+  title: '米津玄師 - 感電   Kenshi Yonezu - KANDEN',
+  authorName: 'Kenshi Yonezu  米津玄師',
+  artistDisplay: '米津玄師',
+  song: '感電 Kenshi Yonezu - KANDEN'
+}
+[resolveArtistSongForPackAsync] heuristic {
+  title: '米津玄師  - 馬と鹿   Kenshi Yonezu - Uma to Shika',
+  authorName: 'Kenshi Yonezu  米津玄師',
+  artistDisplay: '米津玄師',
+  song: '馬と鹿 Kenshi Yonezu - Uma to Shika'
+}
+[resolveArtistSongForPackAsync] heuristic {
+  title: '米津玄師 - パプリカ  Kenshi Yonezu - PAPRIKA',
+  authorName: 'Kenshi Yonezu  米津玄師',
+  artistDisplay: '米津玄師',
+  song: 'パプリカ Kenshi Yonezu - PAPRIKA'
+}
+[resolveArtistSongForPackAsync] heuristic {
+  title: '米津玄師 - 海の幽霊  Kenshi Yonezu - Spirits of the Sea',
+  authorName: 'Kenshi Yonezu  米津玄師',
+  artistDisplay: '米津玄師',
+  song: '海の幽霊 Kenshi Yonezu - Spirits of the Sea'
+}
+[resolveArtistSongForPackAsync] heuristic {
+  title: '米津玄師  - Flamingo / Kenshi Yonezu',
+  authorName: 'Kenshi Yonezu  米津玄師',
+  artistDisplay: '米津玄師',
+  song: 'Flamingo / Kenshi Yonezu'
+}
+[resolveArtistSongForPackAsync] heuristic {
+  title: '米津玄師 - TEENAGE RIOT / Kenshi Yonezu',
+  authorName: 'Kenshi Yonezu  米津玄師',
+  artistDisplay: '米津玄師',
+  song: 'TEENAGE RIOT / Kenshi Yonezu'
+}
+[resolveArtistSongForPackAsync] heuristic {
+  title: '米津玄師  Kenshi Yonezu  - Lemon',
+  authorName: 'Kenshi Yonezu  米津玄師',
+  artistDisplay: '米津玄師 Kenshi Yonezu',
+  song: 'Lemon'
+}
+[resolveArtistSongForPackAsync] heuristic {
+  title: '米津玄師 - 春雷   Kenshi Yonezu - Shunrai',
+  authorName: 'Kenshi Yonezu  米津玄師',
+  artistDisplay: '米津玄師',
+  song: '春雷 Kenshi Yonezu - Shunrai'
+}
+[resolveArtistSongForPackAsync] heuristic {
+  title: '米津玄師  - 灰色と青（ ＋菅田将暉 ）,  Kenshi Yonezu - Haiirotoao（+Masaki Suda)',
+  authorName: 'Kenshi Yonezu  米津玄師',
+  artistDisplay: '米津玄師',
+  song: '灰色と青（ ＋菅田将暉 ）, Kenshi Yonezu - Haiirotoao（+Masaki Suda)'
+}
+[resolveArtistSongForPackAsync] heuristic {
+  title: '『僕のヒーローアカデミア』×米津玄師「ピースサイン」スペシャルミュージックビデオ',
+  authorName: 'TOHO animation チャンネル',
+  artistDisplay: 'TOHO animation チャンネル',
+  song: '『僕のヒーローアカデミア』×米津玄師「ピースサイン」スペシャルミュージックビデオ'
+}
+[resolveArtistSongForPackAsync] heuristic {
+  title: '米津玄師 - ピースサイン , Kenshi Yonezu - Peace Sign',
+  authorName: 'Kenshi Yonezu  米津玄師',
+  artistDisplay: '米津玄師',
+  song: 'ピースサイン , Kenshi Yonezu - Peace Sign'
+}
+[resolveArtistSongForPackAsync] heuristic {
+  title: '米津玄師  - orion , Kenshi Yonezu',
+  authorName: 'Kenshi Yonezu  米津玄師',
+  artistDisplay: '米津玄師',
+  song: 'orion , Kenshi Yonezu'
+}
+[resolveArtistSongForPackAsync] heuristic {
+  title: '米津玄師 - LOSER , Kenshi Yonezu',
+  authorName: 'Kenshi Yonezu  米津玄師',
+  artistDisplay: '米津玄師',
+  song: 'LOSER , Kenshi Yonezu'
+}
+[resolveArtistSongForPackAsync] heuristic {
+  title: '米津玄師 - メトロノーム , Kenshi Yonezu - Metronome',
+  authorName: 'Kenshi Yonezu  米津玄師',
+  artistDisplay: '米津玄師',
+  song: 'メトロノーム , Kenshi Yonezu - Metronome'
+}
+[resolveArtistSongForPackAsync] heuristic {
+  title: '米津玄師  - フローライト , Kenshi Yonezu - Fluorite',
+  authorName: 'Kenshi Yonezu  米津玄師',
+  artistDisplay: '米津玄師',
+  song: 'フローライト , Kenshi Yonezu - Fluorite'
+}
+[resolveArtistSongForPackAsync] heuristic {
+  title: '米津玄師  - アンビリーバーズ , Kenshi Yonezu - Unbelivers',
+  authorName: 'Kenshi Yonezu  米津玄師',
+  artistDisplay: '米津玄師',
+  song: 'アンビリーバーズ , Kenshi Yonezu - Unbelivers'
+}
+[resolveArtistSongForPackAsync] heuristic {
+  title: '米津玄師  - Flowerwall , Kenshi Yonezu',
+  authorName: 'Kenshi Yonezu  米津玄師',
+  artistDisplay: '米津玄師',
+  song: 'Flowerwall , Kenshi Yonezu'
+}
+[resolveArtistSongForPackAsync] heuristic {
+  title: '米津玄師  - アイネクライネ , Kenshi Yonezu - Eine Kleine',
+  authorName: 'Kenshi Yonezu  米津玄師',
+  artistDisplay: '米津玄師',
+  song: 'アイネクライネ , Kenshi Yonezu - Eine Kleine'
+}
+[resolveArtistSongForPackAsync] heuristic {
+  title: '米津玄師  - リビングデッド・ユース , Kenshi Yonezu - Living Dead Youth',
+  authorName: 'Kenshi Yonezu  米津玄師',
+  artistDisplay: '米津玄師',
+  song: 'リビングデッド・ユース , Kenshi Yonezu - Living Dead Youth'
+}
+[resolveArtistSongForPackAsync] heuristic {
+  title: '米津玄師 - WOODEN DOLL , Kenshi Yonezu',
+  authorName: 'Kenshi Yonezu  米津玄師',
+  artistDisplay: '米津玄師',
+  song: 'WOODEN DOLL , Kenshi Yonezu'
+}
+[resolveArtistSongForPackAsync] heuristic {
+  title: "米津玄師 - ポッピンアパシー , Kenshi Yonezu - Poppin'Apathy",
+  authorName: 'Kenshi Yonezu  米津玄師',
+  artistDisplay: '米津玄師',
+  song: "ポッピンアパシー , Kenshi Yonezu - Poppin'Apathy"
+}
+[resolveArtistSongForPackAsync] heuristic {
+  title: '米津玄師　MV「MAD HEAD LOVE」',
+  authorName: 'Kenshi Yonezu  米津玄師',
+  artistDisplay: 'Kenshi Yonezu  米津玄師',
+  song: '米津玄師 MV「MAD HEAD LOVE」'
+}
+[resolveArtistSongForPackAsync] heuristic {
+  title: '米津玄師　MV「サンタマリア」',
+  authorName: 'Kenshi Yonezu  米津玄師',
+  artistDisplay: 'Kenshi Yonezu  米津玄師',
+  song: '米津玄師 MV「サンタマリア」'
+}
+[resolveArtistSongForPackAsync] heuristic {
+  title: '米津玄師　MV『ゴーゴー幽霊船』',
+  authorName: 'Kenshi Yonezu  米津玄師',
+  artistDisplay: 'Kenshi Yonezu  米津玄師',
+  song: '米津玄師 MV『ゴーゴー幽霊船』'
+}
+[resolveArtistSongForPackAsync] heuristic {
+  title: '米津玄師　MV『vivi』',
+  authorName: 'Kenshi Yonezu  米津玄師',
+  artistDisplay: 'Kenshi Yonezu  米津玄師',
+  song: '米津玄師 MV『vivi』'
+}
+[resolveArtistSongForPackAsync] heuristic {
+  title: '米津玄師　MV『恋と病熱』',
+  authorName: 'Kenshi Yonezu  米津玄師',
+  artistDisplay: 'Kenshi Yonezu  米津玄師',
+  song: '米津玄師 MV『恋と病熱』'
+}
+[fetch] playlist PLb02MaZXm5_OGFGXSV-6U2_9f2MqnDBbm
+[fetch] 52 videos 窶・resolving metadata (MB 1req/s 縺ｮ縺溘ａ謨ｰ蛻・°縺九ｊ縺ｾ縺・
+[fetch] 5/52
+[fetch] 10/52
+[fetch] 15/52
+[fetch] 20/52
+[fetch] 25/52
+[fetch] 30/52
+[fetch] 35/52
+[fetch] 40/52
+[fetch] 45/52
+[fetch] 50/52
+[fetch] 52/52
+[fetch] 菫晏ｭ・ E:\mc\tmp\domestic-seed-PLb02MaZXm5_OGFGXSV-6U2_-2026-07-12T00-02-30.json
+  蜈ｨ 52 莉ｶ / 蜴溽乢譌･ 22 / 蜈ｬ蠑衆K 24 / include 24
+[fetch] JSON 繧堤｢ｺ隱阪＠縲∝ｿ・ｦ√↑繧・artist/title/譌･莉・include 繧堤ｷｨ髮・＠縺ｦ縺九ｉ apply 繧貞ｮ溯｡後＠縺ｦ縺上□縺輔＞縲・
+[1/3] fetch done: total=52 releaseDate=22 officialOk=24 included=24
+[2/3] skipped (use -ApplyDryRun or -Apply)
+[3/3] skipped (use -Apply -ForceAllow for DB write)
+      JSON: E:\mc\tmp\domestic-seed-PLb02MaZXm5_OGFGXSV-6U2_-2026-07-12T00-02-30.json
+[log] done. combined=E:\mc\tmp\domestic-seed-logs\2026-07-12T00-02-30\run.log errors=E:\mc\tmp\domestic-seed-logs\2026-07-12T00-02-30\run-errors.log transcript=E:\mc\tmp\domestic-seed-logs\2026-07-12T00-02-30\transcript.log
+**********************
+PowerShell transcript end
+End time: 20260712001057
+**********************

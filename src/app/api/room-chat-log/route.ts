@@ -1,5 +1,11 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import {
+  getRoomHistoryProductId,
+  parseAdminProductFilter,
+  runRoomHistoryQueryScoped,
+  withRoomHistoryProductEq,
+} from '@/lib/room-history-product';
 
 export const dynamic = 'force-dynamic';
 
@@ -108,6 +114,8 @@ export async function GET(request: Request) {
   const scope = scopeParam === 'gathering' ? 'gathering' : 'day';
   const formatJson = searchParams.get('format') === 'json';
   const ymd = dateParam && dateParam.length > 0 ? dateParam : todayJstYmd();
+  const adminProductFilter = parseAdminProductFilter(searchParams.get('product'));
+  const scopeProduct = adminProductFilter === 'all' ? getRoomHistoryProductId() : adminProductFilter;
   const range = scope === 'day' ? jstDayRangeUtc(ymd) : null;
   if (scope === 'day' && !range) {
     return NextResponse.json({ error: 'date は YYYY-MM-DD 形式で指定してください' }, { status: 400 });
@@ -116,16 +124,20 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'scope=gathering のとき gatheringId が必要です' }, { status: 400 });
   }
 
-  let query = supabase
-    .from('room_chat_log')
-    .select('created_at, message_type, display_name, body');
-  query = query.eq('room_id', roomId);
-  if (scope === 'gathering' && gatheringId) {
-    query = query.eq('gathering_id', gatheringId);
-  } else if (range) {
-    query = query.gte('created_at', range.startIso).lt('created_at', range.endIso);
-  }
-  const { data, error } = await query.order('created_at', { ascending: true }).limit(MAX_EXPORT_ROWS + 1);
+  const historyRes = await runRoomHistoryQueryScoped((applyProduct) => {
+    let query = supabase
+      .from('room_chat_log')
+      .select('created_at, message_type, display_name, body');
+    query = query.eq('room_id', roomId);
+    if (applyProduct) query = withRoomHistoryProductEq(query, scopeProduct);
+    if (scope === 'gathering' && gatheringId) {
+      query = query.eq('gathering_id', gatheringId);
+    } else if (range) {
+      query = query.gte('created_at', range.startIso).lt('created_at', range.endIso);
+    }
+    return query.order('created_at', { ascending: true }).limit(MAX_EXPORT_ROWS + 1);
+  });
+  const { data, error } = historyRes;
 
   if (error) {
     if (error.code === '42P01') {
@@ -233,7 +245,9 @@ export async function POST(request: Request) {
     display_name: string;
     body: string;
     user_id: string | null;
+    product: string;
   }> = [];
+  const chatProduct = getRoomHistoryProductId();
 
   for (const item of raw) {
     if (!item || typeof item !== 'object') continue;
@@ -270,6 +284,7 @@ export async function POST(request: Request) {
       display_name,
       body: trimmed,
       user_id,
+      product: chatProduct,
     });
   }
 
@@ -277,10 +292,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, rows: 0 });
   }
 
-  const { error } = await supabase.from('room_chat_log').upsert(rows, {
+  let { error } = await supabase.from('room_chat_log').upsert(rows, {
     onConflict: 'client_message_id',
     ignoreDuplicates: true,
   });
+
+  if (error && (error.code === '42703' || error.message?.includes('product'))) {
+    const legacyRows = rows.map(({ product: _p, ...rest }) => rest);
+    ({ error } = await supabase.from('room_chat_log').upsert(legacyRows, {
+      onConflict: 'client_message_id',
+      ignoreDuplicates: true,
+    }));
+  }
 
   if (error) {
     if (error.code === '42P01') {

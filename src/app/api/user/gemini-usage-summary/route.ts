@@ -3,6 +3,11 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { aggregateUserGeminiUsage, type UserGeminiUsageLogRow } from '@/lib/user-gemini-usage-aggregate';
 import type { ParticipationHistoryRow } from '@/lib/participation-summary';
+import {
+  getRoomHistoryProductId,
+  runRoomHistoryQueryScoped,
+  withRoomHistoryProductEq,
+} from '@/lib/room-history-product';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,11 +34,18 @@ export async function GET() {
     return NextResponse.json({ enabled: false, error: 'ログインが必要です。' }, { status: 401 });
   }
 
-  const { data: participationRows, error: partErr } = await supabase
-    .from('user_room_participation_history')
-    .select('id, room_id, gathering_id, gathering_title, display_name, joined_at, left_at')
-    .order('joined_at', { ascending: false })
-    .limit(200);
+  const historyProduct = getRoomHistoryProductId();
+  const partRes = await runRoomHistoryQueryScoped((scopeProduct) => {
+    let q = supabase
+      .from('user_room_participation_history')
+      .select('id, room_id, gathering_id, gathering_title, display_name, joined_at, left_at')
+      .eq('user_id', user.id)
+      .order('joined_at', { ascending: false })
+      .limit(200);
+    if (scopeProduct) q = withRoomHistoryProductEq(q, historyProduct);
+    return q;
+  });
+  const { data: participationRows, error: partErr } = partRes;
 
   if (partErr && partErr.code !== '42P01') {
     console.error('[user/gemini-usage-summary] participation', partErr);
@@ -59,13 +71,18 @@ export async function GET() {
   const since = new Date(Date.now() - LOG_LOOKBACK_DAYS * 86400000).toISOString();
   const uid = user.id;
 
-  const { data: billingRows, error: billingErr } = await admin
-    .from('gemini_usage_logs')
-    .select(LOG_SELECT)
-    .eq('billing_user_id', uid)
-    .gte('created_at', since)
-    .order('created_at', { ascending: false })
-    .limit(MAX_LOG_ROWS);
+  const billingRes = await runRoomHistoryQueryScoped((scopeProduct) => {
+    let q = admin
+      .from('gemini_usage_logs')
+      .select(LOG_SELECT)
+      .eq('billing_user_id', uid)
+      .gte('created_at', since)
+      .order('created_at', { ascending: false })
+      .limit(MAX_LOG_ROWS);
+    if (scopeProduct) q = withRoomHistoryProductEq(q, historyProduct);
+    return q;
+  });
+  const { data: billingRows, error: billingErr } = billingRes;
 
   if (billingErr?.code === '42P01') {
     return NextResponse.json({
@@ -79,13 +96,18 @@ export async function GET() {
   }
 
   if (billingErr?.code === '42703') {
-    const { data: legacyRows, error: legacyErr } = await admin
-      .from('gemini_usage_logs')
-      .select('context, model, prompt_token_count, output_token_count, room_id, created_at, user_id')
-      .eq('user_id', uid)
-      .gte('created_at', since)
-      .order('created_at', { ascending: false })
-      .limit(MAX_LOG_ROWS);
+    const legacyRes = await runRoomHistoryQueryScoped((scopeProduct) => {
+      let q = admin
+        .from('gemini_usage_logs')
+        .select('context, model, prompt_token_count, output_token_count, room_id, created_at, user_id')
+        .eq('user_id', uid)
+        .gte('created_at', since)
+        .order('created_at', { ascending: false })
+        .limit(MAX_LOG_ROWS);
+      if (scopeProduct) q = withRoomHistoryProductEq(q, historyProduct);
+      return q;
+    });
+    const { data: legacyRows, error: legacyErr } = legacyRes;
 
     if (legacyErr) {
       if (legacyErr.code === '42703') {
@@ -131,14 +153,19 @@ export async function GET() {
     return NextResponse.json({ error: billingErr.message }, { status: 500 });
   }
 
-  const { data: legacyRows } = await admin
-    .from('gemini_usage_logs')
-    .select(LOG_SELECT)
-    .eq('user_id', uid)
-    .is('billing_user_id', null)
-    .gte('created_at', since)
-    .order('created_at', { ascending: false })
-    .limit(MAX_LOG_ROWS);
+  const legacyRes = await runRoomHistoryQueryScoped((scopeProduct) => {
+    let q = admin
+      .from('gemini_usage_logs')
+      .select(LOG_SELECT)
+      .eq('user_id', uid)
+      .is('billing_user_id', null)
+      .gte('created_at', since)
+      .order('created_at', { ascending: false })
+      .limit(MAX_LOG_ROWS);
+    if (scopeProduct) q = withRoomHistoryProductEq(q, historyProduct);
+    return q;
+  });
+  const { data: legacyRows } = legacyRes;
 
   const mergedLogs = [...(billingRows ?? []), ...(legacyRows ?? [])] as UserGeminiUsageLogRow[];
 

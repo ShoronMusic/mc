@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { requireStyleAdminApi } from '@/lib/admin-access';
 import { joinMyListArtistsForStorage, suggestMyListArtistTitleFromYoutubeStyle } from '@/lib/my-list-youtube-title-suggest';
 import { upsertSongAndVideo } from '@/lib/song-entities';
+import { buildSongDbRegistrationInput } from '@/lib/song-db-registration-gate';
 import { getVideoSnippet } from '@/lib/youtube-search';
 
 export const dynamic = 'force-dynamic';
@@ -894,6 +895,7 @@ export async function POST(request: Request) {
           variant,
           originalReleaseDateIso: resolvedDates.originalReleaseDate ?? undefined,
           youtubePublishedAtIso: resolvedDates.youtubePublishedAt ?? undefined,
+          registrationCheck: buildSongDbRegistrationInput({ forceAllow: true }),
         });
         if (!songId) {
           failedCount += 1;

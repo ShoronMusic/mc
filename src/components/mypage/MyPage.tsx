@@ -1,5 +1,29 @@
 'use client';
 
+import {
+  mypageBodyTextClass,
+  mypageInputClass,
+  mypagePaginationBtnClass,
+  mypagePanelClass,
+  mypagePlayBtnClass,
+  mypagePickSongBtnClass,
+  mypagePrimaryBtnClass,
+  mypageSecondaryBtnClass,
+  mypageSectionBorderClass,
+  mypageSectionTitleClass,
+  mypageTabBtnClass,
+  mypageMetaBadgeClass,
+  mypageSongRowClass,
+  mypageMessageBannerClass,
+  mypageDangerBtnClass,
+  mypageFieldClass,
+  libraryIndexLetterBtnClass,
+  librarySecondaryBtnClass,
+  IS_MC_PRODUCT,
+  getMypageSubtitle,
+  getMypageGuestSubtitle,
+  showRoomStyleUi,
+} from '@/lib/product-branding';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -8,8 +32,9 @@ import { getRoomClientId } from '@/lib/room-owner';
 import { useSupabaseAuthUserId } from '@/hooks/useSupabaseAuthUserId';
 import type { User } from '@supabase/supabase-js';
 import {
-  CHAT_TEXT_COLOR_PALETTE,
-  DEFAULT_CHAT_TEXT_COLOR,
+  chatTextColorPalette,
+  chatTextColorSwatchBorder,
+  defaultChatTextColor,
 } from '@/lib/chat-text-color';
 import {
   ROOM_DISPLAY_TITLE_MAX_CHARS,
@@ -29,6 +54,8 @@ import {
   readJoinEntryChimeEnabled,
   writeJoinEntryChimeEnabled,
 } from '@/lib/participant-join-announcements-preference';
+import { useMcUiAccentTheme } from '@/hooks/useMcUiAccentTheme';
+import { useMcUiFontSize, mcUiFontSizeDataAttr } from '@/hooks/useMcUiFontSize';
 import { USER_SONG_HISTORY_UPDATED_EVENT } from '@/lib/user-song-history-events';
 import { suggestMyListArtistTitleFromYoutubeStyle } from '@/lib/my-list-youtube-title-suggest';
 import { formatFavoriteArtistTitle } from '@/lib/favorite-video-metadata';
@@ -81,6 +108,8 @@ import { AiTrialStatusBadge } from '@/components/shared/AiTrialStatusBadge';
 import { useAiTrialStatus } from '@/hooks/useAiTrialStatus';
 import { ParticipationSongHistoryModal } from '@/components/mypage/ParticipationSongHistoryModal';
 import { HostedGatheringPlaybackSection } from '@/components/mypage/HostedGatheringPlaybackSection';
+import { McUiAccentThemeSection } from '@/components/mypage/McUiAccentThemeSection';
+import { MypageFontSizeSection } from '@/components/mypage/MypageFontSizeSection';
 import { UserAtQuestionHistory } from '@/components/mypage/UserAtQuestionHistory';
 import {
   MyPageSongHistoryList,
@@ -129,6 +158,68 @@ function getMyPageStyleTextColor(style: string | null | undefined): string | und
 function getMyPageEraTextColor(era: string | null | undefined): string | undefined {
   if (!era || !era.trim()) return undefined;
   return MY_PAGE_ERA_TEXT_COLORS[era] ?? '#b0bec5';
+}
+
+function ChatTextColorSwatchButton({
+  hex,
+  selected,
+  onSelect,
+}: {
+  hex: string;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  if (IS_MC_PRODUCT) {
+    return (
+      <button
+        type="button"
+        onClick={onSelect}
+        className="mc-chat-text-color-swatch min-w-[4.5rem] rounded border-2 px-2 py-1 text-[10px] font-semibold transition focus:outline-none focus:ring-2 focus:ring-blue-500"
+        style={{
+          backgroundColor: hex,
+          color: '#ffffff',
+          borderColor: chatTextColorSwatchBorder(hex, selected),
+          boxShadow: selected ? '0 0 0 2px rgba(96, 165, 250, 0.5)' : undefined,
+        }}
+        title={hex}
+        aria-label={`色を選択: ${hex}`}
+      >
+        {hex}
+      </button>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className="h-8 w-8 rounded-full border-2 transition focus:outline-none focus:ring-2 focus:ring-blue-500"
+      style={{
+        backgroundColor: hex,
+        borderColor: chatTextColorSwatchBorder(hex, selected),
+      }}
+      title={hex}
+      aria-label={`色を選択: ${hex}`}
+    />
+  );
+}
+
+function ChatTextColorCurrentBadge({ color }: { color: string }) {
+  if (IS_MC_PRODUCT) {
+    return (
+      <span
+        className="mc-chat-text-color-swatch inline-flex rounded px-2 py-0.5 text-xs font-semibold"
+        style={{ backgroundColor: color, color: '#ffffff' }}
+      >
+        {color}
+      </span>
+    );
+  }
+  return (
+    <>
+      <span className="inline-block h-6 w-6 rounded-full border border-gray-600" style={{ backgroundColor: color }} aria-hidden />
+      <span className="text-sm text-gray-200">{color}</span>
+    </>
+  );
 }
 
 type GeminiUsageMonthlyRow = GeminiUsageTokenSummary & {
@@ -643,7 +734,7 @@ const USER_STATUS_OPTIONS = [
 
 export default function MyPage({
   onClose,
-  currentUserTextColor = DEFAULT_CHAT_TEXT_COLOR,
+  currentUserTextColor = defaultChatTextColor(),
   onUserTextColorChange,
   chatOwnerTransferParticipants = [],
   myClientId = '',
@@ -716,6 +807,10 @@ export default function MyPage({
       setJoinChimeInternal(next);
     }
   };
+
+  const [mypageFontSize, handleMypageFontSizeChange] = useMcUiFontSize();
+  const [mcUiAccentTheme, handleMcUiAccentThemeChange] = useMcUiAccentTheme();
+  const mypageFrameFontSize = IS_MC_PRODUCT ? mypageFontSize : undefined;
 
   useEffect(() => {
     if (!effectiveRoomId || isGuest) {
@@ -837,6 +932,14 @@ export default function MyPage({
   useEffect(() => {
     if (!showOwnerTab && mainTab === 'owner') setMainTab('user');
   }, [showOwnerTab, mainTab]);
+
+  useEffect(() => {
+    if (IS_MC_PRODUCT && mainTab === 'questionHistory') setMainTab('user');
+  }, [mainTab]);
+
+  useEffect(() => {
+    if (IS_MC_PRODUCT && mainTab === 'themeMission') setMainTab('user');
+  }, [mainTab]);
 
   useEffect(() => {
     if (mainTab === 'mylist' && historyTab !== 'mylist') setHistoryTab('mylist');
@@ -1130,7 +1233,7 @@ export default function MyPage({
   }, [user]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || IS_MC_PRODUCT) return;
     setGeminiUsageLoading(true);
     fetch('/api/user/gemini-usage-summary', { credentials: 'include' })
       .then(async (r) => {
@@ -1754,9 +1857,134 @@ export default function MyPage({
     }
   };
 
+  const ownerMgmtPanelClass = IS_MC_PRODUCT
+    ? mypagePanelClass()
+    : 'rounded border border-amber-700/50 bg-amber-900/20 p-3';
+  const ownerMgmtHeadingClass = IS_MC_PRODUCT
+    ? mypageSectionTitleClass()
+    : 'flex items-center gap-1.5 text-sm font-medium text-amber-200';
+
+  const ownerRoomManagementPanels = (
+    <>
+      {showOrganizerRoomEditor ? (
+        <div className={ownerMgmtPanelClass}>
+          <LobbyMessageOwnerBlock
+            roomId={effectiveRoomId}
+            clientId={effectiveClientId}
+            onSaved={onRoomProfileSaved}
+          />
+        </div>
+      ) : null}
+
+      {isChatOwner && onSongLimit5MinToggle ? (
+        <div className={ownerMgmtPanelClass}>
+          <h4 className={ownerMgmtHeadingClass}>
+            <span aria-hidden>👑</span>
+            一曲5分制限
+          </h4>
+          <p className={`mb-2 text-xs ${mypageBodyTextClass()}`}>
+            ONのとき、5分経過で次の人に選曲を促します。OFFなら長いPVも最後まで視聴できます。
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={songLimit5MinEnabled ? undefined : onSongLimit5MinToggle}
+              className={mypageTabBtnClass(songLimit5MinEnabled)}
+            >
+              ON
+            </button>
+            <button
+              type="button"
+              onClick={!songLimit5MinEnabled ? undefined : onSongLimit5MinToggle}
+              className={mypageTabBtnClass(!songLimit5MinEnabled)}
+            >
+              OFF
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {onTransferOwner ? (
+        <div className={ownerMgmtPanelClass}>
+          <h4 className={`mb-2 text-xs font-medium ${IS_MC_PRODUCT ? 'text-gray-700' : 'text-gray-300'}`}>
+            チャットオーナーを譲る・参加者の退出・選曲モード
+          </h4>
+          <p className={`mb-2 text-xs ${mypageBodyTextClass()}`}>
+            現在在室している参加者のみ対象です。譲渡するとその人がオーナーになります。視聴専用にした相手はマイページからいつでも選曲参加に戻せます。オーナーも再度切り替えできます。
+          </p>
+          {chatOwnerTransferParticipants.length === 0 ? (
+            <p className="text-xs text-gray-500">ほかに在室している参加者がいません。</p>
+          ) : (
+            <ul className="space-y-2">
+              {chatOwnerTransferParticipants.map((p) => (
+                <li key={p.clientId} className="flex flex-wrap items-center justify-between gap-2">
+                  <span className={`min-w-0 text-sm ${IS_MC_PRODUCT ? 'text-gray-800' : 'text-gray-200'}`}>
+                    {p.displayName}
+                  </span>
+                  <span className="flex shrink-0 flex-wrap justify-end gap-1">
+                    <button
+                      type="button"
+                      onClick={() => onTransferOwner(p.clientId)}
+                      className={
+                        IS_MC_PRODUCT
+                          ? mypageSecondaryBtnClass(false)
+                          : 'rounded border border-amber-600 bg-amber-800/30 px-2 py-1 text-xs text-amber-200 hover:bg-amber-800/50'
+                      }
+                    >
+                      オーナーを譲る
+                    </button>
+                    {onOwnerSetParticipantSelection ? (
+                      p.participatesInSelection === false ? (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onOwnerSetParticipantSelection(p.clientId, p.displayName, true)
+                          }
+                          className={
+                            IS_MC_PRODUCT
+                              ? `${mypagePrimaryBtnClass()} px-2 py-1 text-xs`
+                              : 'rounded border border-sky-600 bg-sky-900/30 px-2 py-1 text-xs text-sky-200 hover:bg-sky-800/45'
+                          }
+                          title={`${p.displayName}さんを選曲参加に戻す`}
+                        >
+                          選曲参加に戻す
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onOwnerSetParticipantSelection(p.clientId, p.displayName, false)
+                          }
+                          className={mypageSecondaryBtnClass(false)}
+                          title={`${p.displayName}さんを視聴専用にする`}
+                        >
+                          視聴専用にする
+                        </button>
+                      )
+                    ) : null}
+                    {onForceExit ? (
+                      <button
+                        type="button"
+                        onClick={() => onForceExit(p.clientId, p.displayName)}
+                        className="rounded border border-red-300 bg-red-50 px-2 py-1 text-xs text-red-700 hover:bg-red-100"
+                        title={`${p.displayName}さんを強制退出`}
+                      >
+                        強制退出
+                      </button>
+                    ) : null}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ) : null}
+    </>
+  );
+
   if (loading) {
     return (
-      <MyPageModalFrame title="マイページ" onClose={onClose}>
+      <MyPageModalFrame title="マイページ" onClose={onClose} fontSize={mypageFrameFontSize}>
         <p className="text-gray-400">読み込み中…</p>
       </MyPageModalFrame>
     );
@@ -1766,8 +1994,9 @@ export default function MyPage({
     return (
       <MyPageModalFrame
         title="マイページ（ゲスト）"
-        subtitle="表示名・テキスト色・選曲参加の設定ができます。"
+        subtitle={getMypageGuestSubtitle()}
         onClose={onClose}
+        fontSize={mypageFrameFontSize}
       >
         <MyPageThreeColumnBody
           col1={
@@ -1807,14 +2036,14 @@ export default function MyPage({
           </div>
         ) : null}
 
-          <div className="rounded border border-gray-700 bg-gray-800/50 p-3">
+          <div className={mypagePanelClass()}>
             <label className="block text-xs text-gray-500">表示名</label>
             <div className="mt-1 flex flex-wrap items-center gap-2">
               <input
                 type="text"
                 value={guestNameValue}
                 onChange={(e) => setGuestNameValue(e.target.value)}
-                className="flex-1 min-w-[120px] rounded border border-gray-600 bg-gray-800 px-3 py-2 text-sm text-white"
+                className={mypageInputClass('min-w-[120px]')}
                 placeholder="表示名"
               />
               <button
@@ -1831,7 +2060,7 @@ export default function MyPage({
                     trimmed ? normalizeRoomDisplayName(trimmed) : assignDefaultGuestDisplayName(),
                   );
                 }}
-                className="rounded bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700"
+                className={mypagePrimaryBtnClass()}
               >
                 反映
               </button>
@@ -1840,21 +2069,21 @@ export default function MyPage({
             </>
           }
           col2={
-          <div className="rounded border border-gray-700 bg-gray-800/50 p-3">
+          <div className={mypagePanelClass()}>
             <label className="block text-xs text-gray-500">選曲に参加する</label>
             <p className="mt-1 text-sm text-gray-400">オフにすると視聴専用になります（順番はスキップされます）。</p>
             <div className="mt-2 flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => onParticipatesInSelectionChange?.(true)}
-                className={`rounded px-3 py-1.5 text-sm ${participatesInSelection ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                className={mypageTabBtnClass(participatesInSelection)}
               >
                 参加する
               </button>
               <button
                 type="button"
                 onClick={() => onParticipatesInSelectionChange?.(false)}
-                className={`rounded px-3 py-1.5 text-sm ${!participatesInSelection ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                className={mypageTabBtnClass(!participatesInSelection)}
               >
                 視聴専用
               </button>
@@ -1863,7 +2092,14 @@ export default function MyPage({
           }
           col3={
             <>
-          <div className="rounded border border-gray-700 bg-gray-800/50 p-3">
+          {IS_MC_PRODUCT ? (
+            <>
+              <MypageFontSizeSection value={mypageFontSize} onChange={handleMypageFontSizeChange} />
+              <McUiAccentThemeSection value={mcUiAccentTheme} onChange={handleMcUiAccentThemeChange} />
+            </>
+          ) : null}
+
+          <div className={mypagePanelClass()}>
             <label className="block text-xs text-gray-500">参加者の入室・退室の効果音</label>
             <p className="mt-1 text-sm text-gray-400">
               オンにすると、誰かが入室したときと退室したときにそれぞれ通知音が鳴ります。オフにするとこのブラウザだけ無音です。入室・退出のチャット表示は常に出ます。設定はこの端末に保存され、入退室を繰り返しても維持されます。
@@ -1871,15 +2107,15 @@ export default function MyPage({
             <JoinEntryChimeToggle enabled={joinChimeDisplay} onChange={handleJoinChimeChange} />
           </div>
 
-          <div className="rounded border border-gray-700 bg-gray-800/50 p-3">
+          <div className={mypagePanelClass()}>
             <h3 className="mb-2 text-sm font-medium text-gray-300">発言のテキストカラー</h3>
             <div className="flex items-center gap-2">
-              <span className="inline-block h-6 w-6 rounded-full border border-gray-600" style={{ backgroundColor: currentUserTextColor }} aria-hidden />
-              <span className="text-sm text-gray-200">{currentUserTextColor}</span>
+              <span className="text-sm text-gray-400">現在:</span>
+              <ChatTextColorCurrentBadge color={currentUserTextColor} />
               <button
                 type="button"
                 onClick={() => setTextColorModalOpen(true)}
-                className="rounded border border-gray-600 bg-gray-700 px-2 py-1 text-xs text-gray-300 hover:bg-gray-600"
+                className={mypageSecondaryBtnClass(true)}
               >
                 変更
               </button>
@@ -1893,21 +2129,15 @@ export default function MyPage({
               >
                 <div className="rounded-lg border border-gray-700 bg-gray-900 p-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
                   <div className="flex flex-wrap gap-2">
-                    {CHAT_TEXT_COLOR_PALETTE.map((hex) => (
-                      <button
+                    {chatTextColorPalette().map((hex) => (
+                      <ChatTextColorSwatchButton
                         key={hex}
-                        type="button"
-                        onClick={() => {
+                        hex={hex}
+                        selected={currentUserTextColor === hex}
+                        onSelect={() => {
                           onUserTextColorChange?.(hex);
                           setTextColorModalOpen(false);
                         }}
-                        className="h-8 w-8 rounded-full border-2 transition focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        style={{
-                          backgroundColor: hex,
-                          borderColor: currentUserTextColor === hex ? '#60a5fa' : 'transparent',
-                        }}
-                        title={hex}
-                        aria-label={`色を選択: ${hex}`}
                       />
                     ))}
                   </div>
@@ -1927,7 +2157,7 @@ export default function MyPage({
 
   if (error || !user) {
     return (
-      <MyPageModalFrame title="マイページ" onClose={onClose}>
+      <MyPageModalFrame title="マイページ" onClose={onClose} fontSize={mypageFrameFontSize}>
         <p className="text-red-400">{error ?? 'ログイン情報を取得できませんでした。'}</p>
       </MyPageModalFrame>
     );
@@ -1939,83 +2169,50 @@ export default function MyPage({
   return (
     <MyPageModalFrame
       title="マイページ"
-      subtitle="ユーザー設定＝自分の選曲時の AI（opt-out）。部屋設定（オーナー）＝全員の上限と AI エージェント。"
+      subtitle={getMypageSubtitle()}
       onClose={onClose}
+      fontSize={mypageFrameFontSize}
     >
       <div className="mb-3 flex shrink-0 flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={() => setMainTab('user')}
-          className={`rounded px-3 py-1.5 text-sm font-medium ${
-            mainTab === 'user' ? 'bg-gray-700 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'
-          }`}
-        >
+        <button type="button" onClick={() => setMainTab('user')} className={mypageTabBtnClass(mainTab === 'user')}>
           ユーザー設定
         </button>
         {showOwnerTab ? (
-          <button
-            type="button"
-            onClick={() => setMainTab('owner')}
-            className={`rounded px-3 py-1.5 text-sm font-medium ${
-              mainTab === 'owner' ? 'bg-gray-700 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'
-            }`}
-          >
+          <button type="button" onClick={() => setMainTab('owner')} className={mypageTabBtnClass(mainTab === 'owner')}>
             部屋設定（オーナー）
           </button>
         ) : null}
         <button
           type="button"
           onClick={() => setMainTab('participation')}
-          className={`rounded px-3 py-1.5 text-sm font-medium ${
-            mainTab === 'participation'
-              ? 'bg-gray-700 text-white'
-              : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'
-          }`}
+          className={mypageTabBtnClass(mainTab === 'participation')}
         >
           参加履歴
         </button>
-        {!isGuest ? (
+        {!IS_MC_PRODUCT && !isGuest ? (
           <button
             type="button"
             onClick={() => setMainTab('questionHistory')}
-            className={`rounded px-3 py-1.5 text-sm font-medium ${
-              mainTab === 'questionHistory'
-                ? 'bg-gray-700 text-white'
-                : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'
-            }`}
+            className={mypageTabBtnClass(mainTab === 'questionHistory')}
           >
             質問履歴
           </button>
         ) : null}
-        <button
-          type="button"
-          onClick={() => setMainTab('music')}
-          className={`rounded px-3 py-1.5 text-sm font-medium ${
-            mainTab === 'music' ? 'bg-gray-700 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'
-          }`}
-        >
+        <button type="button" onClick={() => setMainTab('music')} className={mypageTabBtnClass(mainTab === 'music')}>
           曲管理
         </button>
-        <button
-          type="button"
-          onClick={() => setMainTab('mylist')}
-          className={`rounded px-3 py-1.5 text-sm font-medium ${
-            mainTab === 'mylist' ? 'bg-gray-700 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'
-          }`}
-        >
+        <button type="button" onClick={() => setMainTab('mylist')} className={mypageTabBtnClass(mainTab === 'mylist')}>
           マイリスト
         </button>
-        <button
-          type="button"
-          onClick={() => setMainTab('themeMission')}
-          className={`rounded px-3 py-1.5 text-sm font-medium ${
-            mainTab === 'themeMission'
-              ? 'bg-gray-700 text-white'
-              : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'
-          }`}
-        >
-          お題プレイリスト
-        </button>
+        {!IS_MC_PRODUCT ? (
+          <button
+            type="button"
+            onClick={() => setMainTab('themeMission')}
+            className={mypageTabBtnClass(mainTab === 'themeMission')}
+          >
+            お題プレイリスト
+          </button>
+        ) : null}
       </div>
 
       {saveError ? (
@@ -2037,8 +2234,8 @@ export default function MyPage({
                 />
               ) : null}
 
-              <div className="rounded border border-amber-700/50 bg-amber-900/20 p-3">
-                <h3 className="flex items-center gap-1.5 text-sm font-medium text-amber-200">
+              <div className={ownerMgmtPanelClass}>
+                <h3 className={ownerMgmtHeadingClass}>
                   <span aria-hidden>👑</span>
                   部屋管理（主催者・オーナー）
                 </h3>
@@ -2047,126 +2244,28 @@ export default function MyPage({
             </>
           }
           col2={
-            <>
-              <OwnerRoomAiSettingsPanel
-                ownerAiCharacterJoinEnabled={ownerAiCharacterJoinEnabled}
-                onOwnerAiCharacterJoinToggle={onOwnerAiCharacterJoinToggle}
-                ownerAiCharacterName={ownerAiCharacterName}
-                onOwnerAiCharacterNameChange={onOwnerAiCharacterNameChange}
-                commentPackSlots={commentPackSlots}
-                onCommentPackSlotsChange={onCommentPackSlotsChange}
-                ownerSongQuizEnabled={ownerSongQuizEnabled}
-                onOwnerSongQuizToggle={onOwnerSongQuizToggle}
-                ownerNextSongRecommendEnabled={ownerNextSongRecommendEnabled}
-                onOwnerNextSongRecommendToggle={onOwnerNextSongRecommendToggle}
-                jpAiUnlockEnabled={jpAiUnlockEnabled}
-                onJpAiUnlockToggle={onJpAiUnlockToggle}
-              />
-            </>
+            IS_MC_PRODUCT ? (
+              ownerRoomManagementPanels
+            ) : (
+              <>
+                <OwnerRoomAiSettingsPanel
+                  ownerAiCharacterJoinEnabled={ownerAiCharacterJoinEnabled}
+                  onOwnerAiCharacterJoinToggle={onOwnerAiCharacterJoinToggle}
+                  ownerAiCharacterName={ownerAiCharacterName}
+                  onOwnerAiCharacterNameChange={onOwnerAiCharacterNameChange}
+                  commentPackSlots={commentPackSlots}
+                  onCommentPackSlotsChange={onCommentPackSlotsChange}
+                  ownerSongQuizEnabled={ownerSongQuizEnabled}
+                  onOwnerSongQuizToggle={onOwnerSongQuizToggle}
+                  ownerNextSongRecommendEnabled={ownerNextSongRecommendEnabled}
+                  onOwnerNextSongRecommendToggle={onOwnerNextSongRecommendToggle}
+                  jpAiUnlockEnabled={jpAiUnlockEnabled}
+                  onJpAiUnlockToggle={onJpAiUnlockToggle}
+                />
+              </>
+            )
           }
-          col3={
-            <>
-              {showOrganizerRoomEditor ? (
-                <div className="rounded border border-amber-700/50 bg-amber-900/20 p-3">
-                  <LobbyMessageOwnerBlock
-                    roomId={effectiveRoomId}
-                    clientId={effectiveClientId}
-                    onSaved={onRoomProfileSaved}
-                  />
-                </div>
-              ) : null}
-
-              {isChatOwner && onSongLimit5MinToggle ? (
-                <div className="rounded border border-amber-700/50 bg-amber-900/20 p-3">
-                  <h4 className="mb-2 flex items-center gap-1.5 text-sm font-medium text-amber-200">
-                    <span aria-hidden>👑</span>
-                    一曲5分制限
-                  </h4>
-                  <p className="mb-2 text-xs text-gray-400">ONのとき、5分経過で次の人に選曲を促します。OFFなら長いPVも最後まで視聴できます。</p>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={songLimit5MinEnabled ? undefined : onSongLimit5MinToggle}
-                      className={`rounded px-3 py-1.5 text-sm ${songLimit5MinEnabled ? 'bg-amber-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-                    >
-                      ON
-                    </button>
-                    <button
-                      type="button"
-                      onClick={!songLimit5MinEnabled ? undefined : onSongLimit5MinToggle}
-                      className={`rounded px-3 py-1.5 text-sm ${!songLimit5MinEnabled ? 'bg-gray-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-                    >
-                      OFF
-                    </button>
-                  </div>
-                </div>
-              ) : null}
-
-              {onTransferOwner ? (
-                <div className="rounded border border-amber-700/50 bg-amber-900/20 p-3">
-                  <h4 className="mb-2 text-xs font-medium text-gray-300">チャットオーナーを譲る・参加者の退出・選曲モード</h4>
-                  <p className="mb-2 text-xs text-gray-400">
-                    現在在室している参加者のみ対象です。譲渡するとその人がオーナーになります。視聴専用にした相手はマイページからいつでも選曲参加に戻せます。オーナーも再度切り替えできます。
-                  </p>
-                  {chatOwnerTransferParticipants.length === 0 ? (
-                    <p className="text-xs text-gray-500">ほかに在室している参加者がいません。</p>
-                  ) : (
-                    <ul className="space-y-2">
-                      {chatOwnerTransferParticipants.map((p) => (
-                        <li key={p.clientId} className="flex flex-wrap items-center justify-between gap-2">
-                          <span className="min-w-0 text-sm text-gray-200">{p.displayName}</span>
-                          <span className="flex shrink-0 flex-wrap justify-end gap-1">
-                            <button
-                              type="button"
-                              onClick={() => onTransferOwner(p.clientId)}
-                              className="rounded border border-amber-600 bg-amber-800/30 px-2 py-1 text-xs text-amber-200 hover:bg-amber-800/50"
-                            >
-                              オーナーを譲る
-                            </button>
-                            {onOwnerSetParticipantSelection ? (
-                              p.participatesInSelection === false ? (
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    onOwnerSetParticipantSelection(p.clientId, p.displayName, true)
-                                  }
-                                  className="rounded border border-sky-600 bg-sky-900/30 px-2 py-1 text-xs text-sky-200 hover:bg-sky-800/45"
-                                  title={`${p.displayName}さんを選曲参加に戻す`}
-                                >
-                                  選曲参加に戻す
-                                </button>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    onOwnerSetParticipantSelection(p.clientId, p.displayName, false)
-                                  }
-                                  className="rounded border border-gray-600 bg-gray-800/80 px-2 py-1 text-xs text-gray-200 hover:bg-gray-700"
-                                  title={`${p.displayName}さんを視聴専用にする`}
-                                >
-                                  視聴専用にする
-                                </button>
-                              )
-                            ) : null}
-                            {onForceExit ? (
-                              <button
-                                type="button"
-                                onClick={() => onForceExit(p.clientId, p.displayName)}
-                                className="rounded border border-red-700 bg-red-900/30 px-2 py-1 text-xs text-red-300 hover:bg-red-800/50"
-                                title={`${p.displayName}さんを強制退出`}
-                              >
-                                強制退出
-                              </button>
-                            ) : null}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              ) : null}
-            </>
-          }
+          col3={IS_MC_PRODUCT ? undefined : ownerRoomManagementPanels}
         />
       )}
 
@@ -2179,7 +2278,7 @@ export default function MyPage({
         ) : null}
 
         {/* 表示名 */}
-        <div className="rounded border border-gray-700 bg-gray-800/50 p-3">
+        <div className={mypagePanelClass()}>
           <label className="block text-xs text-gray-500">表示名</label>
           {editDisplayName ? (
             <div className="mt-1 flex flex-wrap items-center gap-2">
@@ -2187,14 +2286,14 @@ export default function MyPage({
                 type="text"
                 value={displayNameValue}
                 onChange={(e) => setDisplayNameValue(e.target.value)}
-                className="flex-1 min-w-[120px] rounded border border-gray-600 bg-gray-800 px-3 py-2 text-sm text-white"
+                className={mypageInputClass('min-w-[120px]')}
                 placeholder="表示名"
               />
               <button
                 type="button"
                 onClick={handleSaveDisplayName}
                 disabled={saving}
-                className="rounded bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700 disabled:opacity-50"
+                className={mypagePrimaryBtnClass()}
               >
                 保存
               </button>
@@ -2205,7 +2304,7 @@ export default function MyPage({
                   setDisplayNameValue(currentDisplayName);
                 }}
                 disabled={saving}
-                className="rounded border border-gray-600 px-3 py-2 text-sm text-gray-300 hover:bg-gray-700"
+                className={mypageSecondaryBtnClass()}
               >
                 キャンセル
               </button>
@@ -2216,7 +2315,7 @@ export default function MyPage({
               <button
                 type="button"
                 onClick={() => setEditDisplayName(true)}
-                className="rounded border border-gray-600 bg-gray-700 px-2 py-1 text-xs text-gray-300 hover:bg-gray-600"
+                className={mypageSecondaryBtnClass(true)}
               >
                 変更
               </button>
@@ -2225,7 +2324,7 @@ export default function MyPage({
         </div>
 
         {/* メールアドレス */}
-        <div className="rounded border border-gray-700 bg-gray-800/50 p-3">
+        <div className={mypagePanelClass()}>
           <label className="block text-xs text-gray-500">メールアドレス</label>
           {editEmail ? (
             <div className="mt-1 flex flex-wrap items-center gap-2">
@@ -2233,14 +2332,14 @@ export default function MyPage({
                 type="email"
                 value={emailValue}
                 onChange={(e) => setEmailValue(e.target.value)}
-                className="flex-1 min-w-[180px] rounded border border-gray-600 bg-gray-800 px-3 py-2 text-sm text-white"
+                className={mypageInputClass('min-w-[180px]')}
                 placeholder="メールアドレス"
               />
               <button
                 type="button"
                 onClick={handleSaveEmail}
                 disabled={saving}
-                className="rounded bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700 disabled:opacity-50"
+                className={mypagePrimaryBtnClass()}
               >
                 保存
               </button>
@@ -2251,7 +2350,7 @@ export default function MyPage({
                   setEmailValue(currentEmail);
                 }}
                 disabled={saving}
-                className="rounded border border-gray-600 px-3 py-2 text-sm text-gray-300 hover:bg-gray-700"
+                className={mypageSecondaryBtnClass()}
               >
                 キャンセル
               </button>
@@ -2262,7 +2361,7 @@ export default function MyPage({
               <button
                 type="button"
                 onClick={() => setEditEmail(true)}
-                className="rounded border border-gray-600 bg-gray-700 px-2 py-1 text-xs text-gray-300 hover:bg-gray-600"
+                className={mypageSecondaryBtnClass(true)}
               >
                 変更
               </button>
@@ -2277,7 +2376,7 @@ export default function MyPage({
 
         {/* 他ユーザー向けプロフィール（公開はオプトイン） */}
         {!isGuest ? (
-          <div className="rounded border border-gray-700 bg-gray-800/50 p-3">
+          <div className={mypagePanelClass()}>
             <label className="block text-xs text-gray-500">他ユーザー向けプロフィール（任意）</label>
             <p className="mt-1 text-xs text-gray-400">
               一言・好きなアーティスト・補足を登録できます。「他の参加者に公開」をオンにすると、ログイン済みのユーザーが
@@ -2393,34 +2492,36 @@ export default function MyPage({
           }
           col2={
             <>
-        <PersonalAiSettingsPanel
-          isGuest={isGuest}
-          isChatOwner={isChatOwner}
-          showOwnerTabLink={showOwnerTab}
-          onOpenOwnerTab={() => setMainTab('owner')}
-          roomAiOwnerPolicy={roomAiOwnerPolicy}
-          ownerAiCharacterJoinEnabled={ownerAiCharacterJoinEnabled}
-          commentPackSlots={commentPackSlots}
-          onCommentPackSlotsChange={onCommentPackSlotsChange}
-        />
+        {!IS_MC_PRODUCT ? (
+          <PersonalAiSettingsPanel
+            isGuest={isGuest}
+            isChatOwner={isChatOwner}
+            showOwnerTabLink={showOwnerTab}
+            onOpenOwnerTab={() => setMainTab('owner')}
+            roomAiOwnerPolicy={roomAiOwnerPolicy}
+            ownerAiCharacterJoinEnabled={ownerAiCharacterJoinEnabled}
+            commentPackSlots={commentPackSlots}
+            onCommentPackSlotsChange={onCommentPackSlotsChange}
+          />
+        ) : null}
 
         {/* 選曲に参加する */}
         {onParticipatesInSelectionChange && (
-          <div className="rounded border border-gray-700 bg-gray-800/50 p-3">
+          <div className={mypagePanelClass()}>
             <label className="block text-xs text-gray-500">選曲に参加する</label>
             <p className="mt-1 text-sm text-gray-400">オフにすると視聴専用になります（順番はスキップされます）。</p>
             <div className="mt-2 flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => onParticipatesInSelectionChange(true)}
-                className={`rounded px-3 py-1.5 text-sm ${participatesInSelection ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                className={mypageTabBtnClass(participatesInSelection)}
               >
                 参加する
               </button>
               <button
                 type="button"
                 onClick={() => onParticipatesInSelectionChange(false)}
-                className={`rounded px-3 py-1.5 text-sm ${!participatesInSelection ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                className={mypageTabBtnClass(!participatesInSelection)}
               >
                 視聴専用
               </button>
@@ -2431,7 +2532,14 @@ export default function MyPage({
           }
           col3={
             <>
-        <div className="rounded border border-gray-700 bg-gray-800/50 p-3">
+        {IS_MC_PRODUCT ? (
+          <>
+            <MypageFontSizeSection value={mypageFontSize} onChange={handleMypageFontSizeChange} />
+            <McUiAccentThemeSection value={mcUiAccentTheme} onChange={handleMcUiAccentThemeChange} />
+          </>
+        ) : null}
+
+        <div className={mypagePanelClass()}>
           <label className="block text-xs text-gray-500">参加者の入室・退室の効果音</label>
           <p className="mt-1 text-sm text-gray-400">
             オンにすると、誰かが入室したときと退室したときにそれぞれ通知音が鳴ります。オフにするとこのブラウザだけ無音です。入室・退出のチャット表示は常に出ます。設定はこの端末に保存され、入退室を繰り返しても維持されます。
@@ -2441,18 +2549,16 @@ export default function MyPage({
 
         {/* 自分のステータス（参加者名横に表示） */}
         {onUserStatusChange && (
-          <div className="rounded border border-gray-700/80 bg-gray-800/50 p-3">
-            <h3 className="mb-2 text-sm font-medium text-gray-300">自分のステータス</h3>
-            <p className="mb-2 text-xs text-gray-400">選択したステータスは参加者欄の自分の名前の横に表示されます。</p>
+          <div className={mypagePanelClass()}>
+            <h3 className={mypageSectionTitleClass()}>自分のステータス</h3>
+            <p className={`mb-2 text-xs ${mypageBodyTextClass()}`}>選択したステータスは参加者欄の自分の名前の横に表示されます。</p>
             <div className="flex flex-wrap gap-1.5">
               {USER_STATUS_OPTIONS.map((opt) => (
                 <button
                   key={opt.value || 'none'}
                   type="button"
                   onClick={() => onUserStatusChange(opt.value)}
-                  className={`rounded px-2.5 py-1.5 text-sm ${
-                    userStatus === opt.value ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                  }`}
+                  className={mypageTabBtnClass(userStatus === opt.value)}
                 >
                   {opt.label}
                 </button>
@@ -2462,20 +2568,15 @@ export default function MyPage({
         )}
 
         {/* 発言のテキストカラー（クリックでモーダル） */}
-        <div className="rounded border border-gray-700/80 bg-gray-800/50 p-3">
+        <div className={mypagePanelClass()}>
           <h3 className="mb-2 text-sm font-medium text-gray-300">発言のテキストカラー</h3>
           <div className="flex items-center gap-2">
             <span className="text-sm text-gray-400">現在:</span>
-            <span
-              className="inline-block h-6 w-6 rounded-full border border-gray-600"
-              style={{ backgroundColor: currentUserTextColor }}
-              aria-hidden
-            />
-            <span className="text-sm text-gray-200">{currentUserTextColor}</span>
+            <ChatTextColorCurrentBadge color={currentUserTextColor} />
             <button
               type="button"
               onClick={() => setTextColorModalOpen(true)}
-              className="rounded border border-gray-600 bg-gray-700 px-2 py-1 text-xs text-gray-300 hover:bg-gray-600"
+              className={mypageSecondaryBtnClass(true)}
             >
               変更
             </button>
@@ -2489,25 +2590,20 @@ export default function MyPage({
             >
               <div className="rounded-lg border border-gray-700 bg-gray-900 p-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
                 <p className="mb-3 text-xs text-gray-500">
-                  チャットでの自分の発言の色を選べます。選択した色は保存され、次回以降も適用されます。
+                  {IS_MC_PRODUCT
+                    ? 'チャット（白背景）での自分の発言・選曲アナウンスの色を選べます。選択した色は保存され、次回以降も適用されます。'
+                    : 'チャットでの自分の発言の色を選べます。選択した色は保存され、次回以降も適用されます。'}
                 </p>
                 <div className="flex flex-wrap gap-2">
-                  {CHAT_TEXT_COLOR_PALETTE.map((hex) => (
-                    <button
+                  {chatTextColorPalette().map((hex) => (
+                    <ChatTextColorSwatchButton
                       key={hex}
-                      type="button"
-                      onClick={() => {
+                      hex={hex}
+                      selected={currentUserTextColor === hex}
+                      onSelect={() => {
                         onUserTextColorChange?.(hex);
                         setTextColorModalOpen(false);
                       }}
-                      className="h-8 w-8 rounded-full border-2 transition focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      style={{
-                        backgroundColor: hex,
-                        borderColor: currentUserTextColor === hex ? '#60a5fa' : 'transparent',
-                        boxShadow: currentUserTextColor === hex ? '0 0 0 2px rgba(96, 165, 250, 0.5)' : undefined,
-                      }}
-                      title={hex}
-                      aria-label={`色を選択: ${hex}`}
                     />
                   ))}
                 </div>
@@ -2523,29 +2619,30 @@ export default function MyPage({
           )}
         </div>
 
-        <div className="rounded border border-red-900/40 bg-red-950/20 p-3">
-          <p className="mb-2 text-xs text-gray-500">
+        <div className={mypagePanelClass()}>
+          <h3 className={mypageSectionTitleClass()}>アカウント削除</h3>
+          <p className={`mb-2 text-xs ${mypageBodyTextClass()}`}>
             アカウントを削除すると、登録情報はデータベースから完全に削除され、元に戻せません。
           </p>
           {!deleteConfirmOpen ? (
             <button
               type="button"
               onClick={() => setDeleteConfirmOpen(true)}
-              className="rounded border border-red-800 bg-red-900/50 px-3 py-2 text-sm text-red-300 hover:bg-red-900/70"
+              className={mypageSecondaryBtnClass()}
             >
               アカウントを削除する
             </button>
           ) : (
-            <div className="space-y-2 rounded border border-red-800 bg-red-900/20 p-3">
-              <p className="text-sm text-red-200">
+            <div className="space-y-2">
+              <p className={`text-sm ${mypageBodyTextClass()}`}>
                 本当にアカウントを削除しますか？ この操作は取り消せません。
               </p>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
                   onClick={handleDeleteAccount}
                   disabled={deleteInProgress}
-                  className="rounded bg-red-700 px-3 py-2 text-sm text-white hover:bg-red-800 disabled:opacity-50"
+                  className={mypageDangerBtnClass()}
                 >
                   {deleteInProgress ? '削除中…' : '削除する'}
                 </button>
@@ -2553,7 +2650,7 @@ export default function MyPage({
                   type="button"
                   onClick={() => setDeleteConfirmOpen(false)}
                   disabled={deleteInProgress}
-                  className="rounded border border-gray-600 px-3 py-2 text-sm text-gray-300 hover:bg-gray-700"
+                  className={mypageSecondaryBtnClass()}
                 >
                   キャンセル
                 </button>
@@ -2569,7 +2666,7 @@ export default function MyPage({
         {/* 選曲リスト / お気に入り / お題プレイリスト（タブ切り替え） */}
         {mainTab === 'music' || mainTab === 'mylist' || mainTab === 'themeMission' ? (
         <div
-          className={`mc-scrollbar-stable min-h-0 flex-1 border-t border-gray-800 pt-4 ${
+          className={`mc-scrollbar-stable min-h-0 flex-1 ${mypageSectionBorderClass()} pt-4 ${
             (mainTab === 'music' && (historyTab === 'songs' || historyTab === 'favorites')) ||
             (mainTab === 'mylist' && myListTab === 'newSongs')
               ? 'flex flex-col overflow-y-auto'
@@ -2583,14 +2680,14 @@ export default function MyPage({
                   <button
                     type="button"
                     onClick={() => setHistoryTab('songs')}
-                    className={`rounded px-3 py-1.5 text-sm font-medium ${historyTab === 'songs' ? 'bg-gray-700 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'}`}
+                    className={mypageTabBtnClass(historyTab === 'songs')}
                   >
                     選曲リスト
                   </button>
                   <button
                     type="button"
                     onClick={() => setHistoryTab('favorites')}
-                    className={`rounded px-3 py-1.5 text-sm font-medium ${historyTab === 'favorites' ? 'bg-gray-700 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'}`}
+                    className={mypageTabBtnClass(historyTab === 'favorites')}
                   >
                     お気に入り
                   </button>
@@ -2609,7 +2706,7 @@ export default function MyPage({
                   ? songHistoryLoading || songHistory.length === 0
                   : favoritesLoading || favorites.length === 0
               }
-              className="shrink-0 rounded border border-emerald-700/60 bg-emerald-900/30 px-3 py-1.5 text-sm font-medium text-emerald-200 hover:bg-emerald-900/50 disabled:cursor-not-allowed disabled:opacity-40"
+              className={`shrink-0 ${mypageSecondaryBtnClass()} disabled:cursor-not-allowed disabled:opacity-40`}
               title={
                 mainTab === 'themeMission' ||
                 mainTab === 'mylist' ||
@@ -2642,12 +2739,12 @@ export default function MyPage({
                 emptyMessage="まだ履歴がありません。部屋でYouTubeのURLを貼ると保存されます。"
               />
               {songHistoryTotalPages > 1 ? (
-                <nav className="mt-3 flex flex-wrap items-center justify-center gap-1 border-t border-gray-700/50 pt-2 text-xs" aria-label="貼った曲の履歴のページ送り">
+                <nav className={`mt-3 flex flex-wrap items-center justify-center gap-1 border-t pt-2 text-xs ${IS_MC_PRODUCT ? 'border-gray-200' : 'border-gray-700/50'}`} aria-label="貼った曲の履歴のページ送り">
                   <button
                     type="button"
                     disabled={Math.min(songHistoryPage, songHistoryTotalPages) <= 1}
                     onClick={() => setSongHistoryPage((p) => Math.max(1, p - 1))}
-                    className="rounded border border-gray-600 px-2 py-1 text-gray-300 hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-40"
+                    className={mypageSecondaryBtnClass(true)}
                   >
                     ←
                   </button>
@@ -2661,11 +2758,9 @@ export default function MyPage({
                         key={slot}
                         type="button"
                         onClick={() => setSongHistoryPage(slot)}
-                        className={`min-w-[1.75rem] rounded border px-1.5 py-1 ${
-                          Math.min(songHistoryPage, songHistoryTotalPages) === slot
-                            ? 'border-violet-600/70 bg-violet-900/40 text-violet-100'
-                            : 'border-gray-600 text-gray-300 hover:bg-gray-700'
-                        }`}
+                        className={mypagePaginationBtnClass(
+                          Math.min(songHistoryPage, songHistoryTotalPages) === slot,
+                        )}
                       >
                         {slot}
                       </button>
@@ -2675,7 +2770,7 @@ export default function MyPage({
                     type="button"
                     disabled={Math.min(songHistoryPage, songHistoryTotalPages) >= songHistoryTotalPages}
                     onClick={() => setSongHistoryPage((p) => Math.min(songHistoryTotalPages, p + 1))}
-                    className="rounded border border-gray-600 px-2 py-1 text-gray-300 hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-40"
+                    className={mypageSecondaryBtnClass(true)}
                   >
                     →
                   </button>
@@ -2718,20 +2813,16 @@ export default function MyPage({
                       return (
                         <div
                           key={f.id}
-                          className={`rounded border border-gray-700 bg-gray-800/50 p-2 ${
-                            musicPreview?.videoId === f.video_id
-                              ? 'ring-1 ring-lime-700/40 bg-lime-950/20'
-                              : ''
-                          }`}
+                          className={mypageSongRowClass(musicPreview?.videoId === f.video_id)}
                         >
                           <p className="text-xs text-gray-500">
                             {dateStr} {timeStr} · {f.display_name}
                           </p>
-                          <p className="text-sm text-gray-200">{artistTitle}</p>
+                          <p className={`text-sm ${IS_MC_PRODUCT ? 'text-gray-900' : 'text-gray-200'}`}>{artistTitle}</p>
                           <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px]">
-                            {f.style?.trim() ? (
+                            {showRoomStyleUi() && f.style?.trim() ? (
                               <span
-                                className="rounded border border-gray-700/70 bg-gray-900/40 px-1.5 py-0.5"
+                                className={mypageMetaBadgeClass()}
                                 style={{ color: getMyPageStyleTextColor(f.style) }}
                                 title={`スタイル: ${f.style}`}
                               >
@@ -2740,14 +2831,14 @@ export default function MyPage({
                             ) : null}
                             {f.era?.trim() ? (
                               <span
-                                className="rounded border border-gray-700/70 bg-gray-900/40 px-1.5 py-0.5"
+                                className={mypageMetaBadgeClass()}
                                 style={{ color: getMyPageEraTextColor(f.era) }}
                                 title={`年代: ${f.era}`}
                               >
                                 {f.era}
                               </span>
                             ) : null}
-                            {!f.style?.trim() && !f.era?.trim() ? (
+                            {(showRoomStyleUi() ? !f.style?.trim() : true) && !f.era?.trim() ? (
                               <span className="text-gray-500">—</span>
                             ) : null}
                           </div>
@@ -2764,22 +2855,18 @@ export default function MyPage({
                                   era: f.era ?? null,
                                 })
                               }
-                              className={`shrink-0 rounded border px-2 py-1 text-xs font-medium ${
-                                musicPreview?.videoId === f.video_id
-                                  ? 'border-lime-500 bg-lime-800 text-white'
-                                  : 'border-lime-700/60 bg-lime-900/30 text-lime-200 hover:bg-lime-900/50'
-                              }`}
+                              className={mypagePlayBtnClass(musicPreview?.videoId === f.video_id)}
                               title="右のプレイヤーで再生"
                             >
                               再生
                             </button>
-                            <a href={url} target="_blank" rel="noopener noreferrer" className="break-all text-xs text-blue-400 hover:underline">
+                            <a href={url} target="_blank" rel="noopener noreferrer" className={`break-all text-xs hover:underline ${IS_MC_PRODUCT ? 'text-blue-600' : 'text-blue-400'}`}>
                               {url}
                             </a>
                             <button
                               type="button"
                               onClick={() => pickSongFromMyList(url)}
-                              className="shrink-0 rounded border border-emerald-700/60 bg-emerald-900/30 px-2 py-1 text-xs text-emerald-200 hover:bg-emerald-900/50"
+                              className={mypagePickSongBtnClass()}
                               title="この曲を選曲欄にセット"
                             >
                               選曲
@@ -2787,7 +2874,7 @@ export default function MyPage({
                             <button
                               type="button"
                               onClick={() => removeFavorite(f.video_id)}
-                              className="shrink-0 rounded border border-gray-600 bg-gray-700 px-2 py-1 text-xs text-gray-300 hover:bg-gray-600"
+                              className={mypageSecondaryBtnClass(true)}
                               title="お気に入り解除"
                             >
                               解除
@@ -2804,7 +2891,7 @@ export default function MyPage({
                                   source: 'favorites',
                                 })
                               }
-                              className="shrink-0 rounded border border-violet-600/60 bg-violet-900/40 px-2 py-1 text-xs text-violet-100 hover:bg-violet-900/60"
+                              className={librarySecondaryBtnClass('px-2 py-1 text-xs')}
                               title="自分のライブラリ（マイリスト）に追加"
                             >
                               マイリストに追加
@@ -2815,12 +2902,12 @@ export default function MyPage({
                     })}
                   </div>
                   {favoritesTotalPages > 1 ? (
-                    <nav className="mt-3 flex flex-wrap items-center justify-center gap-1 border-t border-gray-700/50 pt-2 text-xs" aria-label="お気に入りリストのページ送り">
+                    <nav className={`mt-3 flex flex-wrap items-center justify-center gap-1 border-t pt-2 text-xs ${IS_MC_PRODUCT ? 'border-gray-200' : 'border-gray-700/50'}`} aria-label="お気に入りリストのページ送り">
                       <button
                         type="button"
                         disabled={Math.min(favoritesPage, favoritesTotalPages) <= 1}
                         onClick={() => setFavoritesPage((p) => Math.max(1, p - 1))}
-                        className="rounded border border-gray-600 px-2 py-1 text-gray-300 hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-40"
+                        className={mypageSecondaryBtnClass(true)}
                       >
                         ←
                       </button>
@@ -2834,11 +2921,9 @@ export default function MyPage({
                             key={slot}
                             type="button"
                             onClick={() => setFavoritesPage(slot)}
-                            className={`min-w-[1.75rem] rounded border px-1.5 py-1 ${
-                              Math.min(favoritesPage, favoritesTotalPages) === slot
-                                ? 'border-violet-600/70 bg-violet-900/40 text-violet-100'
-                                : 'border-gray-600 text-gray-300 hover:bg-gray-700'
-                            }`}
+                            className={mypagePaginationBtnClass(
+                              Math.min(favoritesPage, favoritesTotalPages) === slot,
+                            )}
                           >
                             {slot}
                           </button>
@@ -2848,7 +2933,7 @@ export default function MyPage({
                         type="button"
                         disabled={Math.min(favoritesPage, favoritesTotalPages) >= favoritesTotalPages}
                         onClick={() => setFavoritesPage((p) => Math.min(favoritesTotalPages, p + 1))}
-                        className="rounded border border-gray-600 px-2 py-1 text-gray-300 hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-40"
+                        className={mypageSecondaryBtnClass(true)}
                       >
                         →
                       </button>
@@ -2869,7 +2954,7 @@ export default function MyPage({
               </div>
             </div>
           )}
-          {mainTab === 'themeMission' && (
+          {!IS_MC_PRODUCT && mainTab === 'themeMission' && (
             <div className="mb-6">
               <h3 className="mb-2 text-sm font-semibold text-gray-200">お題プレイリスト（β）</h3>
               <ThemePlaylistMissionPanel
@@ -2880,36 +2965,26 @@ export default function MyPage({
           )}
           {mainTab === 'mylist' && (
             <>
-              <p className="mb-3 text-xs text-gray-500">
-                チャット参加とは別の<strong className="text-gray-400">自分のライブラリ</strong>です。同一の YouTube 動画（
-                <code className="text-gray-400">video_id</code>）は 1 件までです。テーブル未作成のときは{' '}
+              <p className={`mb-3 text-xs ${mypageBodyTextClass()}`}>
+                チャット参加とは別の<strong className={IS_MC_PRODUCT ? 'text-gray-800' : 'text-gray-400'}>自分のライブラリ</strong>です。同一の YouTube 動画（
+                <code className={IS_MC_PRODUCT ? 'text-gray-600' : 'text-gray-400'}>video_id</code>）は 1 件までです。テーブル未作成のときは{' '}
                 <code className="text-gray-500">docs/supabase-user-my-list-table.md</code> の SQL を Supabase で実行してください。
               </p>
               {myListMessage ? (
-                <p className="mb-3 rounded border border-amber-800/50 bg-amber-900/20 px-2 py-1.5 text-xs text-amber-100">
-                  {myListMessage}
-                </p>
+                <p className={mypageMessageBannerClass()}>{myListMessage}</p>
               ) : null}
               <div className="mb-3 flex flex-wrap gap-2">
                 <button
                   type="button"
                   onClick={() => setMyListTab('newSongs')}
-                  className={`rounded px-3 py-1.5 text-xs font-medium transition ${
-                    myListTab === 'newSongs'
-                      ? 'border border-violet-600/60 bg-violet-900/40 text-violet-100'
-                      : 'border border-gray-600 bg-gray-800 text-gray-300 hover:bg-gray-700'
-                  }`}
+                  className={mypageTabBtnClass(myListTab === 'newSongs')}
                 >
                   新規追加曲
                 </button>
                 <button
                   type="button"
                   onClick={() => setMyListTab('artists')}
-                  className={`rounded px-3 py-1.5 text-xs font-medium transition ${
-                    myListTab === 'artists'
-                      ? 'border border-violet-600/60 bg-violet-900/40 text-violet-100'
-                      : 'border border-gray-600 bg-gray-800 text-gray-300 hover:bg-gray-700'
-                  }`}
+                  className={mypageTabBtnClass(myListTab === 'artists')}
                 >
                   保存済アーティスト
                 </button>
@@ -2927,13 +3002,13 @@ export default function MyPage({
                           if (e.key === 'Enter') void submitMyListUrl();
                         }}
                         placeholder="https://www.youtube.com/watch?v=… または dQw4w9WgXcQ"
-                        className="min-w-[200px] flex-1 rounded border border-gray-600 bg-gray-800 px-3 py-2 text-sm text-white placeholder:text-gray-500"
+                        className={mypageInputClass('min-w-[200px]')}
                       />
                       <button
                         type="button"
                         disabled={myListAddBusy || !myListAddUrl.trim()}
                         onClick={() => void submitMyListUrl()}
-                        className="shrink-0 rounded bg-violet-600 px-3 py-2 text-sm font-medium text-white hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-40"
+                        className={`shrink-0 ${mypagePrimaryBtnClass()} disabled:cursor-not-allowed disabled:opacity-40`}
                       >
                         {myListAddBusy ? '追加中…' : '追加'}
                       </button>
@@ -2964,24 +3039,20 @@ export default function MyPage({
                           return (
                             <div
                               key={item.id}
-                              className={`rounded border border-gray-700 bg-gray-800/50 p-2 ${
-                                musicPreview?.videoId === item.video_id
-                                  ? 'ring-1 ring-lime-700/40 bg-lime-950/20'
-                                  : ''
-                              }`}
+                              className={mypageSongRowClass(musicPreview?.videoId === item.video_id)}
                             >
                               <p className="text-xs text-gray-500">
                                 追加: {added.toLocaleString('ja-JP')}
-                                {item.source ? <span className="ml-2 text-gray-600">· {item.source}</span> : null}
+                                {item.source ? <span className="ml-2 text-gray-500">· {item.source}</span> : null}
                               </p>
                               {showUpdated ? (
                                 <p className="text-xs text-gray-500">最終更新: {updated.toLocaleString('ja-JP')}</p>
                               ) : null}
-                              <p className="text-sm text-gray-200">{label}</p>
+                              <p className={`text-sm ${IS_MC_PRODUCT ? 'text-gray-900' : 'text-gray-200'}`}>{label}</p>
                               <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px]">
-                                {item.style?.trim() ? (
+                                {showRoomStyleUi() && item.style?.trim() ? (
                                   <span
-                                    className="rounded border border-gray-700/70 bg-gray-900/40 px-1.5 py-0.5"
+                                    className={mypageMetaBadgeClass()}
                                     style={{ color: getMyPageStyleTextColor(item.style) }}
                                     title={`スタイル: ${item.style}`}
                                   >
@@ -2990,67 +3061,69 @@ export default function MyPage({
                                 ) : null}
                                 {item.era?.trim() ? (
                                   <span
-                                    className="rounded border border-gray-700/70 bg-gray-900/40 px-1.5 py-0.5"
+                                    className={mypageMetaBadgeClass()}
                                     style={{ color: getMyPageEraTextColor(item.era) }}
                                     title={`年代: ${item.era}`}
                                   >
                                     {item.era}
                                   </span>
                                 ) : null}
-                                {!item.style?.trim() && !item.era?.trim() ? (
+                                {(showRoomStyleUi() ? !item.style?.trim() : true) && !item.era?.trim() ? (
                                   <span className="text-gray-500">—</span>
                                 ) : null}
                               </div>
                               {myListEditing === item.id ? (
                                 <div className="mt-2 space-y-2">
                                   <div>
-                                    <label className="mb-1 block text-xs text-gray-400">タイトル（曲名）</label>
+                                    <label className={`mb-1 block text-xs ${mypageBodyTextClass()}`}>タイトル（曲名）</label>
                                     <input
                                       type="text"
                                       value={myListEditTitle}
                                       onChange={(e) => setMyListEditTitle(e.target.value)}
-                                      className="w-full rounded border border-gray-600 bg-gray-800 px-2 py-1.5 text-sm text-white"
+                                      className={mypageFieldClass()}
                                     />
                                   </div>
                                   <div>
-                                    <label className="mb-1 block text-xs text-gray-400">アーティスト（カンマ区切り可）</label>
+                                    <label className={`mb-1 block text-xs ${mypageBodyTextClass()}`}>アーティスト（カンマ区切り可）</label>
                                     <input
                                       type="text"
                                       value={myListEditArtist}
                                       onChange={(e) => setMyListEditArtist(e.target.value)}
-                                      className="w-full rounded border border-gray-600 bg-gray-800 px-2 py-1.5 text-sm text-white"
+                                      className={mypageFieldClass()}
                                     />
                                   </div>
                                   <div>
-                                    <label className="mb-1 block text-xs text-gray-400">メモ（任意）</label>
+                                    <label className={`mb-1 block text-xs ${mypageBodyTextClass()}`}>メモ（任意）</label>
                                     <textarea
                                       value={myListEditNote}
                                       onChange={(e) => setMyListEditNote(e.target.value)}
                                       rows={2}
-                                      className="w-full rounded border border-gray-600 bg-gray-800 px-2 py-1.5 text-sm text-white"
+                                      className={mypageFieldClass()}
                                     />
                                   </div>
+                                  {showRoomStyleUi() ? (
+                                    <div>
+                                      <label className={`mb-1 block text-xs ${mypageBodyTextClass()}`}>スタイル</label>
+                                      <select
+                                        value={myListEditStyle}
+                                        onChange={(e) => setMyListEditStyle(e.target.value)}
+                                        className={mypageFieldClass()}
+                                      >
+                                        <option value="">未設定</option>
+                                        {SONG_STYLE_OPTIONS.map((opt) => (
+                                          <option key={opt} value={opt}>
+                                            {opt}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    </div>
+                                  ) : null}
                                   <div>
-                                    <label className="mb-1 block text-xs text-gray-400">スタイル</label>
-                                    <select
-                                      value={myListEditStyle}
-                                      onChange={(e) => setMyListEditStyle(e.target.value)}
-                                      className="w-full rounded border border-gray-600 bg-gray-800 px-2 py-1.5 text-sm text-white"
-                                    >
-                                      <option value="">未設定</option>
-                                      {SONG_STYLE_OPTIONS.map((opt) => (
-                                        <option key={opt} value={opt}>
-                                          {opt}
-                                        </option>
-                                      ))}
-                                    </select>
-                                  </div>
-                                  <div>
-                                    <label className="mb-1 block text-xs text-gray-400">年代</label>
+                                    <label className={`mb-1 block text-xs ${mypageBodyTextClass()}`}>年代</label>
                                     <select
                                       value={myListEditEra}
                                       onChange={(e) => setMyListEditEra(e.target.value)}
-                                      className="w-full rounded border border-gray-600 bg-gray-800 px-2 py-1.5 text-sm text-white"
+                                      className={mypageFieldClass()}
                                     >
                                       <option value="">未設定</option>
                                       {SONG_ERA_OPTIONS.map((opt) => (
@@ -3065,14 +3138,14 @@ export default function MyPage({
                                       type="button"
                                       disabled={myListSaveBusy}
                                       onClick={() => void saveMyListEdit()}
-                                      className="rounded bg-violet-600 px-2 py-1 text-xs text-white hover:bg-violet-700 disabled:opacity-40"
+                                      className={`${mypagePrimaryBtnClass()} px-2 py-1 text-xs disabled:opacity-40`}
                                     >
                                       {myListSaveBusy ? '保存中…' : '保存'}
                                     </button>
                                     <button
                                       type="button"
                                       onClick={() => setMyListEditing(null)}
-                                      className="rounded border border-gray-600 bg-gray-700 px-2 py-1 text-xs text-gray-300 hover:bg-gray-600"
+                                      className={mypageSecondaryBtnClass(true)}
                                     >
                                       キャンセル
                                     </button>
@@ -3081,7 +3154,7 @@ export default function MyPage({
                               ) : (
                                 <>
                                   {item.note ? (
-                                    <p className="mt-1 text-xs text-gray-400 whitespace-pre-wrap">{item.note}</p>
+                                    <p className={`mt-1 text-xs whitespace-pre-wrap ${mypageBodyTextClass()}`}>{item.note}</p>
                                   ) : null}
                                   <div className="mt-1 flex flex-wrap items-center gap-2">
                                     <button
@@ -3096,11 +3169,7 @@ export default function MyPage({
                                           era: item.era ?? null,
                                         })
                                       }
-                                      className={`shrink-0 rounded border px-2 py-1 text-xs font-medium ${
-                                        musicPreview?.videoId === item.video_id
-                                          ? 'border-lime-500 bg-lime-800 text-white'
-                                          : 'border-lime-700/60 bg-lime-900/30 text-lime-200 hover:bg-lime-900/50'
-                                      }`}
+                                      className={mypagePlayBtnClass(musicPreview?.videoId === item.video_id)}
                                       title="右のプレイヤーで再生"
                                     >
                                       再生
@@ -3109,28 +3178,28 @@ export default function MyPage({
                                       href={item.url}
                                       target="_blank"
                                       rel="noopener noreferrer"
-                                      className="min-w-0 flex-1 break-all text-xs text-blue-400 hover:underline"
+                                      className={`min-w-0 flex-1 break-all text-xs hover:underline ${IS_MC_PRODUCT ? 'text-blue-600' : 'text-blue-400'}`}
                                     >
                                       {item.url}
                                     </a>
                                     <button
                                       type="button"
                                       onClick={() => pickSongFromMyList(item.url)}
-                                      className="shrink-0 rounded border border-emerald-700/60 bg-emerald-900/30 px-2 py-1 text-xs text-emerald-200 hover:bg-emerald-900/50"
+                                      className={mypagePickSongBtnClass()}
                                     >
                                       選曲
                                     </button>
                                     <button
                                       type="button"
                                       onClick={() => openMyListEdit(item)}
-                                      className="shrink-0 rounded border border-gray-600 bg-gray-700 px-2 py-1 text-xs text-gray-300 hover:bg-gray-600"
+                                      className={mypageSecondaryBtnClass(true)}
                                     >
                                       編集
                                     </button>
                                     <button
                                       type="button"
                                       onClick={() => void removeMyListItem(item.id)}
-                                      className="shrink-0 rounded border border-red-900/50 bg-red-900/30 px-2 py-1 text-xs text-red-200 hover:bg-red-900/50"
+                                      className={mypageDangerBtnClass(true)}
                                     >
                                       削除
                                     </button>
@@ -3143,14 +3212,14 @@ export default function MyPage({
                       </div>
                       {myListNewSongsTotalPages > 1 ? (
                         <nav
-                          className="flex flex-wrap items-center justify-center gap-1 border-t border-gray-700/50 pt-2 text-xs"
+                          className={`flex flex-wrap items-center justify-center gap-1 border-t pt-2 text-xs ${IS_MC_PRODUCT ? 'border-gray-200' : 'border-gray-700/50'}`}
                           aria-label="マイリストのページ送り"
                         >
                           <button
                             type="button"
                             disabled={Math.min(myListNewSongsPage, myListNewSongsTotalPages) <= 1}
                             onClick={() => setMyListNewSongsPage((p) => Math.max(1, p - 1))}
-                            className="rounded border border-gray-600 px-2 py-1 text-gray-300 hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-40"
+                            className={mypageSecondaryBtnClass(true)}
                           >
                             ←
                           </button>
@@ -3164,11 +3233,9 @@ export default function MyPage({
                                 key={slot}
                                 type="button"
                                 onClick={() => setMyListNewSongsPage(slot)}
-                                className={`min-w-[1.75rem] rounded border px-1.5 py-1 ${
-                                  Math.min(myListNewSongsPage, myListNewSongsTotalPages) === slot
-                                    ? 'border-violet-600/70 bg-violet-900/40 text-violet-100'
-                                    : 'border-gray-600 text-gray-300 hover:bg-gray-700'
-                                }`}
+                                className={mypagePaginationBtnClass(
+                                  Math.min(myListNewSongsPage, myListNewSongsTotalPages) === slot,
+                                )}
                               >
                                 {slot}
                               </button>
@@ -3178,7 +3245,7 @@ export default function MyPage({
                             type="button"
                             disabled={Math.min(myListNewSongsPage, myListNewSongsTotalPages) >= myListNewSongsTotalPages}
                             onClick={() => setMyListNewSongsPage((p) => Math.min(myListNewSongsTotalPages, p + 1))}
-                            className="rounded border border-gray-600 px-2 py-1 text-gray-300 hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-40"
+                            className={mypageSecondaryBtnClass(true)}
                           >
                             →
                           </button>
@@ -3198,9 +3265,9 @@ export default function MyPage({
                 </>
               ) : null}
               {myListTab === 'artists' ? (
-                <div className="rounded border border-gray-700 bg-gray-900/40 p-3">
-                  <h3 className="text-sm font-medium text-gray-200">保存済みアーティスト</h3>
-                  <p className="mt-1 text-xs text-gray-500">
+                <div className={mypagePanelClass()}>
+                  <h3 className={mypageSectionTitleClass()}>保存済みアーティスト</h3>
+                  <p className={`mt-1 text-xs ${mypageBodyTextClass()}`}>
                     括弧内は、このアーティスト名で紐づいているマイリスト曲の件数です。アルファベットを押すと、当該文字のアーティストのみ表示します。
                   </p>
                   {myListLoading && myListLibraryArtists.length === 0 ? (
@@ -3221,23 +3288,30 @@ export default function MyPage({
                             key={key}
                             type="button"
                             onClick={() => setMyListArtistFilterLetter(key)}
-                            className={`min-w-[1.75rem] rounded border px-1.5 py-0.5 text-center text-xs font-medium ${
-                              myListArtistFilterLetter === key
-                                ? 'border-violet-600/70 bg-violet-900/50 text-violet-100'
-                                : 'border-gray-600 bg-gray-800/80 text-violet-200 hover:border-violet-600/60 hover:bg-violet-950/40'
-                            }`}
+                            className={`min-w-[1.75rem] ${libraryIndexLetterBtnClass(myListArtistFilterLetter === key)}`}
                           >
                             {key}
                           </button>
                         ))}
                       </nav>
-                      <div className="mt-2 max-h-[min(50vh,28rem)] overflow-y-auto rounded border border-gray-800/60 pr-0.5">
+                      <div
+                        className={`mt-2 max-h-[min(50vh,28rem)] overflow-y-auto rounded border pr-0.5 ${
+                          IS_MC_PRODUCT ? 'border-gray-200' : 'border-gray-800/60'
+                        }`}
+                      >
                         <ul className="space-y-1">
                           {filteredLibraryArtists.map((a) => {
                             const open = myListLibraryArtistExpandedId === a.id;
                             const effectiveSlug = a.artist_slug ?? buildArtistSlugForProfile(a.display_name);
                             return (
-                              <li key={a.id} className="rounded border border-gray-700/80 bg-gray-800/40">
+                              <li
+                                key={a.id}
+                                className={
+                                  IS_MC_PRODUCT
+                                    ? 'rounded border border-gray-200 bg-white'
+                                    : 'rounded border border-gray-700/80 bg-gray-800/40'
+                                }
+                              >
                                 <div className="flex items-center gap-2 px-2 py-2">
                                   <button
                                     type="button"
@@ -3245,13 +3319,17 @@ export default function MyPage({
                                     onClick={() =>
                                       setMyListLibraryArtistExpandedId((prev) => (prev === a.id ? null : a.id))
                                     }
-                                    className="flex min-w-0 flex-1 items-center justify-between gap-2 text-left text-sm text-gray-200 hover:text-white"
+                                    className={`flex min-w-0 flex-1 items-center justify-between gap-2 text-left text-sm hover:opacity-90 ${
+                                      IS_MC_PRODUCT ? 'text-gray-800' : 'text-gray-200 hover:text-white'
+                                    }`}
                                   >
                                     <span className="min-w-0 truncate font-medium">
                                       {a.display_name}
-                                      <span className="ml-1 font-normal text-gray-400">（{a.linked_count}）</span>
+                                      <span className={`ml-1 font-normal ${IS_MC_PRODUCT ? 'text-gray-500' : 'text-gray-400'}`}>
+                                        （{a.linked_count}）
+                                      </span>
                                     </span>
-                                    <span className="shrink-0 rounded border border-gray-600 bg-gray-800 px-2 py-1 text-[11px] text-gray-300">
+                                    <span className={mypageSecondaryBtnClass(true)}>
                                       {open ? '曲一覧▲' : '曲一覧▼'}
                                     </span>
                                   </button>
@@ -3259,7 +3337,7 @@ export default function MyPage({
                                     <button
                                       type="button"
                                       onClick={() => openMyListArtistProfile(a.display_name, effectiveSlug)}
-                                      className="shrink-0 rounded border border-sky-700/60 bg-sky-900/30 px-2 py-1 text-[11px] font-medium text-sky-100 hover:bg-sky-900/50"
+                                      className={mypageSecondaryBtnClass(true)}
                                       title="アーティスト情報を表示"
                                     >
                                       PROFILE
@@ -3267,16 +3345,24 @@ export default function MyPage({
                                   ) : null}
                                 </div>
                                 {open ? (
-                                  <ul className="space-y-2 border-t border-gray-700/80 px-2 py-2">
+                                  <ul
+                                    className={`space-y-2 border-t px-2 py-2 ${
+                                      IS_MC_PRODUCT ? 'border-gray-200' : 'border-gray-700/80'
+                                    }`}
+                                  >
                                     {a.items.length === 0 ? (
                                       <li className="text-xs text-gray-500">紐づく曲がありません。</li>
                                     ) : (
                                       a.items.map((it) => (
                                         <li
                                           key={`${a.id}-${it.id}-${it.position}`}
-                                          className="rounded bg-gray-900/50 px-2 py-1.5 text-xs text-gray-300"
+                                          className={
+                                            IS_MC_PRODUCT
+                                              ? 'rounded bg-gray-50 px-2 py-1.5 text-xs text-gray-700'
+                                              : 'rounded bg-gray-900/50 px-2 py-1.5 text-xs text-gray-300'
+                                          }
                                         >
-                                          <p className="font-medium text-gray-200">
+                                          <p className={`font-medium ${IS_MC_PRODUCT ? 'text-gray-900' : 'text-gray-200'}`}>
                                             {it.title?.trim() || it.video_id}
                                             {it.artist?.trim() ? ` / ${it.artist.trim()}` : ''}
                                           </p>
@@ -3285,14 +3371,14 @@ export default function MyPage({
                                               href={it.url}
                                               target="_blank"
                                               rel="noopener noreferrer"
-                                              className="break-all text-blue-400 hover:underline"
+                                              className={`break-all hover:underline ${IS_MC_PRODUCT ? 'text-blue-600' : 'text-blue-400'}`}
                                               onClick={(e) => e.stopPropagation()}
                                             >
                                               YouTube で開く
                                             </a>
                                             <button
                                               type="button"
-                                              className="rounded border border-emerald-700/60 bg-emerald-900/30 px-1.5 py-0.5 text-emerald-200 hover:bg-emerald-900/50"
+                                              className={mypagePickSongBtnClass()}
                                               onClick={(e) => {
                                                 e.stopPropagation();
                                                 pickSongFromMyList(it.url);
@@ -3321,15 +3407,19 @@ export default function MyPage({
         ) : null}
 
         {mainTab === 'participation' ? (
-          <div className="mc-scrollbar-stable min-h-0 flex-1 overflow-y-auto border-t border-gray-800 pt-4">
-            <p className="mb-3 text-xs leading-relaxed text-gray-400">
-              ログイン状態で入室した会の参加履歴です。入室時刻・退出時刻に加え、AI 利用量の目安を表示します。
-              <span className="mt-1 block text-emerald-300/90">
-                【現在無料】AI 機能はサイト管理者負担で提供されており、参加者への請求はありません。
-              </span>
+          <div className={`mc-scrollbar-stable min-h-0 flex-1 overflow-y-auto ${mypageSectionBorderClass()} pt-4`}>
+            <p className={`mb-3 text-xs leading-relaxed ${mypageBodyTextClass()}`}>
+              {IS_MC_PRODUCT
+                ? 'ログイン状態で入室した会の参加履歴です。入室・退出時刻と滞在時間を確認できます。'
+                : 'ログイン状態で入室した会の参加履歴です。入室時刻・退出時刻に加え、AI 利用量の目安を表示します。'}
+              {!IS_MC_PRODUCT ? (
+                <span className="mt-1 block text-emerald-300/90">
+                  【現在無料】AI 機能はサイト管理者負担で提供されており、参加者への請求はありません。
+                </span>
+              ) : null}
             </p>
-            <SongSelectionCostGuide variant="mypage" className="mb-4" />
-            {!isGuest ? (
+            {!IS_MC_PRODUCT ? <SongSelectionCostGuide variant="mypage" className="mb-4" /> : null}
+            {!IS_MC_PRODUCT && !isGuest ? (
               <div className="mb-4">
                 <p className="mb-2 text-xs font-medium text-gray-300">{AI_TRIAL_STATUS_MYPAGE_HEADING}</p>
                 <AiTrialStatusBadge
@@ -3339,14 +3429,14 @@ export default function MyPage({
                 />
               </div>
             ) : null}
-            {geminiUsageLoading ? (
+            {!IS_MC_PRODUCT && geminiUsageLoading ? (
               <p className="mb-3 text-xs text-gray-500">AI 利用量を読み込み中…</p>
-            ) : geminiUsageSummary?.enabled === false && geminiUsageSummary.hint ? (
+            ) : !IS_MC_PRODUCT && geminiUsageSummary?.enabled === false && geminiUsageSummary.hint ? (
               <p className="mb-3 rounded border border-amber-900/50 bg-amber-950/30 px-2 py-1.5 text-xs text-amber-200/90">
                 AI 利用量: {geminiUsageSummary.hint}
               </p>
             ) : null}
-            {!geminiUsageLoading && geminiUsageSummary?.enabled && (
+            {!IS_MC_PRODUCT && !geminiUsageLoading && geminiUsageSummary?.enabled && (
               <div className="mb-4 rounded border border-violet-800/50 bg-violet-950/20 p-3">
                 <p className="text-xs font-medium text-violet-200">
                   月次 AI 利用（請求先としてあなたに帰属）
@@ -3452,9 +3542,11 @@ export default function MyPage({
                     return (
                       <div
                         key={`${row.slotStartMs}-${row.room_id}`}
-                        className="rounded border border-gray-700 bg-gray-800/50 p-2"
+                        className={mypagePanelClass()}
                       >
-                        <p className="text-xs text-amber-200">{row.slotLabel}</p>
+                        <p className={`text-xs ${IS_MC_PRODUCT ? 'text-gray-600' : 'text-amber-200'}`}>
+                          {row.slotLabel}
+                        </p>
                         <p className="text-xs text-gray-500">
                           部屋 {row.room_id || '—'} · {row.gathering_title || '部屋の名前未設定'}
                         </p>
@@ -3470,11 +3562,11 @@ export default function MyPage({
                             setMusicPreview(null);
                             setParticipationSongModalSlot(row);
                           }}
-                          className="mt-2 rounded border border-sky-700/60 bg-sky-900/30 px-2.5 py-1 text-xs font-medium text-sky-200 hover:bg-sky-900/50"
+                          className={IS_MC_PRODUCT ? mypageSecondaryBtnClass(true) : 'mt-2 rounded border border-sky-700/60 bg-sky-900/30 px-2.5 py-1 text-xs font-medium text-sky-200 hover:bg-sky-900/50'}
                         >
                           選曲リスト（{slotSongCount} 曲）
                         </button>
-                        {geminiUsageSummary?.enabled ? (
+                        {!IS_MC_PRODUCT && geminiUsageSummary?.enabled ? (
                           slotUsage && slotUsage.calls > 0 ? (
                             <>
                               <p className="mt-1 text-xs text-violet-200">
@@ -3515,7 +3607,7 @@ export default function MyPage({
                       type="button"
                       disabled={Math.min(participationPage, participationTotalPages) <= 1}
                       onClick={() => setParticipationPage((p) => Math.max(1, p - 1))}
-                      className="rounded border border-gray-600 px-2 py-1 text-gray-300 hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-40"
+                      className={mypageSecondaryBtnClass(true)}
                     >
                       ←
                     </button>
@@ -3543,7 +3635,7 @@ export default function MyPage({
                       type="button"
                       disabled={Math.min(participationPage, participationTotalPages) >= participationTotalPages}
                       onClick={() => setParticipationPage((p) => Math.min(participationTotalPages, p + 1))}
-                      className="rounded border border-gray-600 px-2 py-1 text-gray-300 hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-40"
+                      className={mypageSecondaryBtnClass(true)}
                     >
                       →
                     </button>
@@ -3554,7 +3646,7 @@ export default function MyPage({
           </div>
         ) : null}
 
-        {mainTab === 'questionHistory' ? (
+        {!IS_MC_PRODUCT && mainTab === 'questionHistory' ? (
           <div className="mc-scrollbar-stable min-h-0 flex-1 overflow-y-auto border-t border-gray-800 pt-4">
             <p className="mb-3 text-xs leading-relaxed text-gray-400">
               部屋で送った <span className="text-gray-300">@ 質問</span> と AI の回答です。お試し枠の{' '}
@@ -3600,23 +3692,27 @@ export default function MyPage({
           aria-label="アーティスト情報"
         >
           <div
-            className="max-h-[85vh] w-full max-w-2xl overflow-auto rounded-lg border border-gray-700 bg-gray-900 p-4"
+            className={
+              IS_MC_PRODUCT
+                ? 'max-h-[85vh] w-full max-w-2xl overflow-auto rounded-lg border border-gray-200 bg-white p-4 shadow-xl'
+                : 'max-h-[85vh] w-full max-w-2xl overflow-auto rounded-lg border border-gray-700 bg-gray-900 p-4'
+            }
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-base font-semibold text-white">
+              <h3 className={mypageSectionTitleClass()}>
                 アーティスト情報
-                <span className="ml-2 text-xs font-normal text-gray-400">{myListArtistProfileName}</span>
+                <span className={`ml-2 text-xs font-normal ${mypageBodyTextClass()}`}>{myListArtistProfileName}</span>
               </h3>
               <button
                 type="button"
                 onClick={() => setMyListArtistProfileOpen(false)}
-                className="rounded border border-gray-600 bg-gray-800 px-3 py-1.5 text-sm text-gray-200 hover:bg-gray-700"
+                className={mypageSecondaryBtnClass()}
               >
                 閉じる
               </button>
             </div>
-            <div className="rounded border border-gray-700 bg-gray-800/40">
+            <div className={mypagePanelClass()}>
               <MainArtistTabPanel
                 artistName={myListArtistProfileSlug || myListArtistProfileName}
                 songTitle={null}

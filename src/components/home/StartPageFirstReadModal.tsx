@@ -1,6 +1,7 @@
 'use client';
 
 import { GuideFullNotice } from '@/components/guide/GuideFullNotice';
+import { getProductDisplayName, IS_MC_PRODUCT } from '@/lib/product-branding';
 
 type StartPageFirstReadModalProps = {
   open: boolean;
@@ -22,7 +23,7 @@ export function StartPageFirstReadModal({ open, onClose }: StartPageFirstReadMod
         <header className="flex shrink-0 items-start justify-between gap-3 border-b border-gray-700 px-5 py-4">
           <div className="min-w-0">
             <h2 id="start-page-first-read-title" className="text-xl font-bold text-white">
-              洋楽AIチャット（β版）
+              {getProductDisplayName()}
             </h2>
             <p className="mt-1 text-xs text-gray-500">ご利用にあたって</p>
           </div>

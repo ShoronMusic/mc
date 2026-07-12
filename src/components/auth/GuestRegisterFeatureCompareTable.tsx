@@ -1,8 +1,8 @@
 'use client';
 
 import {
-  GUEST_REGISTER_FEATURE_COMPARE_ROWS,
   formatGuestRegisterFeatureAvailability,
+  getGuestRegisterFeatureCompareRows,
 } from '@/lib/guest-register-feature-compare';
 
 export function GuestRegisterFeatureCompareTable({ className = 'mt-4' }: { className?: string }) {
@@ -32,7 +32,7 @@ export function GuestRegisterFeatureCompareTable({ className = 'mt-4' }: { class
           </tr>
         </thead>
         <tbody>
-          {GUEST_REGISTER_FEATURE_COMPARE_ROWS.map((row) => (
+          {getGuestRegisterFeatureCompareRows().map((row) => (
             <tr key={row.feature} className="border-b border-gray-700/80 last:border-b-0">
               <td className="px-2.5 py-2 text-gray-200">
                 <span className="block leading-snug">{row.feature}</span>

@@ -5,6 +5,11 @@ import {
   joinGreetingVariantToResponse,
   type JoinGreetingRow,
 } from '@/lib/join-greeting-logic';
+import {
+  getRoomHistoryProductId,
+  runRoomHistoryQueryScoped,
+  withRoomHistoryProductEq,
+} from '@/lib/room-history-product';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,12 +39,19 @@ export async function GET(request: Request) {
       return NextResponse.json({ variant: 'none', daysSinceLastVisit: null });
     }
 
-    const { data, error } = await supabase
-      .from('user_room_participation_history')
-      .select('joined_at, left_at, room_id')
-      .eq('user_id', user.id)
-      .order('joined_at', { ascending: false })
-      .limit(MAX_ROWS);
+    const historyProduct = getRoomHistoryProductId();
+    const greetRes = await runRoomHistoryQueryScoped((scopeProduct) => {
+      let q = supabase
+        .from('user_room_participation_history')
+        .select('joined_at, left_at, room_id')
+        .eq('user_id', user.id)
+        .eq('room_id', roomId)
+        .order('joined_at', { ascending: false })
+        .limit(MAX_ROWS);
+      if (scopeProduct) q = withRoomHistoryProductEq(q, historyProduct);
+      return q;
+    });
+    const { data, error } = greetRes;
 
     if (error) {
       if (error.code === '42P01') {

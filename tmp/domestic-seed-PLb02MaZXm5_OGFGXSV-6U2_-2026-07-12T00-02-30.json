@@ -1,0 +1,474 @@
+{
+  "schemaVersion": 2,
+  "playlistId": "PLb02MaZXm5_OGFGXSV-6U2_9f2MqnDBbm",
+  "playlistUrl": "https://www.youtube.com/playlist?list=PLb02MaZXm5_OGFGXSV-6U2_9f2MqnDBbm",
+  "items": [
+    {
+      "videoId": "E8N8CAihLT0",
+      "artist": "米津玄師",
+      "title": "KenshiYonezu,HikaruUtada-JANE DOE×ChainsawMan–TheMovie:RezeArc",
+      "include": false,
+      "youtubeDate": "2025-11-18",
+      "note": "MV表記あり。内容確認後 include を検討",
+      "status": "skipped_excluded"
+    },
+    {
+      "videoId": "1cnndBdzCAk",
+      "artist": "米津玄師",
+      "title": "1991",
+      "include": true,
+      "youtubeDate": "2025-10-15",
+      "note": "normalized: dash_en_segment; manual-include: representative single",
+      "status": "pending"
+    },
+    {
+      "videoId": "ux3QETpLcPs",
+      "artist": "米津玄師",
+      "title": "IRIS OUT",
+      "include": false,
+      "youtubeDate": "2025-10-07",
+      "note": "auto-exclude: anime_opening_movie; auto-exclude: anime_opening_movie",
+      "status": "skipped_excluded"
+    },
+    {
+      "videoId": "sPLqsLsooJY",
+      "artist": "米津玄師",
+      "title": "JANE DOE",
+      "include": true,
+      "youtubeDate": "2025-09-23",
+      "note": "normalized: dash_en_segment; manual-include: representative single",
+      "status": "pending"
+    },
+    {
+      "videoId": "LmZD-TU96q4",
+      "artist": "米津玄師",
+      "title": "IRIS OUT",
+      "include": true,
+      "youtubeDate": "2025-09-15",
+      "note": "normalized: dash_en_segment; manual-include: representative single",
+      "status": "pending"
+    },
+    {
+      "videoId": "LMyZmRNszHo",
+      "artist": "米津玄師",
+      "title": "KICK BACK",
+      "include": false,
+      "youtubeDate": "2025-09-05",
+      "note": "auto-exclude: remix; auto-exclude: remix",
+      "status": "skipped_excluded"
+    },
+    {
+      "videoId": "2aFgfKtg3V4",
+      "artist": "米津玄師",
+      "title": "Plazma",
+      "include": false,
+      "youtubeDate": "2025-06-24",
+      "note": "auto-exclude: anime_tie_long; auto-exclude: anime_tie_long",
+      "status": "skipped_excluded"
+    },
+    {
+      "videoId": "Wcza_Do4IoY",
+      "artist": "米津玄師",
+      "title": "羽生結弦",
+      "include": false,
+      "releaseDate": "2025-06-11",
+      "youtubeDate": "2025-03-13",
+      "note": "auto-exclude: figure_skating_ver; auto-exclude: figure_skating_ver",
+      "status": "skipped_excluded"
+    },
+    {
+      "videoId": "M-Eyhjkepy0",
+      "artist": "米津玄師",
+      "title": "BOW AND ARROW",
+      "include": true,
+      "youtubeDate": "2025-03-05",
+      "note": "normalized: dash_en_segment; manual-include: representative single",
+      "status": "pending"
+    },
+    {
+      "videoId": "fp3F6TqBsAU",
+      "artist": "米津玄師",
+      "title": "Plazma",
+      "include": true,
+      "youtubeDate": "2025-01-21",
+      "note": "normalized: dash_en_segment; manual-include: representative single",
+      "status": "pending"
+    },
+    {
+      "videoId": "5DNqESedFMk",
+      "artist": "米津玄師",
+      "title": "さよーならまたいつか！「虎に翼」OPタイトルバック・フル",
+      "include": true,
+      "youtubeDate": "2024-09-24",
+      "status": "dry_run"
+    },
+    {
+      "videoId": "2mUC91bXt60",
+      "artist": "米津玄師",
+      "title": "がらくた",
+      "include": true,
+      "releaseDate": "2024-08-20",
+      "youtubeDate": "2024-08-22",
+      "status": "dry_run"
+    },
+    {
+      "videoId": "mKYpA1-5NNs",
+      "artist": "米津玄師",
+      "title": "RED OUT",
+      "include": true,
+      "youtubeDate": "2024-08-07",
+      "note": "normalized: dash_en_segment; manual-include: representative single",
+      "status": "pending"
+    },
+    {
+      "videoId": "BYGo5t6rdA8",
+      "artist": "米津玄師",
+      "title": "毎日",
+      "include": true,
+      "releaseDate": "2024-05-27",
+      "youtubeDate": "2024-05-28",
+      "status": "dry_run"
+    },
+    {
+      "videoId": "-wb2PAx6aEs",
+      "artist": "米津玄師",
+      "title": "さよーならまたいつか！",
+      "include": true,
+      "releaseDate": "2024-04-08",
+      "youtubeDate": "2024-04-11",
+      "status": "dry_run"
+    },
+    {
+      "videoId": "abKcYyQ1V7Y",
+      "artist": "米津玄師",
+      "title": "地球儀",
+      "include": false,
+      "youtubeDate": "2023-12-03",
+      "note": "normalized: inline_bracket",
+      "status": "skipped_excluded"
+    },
+    {
+      "videoId": "VUsURj_OYdA",
+      "artist": "米津玄師",
+      "title": "地球儀",
+      "include": true,
+      "releaseDate": "2023-07-17",
+      "youtubeDate": "2023-07-25",
+      "status": "dry_run"
+    },
+    {
+      "videoId": "1kUZ0LoUELI",
+      "artist": "米津玄師",
+      "title": "月を見ていた",
+      "include": true,
+      "releaseDate": "2023-06-26",
+      "youtubeDate": "2023-07-09",
+      "status": "dry_run"
+    },
+    {
+      "videoId": "DdF-u3fe5pg",
+      "artist": "米津玄師",
+      "title": "LADY",
+      "include": true,
+      "youtubeDate": "2023-04-05",
+      "note": "normalized: dash_en_segment; manual-include: representative single",
+      "status": "pending"
+    },
+    {
+      "videoId": "M2cckDmNLMI",
+      "artist": "米津玄師",
+      "title": "KICKBACK",
+      "include": true,
+      "youtubeDate": "2022-10-25",
+      "note": "normalized: dash_en_segment; manual-include: representative single",
+      "status": "pending"
+    },
+    {
+      "videoId": "Zhx1n6uvgUE",
+      "artist": "米津玄師",
+      "title": "M八七",
+      "include": true,
+      "releaseDate": "2022-05-18",
+      "youtubeDate": "2022-05-12",
+      "status": "dry_run"
+    },
+    {
+      "videoId": "mHP6-D-yBEw",
+      "artist": "米津玄師",
+      "title": "Kenshi Yonezu",
+      "include": false,
+      "youtubeDate": "2022-02-06",
+      "note": "auto-exclude: garbage_title; auto-exclude: garbage_title",
+      "status": "skipped_excluded"
+    },
+    {
+      "videoId": "7WZ1Kt3zraY",
+      "artist": "米津玄師",
+      "title": "Kenshi Yonezu",
+      "include": false,
+      "youtubeDate": "2021-06-04",
+      "note": "auto-exclude: garbage_title; auto-exclude: garbage_title",
+      "status": "skipped_excluded"
+    },
+    {
+      "videoId": "8nxaZ69ElEc",
+      "artist": "米津玄師",
+      "title": "死神",
+      "include": true,
+      "releaseDate": "2021-06-16",
+      "youtubeDate": "2021-06-24",
+      "status": "dry_run"
+    },
+    {
+      "videoId": "JAMNqRBL_CY",
+      "artist": "米津玄師",
+      "title": "カナリヤ",
+      "include": true,
+      "releaseDate": "2020-08-05",
+      "youtubeDate": "2020-11-18",
+      "status": "dry_run"
+    },
+    {
+      "videoId": "XeFQJ6-XoD0",
+      "artist": "米津玄師",
+      "title": "カムパネルラ",
+      "include": true,
+      "releaseDate": "2020-08-05",
+      "youtubeDate": "2020-08-04",
+      "status": "dry_run"
+    },
+    {
+      "videoId": "UFQEttrn6CQ",
+      "artist": "米津玄師",
+      "title": "感電",
+      "include": true,
+      "releaseDate": "2020-08-05",
+      "youtubeDate": "2020-07-10",
+      "status": "dry_run"
+    },
+    {
+      "videoId": "ptnYBctoexk",
+      "artist": "米津玄師",
+      "title": "馬と鹿",
+      "include": true,
+      "releaseDate": "2019-09-11",
+      "youtubeDate": "2019-09-02",
+      "status": "dry_run"
+    },
+    {
+      "videoId": "s582L3gujnw",
+      "artist": "米津玄師",
+      "title": "パプリカ",
+      "include": true,
+      "releaseDate": "2020-02-03",
+      "youtubeDate": "2019-08-09",
+      "status": "dry_run"
+    },
+    {
+      "videoId": "1s84rIhPuhk",
+      "artist": "米津玄師",
+      "title": "海の幽霊",
+      "include": true,
+      "releaseDate": "2019-06-03",
+      "youtubeDate": "2019-05-27",
+      "status": "dry_run"
+    },
+    {
+      "videoId": "Uh6dkL1M9DM",
+      "artist": "米津玄師",
+      "title": "Kenshi Yonezu",
+      "include": false,
+      "youtubeDate": "2018-10-20",
+      "note": "auto-exclude: garbage_title; auto-exclude: garbage_title",
+      "status": "skipped_excluded"
+    },
+    {
+      "videoId": "lwolyOIcCQg",
+      "artist": "米津玄師",
+      "title": "Kenshi Yonezu",
+      "include": false,
+      "youtubeDate": "2018-10-28",
+      "note": "auto-exclude: garbage_title; auto-exclude: garbage_title",
+      "status": "skipped_excluded"
+    },
+    {
+      "videoId": "SX_ViT4Ra7k",
+      "artist": "米津玄師",
+      "title": "Lemon",
+      "include": true,
+      "youtubeDate": "2018-02-26",
+      "note": "normalized: dash_en_segment; manual-include: representative single",
+      "status": "pending"
+    },
+    {
+      "videoId": "zkNzxsaCunU",
+      "artist": "米津玄師",
+      "title": "春雷",
+      "include": true,
+      "releaseDate": "2017-11-01",
+      "youtubeDate": "2017-12-04",
+      "status": "dry_run"
+    },
+    {
+      "videoId": "gJX2iy6nhHc",
+      "artist": "米津玄師",
+      "title": "灰色と青（ ＋菅田将暉",
+      "include": true,
+      "youtubeDate": "2017-10-10",
+      "status": "dry_run"
+    },
+    {
+      "videoId": "1oMxrHXzOsY",
+      "artist": "米津玄師",
+      "title": "ピースサイン",
+      "include": false,
+      "youtubeDate": "2017-12-18",
+      "note": "auto-exclude: special_mv; auto-exclude: special_mv",
+      "status": "skipped_excluded"
+    },
+    {
+      "videoId": "9aJVr5tTTWk",
+      "artist": "米津玄師",
+      "title": "ピースサイン",
+      "include": true,
+      "releaseDate": "2017-04-29",
+      "youtubeDate": "2017-06-07",
+      "status": "dry_run"
+    },
+    {
+      "videoId": "lzAyrgSqeeE",
+      "artist": "米津玄師",
+      "title": "orion",
+      "include": true,
+      "youtubeDate": "2017-02-01",
+      "note": "normalized: strip_prefix; manual-include: representative single",
+      "status": "pending"
+    },
+    {
+      "videoId": "Dx_fKPBPYUI",
+      "artist": "米津玄師",
+      "title": "LOSER",
+      "include": true,
+      "youtubeDate": "2016-09-15",
+      "note": "normalized: strip_prefix; manual-include: representative single",
+      "status": "pending"
+    },
+    {
+      "videoId": "Qa9PkDZkyHg",
+      "artist": "米津玄師",
+      "title": "メトロノーム",
+      "include": true,
+      "releaseDate": "2015-10-07",
+      "youtubeDate": "2015-10-08",
+      "status": "dry_run"
+    },
+    {
+      "videoId": "WLEPU7DqLzg",
+      "artist": "米津玄師",
+      "title": "フローライト",
+      "include": true,
+      "releaseDate": "2015-10-07",
+      "youtubeDate": "2015-09-11",
+      "status": "dry_run"
+    },
+    {
+      "videoId": "naJcqMBbAn4",
+      "artist": "米津玄師",
+      "title": "アンビリーバーズ",
+      "include": true,
+      "releaseDate": "2015-09-02",
+      "youtubeDate": "2015-08-21",
+      "status": "dry_run"
+    },
+    {
+      "videoId": "Y4_vXzyOJHE",
+      "artist": "米津玄師",
+      "title": "Flowerwall",
+      "include": true,
+      "youtubeDate": "2015-01-07",
+      "note": "normalized: strip_prefix; manual-include: representative single",
+      "status": "pending"
+    },
+    {
+      "videoId": "-EKxzId_Sj4",
+      "artist": "米津玄師",
+      "title": "アイネクライネ",
+      "include": true,
+      "releaseDate": "2014-04-23",
+      "youtubeDate": "2014-03-31",
+      "status": "dry_run"
+    },
+    {
+      "videoId": "A2bFukH-TwA",
+      "artist": "米津玄師",
+      "title": "リビングデッド・ユース",
+      "include": true,
+      "releaseDate": "2014-04-23",
+      "youtubeDate": "2014-03-14",
+      "status": "dry_run"
+    },
+    {
+      "videoId": "QA_p90T6oy4",
+      "artist": "米津玄師",
+      "title": "WOODEN DOLL",
+      "include": true,
+      "youtubeDate": "2014-04-23",
+      "note": "normalized: strip_prefix; manual-include: representative single",
+      "status": "pending"
+    },
+    {
+      "videoId": "pUDI2x5Y0Wo",
+      "artist": "米津玄師",
+      "title": "ポッピンアパシー",
+      "include": true,
+      "releaseDate": "2013-10-23",
+      "youtubeDate": "2013-10-11",
+      "status": "dry_run"
+    },
+    {
+      "videoId": "xCIJJ2Rb368",
+      "artist": "米津玄師",
+      "title": "MAD HEAD LOVE",
+      "include": true,
+      "youtubeDate": "2013-09-20",
+      "note": "MV表記あり。内容確認後 include を検討; manual-include: representative single",
+      "status": "pending"
+    },
+    {
+      "videoId": "KR54fHpcxEQ",
+      "artist": "米津玄師",
+      "title": "サンタマリア",
+      "include": true,
+      "youtubeDate": "2013-04-23",
+      "note": "MV表記あり。内容確認後 include を検討; manual-include: representative single",
+      "status": "pending"
+    },
+    {
+      "videoId": "2PqxOytUjz0",
+      "artist": "米津玄師",
+      "title": "ゴーゴー幽霊船",
+      "include": true,
+      "youtubeDate": "2012-02-19",
+      "note": "MV表記あり。内容確認後 include を検討; manual-include: representative single",
+      "status": "pending"
+    },
+    {
+      "videoId": "W-Tun8O-Tjk",
+      "artist": "米津玄師",
+      "title": "vivi",
+      "include": true,
+      "youtubeDate": "2012-03-15",
+      "note": "MV表記あり。内容確認後 include を検討; manual-include: representative single",
+      "status": "pending"
+    },
+    {
+      "videoId": "GiPdefbPa0k",
+      "artist": "米津玄師",
+      "title": "恋と病熱",
+      "include": true,
+      "youtubeDate": "2012-04-06",
+      "note": "MV表記あり。内容確認後 include を検討; manual-include: representative single",
+      "status": "pending"
+    }
+  ]
+}

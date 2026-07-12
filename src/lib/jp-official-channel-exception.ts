@@ -6,6 +6,8 @@
  * 追加: 環境変数 JP_DOMESTIC_OFFICIAL_CHANNEL_EXCEPTION_IDS にカンマ区切りで UC… を指定。
  */
 
+import { matchesWesternTreatedJpArtist } from '@/lib/western-treated-jp-artists';
+
 const CORE_OFFICIAL_CHANNEL_IDS: readonly string[] = [
   'UCzycs8MqvIY4nXWwS-v4J9g', // ONE OK ROCK (@ONEOKROCK)
   'UC12HMtO5MYph9dCZZ7yygng', // XG (@xg_official)
@@ -53,6 +55,7 @@ export function suppressJpDomesticAnnounceTagForArtist(opts: {
   artist: string | null | undefined;
   artistDisplay: string | null | undefined;
 }): boolean {
+  if (matchesWesternTreatedJpArtist(opts.artist, opts.artistDisplay)) return true;
   const parts = [opts.artist, opts.artistDisplay]
     .filter((x): x is string => typeof x === 'string' && x.trim().length > 0)
     .map((x) => x.trim());

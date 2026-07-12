@@ -3,8 +3,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { AdminMenuBar } from '@/components/admin/AdminMenuBar';
+import {
+  AdminProductFilterSelect,
+  productBadgeClass,
+  productBadgeLabel,
+} from '@/components/admin/AdminProductFilterSelect';
 
-type SummaryRow = { room_id: string; date_jst: string; count: number };
+type SummaryRow = { room_id: string; date_jst: string; product: string; count: number };
 
 type ApiResponse = {
   error?: string;
@@ -15,30 +20,24 @@ type ApiResponse = {
   truncated?: boolean;
 };
 
-function logTextHref(roomId: string, dateJst: string): string {
-  const q = new URLSearchParams({
-    roomId,
-    date: dateJst,
-  });
+function logTextHref(roomId: string, dateJst: string, product: string): string {
+  const q = new URLSearchParams({ roomId, date: dateJst, product });
   return `/api/room-chat-log?${q.toString()}`;
 }
 
-function logDownloadHref(roomId: string, dateJst: string): string {
-  const q = new URLSearchParams({
-    roomId,
-    date: dateJst,
-    download: '1',
-  });
+function logDownloadHref(roomId: string, dateJst: string, product: string): string {
+  const q = new URLSearchParams({ roomId, date: dateJst, product, download: '1' });
   return `/api/room-chat-log?${q.toString()}`;
 }
 
-function atQaViewerHref(roomId: string, dateJst: string): string {
-  const q = new URLSearchParams({ roomId, date: dateJst });
+function atQaViewerHref(roomId: string, dateJst: string, product: string): string {
+  const q = new URLSearchParams({ roomId, date: dateJst, product });
   return `/admin/room-chat-log/at-qa?${q.toString()}`;
 }
 
 export default function AdminRoomChatLogPage() {
   const [days, setDays] = useState(30);
+  const [productFilter, setProductFilter] = useState<'all' | 'musicaichat' | 'musicchat'>('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [hint, setHint] = useState<string | null>(null);
@@ -51,7 +50,8 @@ export default function AdminRoomChatLogPage() {
     setError(null);
     setHint(null);
     try {
-      const res = await fetch(`/api/admin/room-chat-log-summary?days=${days}`, { credentials: 'include' });
+      const q = new URLSearchParams({ days: String(days), product: productFilter });
+      const res = await fetch(`/api/admin/room-chat-log-summary?${q}`, { credentials: 'include' });
       const data = (await res.json().catch(() => ({}))) as ApiResponse;
       if (!res.ok) {
         setError(data?.error || '読み込みに失敗しました。');
@@ -70,7 +70,7 @@ export default function AdminRoomChatLogPage() {
     } finally {
       setLoading(false);
     }
-  }, [days]);
+  }, [days, productFilter]);
 
   useEffect(() => {
     void load();
@@ -106,6 +106,7 @@ export default function AdminRoomChatLogPage() {
                 <option value={120}>過去120日</option>
               </select>
             </label>
+            <AdminProductFilterSelect value={productFilter} onChange={setProductFilter} />
             <button
               type="button"
               onClick={() => load()}
@@ -119,7 +120,8 @@ export default function AdminRoomChatLogPage() {
         <section className="mb-6 rounded-lg border border-gray-700 bg-gray-900/50 p-4 text-sm text-gray-400">
           <p>
             <strong className="text-gray-300">STYLE_ADMIN_USER_IDS</strong> に入っているアカウントでのみ表示されます。集計は{' '}
-            <strong className="text-gray-300">日本時間の日付</strong>×<strong className="text-gray-300">部屋ID</strong>です。
+            <strong className="text-gray-300">日本時間の日付</strong>×<strong className="text-gray-300">product</strong>×
+            <strong className="text-gray-300">部屋ID</strong>です。
           </p>
           <p className="mt-2">
             「テキスト」はブラウザで1日分のログを表示、「DL」は .txt ダウンロード、「
@@ -159,9 +161,10 @@ export default function AdminRoomChatLogPage() {
                       <span className="text-sm font-normal text-gray-500">（JST）</span>
                     </h2>
                     <div className="overflow-x-auto rounded-lg border border-gray-700">
-                      <table className="w-full min-w-[640px] text-left text-sm">
+                      <table className="w-full min-w-[720px] text-left text-sm">
                         <thead className="border-b border-gray-700 bg-gray-800/80">
                           <tr>
+                            <th className="px-3 py-2">product</th>
                             <th className="px-3 py-2">部屋ID</th>
                             <th className="px-3 py-2 text-right">件数</th>
                             <th className="px-3 py-2">リンク</th>
@@ -169,7 +172,15 @@ export default function AdminRoomChatLogPage() {
                         </thead>
                         <tbody>
                           {list.map((r: SummaryRow) => (
-                            <tr key={`${r.date_jst}-${r.room_id}`} className="border-b border-gray-800/80">
+                            <tr
+                              key={`${r.date_jst}-${r.product}-${r.room_id}`}
+                              className="border-b border-gray-800/80"
+                            >
+                              <td className="px-3 py-2">
+                                <span className={productBadgeClass(r.product)}>
+                                  {productBadgeLabel(r.product)}
+                                </span>
+                              </td>
                               <td className="px-3 py-2 font-mono text-gray-200">{r.room_id}</td>
                               <td className="px-3 py-2 text-right tabular-nums text-gray-300">
                                 {r.count.toLocaleString()}
@@ -177,7 +188,7 @@ export default function AdminRoomChatLogPage() {
                               <td className="px-3 py-2">
                                 <div className="flex flex-wrap gap-x-3 gap-y-1">
                                   <a
-                                    href={logTextHref(r.room_id, r.date_jst)}
+                                    href={logTextHref(r.room_id, r.date_jst, r.product)}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="text-sky-400 hover:underline"
@@ -185,13 +196,13 @@ export default function AdminRoomChatLogPage() {
                                     テキスト
                                   </a>
                                   <a
-                                    href={logDownloadHref(r.room_id, r.date_jst)}
+                                    href={logDownloadHref(r.room_id, r.date_jst, r.product)}
                                     className="text-emerald-400 hover:underline"
                                   >
                                     DL
                                   </a>
                                   <Link
-                                    href={atQaViewerHref(r.room_id, r.date_jst)}
+                                    href={atQaViewerHref(r.room_id, r.date_jst, r.product)}
                                     className="text-amber-300 hover:underline"
                                   >
                                     ＠Q&A

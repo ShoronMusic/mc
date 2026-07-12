@@ -10,6 +10,7 @@ import {
 } from '@/lib/spotify-search-track';
 import {
   pickBestSpotifyCandidate,
+  type SpotifyArtistMatchOptions,
   type SpotifyTrackCandidate,
 } from '@/lib/spotify-track-match';
 import {
@@ -127,7 +128,37 @@ export async function enrichSongFromSpotifySelection(
     popularity: t.spotifyPopularity,
   }));
 
-  const { best, decision } = pickBestSpotifyCandidate(candidates, mainArtist, songTitle);
+  // artists.name_en / spotify_artist_id があれば照合に使う（邦楽の表記ゆれ）
+  let matchOpts: SpotifyArtistMatchOptions | undefined;
+  try {
+    const esc = mainArtist.split(',')[0]?.trim() || mainArtist;
+    const q = esc.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    const { data: artistRows } = await admin
+      .from('artists')
+      .select('name_en, spotify_artist_id')
+      .or(`name.eq."${q}",name_en.eq."${q}",name_ja.eq."${q}"`)
+      .limit(3);
+    const alternateArtistNames: string[] = [];
+    const expectedSpotifyArtistIds: string[] = [];
+    for (const r of artistRows ?? []) {
+      const en = (r as { name_en?: string | null }).name_en?.trim();
+      const sid = (r as { spotify_artist_id?: string | null }).spotify_artist_id?.trim();
+      if (en) alternateArtistNames.push(en);
+      if (sid) expectedSpotifyArtistIds.push(sid);
+    }
+    if (alternateArtistNames.length > 0 || expectedSpotifyArtistIds.length > 0) {
+      matchOpts = { alternateArtistNames, expectedSpotifyArtistIds };
+    }
+  } catch {
+    /* ignore hint lookup failures */
+  }
+
+  const { best, decision } = pickBestSpotifyCandidate(
+    candidates,
+    mainArtist,
+    songTitle,
+    matchOpts,
+  );
 
   if (decision.action === 'review' && best) {
     const rank = candidates.findIndex((c) => c.spotifyTrackId === best.spotifyTrackId) + 1;

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { downloadCsvFile } from '@/lib/admin-csv-download';
 import { AdminMenuBar } from '@/components/admin/AdminMenuBar';
+import { AdminProductFilterSelect } from '@/components/admin/AdminProductFilterSelect';
 import { GeminiUsageCategoryBreakdown } from '@/components/mypage/GeminiUsageCategoryBreakdown';
 import { formatGeminiCostJpyApprox, type GeminiUsageTokenSummary } from '@/lib/gemini-pricing';
 import { formatInfraCostJpyApprox } from '@/lib/infra-cost-estimates';
@@ -51,6 +52,7 @@ const BILLING_KIND_LABEL: Record<GeminiUsageBillingKind, string> = {
 export default function AdminUserBillingUsagePage() {
   const [days, setDays] = useState(30);
   const [roomFilter, setRoomFilter] = useState('');
+  const [productFilter, setProductFilter] = useState<'all' | 'musicaichat' | 'musicchat'>('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [hint, setHint] = useState<string | null>(null);
@@ -77,7 +79,7 @@ export default function AdminUserBillingUsagePage() {
     setError(null);
     setHint(null);
     try {
-      const params = new URLSearchParams({ days: String(days) });
+      const params = new URLSearchParams({ days: String(days), product: productFilter });
       if (roomFilter.trim()) params.set('roomId', roomFilter.trim());
       const res = await fetch(`/api/admin/user-billing-usage?${params}`, { credentials: 'include' });
       const data = await res.json().catch(() => ({}));
@@ -101,7 +103,7 @@ export default function AdminUserBillingUsagePage() {
     } finally {
       setLoading(false);
     }
-  }, [days, roomFilter]);
+  }, [days, roomFilter, productFilter]);
 
   const loadDetail = useCallback(
     async (userId: string) => {
@@ -109,7 +111,7 @@ export default function AdminUserBillingUsagePage() {
       setSelectedId(userId);
       try {
         const res = await fetch(
-          `/api/admin/user-billing-usage?userId=${encodeURIComponent(userId)}&days=${days}`,
+          `/api/admin/user-billing-usage?userId=${encodeURIComponent(userId)}&days=${days}&product=${productFilter}`,
           { credentials: 'include' },
         );
         const data = await res.json().catch(() => ({}));
@@ -124,7 +126,7 @@ export default function AdminUserBillingUsagePage() {
         setDetailLoading(false);
       }
     },
-    [days],
+    [days, productFilter],
   );
 
   useEffect(() => {
@@ -216,6 +218,7 @@ export default function AdminUserBillingUsagePage() {
             className="ml-2 w-20 rounded border border-gray-700 bg-gray-900 px-2 py-1 text-gray-100"
           />
         </label>
+        <AdminProductFilterSelect value={productFilter} onChange={setProductFilter} />
         <button
           type="button"
           onClick={() => void loadList()}

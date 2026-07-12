@@ -4,6 +4,7 @@ import type { CommentPackSlotSelection } from '@/lib/comment-pack-slots';
 import { formatCommentPackSlotsSummary } from '@/lib/comment-pack-slots';
 import type { RoomAiOwnerPolicy } from '@/lib/user-room-ai-features';
 import { isUserRoomAiFeaturesSetupMessage } from '@/lib/user-room-ai-features';
+import { IS_MC_PRODUCT } from '@/lib/product-branding';
 import { UserRoomAiFeaturesSqlHint } from '@/components/mypage/UserRoomAiFeaturesSqlHint';
 import { AiTrialStatusBadge } from '@/components/shared/AiTrialStatusBadge';
 import { usePersonalAiSettings } from '@/hooks/usePersonalAiSettings';
@@ -40,7 +41,7 @@ export function PersonalAiSettingsPanel({
 }: PersonalAiSettingsPanelProps) {
   const settings = usePersonalAiSettings(isGuest, roomAiOwnerPolicy);
 
-  if (isGuest) return null;
+  if (IS_MC_PRODUCT || isGuest) return null;
 
   const ownerLinkLabel = variant === 'modal' ? '部屋（オーナー）タブ' : '部屋設定（オーナー）タブ';
 

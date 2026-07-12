@@ -201,6 +201,7 @@ MusicAI チャットで過去に貯まった **自分のデータ**から、マ�
 
 ## 9. 関連ドキュメント
 
+- YouTube 視聴履歴取り込み（**保留**・検討課題）: `docs/youtube-watch-history-import-consideration.md`
 - Chrome 拡張: `docs/chrome-extension-musicaichat.md`
 - 拡張イベント定数: `src/lib/musicai-extension-events.ts`
 - Music8 曲 JSON（参考データの形）: `docs/music8-song-json-schema.md`

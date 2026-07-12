@@ -586,6 +586,16 @@ async function insertOrUpdateArtist(
   return { id: null, mode: 'insert', error: 'too many column retries' };
 }
 
+/** 管理画面・スクリプトから `artists` 行を patch upsert（列不足時は該当キーを落として再試行） */
+export async function upsertArtistDbPatch(
+  admin: SupabaseClient,
+  patch: Music8ArtistDbPatch,
+  existingId: string | null,
+  dryRun = false,
+): Promise<{ id: string | null; mode: 'insert' | 'update'; error?: string }> {
+  return insertOrUpdateArtist(admin, patch, existingId, dryRun);
+}
+
 /**
  * m8 JSON 1件を `artists` に upsert。
  * 突合: music8_artist_id → music8_artist_slug → 名前（緩い一致）

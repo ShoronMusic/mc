@@ -5,6 +5,11 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { resolveAdminUserDisplayLabels } from '@/lib/admin-user-display-labels';
 import {
+  parseAdminProductFilter,
+  runAdminHistoryQueryScoped,
+  type AdminProductFilter,
+} from '@/lib/room-history-product';
+import {
   resolveLogBillingUserId,
   resolveLogTriggerUserId,
   type GeminiBillingLogRow,
@@ -257,16 +262,20 @@ async function ingestYoutubeApiLogs(
   fromIso: string,
   roomFilter: string,
   toIso?: string,
+  productFilter: AdminProductFilter = 'all',
 ): Promise<void> {
-  let query = admin
-    .from('youtube_api_usage_logs')
-    .select('room_id, endpoint, ok, created_at')
-    .gte('created_at', fromIso)
-    .limit(8000);
-  if (toIso) query = query.lt('created_at', toIso);
-  if (roomFilter) query = query.eq('room_id', roomFilter);
-
-  const { data, error } = await query;
+  const scanRes = await runAdminHistoryQueryScoped((applyProductEq, scopedProduct) => {
+    let q = admin
+      .from('youtube_api_usage_logs')
+      .select('room_id, endpoint, ok, created_at')
+      .gte('created_at', fromIso)
+      .limit(8000);
+    if (toIso) q = q.lt('created_at', toIso);
+    if (roomFilter) q = q.eq('room_id', roomFilter);
+    if (applyProductEq && scopedProduct) q = q.eq('product', scopedProduct);
+    return q;
+  }, productFilter);
+  const { data, error } = scanRes;
   if (error?.code === '42P01') return;
   if (error) {
     console.error('[room-daily-slot-aggregate] youtube_api', error.message);
@@ -319,29 +328,41 @@ async function buildUserBillingRows(
 
 export async function aggregateDailySlotSummaries(
   admin: SupabaseClient,
-  options: { lookbackDays?: number; roomId?: string | null; nowMs?: number } = {},
+  options: {
+    lookbackDays?: number;
+    roomId?: string | null;
+    nowMs?: number;
+    productFilter?: AdminProductFilter;
+  } = {},
 ): Promise<DailySlotSummaryRow[]> {
   const lookbackDays = Math.min(90, Math.max(1, options.lookbackDays ?? 14));
   const nowMs = options.nowMs ?? Date.now();
   const fromMs = nowMs - lookbackDays * 86400000;
   const fromIso = new Date(fromMs).toISOString();
   const roomFilter = options.roomId?.trim() || '';
+  const productFilter = options.productFilter ?? parseAdminProductFilter(null);
 
   const buckets = new Map<string, SlotBucket>();
 
-  let geminiQuery = admin.from('gemini_usage_logs').select(GEMINI_SELECT).gte('created_at', fromIso).limit(12000);
-  if (roomFilter) geminiQuery = geminiQuery.eq('room_id', roomFilter);
-
-  const { data: geminiRows, error: geminiErr } = await geminiQuery;
+  const geminiRes = await runAdminHistoryQueryScoped((applyProductEq, scopedProduct) => {
+    let q = admin.from('gemini_usage_logs').select(GEMINI_SELECT).gte('created_at', fromIso).limit(12000);
+    if (roomFilter) q = q.eq('room_id', roomFilter);
+    if (applyProductEq && scopedProduct) q = q.eq('product', scopedProduct);
+    return q;
+  }, productFilter);
+  const { data: geminiRows, error: geminiErr } = geminiRes;
   if (geminiErr?.code === '42703') {
-    let legacyQuery = admin
-      .from('gemini_usage_logs')
-      .select('room_id, context, model, prompt_token_count, output_token_count, user_id, created_at')
-      .gte('created_at', fromIso)
-      .limit(12000);
-    if (roomFilter) legacyQuery = legacyQuery.eq('room_id', roomFilter);
-    const { data: legacyRows } = await legacyQuery;
-    for (const raw of legacyRows ?? []) {
+    const legacyRes = await runAdminHistoryQueryScoped((applyProductEq, scopedProduct) => {
+      let q = admin
+        .from('gemini_usage_logs')
+        .select('room_id, context, model, prompt_token_count, output_token_count, user_id, created_at')
+        .gte('created_at', fromIso)
+        .limit(12000);
+      if (roomFilter) q = q.eq('room_id', roomFilter);
+      if (applyProductEq && scopedProduct) q = q.eq('product', scopedProduct);
+      return q;
+    }, productFilter);
+    for (const raw of legacyRes.data ?? []) {
       const row = raw as GeminiBillingLogRow;
       const roomId = row.room_id?.trim();
       if (!roomId) continue;
@@ -355,7 +376,7 @@ export async function aggregateDailySlotSummaries(
       });
     }
   } else if (geminiErr && geminiErr.code !== '42P01') {
-    throw new Error(geminiErr.message);
+    throw new Error(geminiErr.message ?? 'gemini_usage_logs query failed');
   } else {
     for (const raw of (geminiRows ?? []) as GeminiBillingLogRow[]) {
       const roomId = raw.room_id?.trim();
@@ -366,14 +387,17 @@ export async function aggregateDailySlotSummaries(
     }
   }
 
-  let playQuery = admin
-    .from('room_playback_history')
-    .select('room_id, played_at, user_id')
-    .gte('played_at', fromIso)
-    .limit(8000);
-  if (roomFilter) playQuery = playQuery.eq('room_id', roomFilter);
-
-  const { data: playRows, error: playErr } = await playQuery;
+  const playRes = await runAdminHistoryQueryScoped((applyProductEq, scopedProduct) => {
+    let q = admin
+      .from('room_playback_history')
+      .select('room_id, played_at, user_id')
+      .gte('played_at', fromIso)
+      .limit(8000);
+    if (roomFilter) q = q.eq('room_id', roomFilter);
+    if (applyProductEq && scopedProduct) q = q.eq('product', scopedProduct);
+    return q;
+  }, productFilter);
+  const { data: playRows, error: playErr } = playRes;
   if (!playErr) {
     for (const raw of (playRows ?? []) as PlaybackRow[]) {
       const roomId = raw.room_id?.trim();
@@ -383,14 +407,17 @@ export async function aggregateDailySlotSummaries(
     }
   }
 
-  let chatQuery = admin
-    .from('room_chat_log')
-    .select('room_id, message_type, created_at')
-    .gte('created_at', fromIso)
-    .limit(8000);
-  if (roomFilter) chatQuery = chatQuery.eq('room_id', roomFilter);
-
-  const { data: chatRows, error: chatErr } = await chatQuery;
+  const chatRes = await runAdminHistoryQueryScoped((applyProductEq, scopedProduct) => {
+    let q = admin
+      .from('room_chat_log')
+      .select('room_id, message_type, created_at')
+      .gte('created_at', fromIso)
+      .limit(8000);
+    if (roomFilter) q = q.eq('room_id', roomFilter);
+    if (applyProductEq && scopedProduct) q = q.eq('product', scopedProduct);
+    return q;
+  }, productFilter);
+  const { data: chatRows, error: chatErr } = chatRes;
   if (!chatErr) {
     for (const raw of (chatRows ?? []) as ChatRow[]) {
       const roomId = raw.room_id?.trim();
@@ -403,7 +430,7 @@ export async function aggregateDailySlotSummaries(
     }
   }
 
-  await ingestYoutubeApiLogs(admin, buckets, fromIso, roomFilter);
+  await ingestYoutubeApiLogs(admin, buckets, fromIso, roomFilter, undefined, productFilter);
 
   return Array.from(buckets.values())
     .map((b) => bucketToRow(b, nowMs))
@@ -414,50 +441,67 @@ export async function aggregateDailySlotSummaries(
 export async function aggregateDailySlotDetail(
   admin: SupabaseClient,
   slotKey: string,
-  nowMs: number = Date.now(),
+  options: { nowMs?: number; productFilter?: AdminProductFilter } = {},
 ): Promise<{ summary: DailySlotSummaryRow | null; users: DailySlotUserBillingRow[] }> {
   const parsed = parseDailySlotKey(slotKey);
   if (!parsed) return { summary: null, users: [] };
 
   const { slotStartMs, roomId } = parsed;
+  const productFilter = options.productFilter ?? parseAdminProductFilter(null);
+  const nowMs = options.nowMs ?? Date.now();
   const fromIso = new Date(slotStartMs).toISOString();
   const toIso = new Date(dailySlotEndMs(slotStartMs)).toISOString();
   const buckets = new Map<string, SlotBucket>();
   const b = getOrCreateBucket(buckets, roomId, slotStartMs);
 
-  const { data: geminiRows } = await admin
-    .from('gemini_usage_logs')
-    .select(GEMINI_SELECT)
-    .eq('room_id', roomId)
-    .gte('created_at', fromIso)
-    .lt('created_at', toIso)
-    .limit(5000);
+  const geminiRes = await runAdminHistoryQueryScoped((applyProductEq, scopedProduct) => {
+    let q = admin
+      .from('gemini_usage_logs')
+      .select(GEMINI_SELECT)
+      .eq('room_id', roomId)
+      .gte('created_at', fromIso)
+      .lt('created_at', toIso)
+      .limit(5000);
+    if (applyProductEq && scopedProduct) q = q.eq('product', scopedProduct);
+    return q;
+  }, productFilter);
+  const { data: geminiRows } = geminiRes;
 
   for (const raw of (geminiRows ?? []) as GeminiBillingLogRow[]) {
     if (!isoInDailySlot(raw.created_at, slotStartMs)) continue;
     addGeminiToBucket(b, raw);
   }
 
-  const { data: playRows } = await admin
-    .from('room_playback_history')
-    .select('room_id, played_at, user_id')
-    .eq('room_id', roomId)
-    .gte('played_at', fromIso)
-    .lt('played_at', toIso)
-    .limit(3000);
+  const playRes = await runAdminHistoryQueryScoped((applyProductEq, scopedProduct) => {
+    let q = admin
+      .from('room_playback_history')
+      .select('room_id, played_at, user_id')
+      .eq('room_id', roomId)
+      .gte('played_at', fromIso)
+      .lt('played_at', toIso)
+      .limit(3000);
+    if (applyProductEq && scopedProduct) q = q.eq('product', scopedProduct);
+    return q;
+  }, productFilter);
+  const { data: playRows } = playRes;
 
   for (const raw of (playRows ?? []) as PlaybackRow[]) {
     if (!isoInDailySlot(raw.played_at, slotStartMs)) continue;
     addSongToBucket(b, raw.user_id);
   }
 
-  const { data: chatRows } = await admin
-    .from('room_chat_log')
-    .select('room_id, message_type, created_at')
-    .eq('room_id', roomId)
-    .gte('created_at', fromIso)
-    .lt('created_at', toIso)
-    .limit(5000);
+  const chatRes = await runAdminHistoryQueryScoped((applyProductEq, scopedProduct) => {
+    let q = admin
+      .from('room_chat_log')
+      .select('room_id, message_type, created_at')
+      .eq('room_id', roomId)
+      .gte('created_at', fromIso)
+      .lt('created_at', toIso)
+      .limit(5000);
+    if (applyProductEq && scopedProduct) q = q.eq('product', scopedProduct);
+    return q;
+  }, productFilter);
+  const { data: chatRows } = chatRes;
 
   for (const raw of (chatRows ?? []) as ChatRow[]) {
     if (!isoInDailySlot(raw.created_at, slotStartMs)) continue;
@@ -466,7 +510,7 @@ export async function aggregateDailySlotDetail(
     else if (mt === 'ai') b.chatAi += 1;
   }
 
-  await ingestYoutubeApiLogs(admin, buckets, fromIso, roomId, toIso);
+  await ingestYoutubeApiLogs(admin, buckets, fromIso, roomId, toIso, productFilter);
 
   const summary = bucketToRow(b, nowMs);
   if (!slotRowHasActivity(summary)) {

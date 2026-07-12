@@ -9,6 +9,8 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Chat from '@/components/chat/Chat';
 import { AiUsageBillingNotice } from '@/components/room/AiUsageBillingNotice';
+import { McMaPromoHeaderBanner } from '@/components/home/McMaPromoBanner';
+import { MusicChatTitleLogo } from '@/components/home/MusicChatTitleLogo';
 import ChatInput, { type ChatInputHandle } from '@/components/chat/ChatInput';
 import YouTubePlayer, {
   type YouTubePlayerHandle,
@@ -28,7 +30,17 @@ import ChatSummaryModalBody, {
 import { useThemePlaylistRoomSubmitMission } from '@/hooks/useThemePlaylistRoomSubmitMission';
 import { useAiTrialStatus } from '@/hooks/useAiTrialStatus';
 import { scheduleGuestFirstSongInvite } from '@/lib/guest-first-song-invite';
-import { MUSICAICHAT_ROOM_TAGLINE } from '@/lib/musicaichat-room-tagline';
+import {
+  favoriteHeartIdleIconClass,
+  getRoomProgressChatDisplayName,
+  getRoomServiceTagline,
+  IS_MC_PRODUCT,
+  roomHeaderActionBtnClass,
+  roomPlayerOverlayIconBtnClass,
+  roomFrameBlockClass,
+  roomViewportHeaderClass,
+} from '@/lib/product-branding';
+import { getAnnounceSongApiPath } from '@/lib/room-announce-song-client';
 import { isGuestSoloSession } from '@/lib/guest-solo-playback-history-since';
 import { resolvePlaybackHistorySinceIso } from '@/lib/playback-history-since';
 import { GUEST_AI_AT_QUESTION_UNAVAILABLE } from '@/lib/ai-usage-disclosure-copy';
@@ -49,7 +61,10 @@ import {
 } from '@/lib/chat-limits';
 import {
   CHAT_TEXT_COLOR_STORAGE_KEY,
-  DEFAULT_CHAT_TEXT_COLOR,
+  chatTextColorPalette,
+  chatTextColorSwatchBorder,
+  defaultChatTextColor,
+  normalizeSavedChatTextColor,
 } from '@/lib/chat-text-color';
 import { NON_YOUTUBE_URL_SYSTEM_MESSAGE } from '@/lib/chat-non-youtube-url';
 import {
@@ -86,6 +101,8 @@ import { scheduleNextSongRecommendAfterCommentary } from '@/lib/schedule-next-so
 import { scheduleThemePlaylistRoomBlurbAfterPack } from '@/lib/schedule-theme-playlist-room-blurb';
 import type { ChatMessage, SystemMessageOptions } from '@/types/chat';
 import { useIsLgViewport } from '@/hooks/useLgViewport';
+import { mcUiFontSizeDataAttr, useMcUiFontSize } from '@/hooks/useMcUiFontSize';
+import { useMcUiAccentTheme } from '@/hooks/useMcUiAccentTheme';
 import { useRoomChatLogPersistence } from '@/hooks/useRoomChatLogPersistence';
 import { useRoomAccessLogReport } from '@/hooks/useRoomAccessLogReport';
 import { rememberLastActiveRoom } from '@/lib/share-target-pending';
@@ -297,7 +314,7 @@ export default function RoomWithoutSync({
   /** AI_TIDBIT_MODERATOR_USER_IDS（tidbit NG・チューニング報告ボタン） */
   const [canRejectTidbit, setCanRejectTidbit] = useState(false);
   useEffect(() => {
-    if (isGuest) {
+    if (isGuest || IS_MC_PRODUCT) {
       setChatStyleAdminTools(false);
       return;
     }
@@ -317,7 +334,7 @@ export default function RoomWithoutSync({
   }, [isGuest]);
 
   useEffect(() => {
-    if (isGuest) {
+    if (isGuest || IS_MC_PRODUCT) {
       setCanRejectTidbit(false);
       return;
     }
@@ -353,7 +370,9 @@ export default function RoomWithoutSync({
 
   const [chatSummary, setChatSummary] = useState<RoomSessionChatSummaryDisplay | null>(null);
   const isLg = useIsLgViewport();
-  const [userTextColor, setUserTextColor] = useState(DEFAULT_CHAT_TEXT_COLOR);
+  const [mcUiFontSize] = useMcUiFontSize();
+  useMcUiAccentTheme();
+  const [userTextColor, setUserTextColor] = useState(defaultChatTextColor);
   const lastActivityAtRef = useRef(Date.now());
   const lastTidbitAtRef = useRef(0);
   const videoIdRef = useRef<string | null>(null);
@@ -457,6 +476,12 @@ export default function RoomWithoutSync({
   useResumeYoutubeWhenTabVisible(playerRef, videoIdRef, playingRef);
 
   useEffect(() => {
+    if (IS_MC_PRODUCT) {
+      userRoomAiCommentaryEnabledRef.current = false;
+      userRoomAiSongQuizEnabledRef.current = false;
+      userRoomAiRecommendEnabledRef.current = false;
+      return;
+    }
     if (isGuest) {
       userRoomAiCommentaryEnabledRef.current = false;
       userRoomAiSongQuizEnabledRef.current = false;
@@ -686,7 +711,7 @@ export default function RoomWithoutSync({
       const msg: ChatMessage = {
         id: createMessageId(),
         body,
-        displayName: options?.displayName ?? AI_DISPLAY_NAME,
+        displayName: options?.displayName ?? getRoomProgressChatDisplayName(),
         messageType: 'ai',
         createdAt: new Date().toISOString(),
         ...(options?.videoId != null ? { videoId: options.videoId } : {}),
@@ -1028,7 +1053,11 @@ export default function RoomWithoutSync({
   useEffect(() => {
     try {
       const saved = typeof window !== 'undefined' ? localStorage.getItem(CHAT_TEXT_COLOR_STORAGE_KEY) : null;
-      if (saved && /^#[0-9a-fA-F]{6}$/.test(saved)) setUserTextColor(saved);
+      const normalized = normalizeSavedChatTextColor(saved);
+      setUserTextColor(normalized);
+      if (saved !== normalized) {
+        localStorage.setItem(CHAT_TEXT_COLOR_STORAGE_KEY, normalized);
+      }
     } catch {}
   }, []);
 
@@ -1076,7 +1105,7 @@ export default function RoomWithoutSync({
           ? (pendingThemePlaylistBlurbRef.current?.themeLabel ?? '').trim()
           : '';
       const themePlaylistThemeLabel = themeLabelRaw || themeLabelFromPending;
-      fetch('/api/ai/announce-song', {
+      fetch(getAnnounceSongApiPath(), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1125,6 +1154,22 @@ export default function RoomWithoutSync({
 
   const fetchCommentaryAndPublish = useCallback(
     (vid: string, options?: { aiMode?: AiSelectionMode }) => {
+      if (IS_MC_PRODUCT) {
+        pendingThemePlaylistBlurbRef.current = null;
+        if (songQuizFetchTimeoutRef.current) {
+          clearTimeout(songQuizFetchTimeoutRef.current);
+          songQuizFetchTimeoutRef.current = null;
+        }
+        if (nextSongRecommendTimeoutRef.current) {
+          clearTimeout(nextSongRecommendTimeoutRef.current);
+          nextSongRecommendTimeoutRef.current = null;
+        }
+        if (themePlaylistBlurbTimeoutRef.current) {
+          clearTimeout(themePlaylistBlurbTimeoutRef.current);
+          themePlaylistBlurbTimeoutRef.current = null;
+        }
+        return;
+      }
       const selectionAiMode = options?.aiMode ?? lastSelectionAiModeRef.current;
       if (selectionAiMode === 'none') {
         pendingThemePlaylistBlurbRef.current = null;
@@ -2023,6 +2068,12 @@ export default function RoomWithoutSync({
       };
 
       const doChatReply = () => {
+        if (IS_MC_PRODUCT) {
+          addSystemMessage(
+            'AI への質問・曲解説は Music AI Chat（洋楽AIチャット）でご利用ください。トップの案内から移動できます。',
+          );
+          return;
+        }
         const jpS = jpDomesticSilenceVideoIdRef.current;
         const vCur = videoIdRef.current;
         if (jpS != null && vCur != null && jpS === vCur) {
@@ -2278,37 +2329,68 @@ export default function RoomWithoutSync({
   );
 
   return (
-    <main className="mc-room-viewport mc-scrollbar-stable flex flex-col bg-gray-950 p-3">
+    <main
+      className={`mc-room-viewport mc-scrollbar-stable flex flex-col p-3 ${
+        IS_MC_PRODUCT ? 'bg-[var(--mc-bg-page)]' : 'bg-gray-950'
+      }`}
+      data-mc-ui-font-size={mcUiFontSizeDataAttr(mcUiFontSize)}
+    >
       <div className="mb-2 shrink-0 rounded border border-amber-700 bg-amber-900/50 px-3 py-2 text-sm leading-snug text-amber-200">
         .env.local に <strong>NEXT_PUBLIC_ABLY_API_KEY</strong> を設定すると、複数ブラウザ・タブが「同じ部屋の別々の参加者」として扱われ、参加者一覧・同期再生・チャット共有が利用できます。未設定の場合は各ウィンドウが独立して動作します。
       </div>
-      <header className="mb-2 flex shrink-0 flex-row items-center justify-between gap-2 border-b border-gray-800 pb-2 sm:gap-3">
+      <header className={roomViewportHeaderClass()}>
         <div className="flex min-w-0 flex-1 items-center gap-2">
-          <Image
-            src={isLg ? '/music_ai_chat_wh.png' : '/music_ai_chat_beta.png'}
-            alt=""
-            width={180}
-            height={36}
-            className="h-10 w-auto max-h-10 shrink-0 object-contain object-left"
-            priority
-          />
-          <span className="hidden shrink-0 items-center rounded bg-lime-400/10 px-1.5 py-0.5 text-[9px] font-semibold text-lime-200 sm:inline-flex sm:px-2 sm:text-[10px]">
-            <span>（β）版</span>
-          </span>
+          {IS_MC_PRODUCT ? (
+            <MusicChatTitleLogo variant="header" />
+          ) : (
+            <Image
+              src={isLg ? '/music_ai_chat_wh.png' : '/music_ai_chat_beta.png'}
+              alt=""
+              width={180}
+              height={36}
+              className="h-10 w-auto max-h-10 shrink-0 object-contain object-left"
+              priority
+            />
+          )}
+          {!IS_MC_PRODUCT ? (
+            <span className="hidden shrink-0 items-center rounded bg-lime-400/10 px-1.5 py-0.5 text-[9px] font-semibold text-lime-200 sm:inline-flex sm:px-2 sm:text-[10px]">
+              <span>（β）版</span>
+            </span>
+          ) : (
+            <span className="hidden shrink-0 items-center rounded border border-gray-300 bg-gray-100 px-1.5 py-0.5 text-[9px] font-semibold text-gray-600 sm:inline-flex sm:px-2 sm:text-[10px]">
+              <span>β版</span>
+            </span>
+          )}
           <h1
-            className="min-w-0 flex-1 text-xs font-semibold leading-tight text-white sm:text-lg sm:leading-none"
+            className={`min-w-0 flex-1 text-xs font-semibold leading-tight sm:text-lg sm:leading-none ${
+              IS_MC_PRODUCT ? 'text-gray-900' : 'text-white'
+            }`}
             title={`部屋 ${headerRoomId}${headerRoomSub ? ` - ${headerRoomSub}` : ''}`}
           >
             <span className="inline-flex min-w-0 items-center gap-1 sm:gap-2">
-              <span className="inline-flex h-10 w-10 shrink-0 flex-col items-center justify-center rounded border border-sky-500/60 bg-sky-500/10 px-0 py-0 leading-none text-sky-200 sm:w-auto sm:px-1 sm:py-0.5">
+              <span
+                className={`inline-flex h-10 w-10 shrink-0 flex-col items-center justify-center rounded border px-0 py-0 leading-none sm:w-auto sm:px-1 sm:py-0.5 ${
+                  IS_MC_PRODUCT
+                    ? 'border-gray-400 bg-gray-100 text-gray-800'
+                    : 'border-sky-500/60 bg-sky-500/10 text-sky-200'
+                }`}
+              >
                 <span className="text-[8px] font-medium sm:text-[9px]">部屋</span>
                 <span className="text-[11px] font-semibold sm:text-xs">{headerRoomId}</span>
               </span>
-              <span className="min-w-0 truncate text-base font-semibold leading-none text-white">
+              <span
+                className={`min-w-0 truncate text-base font-semibold leading-none ${
+                  IS_MC_PRODUCT ? 'text-gray-900' : 'text-white'
+                }`}
+              >
                 {headerRoomSub || ''}
               </span>
-              <span className="hidden shrink-0 whitespace-nowrap text-xs font-normal text-amber-200/75 md:inline md:text-sm">
-                {MUSICAICHAT_ROOM_TAGLINE}
+              <span
+                className={`hidden shrink-0 whitespace-nowrap text-xs font-normal md:inline md:text-sm ${
+                  IS_MC_PRODUCT ? 'text-amber-800/85' : 'text-amber-200/75'
+                }`}
+              >
+                {getRoomServiceTagline()}
               </span>
             </span>
           </h1>
@@ -2330,16 +2412,17 @@ export default function RoomWithoutSync({
             <button
               type="button"
               onClick={handleLeaveClick}
-              className="h-10 w-10 rounded border border-gray-600 bg-gray-800 px-0 py-0 text-[11px] font-medium leading-none text-gray-200 hover:bg-gray-700 hover:text-white sm:w-auto sm:px-4 sm:py-2 sm:text-sm"
+              className={roomHeaderActionBtnClass()}
               aria-label="部屋を退室して最初の画面に戻る"
             >
               退室
             </button>
+            <McMaPromoHeaderBanner />
           </div>
         )}
       </header>
 
-      <section className="mb-1 shrink-0">
+      <section className="mb-2 shrink-0">
         <UserBar
           displayName={displayNameProp}
           isGuest={isGuest}
@@ -2501,8 +2584,8 @@ export default function RoomWithoutSync({
             onChatLogClick={() => setChatLogModalOpen(true)}
             roomId={roomId ?? 'local'}
             myClientId="local-client"
-            styleAdminChatTools={chatStyleAdminTools}
-            canRejectTidbit={canRejectTidbit && !isGuest}
+            styleAdminChatTools={!IS_MC_PRODUCT && chatStyleAdminTools}
+            canRejectTidbit={!IS_MC_PRODUCT && canRejectTidbit && !isGuest}
             onNextSongRecommendReject={handleNextSongRecommendReject}
             onYoutubeSearchFromAi={
               isYoutubeKeywordSearchEnabled()
@@ -2528,15 +2611,15 @@ export default function RoomWithoutSync({
             roomHasRegisteredParticipant={!isGuest}
             aiTrialStatus={aiTrialStatus}
             aiTrialLoading={aiTrialState === 'loading'}
-            onAiSettingsClick={!isGuest ? () => setAiSettingsOpen(true) : undefined}
+            onAiSettingsClick={!isGuest && !IS_MC_PRODUCT ? () => setAiSettingsOpen(true) : undefined}
             ownerAiCharacterName={AI_CHARACTER_DEFAULT_NAME}
             onRequestSongOverview={!isGuest ? handleRequestSongOverview : undefined}
             songOverviewRequestedVideoIds={songOverviewRequestedVideoIds}
           />
         }
         rightTop={
-          <>
-            <div className="relative">
+            <div className={roomFrameBlockClass('flex min-h-0 flex-col')}>
+              <div className="relative min-h-0 shrink-0">
               <YouTubePlayer
                 ref={playerRef}
                 videoId={videoId}
@@ -2565,9 +2648,9 @@ export default function RoomWithoutSync({
                     });
                   }}
                   disabled={!videoId || isGuest}
-                  className={`flex h-9 w-9 items-center justify-center rounded-lg border border-gray-600 bg-gray-900/90 text-gray-200 backdrop-blur-sm hover:bg-gray-800 disabled:opacity-50 ${
-                    mobileCurrentIsFavorited ? favoriteHeartActiveRingClass : ''
-                  }`}
+                  className={roomPlayerOverlayIconBtnClass(
+                    `disabled:opacity-50 ${mobileCurrentIsFavorited ? favoriteHeartActiveRingClass : ''}`,
+                  )}
                   aria-label={
                     isGuest
                       ? 'お気に入り（ログインで利用可）'
@@ -2584,7 +2667,7 @@ export default function RoomWithoutSync({
                   }
                 >
                   <HeartIcon
-                    className={`h-5 w-5 ${mobileCurrentIsFavorited ? favoriteHeartActiveTextClass : 'text-gray-300'}`}
+                    className={`h-5 w-5 ${mobileCurrentIsFavorited ? favoriteHeartActiveTextClass : favoriteHeartIdleIconClass()}`}
                     aria-hidden
                   />
                 </button>
@@ -2592,7 +2675,7 @@ export default function RoomWithoutSync({
                   <button
                     type="button"
                     onClick={() => openMyPage('user')}
-                    className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-600 bg-gray-900/90 text-gray-200 backdrop-blur-sm hover:bg-gray-800"
+                    className={roomPlayerOverlayIconBtnClass()}
                     aria-label="マイページを開く"
                     title="マイページ"
                   >
@@ -2602,7 +2685,7 @@ export default function RoomWithoutSync({
                 <button
                   type="button"
                   onClick={() => setPlaybackHistoryModalOpen(true)}
-                  className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-600 bg-gray-900/90 text-gray-200 backdrop-blur-sm hover:bg-gray-800"
+                  className={roomPlayerOverlayIconBtnClass()}
                   aria-label="視聴履歴を表示"
                   title="視聴履歴"
                 >
@@ -2620,9 +2703,9 @@ export default function RoomWithoutSync({
                     });
                   }}
                   disabled={!videoId || isGuest}
-                  className={`flex h-9 w-9 items-center justify-center rounded-lg border border-gray-600 bg-gray-900/90 text-gray-200 backdrop-blur-sm hover:bg-gray-800 disabled:opacity-50 ${
-                    mobileCurrentIsFavorited ? favoriteHeartActiveRingClass : ''
-                  }`}
+                  className={roomPlayerOverlayIconBtnClass(
+                    `disabled:opacity-50 ${mobileCurrentIsFavorited ? favoriteHeartActiveRingClass : ''}`,
+                  )}
                   aria-label={
                     isGuest
                       ? 'お気に入り（ログインで利用可）'
@@ -2639,14 +2722,14 @@ export default function RoomWithoutSync({
                   }
                 >
                   <HeartIcon
-                    className={`h-5 w-5 ${mobileCurrentIsFavorited ? favoriteHeartActiveTextClass : 'text-gray-300'}`}
+                    className={`h-5 w-5 ${mobileCurrentIsFavorited ? favoriteHeartActiveTextClass : favoriteHeartIdleIconClass()}`}
                     aria-hidden
                   />
                 </button>
               </div>
+              </div>
+              <NowPlaying artistTitle={currentPlayingArtistTitle} />
             </div>
-            <NowPlaying artistTitle={currentPlayingArtistTitle} />
-          </>
         }
         rightBottom={
           <RoomPlaybackHistory

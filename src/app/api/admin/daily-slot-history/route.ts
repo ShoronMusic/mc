@@ -7,6 +7,7 @@ import {
   aggregateDailySlotDetail,
   aggregateDailySlotSummaries,
 } from '@/lib/room-daily-slot-aggregate';
+import { parseAdminProductFilter } from '@/lib/room-history-product';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,10 +28,11 @@ export async function GET(request: Request) {
   const slotKey = url.searchParams.get('slotKey')?.trim() || '';
   const days = Math.min(90, Math.max(1, parseInt(url.searchParams.get('days') || '14', 10) || 14));
   const roomId = url.searchParams.get('roomId')?.trim() || '';
+  const productFilter = parseAdminProductFilter(url.searchParams.get('product'));
 
   if (slotKey) {
     try {
-      const detail = await aggregateDailySlotDetail(admin, slotKey);
+      const detail = await aggregateDailySlotDetail(admin, slotKey, { productFilter });
       if (!detail.summary) {
         return NextResponse.json({ enabled: true, summary: null, users: [] });
       }
@@ -45,6 +47,7 @@ export async function GET(request: Request) {
     const rows = await aggregateDailySlotSummaries(admin, {
       lookbackDays: days,
       roomId: roomId || null,
+      productFilter,
     });
 
     const totals = rows.reduce(

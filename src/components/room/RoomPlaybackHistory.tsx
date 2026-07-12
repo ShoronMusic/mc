@@ -20,6 +20,14 @@ import {
 import { resolveFamousPvArtistSongPack } from '@/lib/youtube-famous-pv-override';
 import { SONG_STYLE_OPTIONS } from '@/lib/song-styles';
 import type { Music8ArtistJson } from '@/lib/music8-artist-display';
+import {
+  IS_MC_PRODUCT,
+  playbackWatchNewTabBtnClass,
+  roomFrameBlockClass,
+  roomFrameInnerHeaderClass,
+  showRoomStyleUi,
+} from '@/lib/product-branding';
+import { participantChatColorForSurface } from '@/lib/chat-text-color';
 import MainArtistTabPanel from './MainArtistTabPanel';
 import SongDataTabPanel from './SongDataTabPanel';
 import EraDistributionModal from './EraDistributionModal';
@@ -39,12 +47,26 @@ const COL_FAV = '♡';
 const COL_WIDTH_PARTICIPANT = 68;
 /** 例: 16:33 R2（ラウンド併記） */
 const COL_WIDTH_TIME = 72;
-/** アーティスト - タイトルは残り幅を使うため minWidth のみ（横スクロールを出さない） */
 const COL_MIN_WIDTH_ARTIST_TITLE = 80;
 const COL_WIDTH_STYLE = 56;
 const COL_WIDTH_ERA = 48;
 const COL_WIDTH_LINK = 56;
 const COL_WIDTH_FAV = 36;
+
+function playbackHistoryGridTemplate(showStyleUi: boolean): string {
+  return [
+    `${COL_WIDTH_PARTICIPANT}px`,
+    `${COL_WIDTH_TIME}px`,
+    `${COL_WIDTH_ERA}px`,
+    ...(showStyleUi ? [`${COL_WIDTH_STYLE}px`] : []),
+    `minmax(${COL_MIN_WIDTH_ARTIST_TITLE}px, 1fr)`,
+    `${COL_WIDTH_LINK}px`,
+    `${COL_WIDTH_FAV}px`,
+    '28px',
+  ].join(' ');
+}
+
+const PLAYBACK_HISTORY_GRID_ROW_CLASS = 'grid w-full min-w-0 items-center';
 
 /** スタイル値ごとの文字色（背景は従来どおり） */
 const STYLE_TEXT_COLORS: Record<string, string> = {
@@ -620,6 +642,8 @@ export default function RoomPlaybackHistory({
 
   const hasSinceFilter = Boolean(playbackHistorySinceIso?.trim());
   const showDistributionStats = !playbackHistoryGuestSessionOnly;
+  const showStyleUi = showRoomStyleUi();
+  const historyGridStyle = { gridTemplateColumns: playbackHistoryGridTemplate(showStyleUi) };
 
   const toggleSort = useCallback(() => {
     setSortOrder((o) => (o === 'desc' ? 'asc' : 'desc'));
@@ -800,8 +824,14 @@ export default function RoomPlaybackHistory({
       : null;
 
   return (
-    <div className="flex h-full flex-col overflow-hidden rounded-lg border border-gray-700 bg-gray-900/50">
-      <div className="flex items-center justify-between gap-2 border-b border-gray-700 px-2 py-1.5 text-sm font-medium text-gray-300">
+    <div className={roomFrameBlockClass('flex h-full min-w-0 w-full flex-col')}>
+      <div
+        className={roomFrameInnerHeaderClass(
+          `flex items-center justify-between gap-2 px-2 py-1.5 text-sm font-medium ${
+            IS_MC_PRODUCT ? 'text-gray-700' : 'text-gray-300'
+          }`,
+        )}
+      >
         <div className="flex min-w-0 flex-1 items-center gap-1">
           <button
             type="button"
@@ -849,16 +879,18 @@ export default function RoomPlaybackHistory({
                 <CalendarDaysIcon className="h-4 w-4 flex-shrink-0" aria-hidden />
                 <span className="hidden rounded px-2 py-1 hover:bg-gray-700/50 sm:inline">年代</span>
               </button>
-              <button
-                type="button"
-                onClick={() => setStyleDistOpen(true)}
-                className="flex items-center gap-1 text-sm text-gray-400 transition hover:text-gray-200"
-                title="スタイルを表示"
-                aria-label="スタイルを表示"
-              >
-                <ChartBarIcon className="h-4 w-4 flex-shrink-0" aria-hidden />
-                <span className="hidden rounded px-2 py-1 hover:bg-gray-700/50 sm:inline">スタイル</span>
-              </button>
+              {showStyleUi && (
+                <button
+                  type="button"
+                  onClick={() => setStyleDistOpen(true)}
+                  className="flex items-center gap-1 text-sm text-gray-400 transition hover:text-gray-200"
+                  title="スタイルを表示"
+                  aria-label="スタイルを表示"
+                >
+                  <ChartBarIcon className="h-4 w-4 flex-shrink-0" aria-hidden />
+                  <span className="hidden rounded px-2 py-1 hover:bg-gray-700/50 sm:inline">スタイル</span>
+                </button>
+              )}
             </>
           )}
         </div>
@@ -867,7 +899,7 @@ export default function RoomPlaybackHistory({
             href={watchInNewTabUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex flex-shrink-0 items-center gap-1 rounded bg-red-600 px-2 py-1 text-xs font-medium text-white shadow hover:bg-red-500"
+            className={playbackWatchNewTabBtnClass()}
           >
             <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 flex-shrink-0" fill="currentColor" aria-hidden>
               <path d="M8 5v14l11-7z" />
@@ -876,7 +908,7 @@ export default function RoomPlaybackHistory({
           </a>
         )}
       </div>
-      <div className="min-h-0 flex-1 overflow-auto">
+      <div className="min-h-0 min-w-0 w-full flex-1 overflow-auto">
         {activeTab === 'artist' && playbackTabsResolve?.tabArtist ? (
           <MainArtistTabPanel
             artistName={playbackTabsResolve.tabArtist}
@@ -890,74 +922,71 @@ export default function RoomPlaybackHistory({
             videoId={currentRowForTabs?.video_id ?? null}
           />
         ) : (
-        <table className="w-full table-fixed border-collapse text-left text-sm">
-          <thead className="sticky top-0 z-10 bg-gray-800">
-            <tr>
-              <th
-                className="cursor-pointer border-b border-gray-600 py-1 pr-1 font-medium text-gray-400"
-                style={{ width: COL_WIDTH_PARTICIPANT, minWidth: COL_WIDTH_PARTICIPANT, maxWidth: COL_WIDTH_PARTICIPANT }}
-                scope="col"
+        <div role="table" className="w-full min-w-0 text-left text-sm">
+          <div
+            role="rowgroup"
+            className={`sticky top-0 z-10 ${IS_MC_PRODUCT ? 'bg-gray-50' : 'bg-gray-800'}`}
+          >
+            <div role="row" className={PLAYBACK_HISTORY_GRID_ROW_CLASS} style={historyGridStyle}>
+              <div
+                role="columnheader"
+                className="min-w-0 cursor-pointer truncate border-b border-gray-600 py-1 pr-1 font-medium text-gray-400"
                 title="選曲者でソート"
                 onClick={setSortByParticipant}
               >
-                <span className="block truncate">{COL_PARTICIPANT}</span>
-              </th>
-              <th
-                className="cursor-pointer border-b border-gray-600 py-1 pr-1 font-medium text-gray-400"
-                style={{ width: COL_WIDTH_TIME, minWidth: COL_WIDTH_TIME, maxWidth: COL_WIDTH_TIME }}
-                scope="col"
+                {COL_PARTICIPANT}
+              </div>
+              <div
+                role="columnheader"
+                className="min-w-0 cursor-pointer truncate border-b border-gray-600 py-1 pr-1 font-medium text-gray-400"
                 title="時間でソート。R は選曲ラウンド（同期部屋）"
                 onClick={setSortByTime}
               >
-                <span className="block truncate">{COL_TIME}</span>
-              </th>
-              <th
-                className="border-b border-gray-600 py-1 pr-1 font-medium text-gray-400"
-                style={{ width: COL_WIDTH_ERA, minWidth: COL_WIDTH_ERA, maxWidth: COL_WIDTH_ERA }}
-                scope="col"
+                {COL_TIME}
+              </div>
+              <div
+                role="columnheader"
+                className="min-w-0 truncate border-b border-gray-600 py-1 pr-1 font-medium text-gray-400"
                 title="録音・ヒットの十年（Music8 / AI）"
               >
-                <span className="block truncate">{COL_ERA}</span>
-              </th>
-              <th
-                className="border-b border-gray-600 py-1 pr-1 font-medium text-gray-400"
-                style={{ width: COL_WIDTH_STYLE, minWidth: COL_WIDTH_STYLE, maxWidth: COL_WIDTH_STYLE }}
-                scope="col"
-                title="曲のスタイル"
-              >
-                <span className="block truncate">{COL_STYLE}</span>
-              </th>
-              <th
-                className="border-b border-gray-600 py-1 pr-1 font-medium text-gray-400"
-                style={{ minWidth: COL_MIN_WIDTH_ARTIST_TITLE }}
-                scope="col"
+                {COL_ERA}
+              </div>
+              {showStyleUi && (
+                <div
+                  role="columnheader"
+                  className="min-w-0 truncate border-b border-gray-600 py-1 pr-1 font-medium text-gray-400"
+                  title="曲のスタイル"
+                >
+                  {COL_STYLE}
+                </div>
+              )}
+              <div
+                role="columnheader"
+                className="min-w-0 truncate border-b border-gray-600 py-1 pr-1 font-medium text-gray-400"
                 title={
                   canEditStyles
                     ? 'アーティスト - タイトル（STYLE_ADMIN: セルをクリックして修正）'
                     : 'アーティスト - タイトル'
                 }
               >
-                <span className="block truncate">{COL_ARTIST_TITLE}</span>
-              </th>
-              <th
-                className="border-b border-gray-600 py-1 pr-1 font-medium text-gray-400"
-                style={{ width: COL_WIDTH_LINK, minWidth: COL_WIDTH_LINK, maxWidth: COL_WIDTH_LINK }}
-                scope="col"
+                {COL_ARTIST_TITLE}
+              </div>
+              <div
+                role="columnheader"
+                className="min-w-0 truncate border-b border-gray-600 py-1 pr-1 font-medium text-gray-400"
               >
-                <span className="block truncate">{COL_LINK}</span>
-              </th>
-              <th
-                className="border-b border-gray-600 py-1 pr-1 font-medium text-gray-400"
-                style={{ width: COL_WIDTH_FAV, minWidth: COL_WIDTH_FAV, maxWidth: COL_WIDTH_FAV }}
-                scope="col"
+                {COL_LINK}
+              </div>
+              <div
+                role="columnheader"
+                className="min-w-0 truncate border-b border-gray-600 py-1 pr-1 font-medium text-gray-400"
                 title="お気に入り"
               >
-                <span className="block truncate">{COL_FAV}</span>
-              </th>
-              <th
+                {COL_FAV}
+              </div>
+              <div
+                role="columnheader"
                 className="border-b border-gray-600 py-1 pl-0 pr-1 text-right"
-                style={{ width: 28, minWidth: 28, maxWidth: 28 }}
-                scope="col"
               >
                 <button
                   type="button"
@@ -968,26 +997,26 @@ export default function RoomPlaybackHistory({
                 >
                   {sortOrder === 'desc' ? '▼' : '▲'}
                 </button>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
+              </div>
+            </div>
+          </div>
+          <div role="rowgroup">
             {loading && items.length === 0 ? (
-              <tr>
-                <td colSpan={8} className="py-2 text-center text-gray-500">
+              <div role="row" className={PLAYBACK_HISTORY_GRID_ROW_CLASS} style={historyGridStyle}>
+                <div role="cell" className="py-2 text-center text-gray-500" style={{ gridColumn: '1 / -1' }}>
                   読み込み中...
-                </td>
-              </tr>
+                </div>
+              </div>
             ) : sorted.length === 0 ? (
-              <tr>
-                <td colSpan={8} className="py-2 text-center text-gray-500">
+              <div role="row" className={PLAYBACK_HISTORY_GRID_ROW_CLASS} style={historyGridStyle}>
+                <div role="cell" className="py-2 text-center text-gray-500" style={{ gridColumn: '1 / -1' }}>
                   {playbackHistoryGuestSessionOnly
                     ? 'このセッションではまだ再生履歴がありません'
                     : hasSinceFilter
                       ? 'この会ではまだ再生履歴がありません'
                       : '履歴がありません'}
-                </td>
-              </tr>
+                </div>
+              </div>
             ) : (
               (() => {
                 const renderRow = (row: RoomPlaybackHistoryRow) => {
@@ -995,81 +1024,79 @@ export default function RoomPlaybackHistory({
                   const isFavorited = favoritedVideoIds.includes(row.video_id);
                   const url = `https://www.youtube.com/watch?v=${row.video_id}`;
                   return (
-                    <tr key={row.id} className={isActive ? 'bg-blue-900/30' : ''}>
-                      <td
-                        className="truncate border-b border-gray-700/80 py-0.5 pr-1"
+                    <div
+                      role="row"
+                      key={row.id}
+                      className={`${PLAYBACK_HISTORY_GRID_ROW_CLASS} ${isActive ? 'bg-blue-900/30' : ''}`}
+                      style={historyGridStyle}
+                    >
+                      <div
+                        role="cell"
+                        className="min-w-0 truncate border-b border-gray-700/80 py-0.5 pr-1"
                         style={{
-                          width: COL_WIDTH_PARTICIPANT,
-                          minWidth: COL_WIDTH_PARTICIPANT,
-                          maxWidth: COL_WIDTH_PARTICIPANT,
-                          color: participantNameColor(row.display_name) ?? '#e5e7eb',
+                          color: participantChatColorForSurface(
+                            participantNameColor(row.display_name),
+                          ),
                         }}
                         title={row.display_name}
                       >
                         {row.display_name}
-                      </td>
-                      <td
-                        className="truncate border-b border-gray-700/80 py-0.5 pr-1 text-gray-400"
-                        style={{ width: COL_WIDTH_TIME, minWidth: COL_WIDTH_TIME, maxWidth: COL_WIDTH_TIME }}
+                      </div>
+                      <div
+                        role="cell"
+                        className="min-w-0 truncate border-b border-gray-700/80 py-0.5 pr-1 text-gray-400"
                       >
                         <span title={row.selection_round != null ? `ラウンド ${row.selection_round}` : undefined}>
                           {formatPlayedAtWithRound(row.played_at, row.selection_round)}
                         </span>
-                      </td>
-                      <td
-                        className="truncate border-b border-gray-700/80 py-0.5 pr-1 text-gray-400"
-                        style={{
-                          width: COL_WIDTH_ERA,
-                          minWidth: COL_WIDTH_ERA,
-                          maxWidth: COL_WIDTH_ERA,
-                          color: getEraTextColor(row.era),
-                        }}
+                      </div>
+                      <div
+                        role="cell"
+                        className="min-w-0 truncate border-b border-gray-700/80 py-0.5 pr-1 text-gray-400"
+                        style={{ color: getEraTextColor(row.era) }}
                         title={row.era ? `年代: ${row.era}` : '年代未設定（新規再生で付与）'}
                       >
                         {row.era?.trim() ? row.era : '—'}
-                      </td>
-                      <td
-                        className={
-                          canEditStyles
-                            ? 'cursor-pointer truncate border-b border-gray-700/80 py-0.5 pr-1 text-gray-400 hover:bg-gray-700/50 hover:text-white hover:underline'
-                            : 'truncate border-b border-gray-700/80 py-0.5 pr-1 text-gray-400'
-                        }
-                        style={{
-                          width: COL_WIDTH_STYLE,
-                          minWidth: COL_WIDTH_STYLE,
-                          maxWidth: COL_WIDTH_STYLE,
-                          color: getStyleTextColor(row.style),
-                        }}
-                        title={
-                          canEditStyles
-                            ? row.style
-                              ? `${row.style}（クリックで変更）`
-                              : 'クリックでスタイルを設定'
-                            : row.style ?? undefined
-                        }
-                        onClick={canEditStyles ? () => openStyleModal(row) : undefined}
-                        role={canEditStyles ? 'button' : undefined}
-                        tabIndex={canEditStyles ? 0 : undefined}
-                        onKeyDown={
-                          canEditStyles
-                            ? (e) => {
-                                if (e.key === 'Enter' || e.key === ' ') {
-                                  e.preventDefault();
-                                  openStyleModal(row);
+                      </div>
+                      {showStyleUi && (
+                        <div
+                          role="cell"
+                          className={
+                            canEditStyles
+                              ? 'min-w-0 cursor-pointer truncate border-b border-gray-700/80 py-0.5 pr-1 text-gray-400 hover:bg-gray-700/50 hover:text-white hover:underline'
+                              : 'min-w-0 truncate border-b border-gray-700/80 py-0.5 pr-1 text-gray-400'
+                          }
+                          style={{ color: getStyleTextColor(row.style) }}
+                          title={
+                            canEditStyles
+                              ? row.style
+                                ? `${row.style}（クリックで変更）`
+                                : 'クリックでスタイルを設定'
+                              : row.style ?? undefined
+                          }
+                          onClick={canEditStyles ? () => openStyleModal(row) : undefined}
+                          onKeyDown={
+                            canEditStyles
+                              ? (e) => {
+                                  if (e.key === 'Enter' || e.key === ' ') {
+                                    e.preventDefault();
+                                    openStyleModal(row);
+                                  }
                                 }
-                              }
-                            : undefined
-                        }
-                      >
-                        {row.style ?? '—'}
-                      </td>
-                      <td
+                              : undefined
+                          }
+                          tabIndex={canEditStyles ? 0 : undefined}
+                        >
+                          {row.style ?? '—'}
+                        </div>
+                      )}
+                      <div
+                        role="cell"
                         className={
                           canEditStyles && titleEditRowId !== row.id
-                            ? 'cursor-pointer truncate border-b border-gray-700/80 py-0.5 pr-1 text-gray-200 hover:bg-gray-700/40'
-                            : 'truncate border-b border-gray-700/80 py-0.5 pr-1 text-gray-200'
+                            ? 'min-w-0 cursor-pointer truncate border-b border-gray-700/80 py-0.5 pr-1 text-gray-200 hover:bg-gray-700/40'
+                            : 'min-w-0 truncate border-b border-gray-700/80 py-0.5 pr-1 text-gray-200'
                         }
-                        style={{ minWidth: COL_MIN_WIDTH_ARTIST_TITLE }}
                         title={
                           canEditStyles
                             ? `${artistTitle(row)}（クリックで修正）`
@@ -1080,8 +1107,6 @@ export default function RoomPlaybackHistory({
                             ? () => beginTitleEdit(row)
                             : undefined
                         }
-                        role={canEditStyles && titleEditRowId !== row.id ? 'button' : undefined}
-                        tabIndex={canEditStyles && titleEditRowId !== row.id ? 0 : undefined}
                         onKeyDown={
                           canEditStyles && titleEditRowId !== row.id
                             ? (e) => {
@@ -1092,6 +1117,7 @@ export default function RoomPlaybackHistory({
                               }
                             : undefined
                         }
+                        tabIndex={canEditStyles && titleEditRowId !== row.id ? 0 : undefined}
                       >
                         {titleEditRowId === row.id ? (
                           <div className="flex min-w-0 flex-col gap-1 py-0.5" onClick={(e) => e.stopPropagation()}>
@@ -1136,11 +1162,8 @@ export default function RoomPlaybackHistory({
                         ) : (
                           artistTitle(row)
                         )}
-                      </td>
-                      <td
-                        className="border-b border-gray-700/80 py-0.5 pr-1"
-                        style={{ width: COL_WIDTH_LINK, minWidth: COL_WIDTH_LINK, maxWidth: COL_WIDTH_LINK }}
-                      >
+                      </div>
+                      <div role="cell" className="min-w-0 border-b border-gray-700/80 py-0.5 pr-1">
                         <a
                           href={url}
                           target="_blank"
@@ -1150,11 +1173,8 @@ export default function RoomPlaybackHistory({
                         >
                           YT
                         </a>
-                      </td>
-                      <td
-                        className="border-b border-gray-700/80 py-0.5 pr-1"
-                        style={{ width: COL_WIDTH_FAV, minWidth: COL_WIDTH_FAV, maxWidth: COL_WIDTH_FAV }}
-                      >
+                      </div>
+                      <div role="cell" className="min-w-0 border-b border-gray-700/80 py-0.5 pr-1">
                         <button
                           type="button"
                           onClick={() => handleHeartClick(row)}
@@ -1178,9 +1198,9 @@ export default function RoomPlaybackHistory({
                             </span>
                           )}
                         </button>
-                      </td>
-                      <td className="border-b border-gray-700/80 py-0.5 pl-0 pr-1" style={{ width: 28, minWidth: 28, maxWidth: 28 }} />
-                    </tr>
+                      </div>
+                      <div role="cell" className="border-b border-gray-700/80 py-0.5 pl-0 pr-1" />
+                    </div>
                   );
                 };
 
@@ -1194,11 +1214,22 @@ export default function RoomPlaybackHistory({
                   const played = formatPlayedDateWithWeekday(row.played_at);
                   if (played && played.key !== lastDateKey) {
                     nodes.push(
-                      <tr key={`sep-${played.key}`} className="bg-gray-800/25">
-                        <td colSpan={8} className="border-b border-gray-700/80 px-2 py-1.5 text-xs font-semibold text-gray-200">
+                      <div
+                        role="row"
+                        key={`sep-${played.key}`}
+                        className={`${PLAYBACK_HISTORY_GRID_ROW_CLASS} ${IS_MC_PRODUCT ? 'bg-gray-100' : 'bg-gray-800/25'}`}
+                        style={historyGridStyle}
+                      >
+                        <div
+                          role="cell"
+                          className={`border-b border-gray-700/80 px-2 py-1.5 text-xs font-semibold ${
+                            IS_MC_PRODUCT ? 'text-gray-800' : 'text-gray-200'
+                          }`}
+                          style={{ gridColumn: '1 / -1' }}
+                        >
                           {played.label}
-                        </td>
-                      </tr>
+                        </div>
+                      </div>
                     );
                     lastDateKey = played.key;
                   }
@@ -1207,8 +1238,8 @@ export default function RoomPlaybackHistory({
                 return nodes;
               })()
             )}
-          </tbody>
-        </table>
+          </div>
+        </div>
         )}
         {activeTab === 'history' && hasMoreHistory && (
           <div className="border-t border-gray-700/80 px-2 py-2">
@@ -1231,12 +1262,14 @@ export default function RoomPlaybackHistory({
         </p>
       )}
 
-      <StyleDistributionModal
-        roomId={roomId}
-        playbackHistorySinceIso={playbackHistorySinceIso}
-        open={styleDistOpen}
-        onClose={() => setStyleDistOpen(false)}
-      />
+      {showStyleUi && (
+        <StyleDistributionModal
+          roomId={roomId}
+          playbackHistorySinceIso={playbackHistorySinceIso}
+          open={styleDistOpen}
+          onClose={() => setStyleDistOpen(false)}
+        />
+      )}
 
       <EraDistributionModal
         roomId={roomId}
@@ -1245,7 +1278,7 @@ export default function RoomPlaybackHistory({
         onClose={() => setEraDistOpen(false)}
       />
 
-      {styleEditRow && (
+      {showStyleUi && styleEditRow && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
           role="dialog"

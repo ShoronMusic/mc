@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { requireStyleAdminApi } from '@/lib/admin-access';
 import { songRowLooksJapaneseDomesticForAdminLibrary } from '@/lib/admin-library-jp-exclude';
+import { compareLibraryReleaseSort } from '@/lib/library-release-sort-date';
+import { ensureWesternTreatedJpArtistCache } from '@/lib/western-treated-jp-artists';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,6 +15,7 @@ export type AdminLibrarySongItem = {
   play_count: number | null;
   spotify_popularity: number | null;
   original_release_date: string | null;
+  youtube_published_at: string | null;
   video_id: string | null;
 };
 
@@ -38,6 +41,8 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'artist query is required' }, { status: 400 });
   }
 
+  await ensureWesternTreatedJpArtistCache();
+
   const sort = parseSort(searchParams.get('sort'));
 
   const { data: songRows, error: songErr } = await supabase
@@ -52,25 +57,36 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: songErr.message }, { status: 500 });
   }
 
-  const songs = ((songRows ?? []) as Omit<AdminLibrarySongItem, 'video_id'>[]).filter(
-    (s) => !songRowLooksJapaneseDomesticForAdminLibrary(s),
-  );
+  const songs = (
+    (songRows ?? []) as Omit<AdminLibrarySongItem, 'video_id' | 'youtube_published_at'>[]
+  ).filter((s) => !songRowLooksJapaneseDomesticForAdminLibrary(s));
   const ids = songs.map((s) => s.id).filter(Boolean);
   const videoBySong = new Map<string, string>();
+  const ytPublishedBySong = new Map<string, string | null>();
 
   if (ids.length > 0) {
     const { data: vidRows, error: vidErr } = await supabase
       .from('song_videos')
-      .select('song_id, video_id, created_at')
+      .select('song_id, video_id, created_at, youtube_published_at')
       .in('song_id', ids)
       .order('created_at', { ascending: true });
 
     if (vidErr && vidErr.code !== '42P01') {
       console.error('[admin/library/songs] song_videos', vidErr);
     } else if (Array.isArray(vidRows)) {
-      for (const r of vidRows as { song_id: string; video_id: string }[]) {
+      for (const r of vidRows as {
+        song_id: string;
+        video_id: string;
+        youtube_published_at?: string | null;
+      }[]) {
         if (r.song_id && r.video_id && !videoBySong.has(r.song_id)) {
           videoBySong.set(r.song_id, r.video_id);
+          ytPublishedBySong.set(
+            r.song_id,
+            typeof r.youtube_published_at === 'string' && r.youtube_published_at.trim()
+              ? r.youtube_published_at.trim()
+              : null,
+          );
         }
       }
     }
@@ -79,31 +95,27 @@ export async function GET(request: Request) {
   const items: AdminLibrarySongItem[] = songs.map((s) => ({
     ...s,
     video_id: videoBySong.get(s.id) ?? null,
+    youtube_published_at: ytPublishedBySong.get(s.id) ?? null,
   }));
-
-  const nullsLast = (v: string | null | undefined) => (v == null || v === '' ? null : v);
 
   items.sort((a, b) => {
     if (sort === 'spotify_popularity') {
       const pa = a.spotify_popularity ?? -1;
       const pb = b.spotify_popularity ?? -1;
       if (pb !== pa) return pb - pa;
-    } else if (sort === 'release_old') {
-      const da = nullsLast(a.original_release_date);
-      const db = nullsLast(b.original_release_date);
-      if (da && db) {
-        const c = da.localeCompare(db);
-        if (c !== 0) return c;
-      } else if (db && !da) return 1;
-      else if (da && !db) return -1;
     } else {
-      const da = nullsLast(a.original_release_date);
-      const db = nullsLast(b.original_release_date);
-      if (da && db) {
-        const c = db.localeCompare(da);
-        if (c !== 0) return c;
-      } else if (db && !da) return 1;
-      else if (da && !db) return -1;
+      const c = compareLibraryReleaseSort(
+        {
+          originalReleaseDate: a.original_release_date,
+          youtubePublishedAt: a.youtube_published_at,
+        },
+        {
+          originalReleaseDate: b.original_release_date,
+          youtubePublishedAt: b.youtube_published_at,
+        },
+        sort === 'release_old' ? 'asc' : 'desc',
+      );
+      if (c !== 0) return c;
     }
     const ta = (a.display_title ?? a.song_title ?? '').trim();
     const tb = (b.display_title ?? b.song_title ?? '').trim();
