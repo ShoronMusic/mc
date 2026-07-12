@@ -5,6 +5,8 @@ import { useState, type ReactNode } from 'react';
 import { PolicyDocsModal, type PolicyDocsTab } from '@/components/legal/PolicyDocsModal';
 import { SiteGuideModal, type SiteGuideTab } from '@/components/site/SiteGuideModal';
 import { PwaInstallHelpLink } from '@/components/pwa/PwaInstallHelpLink';
+import { SisterSiteAccountNote } from '@/components/home/SisterSiteAccountNote';
+import { IS_MC_PRODUCT } from '@/lib/product-branding';
 
 type StartPageFooterProps = {
   /** ログイン後トップなど：リンクの代わりにモーダルで開く */
@@ -105,15 +107,19 @@ export function StartPageFooter({ usePolicyModal = false }: StartPageFooterProps
             プライバシー
           </Link>
         )}
-        <span aria-hidden className="text-gray-600">
-          |
-        </span>
-        <Link
-          href="/guide/ai-pricing"
-          className="underline-offset-2 hover:text-gray-300 hover:underline"
-        >
-          AI利用料金
-        </Link>
+        {IS_MC_PRODUCT ? null : (
+          <>
+            <span aria-hidden className="text-gray-600">
+              |
+            </span>
+            <Link
+              href="/guide/ai-pricing"
+              className="underline-offset-2 hover:text-gray-300 hover:underline"
+            >
+              AI利用料金
+            </Link>
+          </>
+        )}
         <span aria-hidden className="text-gray-600">
           |
         </span>
@@ -124,6 +130,9 @@ export function StartPageFooter({ usePolicyModal = false }: StartPageFooterProps
           特定商取引法に基づく表示
         </Link>
       </p>
+      <div className="mt-3 max-w-xl">
+        <SisterSiteAccountNote variant="compact" />
+      </div>
       <PwaInstallHelpLink />
       <p className="mt-3 text-center text-[11px] text-gray-600 lg:text-left">
         スマホ・PC どちらからでもご利用いただけます

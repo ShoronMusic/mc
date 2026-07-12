@@ -38,6 +38,57 @@ export function getMaPublicOrigin(): string {
   return 'https://www.musicai.jp';
 }
 
+/** ma から mc へのリンク（ローカル 3002→3003、本番は musicchat.jp） */
+export function getMcPublicOrigin(): string {
+  if (typeof window !== 'undefined') {
+    const { protocol, hostname, port } = window.location;
+    if (port === '3002') return `${protocol}//${hostname}:3003`;
+  }
+  const fromEnv = process.env.NEXT_PUBLIC_MC_PUBLIC_URL?.trim();
+  if (fromEnv) return fromEnv.replace(/\/$/, '');
+  return 'https://www.musicchat.jp';
+}
+
+/** 姉妹サイトの日本語名（案内・リンク用） */
+export function getSisterSiteNameJa(): string {
+  return IS_MC_PRODUCT ? '洋楽AIチャット' : 'ミュージックチャット';
+}
+
+export function getSisterSiteOrigin(): string {
+  return IS_MC_PRODUCT ? getMaPublicOrigin() : getMcPublicOrigin();
+}
+
+/**
+ * 姉妹サイト＋同一アカウント案内（トップ・同意・フッター等）。
+ * 自動 SSO は約束せず、同じ credentials で双方使える旨にとどめる。
+ */
+export function getSisterSiteAccountNote(): {
+  lead: string;
+  account: string;
+} {
+  if (IS_MC_PRODUCT) {
+    return {
+      lead:
+        '姉妹サイトの洋楽AIチャットでは、AI による曲解説や選曲サポートが使えます。',
+      account:
+        '同じ Google アカウント（または同じメール）で利用でき、マイリストなども共通です。両方を同時に開いて使うこともできます。',
+    };
+  }
+  return {
+    lead:
+      '姉妹サイトのミュージックチャットは、同期視聴とチャットに特化した完全無料のサービスです（邦楽・洋楽OK）。',
+    account:
+      '同じ Google アカウント（または同じメール）で利用でき、マイリストなども共通です。両方を同時に開いて使うこともできます。',
+  };
+}
+
+/** 部屋ヘッダー等の短い一行 */
+export function getSisterSiteAccountNoteShort(): string {
+  return IS_MC_PRODUCT
+    ? '姉妹サイト — 同じアカウントで利用可'
+    : '姉妹サイト（ミュージックチャット）— 同じアカウントで利用可';
+}
+
 export function getMcTopSubtitle(): string {
   return IS_MC_PRODUCT
     ? '邦楽も洋楽も、みんなで同期視聴×チャット（完全無料）'

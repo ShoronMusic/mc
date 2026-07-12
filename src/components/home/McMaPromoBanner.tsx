@@ -4,7 +4,8 @@ import Image from 'next/image';
 import { useEffect, useRef, useState } from 'react';
 import {
   getMaPublicOrigin,
-  getProductDisplayNamePlain,
+  getSisterSiteAccountNoteShort,
+  getSisterSiteNameJa,
   IS_MC_PRODUCT,
   MA_TITLE_LOGO_SRC,
   MC_MA_PROMO_HEADER,
@@ -12,49 +13,6 @@ import {
 
 /** 点線枠を黒バナー外側にずらす余白（px） */
 const DASH_RING_OUTSET = 4;
-
-/** 一時オフ — トップのブロック版。部屋ヘッダーは McMaPromoHeaderBanner を使用 */
-const MC_MA_PROMO_BLOCK_BANNER_VISIBLE = false;
-
-/** mc トップのブロック導線（部屋では McMaPromoHeaderBanner） */
-export function McMaPromoBanner({ className = '' }: { className?: string }) {
-  if (!MC_MA_PROMO_BLOCK_BANNER_VISIBLE) {
-    return null;
-  }
-
-  const maOrigin = getMaPublicOrigin();
-
-  return (
-    <div
-      className={`rounded-lg border px-3 py-2.5 text-sm leading-relaxed shadow-sm ${
-        IS_MC_PRODUCT
-          ? 'border-gray-300 bg-gray-50 text-gray-800'
-          : 'border-sky-300 bg-sky-50 text-sky-950'
-      } ${className}`.trim()}
-      role="note"
-    >
-      <p className={`font-semibold ${IS_MC_PRODUCT ? 'text-gray-900' : 'text-sky-900'}`}>
-        AI に曲を解説してほしい方へ
-      </p>
-      <p className={`mt-1 text-xs ${IS_MC_PRODUCT ? 'text-gray-600' : 'text-sky-800/90'}`}>
-        <a
-          href={maOrigin}
-          className={
-            IS_MC_PRODUCT
-              ? 'font-medium text-gray-900 underline underline-offset-2 hover:text-black'
-              : 'font-medium text-sky-700 underline underline-offset-2 hover:text-sky-900'
-          }
-        >
-          {getProductDisplayNamePlain() === 'Music Chat'
-            ? '洋楽AIチャット'
-            : getProductDisplayNamePlain()}
-        </a>
-        {' '}
-        — 登録で AI 付き選曲 10 曲無料
-      </p>
-    </div>
-  );
-}
 
 /** mc 部屋ヘッダー：退室ボタン右の ma 導線 */
 export function McMaPromoHeaderBanner({ className = '' }: { className?: string }) {
@@ -84,11 +42,12 @@ export function McMaPromoHeaderBanner({ className = '' }: { className?: string }
   }
 
   const maOrigin = getMaPublicOrigin();
-  const maName = '洋楽AIチャット';
+  const maName = getSisterSiteNameJa();
   const pad = DASH_RING_OUTSET;
   const ringW = shellSize.w + pad * 2;
   const ringH = shellSize.h + pad * 2;
   const rectInset = pad - 1;
+  const shortNote = getSisterSiteAccountNoteShort();
 
   return (
     <a
@@ -97,8 +56,8 @@ export function McMaPromoHeaderBanner({ className = '' }: { className?: string }
       rel="noopener noreferrer"
       className={`${MC_MA_PROMO_HEADER} hidden shrink-0 self-center sm:inline-flex ${className}`.trim()}
       style={{ margin: pad }}
-      title={`${maName}（AI曲解説・選曲参加・同じアカウントで利用可）`}
-      aria-label={`${maName}へ — AIの曲解説や選曲参加で一人でも楽しめる。同じアカウントで利用可`}
+      title={`${maName}（AI曲解説・選曲参加・${shortNote}）`}
+      aria-label={`${maName}へ — AIの曲解説や選曲参加で一人でも楽しめる。${shortNote}`}
     >
       <span
         ref={shellRef}
@@ -138,7 +97,7 @@ export function McMaPromoHeaderBanner({ className = '' }: { className?: string }
           <span className="mc-ma-promo-header-title block font-medium">AIの曲解説や選曲参加で一人でも楽しめる！</span>
           <span className="mc-ma-promo-header-sub">
             {maName}
-            <span className="mc-ma-promo-header-muted"> — 同じアカウントで利用可</span>
+            <span className="mc-ma-promo-header-muted"> — 姉妹サイト・同じアカウントで利用可</span>
           </span>
         </span>
       </span>

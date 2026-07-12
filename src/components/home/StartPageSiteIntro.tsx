@@ -7,6 +7,7 @@ import { hasGuestRoomPersistence } from '@/lib/guest-room-persistence';
 import { ConsentPageLiveChats } from '@/components/home/ConsentPageLiveChats';
 import { loadBrowserSupabaseClient } from '@/lib/supabase/load-browser-client';
 import { MusicChatTitleBrand } from '@/components/home/MusicChatTitleLogo';
+import { SisterSiteAccountNote } from '@/components/home/SisterSiteAccountNote';
 import { IS_MC_PRODUCT } from '@/lib/product-branding';
 
 /** サイト紹介動画（トップ・ご利用にあたっての説明内） */
@@ -89,11 +90,12 @@ export function StartPageSiteIntro({
       <>
         <div className="mb-4 rounded-lg border border-gray-200 bg-white p-4 text-sm text-gray-700 shadow-sm">
           <p className="mb-2 font-medium text-gray-900">みんなで YouTube を同期視聴しながらチャット</p>
-          <ul className="list-disc space-y-1 pl-5 leading-relaxed">
+          <ul className="mb-3 list-disc space-y-1 pl-5 leading-relaxed">
             <li>邦楽・洋楽どちらも選曲 OK</li>
             <li>完全無料（登録・ゲスト参加）</li>
             <li>同期視聴 × チャットに特化したサービスです</li>
           </ul>
+          <SisterSiteAccountNote />
         </div>
         <figure className="space-y-1.5">
           <Image
@@ -157,6 +159,9 @@ export function StartPageSiteIntro({
             機能の一覧はこちら
           </Link>
         </p>
+        <div className="mt-3">
+          <SisterSiteAccountNote />
+        </div>
       </div>
       <div className={`space-y-5 ${section === 'content' ? '' : 'mb-6'}`}>
         <figure className="space-y-1.5">

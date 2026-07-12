@@ -10,7 +10,6 @@ import {
 import { TopPageLoginAndLiveRooms } from '@/components/home/TopPageLoginAndLiveRooms';
 import { hasGuestRoomPersistence } from '@/lib/guest-room-persistence';
 import { loadBrowserSupabaseClient } from '@/lib/supabase/load-browser-client';
-import { McMaPromoBanner } from '@/components/home/McMaPromoBanner';
 import { MusicChatTitleBrand } from '@/components/home/MusicChatTitleLogo';
 import { getProductDisplayName, IS_MC_PRODUCT } from '@/lib/product-branding';
 import { useEffect, useState } from 'react';
@@ -31,7 +30,6 @@ function StartPageTitle() {
           getProductDisplayName()
         )}
       </h1>
-      {IS_MC_PRODUCT ? <McMaPromoBanner className="mb-4" /> : null}
       <p className="mb-6 text-center text-sm lg:text-left">
         <button
           type="button"
