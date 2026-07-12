@@ -19,6 +19,10 @@ import {
   type ResolveArtistSongForPackOptions,
 } from '@/lib/youtube-artist-song-for-pack';
 import { fetchPlaybackDisplayOverride } from '@/lib/video-playback-display-override';
+import {
+  fetchLibrarySongDisplayByVideoId,
+  preferPlaybackDisplaySources,
+} from '@/lib/library-song-display-by-video';
 import { getVideoSnippet } from '@/lib/youtube-search';
 import { resolveJapaneseEconomyWithMusicBrainz } from '@/lib/resolve-japanese-economy';
 import { isJpDomesticOfficialChannelAiException } from '@/lib/jp-official-channel-exception';
@@ -73,7 +77,16 @@ export async function POST(request: Request) {
     const reader = createAdminClient() ?? supabase;
     const [oembed, snippet] = await Promise.all([fetchOEmbed(videoId), getVideoSnippet(videoId)]);
     const rawYouTubeTitle = oembed?.title ?? snippet?.title ?? videoId;
-    const displayOverride = reader ? await fetchPlaybackDisplayOverride(reader, videoId) : null;
+    const [adminOverride, librarySong] = reader
+      ? await Promise.all([
+          fetchPlaybackDisplayOverride(reader, videoId),
+          fetchLibrarySongDisplayByVideoId(reader, videoId),
+        ])
+      : [null, null];
+    const displayOverride = preferPlaybackDisplaySources({
+      adminOverride,
+      library: librarySong,
+    });
     const title = displayOverride?.title ?? rawYouTubeTitle;
     const authorName =
       displayOverride?.artist_name?.trim()

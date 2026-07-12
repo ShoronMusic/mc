@@ -7,18 +7,21 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import {
   fetchSpotifyArtistsByIds,
   searchSpotifyTrackCandidatesByArtistTitle,
+  searchSpotifyTrackCandidatesByFreeText,
+  SPOTIFY_MARKET_DOMESTIC,
 } from '@/lib/spotify-search-track';
 import {
   pickBestSpotifyCandidate,
-  type SpotifyArtistMatchOptions,
   type SpotifyTrackCandidate,
 } from '@/lib/spotify-track-match';
+import { resolveSpotifyArtistMatchHints } from '@/lib/spotify-artist-match-hints';
 import {
   clearArtistLookupIndexCache,
   loadArtistLookupIndex,
   syncSongCreditsFromSongId,
 } from '@/lib/song-credits-sync';
 import { resolveArtistIdFromIndex } from '@/lib/song-credits-resolve';
+import { normalizeSongCatalogScope } from '@/lib/song-catalog-scope';
 
 export function isSongSelectionSpotifyEnrichEnabled(): boolean {
   const v = process.env.SONG_SELECTION_SPOTIFY_ENRICH?.trim();
@@ -102,7 +105,9 @@ export async function enrichSongFromSpotifySelection(
 ): Promise<void> {
   const { data: song, error } = await admin
     .from('songs')
-    .select('id, display_title, main_artist, song_title, spotify_track_id, music8_song_data')
+    .select(
+      'id, display_title, main_artist, song_title, spotify_track_id, music8_song_data, music8_artist_slug, catalog_scope',
+    )
     .eq('id', songId)
     .maybeSingle();
   if (error) throw error;
@@ -114,11 +119,50 @@ export async function enrichSongFromSpotifySelection(
   const displayTitle = (song as { display_title?: string }).display_title?.trim() ?? '';
   const mainArtist = (song as { main_artist?: string }).main_artist?.trim() ?? '';
   const songTitle = (song as { song_title?: string }).song_title?.trim() ?? '';
+  const songSlug = (song as { music8_artist_slug?: string | null }).music8_artist_slug?.trim() ?? null;
+  const catalogScope = normalizeSongCatalogScope(
+    (song as { catalog_scope?: string | null }).catalog_scope,
+  );
+  const market =
+    catalogScope === 'domestic' ? SPOTIFY_MARKET_DOMESTIC : undefined;
   if (!mainArtist || !songTitle) return;
 
-  const searchQuery = `artist:${mainArtist.split(',')[0]?.trim() || mainArtist} track:${songTitle}`;
-  const rawCandidates = await searchSpotifyTrackCandidatesByArtistTitle(mainArtist, songTitle, 8);
+  const hints = await resolveSpotifyArtistMatchHints(admin, mainArtist, {
+    songMusic8ArtistSlug: songSlug,
+  });
+  const searchNames =
+    hints.searchArtistNames.length > 0
+      ? hints.searchArtistNames
+      : [hints.searchArtistName || mainArtist];
+
+  const seenIds = new Set<string>();
+  const rawCandidates: Awaited<ReturnType<typeof searchSpotifyTrackCandidatesByArtistTitle>> = [];
+  const merge = (list: typeof rawCandidates) => {
+    for (const t of list) {
+      const id = t.spotifyTrackId?.trim();
+      if (!id || seenIds.has(id)) continue;
+      seenIds.add(id);
+      rawCandidates.push(t);
+    }
+  };
+  for (const searchArtist of searchNames.slice(0, 2)) {
+    merge(
+      await searchSpotifyTrackCandidatesByArtistTitle(searchArtist, songTitle, 8, { market }),
+    );
+  }
+  {
+    const latin = searchNames.find((n) => /[A-Za-z]/.test(n));
+    const freeQ = [latin || mainArtist.split(',')[0]?.trim() || mainArtist, songTitle]
+      .filter(Boolean)
+      .join(' ');
+    merge(await searchSpotifyTrackCandidatesByFreeText(freeQ, 8, { market }));
+  }
   if (rawCandidates.length === 0) return;
+
+  const searchQuery = searchNames
+    .slice(0, 2)
+    .map((a) => `artist:${a.split(',')[0]?.trim() || a} track:${songTitle}`)
+    .join(' | ');
 
   const candidates: SpotifyTrackCandidate[] = rawCandidates.map((t) => ({
     spotifyTrackId: t.spotifyTrackId!,
@@ -128,30 +172,11 @@ export async function enrichSongFromSpotifySelection(
     popularity: t.spotifyPopularity,
   }));
 
-  // artists.name_en / spotify_artist_id があれば照合に使う（邦楽の表記ゆれ）
-  let matchOpts: SpotifyArtistMatchOptions | undefined;
-  try {
-    const esc = mainArtist.split(',')[0]?.trim() || mainArtist;
-    const q = esc.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-    const { data: artistRows } = await admin
-      .from('artists')
-      .select('name_en, spotify_artist_id')
-      .or(`name.eq."${q}",name_en.eq."${q}",name_ja.eq."${q}"`)
-      .limit(3);
-    const alternateArtistNames: string[] = [];
-    const expectedSpotifyArtistIds: string[] = [];
-    for (const r of artistRows ?? []) {
-      const en = (r as { name_en?: string | null }).name_en?.trim();
-      const sid = (r as { spotify_artist_id?: string | null }).spotify_artist_id?.trim();
-      if (en) alternateArtistNames.push(en);
-      if (sid) expectedSpotifyArtistIds.push(sid);
-    }
-    if (alternateArtistNames.length > 0 || expectedSpotifyArtistIds.length > 0) {
-      matchOpts = { alternateArtistNames, expectedSpotifyArtistIds };
-    }
-  } catch {
-    /* ignore hint lookup failures */
-  }
+  const matchOpts = {
+    alternateArtistNames: hints.alternateArtistNames,
+    expectedSpotifyArtistIds: hints.expectedSpotifyArtistIds,
+    crossScriptArtistNames: hints.crossScriptArtistNames,
+  };
 
   const { best, decision } = pickBestSpotifyCandidate(
     candidates,

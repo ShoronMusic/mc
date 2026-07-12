@@ -39,12 +39,45 @@ export function stripJpOfficialVideoDecorations(raw: string): string {
     .replace(/\s*\(Official\s+Music\s+Video\)\s*/gi, ' ')
     .replace(/\s*\(Official\s+Video\)\s*/gi, ' ')
     .replace(/\s*\[Official\s+Video\]\s*/gi, ' ')
+    // 宇多田ヒカル「曲名」Music Video / 」official visualizer（閉じ鉤直後・スペース無し含む）
+    .replace(/\s*Music\s+Video(?:\s+Behind\s+the\s+Scenes?)?/gi, ' ')
+    .replace(/\s*official\s+visualizer\b/gi, ' ')
+    .replace(/\s*official\s+audio\b/gi, ' ')
+    .replace(/\s*lyric\s+video\b/gi, ' ')
+    .replace(/\s*リリック\s*ビデオ\b/gi, ' ')
+    .replace(/\s*short\s+version\b/gi, ' ')
+    .replace(/\s*\(\s*4K(?:\s*UPGRADE)?\s*\)/gi, ' ')
+    .replace(/\s*\[\s*4K(?:\s*UPGRADE)?\s*\]/gi, ' ')
     .replace(/\s+MUSIC\s+VIDEO\s*$/i, ' ')
     .replace(/\s+MV\s*$/i, ' ')
     .replace(/\s+PV\s*$/i, ' ')
     .replace(/\s+/g, ' ')
     .trim();
   return cleanTitle(t) || t;
+}
+
+/** `Mrs. GREEN APPLE -` のように鉤括弧直前の区切りハイフンを落とす */
+export function stripTrailingArtistDashSeparator(artist: string): string {
+  return artist.replace(/\s*[-\u2013\u2014\u2015\uFF0D]\s*$/u, '').trim();
+}
+
+/**
+ * レーベル／ディストリビューター系チャンネル（タイトル側のアーティストを優先すべき）
+ * 例: UNIVERSAL MUSIC JAPAN, Sony Music, Warner Music Japan
+ */
+export function isLikelyRecordLabelOrDistributorChannel(channelTitle: string | null | undefined): boolean {
+  const raw = (channelTitle ?? '').trim();
+  if (!raw) return false;
+  const base = stripYoutubeOfficialChannelSuffix(raw) ?? raw;
+  const n = base.toLowerCase().replace(/\s+/g, ' ').trim();
+  if (!n) return false;
+  if (/\b(universal|sony|warner|emi|atlantic|interscope|capitol|columbia|rca|def jam|motown)\b/.test(n) &&
+    /\b(music|records?|entertainment|japan|uk|usa)\b/.test(n)) {
+    return true;
+  }
+  if (/^(universal|sony|warner)\s+music(\s+\w+)?$/i.test(n)) return true;
+  if (/\b(vevo|topic)\b/i.test(n)) return true;
+  return false;
 }
 
 /**
@@ -139,18 +172,20 @@ export function parseArtistSongFromJpBilingualHyphenTitle(rawTitle: string): JpS
 }
 
 /**
- * `Mr.Children 「Tomorrow never knows」` 等、アーティスト名の直後に鉤括弧で曲名。
- * 邦楽公式 MV で英字表記アーティストに多い。
+ * `Mr.Children 「Tomorrow never knows」` / `宇多田ヒカル「Mine or Yours」Music Video`
+ * アーティスト名の直後に鉤括弧で曲名。閉じ鉤の後ろの MV 表記は無視する。
  */
 export function parseArtistSongFromCornerBracketTitle(rawTitle: string): JpSlashTitleParse | null {
   const t = stripJpOfficialVideoDecorations(rawTitle);
   if (!t) return null;
-  const m = t.match(/^(.+?)\s*[「『]([^」』]+)[」』]\s*$/);
+  const m = t.match(/^(.+?)\s*[「『]([^」』]+)[」』]/);
   if (!m) return null;
-  const artist = m[1]!.trim();
+  const artist = stripTrailingArtistDashSeparator(m[1]!.trim());
   const song = cleanTitle(m[2]!.trim()) || m[2]!.trim();
   if (!artist || !song || artist.length < 2 || song.length < 1) return null;
   if (/^music\s+video$/i.test(song) || /^official$/i.test(song)) return null;
+  // アーティスト側に鉤括弧が残っているのは不正
+  if (/[「『」』]/.test(artist)) return null;
   return { artist, song };
 }
 
@@ -176,7 +211,7 @@ export function splitJapaneseAndLatinChannelName(channel: string): {
   return { japanese, latin };
 }
 
-/** 邦楽の正規アーティスト表記（日本語優先） */
+/** 邦楽の正規アーティスト表記（日本語優先。タイトル由来があればレーベルchより優先） */
 export function canonicalJapaneseArtistFromChannel(
   channelTitle: string | null | undefined,
   slashArtist: string | null | undefined,
@@ -186,15 +221,19 @@ export function canonicalJapaneseArtistFromChannel(
   const { japanese, latin } = splitJapaneseAndLatinChannelName(channelBase);
   if (japanese) return japanese;
 
-  const slash = (slashArtist ?? '').trim();
+  const slash = stripTrailingArtistDashSeparator((slashArtist ?? '').trim());
   if (slash && JAPANESE_SCRIPT.test(slash)) {
     const slashLatin = splitJapaneseAndLatinChannelName(slash);
     if (slashLatin.japanese) return slashLatin.japanese;
     return slash;
   }
 
-  if (latin) return latin;
+  // タイトルから取れたアーティスト（英字バンド名含む）を優先。
+  // 旧実装は ch のラテン名を先に返していたため、UNIVERSAL MUSIC JAPAN 等が
+  // Mrs. GREEN APPLE を上書きしていた。
   if (slash) return slash;
+
+  if (latin) return latin;
   return channelBase || null;
 }
 
@@ -315,7 +354,11 @@ export function resolveDomesticArtistSongFromYoutube(
   }
 
   const stripped = stripJpOfficialVideoDecorations(input.rawTitle);
-  const canonicalArtist = canonicalJapaneseArtistFromChannel(channel, null);
+  let canonicalArtist = canonicalJapaneseArtistFromChannel(channel, null);
+  if (canonicalArtist && isLikelyRecordLabelOrDistributorChannel(channel)) {
+    // レーベル ch だけをアーティストにしない（タイトル側にアーティストが無いとき）
+    canonicalArtist = null;
+  }
   if (canonicalArtist && stripped && textHasJapaneseScript(stripped)) {
     const displayTitle = `${canonicalArtist} - ${stripped}`;
     return {

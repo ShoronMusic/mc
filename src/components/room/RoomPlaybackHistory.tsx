@@ -66,7 +66,12 @@ function playbackHistoryGridTemplate(showStyleUi: boolean): string {
   ].join(' ');
 }
 
-const PLAYBACK_HISTORY_GRID_ROW_CLASS = 'grid w-full min-w-0 items-center';
+const PLAYBACK_HISTORY_GRID_ROW_CLASS = 'grid w-full min-w-0 items-stretch';
+
+/** データ行セル共通（行側で border-b するためセルには付けない） */
+const PLAYBACK_HISTORY_CELL_CLASS = 'min-w-0 truncate py-0.5 pr-1 flex items-center';
+const PLAYBACK_HISTORY_HEADER_CELL_CLASS =
+  'min-w-0 truncate border-b border-gray-600 py-1 pr-1 font-medium text-gray-400 flex items-center';
 
 /** スタイル値ごとの文字色（背景は従来どおり） */
 const STYLE_TEXT_COLORS: Record<string, string> = {
@@ -908,7 +913,7 @@ export default function RoomPlaybackHistory({
           </a>
         )}
       </div>
-      <div className="min-h-0 min-w-0 w-full flex-1 overflow-auto">
+      <div className="min-h-0 min-w-0 w-full flex-1 overflow-auto [scrollbar-gutter:stable]">
         {activeTab === 'artist' && playbackTabsResolve?.tabArtist ? (
           <MainArtistTabPanel
             artistName={playbackTabsResolve.tabArtist}
@@ -930,7 +935,7 @@ export default function RoomPlaybackHistory({
             <div role="row" className={PLAYBACK_HISTORY_GRID_ROW_CLASS} style={historyGridStyle}>
               <div
                 role="columnheader"
-                className="min-w-0 cursor-pointer truncate border-b border-gray-600 py-1 pr-1 font-medium text-gray-400"
+                className={`${PLAYBACK_HISTORY_HEADER_CELL_CLASS} cursor-pointer`}
                 title="選曲者でソート"
                 onClick={setSortByParticipant}
               >
@@ -938,7 +943,7 @@ export default function RoomPlaybackHistory({
               </div>
               <div
                 role="columnheader"
-                className="min-w-0 cursor-pointer truncate border-b border-gray-600 py-1 pr-1 font-medium text-gray-400"
+                className={`${PLAYBACK_HISTORY_HEADER_CELL_CLASS} cursor-pointer`}
                 title="時間でソート。R は選曲ラウンド（同期部屋）"
                 onClick={setSortByTime}
               >
@@ -946,7 +951,7 @@ export default function RoomPlaybackHistory({
               </div>
               <div
                 role="columnheader"
-                className="min-w-0 truncate border-b border-gray-600 py-1 pr-1 font-medium text-gray-400"
+                className={PLAYBACK_HISTORY_HEADER_CELL_CLASS}
                 title="録音・ヒットの十年（Music8 / AI）"
               >
                 {COL_ERA}
@@ -954,7 +959,7 @@ export default function RoomPlaybackHistory({
               {showStyleUi && (
                 <div
                   role="columnheader"
-                  className="min-w-0 truncate border-b border-gray-600 py-1 pr-1 font-medium text-gray-400"
+                  className={PLAYBACK_HISTORY_HEADER_CELL_CLASS}
                   title="曲のスタイル"
                 >
                   {COL_STYLE}
@@ -962,7 +967,7 @@ export default function RoomPlaybackHistory({
               )}
               <div
                 role="columnheader"
-                className="min-w-0 truncate border-b border-gray-600 py-1 pr-1 font-medium text-gray-400"
+                className={PLAYBACK_HISTORY_HEADER_CELL_CLASS}
                 title={
                   canEditStyles
                     ? 'アーティスト - タイトル（STYLE_ADMIN: セルをクリックして修正）'
@@ -971,22 +976,19 @@ export default function RoomPlaybackHistory({
               >
                 {COL_ARTIST_TITLE}
               </div>
-              <div
-                role="columnheader"
-                className="min-w-0 truncate border-b border-gray-600 py-1 pr-1 font-medium text-gray-400"
-              >
+              <div role="columnheader" className={PLAYBACK_HISTORY_HEADER_CELL_CLASS}>
                 {COL_LINK}
               </div>
               <div
                 role="columnheader"
-                className="min-w-0 truncate border-b border-gray-600 py-1 pr-1 font-medium text-gray-400"
+                className={PLAYBACK_HISTORY_HEADER_CELL_CLASS}
                 title="お気に入り"
               >
                 {COL_FAV}
               </div>
               <div
                 role="columnheader"
-                className="border-b border-gray-600 py-1 pl-0 pr-1 text-right"
+                className="flex items-center justify-end border-b border-gray-600 py-1 pl-0 pr-1"
               >
                 <button
                   type="button"
@@ -1027,12 +1029,12 @@ export default function RoomPlaybackHistory({
                     <div
                       role="row"
                       key={row.id}
-                      className={`${PLAYBACK_HISTORY_GRID_ROW_CLASS} ${isActive ? 'bg-blue-900/30' : ''}`}
+                      className={`${PLAYBACK_HISTORY_GRID_ROW_CLASS} border-b border-gray-700/80 ${isActive ? 'bg-blue-900/30' : ''}`}
                       style={historyGridStyle}
                     >
                       <div
                         role="cell"
-                        className="min-w-0 truncate border-b border-gray-700/80 py-0.5 pr-1"
+                        className={PLAYBACK_HISTORY_CELL_CLASS}
                         style={{
                           color: participantChatColorForSurface(
                             participantNameColor(row.display_name),
@@ -1042,17 +1044,14 @@ export default function RoomPlaybackHistory({
                       >
                         {row.display_name}
                       </div>
-                      <div
-                        role="cell"
-                        className="min-w-0 truncate border-b border-gray-700/80 py-0.5 pr-1 text-gray-400"
-                      >
+                      <div role="cell" className={`${PLAYBACK_HISTORY_CELL_CLASS} text-gray-400`}>
                         <span title={row.selection_round != null ? `ラウンド ${row.selection_round}` : undefined}>
                           {formatPlayedAtWithRound(row.played_at, row.selection_round)}
                         </span>
                       </div>
                       <div
                         role="cell"
-                        className="min-w-0 truncate border-b border-gray-700/80 py-0.5 pr-1 text-gray-400"
+                        className={`${PLAYBACK_HISTORY_CELL_CLASS} text-gray-400`}
                         style={{ color: getEraTextColor(row.era) }}
                         title={row.era ? `年代: ${row.era}` : '年代未設定（新規再生で付与）'}
                       >
@@ -1063,8 +1062,8 @@ export default function RoomPlaybackHistory({
                           role="cell"
                           className={
                             canEditStyles
-                              ? 'min-w-0 cursor-pointer truncate border-b border-gray-700/80 py-0.5 pr-1 text-gray-400 hover:bg-gray-700/50 hover:text-white hover:underline'
-                              : 'min-w-0 truncate border-b border-gray-700/80 py-0.5 pr-1 text-gray-400'
+                              ? `${PLAYBACK_HISTORY_CELL_CLASS} cursor-pointer text-gray-400 hover:bg-gray-700/50 hover:text-white hover:underline`
+                              : `${PLAYBACK_HISTORY_CELL_CLASS} text-gray-400`
                           }
                           style={{ color: getStyleTextColor(row.style) }}
                           title={
@@ -1094,8 +1093,10 @@ export default function RoomPlaybackHistory({
                         role="cell"
                         className={
                           canEditStyles && titleEditRowId !== row.id
-                            ? 'min-w-0 cursor-pointer truncate border-b border-gray-700/80 py-0.5 pr-1 text-gray-200 hover:bg-gray-700/40'
-                            : 'min-w-0 truncate border-b border-gray-700/80 py-0.5 pr-1 text-gray-200'
+                            ? `${PLAYBACK_HISTORY_CELL_CLASS} cursor-pointer text-gray-200 hover:bg-gray-700/40`
+                            : titleEditRowId === row.id
+                              ? 'min-w-0 py-0.5 pr-1 text-gray-200'
+                              : `${PLAYBACK_HISTORY_CELL_CLASS} text-gray-200`
                         }
                         title={
                           canEditStyles
@@ -1163,7 +1164,7 @@ export default function RoomPlaybackHistory({
                           artistTitle(row)
                         )}
                       </div>
-                      <div role="cell" className="min-w-0 border-b border-gray-700/80 py-0.5 pr-1">
+                      <div role="cell" className={PLAYBACK_HISTORY_CELL_CLASS}>
                         <a
                           href={url}
                           target="_blank"
@@ -1174,7 +1175,7 @@ export default function RoomPlaybackHistory({
                           YT
                         </a>
                       </div>
-                      <div role="cell" className="min-w-0 border-b border-gray-700/80 py-0.5 pr-1">
+                      <div role="cell" className={`${PLAYBACK_HISTORY_CELL_CLASS}`}>
                         <button
                           type="button"
                           onClick={() => handleHeartClick(row)}
@@ -1199,7 +1200,7 @@ export default function RoomPlaybackHistory({
                           )}
                         </button>
                       </div>
-                      <div role="cell" className="border-b border-gray-700/80 py-0.5 pl-0 pr-1" />
+                      <div role="cell" className="min-w-0" aria-hidden />
                     </div>
                   );
                 };
@@ -1222,7 +1223,7 @@ export default function RoomPlaybackHistory({
                       >
                         <div
                           role="cell"
-                          className={`border-b border-gray-700/80 px-2 py-1.5 text-xs font-semibold ${
+                          className={`flex items-center border-b border-gray-700/80 px-2 py-1.5 text-xs font-semibold ${
                             IS_MC_PRODUCT ? 'text-gray-800' : 'text-gray-200'
                           }`}
                           style={{ gridColumn: '1 / -1' }}

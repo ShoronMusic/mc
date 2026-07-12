@@ -304,6 +304,20 @@ function spotifyMarket(): string {
   return trim(process.env.SPOTIFY_MARKET) || 'US';
 }
 
+/** 邦楽向け Spotify 検索・取得の market（日本カタログ優先） */
+export const SPOTIFY_MARKET_DOMESTIC = 'JP';
+
+export type SpotifyMarketOptions = {
+  /** 未指定時は `SPOTIFY_MARKET` または US */
+  market?: string | null;
+};
+
+function resolveSpotifyMarket(override?: string | null): string {
+  const o = trim(override);
+  if (o) return o.toUpperCase();
+  return spotifyMarket();
+}
+
 async function spotifyFetchJson(url: string, token: string, retries = 3): Promise<Response | null> {
   for (let attempt = 0; attempt <= retries; attempt++) {
     const res = await fetch(url, {
@@ -355,12 +369,16 @@ function emptyTrackMeta(): SpotifyTrackMeta {
 }
 
 /** GET /v1/tracks/{id} — アーティスト ID 付き */
-export async function fetchSpotifyTrackWithArtistsById(trackId: string): Promise<SpotifyTrackWithArtists> {
+export async function fetchSpotifyTrackWithArtistsById(
+  trackId: string,
+  options?: SpotifyMarketOptions,
+): Promise<SpotifyTrackWithArtists> {
   const token = await getSpotifyAccessToken();
   if (!token) return { ...emptyTrackMeta(), artists: [] };
 
   const id = trackId.trim();
-  const url = `https://api.spotify.com/v1/tracks/${encodeURIComponent(id)}?market=${encodeURIComponent(spotifyMarket())}`;
+  const market = resolveSpotifyMarket(options?.market);
+  const url = `https://api.spotify.com/v1/tracks/${encodeURIComponent(id)}?market=${encodeURIComponent(market)}`;
   try {
     const res = await spotifyFetchJson(url, token);
     if (!res?.ok) return { ...emptyTrackMeta(), artists: [] };
@@ -371,8 +389,11 @@ export async function fetchSpotifyTrackWithArtistsById(trackId: string): Promise
   }
 }
 
-export async function fetchSpotifyTrackById(trackId: string): Promise<SpotifyTrackMeta> {
-  const full = await fetchSpotifyTrackWithArtistsById(trackId);
+export async function fetchSpotifyTrackById(
+  trackId: string,
+  options?: SpotifyMarketOptions,
+): Promise<SpotifyTrackMeta> {
+  const full = await fetchSpotifyTrackWithArtistsById(trackId, options);
   const { artists: _a, ...meta } = full;
   return meta;
 }
@@ -415,6 +436,7 @@ export async function searchSpotifyTrackCandidatesByArtistTitle(
   artist: string,
   title: string,
   limit = 8,
+  options?: SpotifyMarketOptions,
 ): Promise<SpotifyTrackWithArtists[]> {
   const token = await getSpotifyAccessToken();
   if (!token) return [];
@@ -425,7 +447,7 @@ export async function searchSpotifyTrackCandidatesByArtistTitle(
   url.searchParams.set('q', q);
   url.searchParams.set('type', 'track');
   url.searchParams.set('limit', String(Math.max(1, Math.min(10, limit))));
-  url.searchParams.set('market', spotifyMarket());
+  url.searchParams.set('market', resolveSpotifyMarket(options?.market));
 
   try {
     const res = await spotifyFetchJson(url.toString(), token);
@@ -446,8 +468,9 @@ export async function searchSpotifyTrackCandidatesByArtistTitle(
 export async function fetchSpotifyTrackByArtistTitle(
   artist: string,
   title: string,
+  options?: SpotifyMarketOptions,
 ): Promise<SpotifyTrackMeta> {
-  const list = await searchSpotifyTrackCandidatesByArtistTitle(artist, title, 1);
+  const list = await searchSpotifyTrackCandidatesByArtistTitle(artist, title, 1, options);
   const first = list[0];
   if (!first) {
     return {
@@ -464,31 +487,45 @@ export async function fetchSpotifyTrackByArtistTitle(
 }
 
 /** display_title をそのまま q にした汎用検索（精度は落ちるがフォールバック用） */
-export async function fetchSpotifyTrackByFreeTextQuery(query: string): Promise<SpotifyTrackMeta> {
+export async function fetchSpotifyTrackByFreeTextQuery(
+  query: string,
+  options?: SpotifyMarketOptions,
+): Promise<SpotifyTrackMeta> {
+  const list = await searchSpotifyTrackCandidatesByFreeText(query, 1, options);
+  const first = list[0];
+  if (!first) return emptyTrackMeta();
+  const { artists: _a, ...meta } = first;
+  return meta;
+}
+
+/** フリーテキストで複数候補（邦楽の artist: 日本語検索が弱いときのフォールバック） */
+export async function searchSpotifyTrackCandidatesByFreeText(
+  query: string,
+  limit = 8,
+  options?: SpotifyMarketOptions,
+): Promise<SpotifyTrackWithArtists[]> {
   const token = await getSpotifyAccessToken();
-  if (!token) {
-    return {
-      spotifyTrackId: null,
-      spotifyPopularity: null,
-      spotifyName: null,
-      spotifyArtists: null,
-      spotifyReleaseDate: null,
-      spotifyImages: null,
-    };
-  }
+  if (!token) return [];
+  const q = query.trim();
+  if (!q) return [];
+
   const url = new URL('https://api.spotify.com/v1/search');
-  url.searchParams.set('q', query.trim());
+  url.searchParams.set('q', q);
   url.searchParams.set('type', 'track');
-  url.searchParams.set('limit', '1');
-  url.searchParams.set('market', spotifyMarket());
+  url.searchParams.set('limit', String(Math.max(1, Math.min(10, limit))));
+  url.searchParams.set('market', resolveSpotifyMarket(options?.market));
   try {
     const res = await spotifyFetchJson(url.toString(), token);
-    if (!res?.ok) {
-      return emptyTrackMeta();
-    }
+    if (!res?.ok) return [];
     const data = (await res.json()) as SpotifySearchJson;
-    return mapTrackItem(data?.tracks?.items?.[0]);
+    const items = data?.tracks?.items ?? [];
+    return items
+      .map((item) => ({
+        ...mapTrackItem(item),
+        artists: mapTrackArtists(item),
+      }))
+      .filter((t) => t.spotifyTrackId && t.artists.length > 0);
   } catch {
-    return emptyTrackMeta();
+    return [];
   }
 }

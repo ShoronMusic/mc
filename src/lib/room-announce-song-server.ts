@@ -10,10 +10,14 @@ import { sessionMayEditRoomPlaybackHistoryFields } from '@/lib/admin-access';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import {
-  applyPlaybackDisplayHintWhenDbMissing,
   fetchPlaybackDisplayOverride,
   parseAdminPlaybackDisplayHint,
 } from '@/lib/video-playback-display-override';
+import {
+  buildLibrarySongAnnounceTitle,
+  fetchLibrarySongDisplayByVideoId,
+  preferPlaybackDisplaySources,
+} from '@/lib/library-song-display-by-video';
 import { fetchOEmbed } from '@/lib/youtube-oembed';
 import { getVideoDurationSeconds, getVideoSnippet } from '@/lib/youtube-search';
 import {
@@ -82,11 +86,21 @@ export async function handleAnnounceSongPost(
 
     const supabase = await createClient();
     const reader = createAdminClient() ?? supabase;
-    let displayOverride = reader ? await fetchPlaybackDisplayOverride(reader, videoId) : null;
+    const [adminOverride, librarySong] = reader
+      ? await Promise.all([
+          fetchPlaybackDisplayOverride(reader, videoId),
+          fetchLibrarySongDisplayByVideoId(reader, videoId),
+        ])
+      : [null, null];
     const hintParsed = parseAdminPlaybackDisplayHint(body?.adminPlaybackDisplayHint);
-    if (hintParsed && (await sessionMayEditRoomPlaybackHistoryFields(supabase))) {
-      displayOverride = applyPlaybackDisplayHintWhenDbMissing(displayOverride, hintParsed);
-    }
+    const hintAllowed =
+      hintParsed && (await sessionMayEditRoomPlaybackHistoryFields(supabase)) ? hintParsed : null;
+    const displayOverride = preferPlaybackDisplaySources({
+      adminOverride,
+      library: librarySong,
+      hint: hintAllowed,
+    });
+    const libraryAnnounceTitle = librarySong ? buildLibrarySongAnnounceTitle(librarySong) : '';
     const title = displayOverride?.title ?? rawYouTubeTitle;
     const authorName =
       displayOverride?.artist_name?.trim() ? displayOverride.artist_name.trim() : authorNameOembed;
@@ -104,6 +118,10 @@ export async function handleAnnounceSongPost(
       artistDisplay && song
         ? `${artistDisplay} - ${song}`
         : formatArtistTitle(title, authorName, snippet?.description, snippet?.channelTitle ?? null);
+    /** ライブラリ整備済み表記を正とする（管理者上書きが無いとき） */
+    if (!adminOverride && libraryAnnounceTitle) {
+      artistTitleBase = libraryAnnounceTitle;
+    }
     const isJapaneseDomestic = await resolveJapaneseDomesticWithMusicBrainz({
       title,
       artistDisplay,
@@ -113,7 +131,7 @@ export async function handleAnnounceSongPost(
       channelTitle: snippet?.channelTitle ?? null,
       defaultAudioLanguage: snippet?.defaultAudioLanguage ?? null,
     });
-    if (isJapaneseDomestic) {
+    if (isJapaneseDomestic && !adminOverride && !libraryAnnounceTitle) {
       try {
         const domesticMeta = await resolveDomesticSongMetadataForRegistration({
           rawTitle: title,

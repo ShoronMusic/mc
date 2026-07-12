@@ -20,6 +20,11 @@ export type SpotifyTrackCandidate = {
 export type SpotifyArtistMatchOptions = {
   alternateArtistNames?: string[];
   expectedSpotifyArtistIds?: string[];
+  /**
+   * 日本語曲名↔Spotify英題の緩和に使う名前（m8 slug 由来のみ推奨）。
+   * 汚染された name_en をここに入れないこと。
+   */
+  crossScriptArtistNames?: string[];
 };
 
 const REJECT_ARTIST = /\b(tribute|tribute\s+co\.?|hit\s+co\.?|karaoke|cover\s+band|backing\s+business|party\s+tyme|zzang\s+karaoke)\b/i;
@@ -135,6 +140,14 @@ function artistFirstCreditMatches(expectedDisplayArtist: string, firstCredit: st
   return expKey === creditKey;
 }
 
+/** 空白・ハイフン差を吸収したラテン表記のゆるい一致（sakanaction ↔ Sakanaction） */
+function latinArtistKeysLooselyEqual(a: string, b: string): boolean {
+  const ka = compactMatchKey(a);
+  const kb = compactMatchKey(b);
+  if (!ka || !kb) return false;
+  return ka === kb || ka.includes(kb) || kb.includes(ka);
+}
+
 function artistCreditMatchesExpected(
   expectedDisplayArtist: string,
   firstCredit: string,
@@ -157,6 +170,10 @@ function artistCreditMatchesExpected(
     ) {
       return true;
     }
+    // slug 由来エイリアス（sakanaction）↔ Spotify 英語名（Sakanaction）
+    if (latinArtistKeysLooselyEqual(name.split(',')[0]?.trim() ?? name, firstCredit)) {
+      return true;
+    }
   }
 
   const ids = (options?.expectedSpotifyArtistIds ?? [])
@@ -177,6 +194,62 @@ function artistIdMatched(
   );
 }
 
+function hasStrongArtistAlias(
+  firstArtist: string,
+  firstArtistId: string | null,
+  options?: SpotifyArtistMatchOptions,
+): boolean {
+  if (artistIdMatched(firstArtistId, options)) return true;
+  const names = [
+    ...(options?.crossScriptArtistNames ?? []),
+    ...(options?.alternateArtistNames ?? []),
+  ];
+  for (const name of names) {
+    const n = name.trim();
+    if (!n) continue;
+    if (latinArtistKeysLooselyEqual(n, firstArtist)) return true;
+    if (
+      titleMatchKey(n) === titleMatchKey(firstArtist) &&
+      titleMatchKey(firstArtist).length > 0
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/** slug 由来など、英題↔日本語の緩和に使ってよいアーティスト一致か */
+function hasCrossScriptArtistTrust(
+  firstArtist: string,
+  firstArtistId: string | null,
+  options?: SpotifyArtistMatchOptions,
+): boolean {
+  if (artistIdMatched(firstArtistId, options)) return true;
+  const names = options?.crossScriptArtistNames ?? [];
+  for (const name of names) {
+    const n = name.trim();
+    if (!n) continue;
+    if (latinArtistKeysLooselyEqual(n, firstArtist)) return true;
+    if (
+      titleMatchKey(n) === titleMatchKey(firstArtist) &&
+      titleMatchKey(firstArtist).length > 0
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/** 日本語曲名 ↔ Spotify 英題（怪獣 / Kaiju）など文字種が違うか */
+export function isCrossScriptSongTitle(expected: string, actual: string | null | undefined): boolean {
+  const a = (expected ?? '').trim();
+  const b = (actual ?? '').trim();
+  if (!a || !b) return false;
+  const aCjk = JP_SCRIPT.test(a);
+  const bCjk = JP_SCRIPT.test(b);
+  return aCjk !== bCjk;
+}
+
 export function scoreSpotifyTrackCandidate(
   candidate: SpotifyTrackCandidate,
   expectedDisplayArtist: string,
@@ -195,7 +268,19 @@ export function scoreSpotifyTrackCandidate(
     return { action: 'review', reason: 'artist_mismatch', score: 0.1 };
   }
 
-  const titleSim = titleSimilarity(expectedSongTitle, candidate.spotifyName);
+  let titleSim = titleSimilarity(expectedSongTitle, candidate.spotifyName);
+  const strongAlias = hasStrongArtistAlias(firstArtist, firstArtistId, options);
+  const crossScriptTrusted = hasCrossScriptArtistTrust(firstArtist, firstArtistId, options);
+
+  // 邦楽: DB「怪獣」vs Spotify「Kaiju」など。slug / spotify_artist_id で確からしいときだけ緩和
+  if (
+    titleSim < 0.55 &&
+    crossScriptTrusted &&
+    isCrossScriptSongTitle(expectedSongTitle, candidate.spotifyName)
+  ) {
+    titleSim = 0.72;
+  }
+
   if (titleSim < 0.55) {
     return { action: 'review', reason: 'title_weak_match', score: titleSim };
   }
@@ -206,8 +291,8 @@ export function scoreSpotifyTrackCandidate(
 
   const knownArtist = artistIdMatched(firstArtistId, options);
 
-  // artists.spotify_artist_id 一致時はタイトル閾値を緩和（Kick Back / 英訳付き邦楽など）
-  if (knownArtist && titleSim >= 0.7) {
+  // artists.spotify_artist_id / slug エイリアス一致時はタイトル閾値を緩和
+  if ((knownArtist || strongAlias) && titleSim >= 0.7) {
     return { action: 'apply', score: Math.max(score, 80) };
   }
 

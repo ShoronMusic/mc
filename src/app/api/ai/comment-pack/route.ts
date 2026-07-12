@@ -23,6 +23,10 @@ import {
   fetchPlaybackDisplayOverride,
   parseAdminPlaybackDisplayHint,
 } from '@/lib/video-playback-display-override';
+import {
+  fetchLibrarySongDisplayByVideoId,
+  preferPlaybackDisplaySources,
+} from '@/lib/library-song-display-by-video';
 import { getVideoSnippet } from '@/lib/youtube-search';
 import { containsUnreliableCommentPackClaim } from '@/lib/ai-output-policy';
 import {
@@ -372,10 +376,20 @@ export async function POST(request: Request) {
     ]);
 
     const rawYouTubeTitleForPrompt = oembed?.title ?? snippet?.title ?? videoId;
-    let displayOverride = reader ? await fetchPlaybackDisplayOverride(reader, videoId) : null;
+    const [adminOverride, librarySong] = reader
+      ? await Promise.all([
+          fetchPlaybackDisplayOverride(reader, videoId),
+          fetchLibrarySongDisplayByVideoId(reader, videoId),
+        ])
+      : [null, null];
+    let displayOverride = adminOverride;
     if (skipCommentPackCacheRequested && adminPlaybackHintRaw) {
       displayOverride = applyPlaybackDisplayHintWhenDbMissing(displayOverride, adminPlaybackHintRaw);
     }
+    displayOverride = preferPlaybackDisplaySources({
+      adminOverride: displayOverride,
+      library: librarySong,
+    });
     const title = displayOverride?.title ?? rawYouTubeTitleForPrompt;
     const authorName =
       displayOverride?.artist_name?.trim() ? displayOverride.artist_name.trim() : oembed?.author_name;

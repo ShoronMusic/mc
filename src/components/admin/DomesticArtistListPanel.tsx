@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { AdminMenuBar } from '@/components/admin/AdminMenuBar';
 import {
   RegistrationStatusIcons,
   type RegisteredArtistRow,
@@ -62,7 +61,12 @@ export function DomesticArtistListPanel() {
         </div>
       </div>
       <p className="mt-1 text-xs text-gray-500">
-        <code className="rounded bg-gray-800 px-1">catalog_scope = domestic</code> の artists 行です。行をクリックすると編集画面へ移動します。
+        <code className="rounded bg-gray-800 px-1">catalog_scope = domestic</code> の artists 行です。
+        行をクリックすると編集画面へ。選曲直後の未整備行は{' '}
+        <Link href="/admin/artists-newly-registered" className="text-sky-400 hover:underline">
+          選曲登録アーティスト（日別）
+        </Link>
+        から入る方が分かりやすいです。
       </p>
       <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] text-gray-500">
         <span className="text-gray-400">登録ステータス:</span>

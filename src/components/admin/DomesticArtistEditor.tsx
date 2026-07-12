@@ -1,7 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { AdminMenuBar } from '@/components/admin/AdminMenuBar';
 import {
   artistRowToDraft,
@@ -142,8 +143,12 @@ type Props =
 export function DomesticArtistEditor(props: Props) {
   const { mode } = props;
   const artistIdParam = props.mode === 'edit' ? props.artistId : null;
+  const searchParams = useSearchParams();
+  const nameFromQuery = mode === 'new' ? (searchParams.get('name') ?? '').trim() : '';
+  const autoloadFromQuery = mode === 'new' && searchParams.get('autoload') === '1';
+  const queryBootstrapped = useRef(false);
 
-  const [artistName, setArtistName] = useState('');
+  const [artistName, setArtistName] = useState(nameFromQuery);
   const [draft, setDraft] = useState<AdminArtistProfileDraft | null>(null);
   const [artistId, setArtistId] = useState<string | null>(artistIdParam);
   const [aiModel, setAiModel] = useState<string | null>(null);
@@ -284,6 +289,15 @@ export function DomesticArtistEditor(props: Props) {
       setLoading(false);
     }
   }, [loadRegisteredSongs]);
+
+  useEffect(() => {
+    if (mode !== 'new' || !nameFromQuery || queryBootstrapped.current) return;
+    queryBootstrapped.current = true;
+    setArtistName(nameFromQuery);
+    if (autoloadFromQuery) {
+      void loadExistingByName(nameFromQuery);
+    }
+  }, [mode, nameFromQuery, autoloadFromQuery, loadExistingByName]);
 
   async function runGenerate(): Promise<void> {
     const name = (draft?.name ?? artistName).trim();
@@ -849,7 +863,12 @@ export function DomesticArtistEditor(props: Props) {
         </div>
       ) : (
         <p className="mt-2 text-sm text-gray-400">
-          名前入力 → <span className="text-sky-300">AI 生成（青）</span> → 確認 → DB 保存
+          名前入力 → 「① 既存を読込」（選曲でできた行など）または「② AI 生成」→ ③確認 → DB 保存。
+          選曲で insert された行は{' '}
+          <Link href="/admin/artists-newly-registered" className="text-sky-300 hover:underline">
+            選曲登録アーティスト（日別）
+          </Link>
+          の「邦楽登録で編集」が最短です。
         </p>
       )}
 

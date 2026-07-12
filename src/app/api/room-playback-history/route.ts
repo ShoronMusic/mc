@@ -33,6 +33,10 @@ import {
   fetchPlaybackDisplayOverride,
   upsertPlaybackDisplayOverride,
 } from '@/lib/video-playback-display-override';
+import {
+  buildLibrarySongAnnounceTitle,
+  fetchLibrarySongDisplayByVideoId,
+} from '@/lib/library-song-display-by-video';
 import { SONG_STYLE_OPTIONS } from '@/lib/song-styles';
 import type { SongStyle } from '@/lib/gemini';
 import { gateRoomPlaybackHistoryRead } from '@/lib/room-playback-history-access';
@@ -320,6 +324,10 @@ export async function POST(request: Request) {
   let snippetDescription =
     snippet?.description && snippet.description.trim() ? snippet.description : null;
 
+  const songDbClient = createAdminClient() ?? supabase;
+  const librarySong = await fetchLibrarySongDisplayByVideoId(songDbClient, videoId);
+  const libraryAnnounceTitle = librarySong ? buildLibrarySongAnnounceTitle(librarySong) : '';
+
   const resolved = await resolveArtistSongForPackAsync(title ?? videoId, authorName, snippet, videoId);
   if (process.env.DEBUG_YT_ARTIST === '1') {
     console.info('[room-playback-history POST] resolved', {
@@ -328,9 +336,20 @@ export async function POST(request: Request) {
       authorName,
       artistDisplay: resolved.artistDisplay,
       song: resolved.song,
+      libraryDisplayTitle: libraryAnnounceTitle || null,
     });
   }
   let { artist, artistDisplay, song } = resolved;
+
+  if (librarySong) {
+    if (librarySong.mainArtist) {
+      artist = librarySong.mainArtist;
+      artistDisplay = librarySong.mainArtist;
+    }
+    if (librarySong.songTitle) {
+      song = librarySong.songTitle;
+    }
+  }
 
   /** announce-song の邦楽判定と同じ。邦楽かつ未解禁（公式チャ例外なし）なら視聴履歴に載せない */
   const isJapaneseDomestic = await resolveJapaneseDomesticWithMusicBrainz({
@@ -358,9 +377,9 @@ export async function POST(request: Request) {
   let originalReleaseDateIso: string | null = null;
   let music8SongData: Record<string, unknown> | null = null;
   let domesticGenres: string[] = [];
-  let domesticDisplayTitle: string | null = null;
+  let domesticDisplayTitle: string | null = libraryAnnounceTitle || null;
 
-  if (isJapaneseDomestic) {
+  if (isJapaneseDomestic && !libraryAnnounceTitle) {
     try {
       const domesticMeta = await resolveDomesticSongMetadataForRegistration({
         rawTitle: title ?? videoId,
@@ -389,7 +408,7 @@ export async function POST(request: Request) {
     } catch (e) {
       console.warn('[room-playback-history] domestic metadata resolve', e);
     }
-  } else {
+  } else if (!isJapaneseDomestic) {
     try {
       const music8Json = await fetchMusic8SongDataForPlaybackRow(
         (artist ?? effectiveAuthor ?? '').trim() || 'Unknown',
@@ -411,8 +430,7 @@ export async function POST(request: Request) {
     snippet?.channelTitle ?? authorName ?? effectiveAuthor ?? null,
   );
 
-  let songId: string | null = null;
-  const songDbClient = createAdminClient() ?? supabase;
+  let songId: string | null = librarySong?.songId ?? null;
   try {
     songId = await upsertSongAndVideo({
       supabase: songDbClient,
@@ -516,10 +534,13 @@ export async function POST(request: Request) {
     console.error('[room-playback-history] getOrAssignEra', e);
   }
 
-  /** 管理者が保存した video_id 単位の表記があれば、履歴行の表示に優先 */
+  /** 管理者が保存した video_id 単位の表記があれば最優先。次にライブラリ整備済み表記 */
   let historyTitle = titleForDb;
   let historyArtistName: string | null = artist ?? effectiveAuthor ?? null;
-  if (domesticDisplayTitle && song?.trim() && historyArtistName) {
+  if (libraryAnnounceTitle) {
+    historyTitle = libraryAnnounceTitle;
+    if (librarySong?.mainArtist) historyArtistName = librarySong.mainArtist;
+  } else if (domesticDisplayTitle && song?.trim() && historyArtistName) {
     historyTitle = song.trim();
   }
   const overrideReader = createAdminClient() ?? supabase;

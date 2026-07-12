@@ -229,7 +229,8 @@ export const ADMIN_SECTIONS: AdminSection[] = [
   {
     href: '/admin/artists-newly-registered',
     title: '選曲登録アーティスト（日別）',
-    description: '選曲で新規 insert された artists（m8 未照会）。slug で WP JSON 照会用',
+    description:
+      '選曲で insert された未整備 artists。行から「邦楽登録で編集」へ（ライブラリ詳細は閲覧のみ）',
     category: 'library',
   },
   {
@@ -249,7 +250,7 @@ export const ADMIN_SECTIONS: AdminSection[] = [
     href: '/admin/domestic-artist-register',
     title: '邦楽アーティスト登録',
     description:
-      'アーティスト名 → Gemini AI 生成 → 確認 → artists マスタ保存（Music8 WP カテゴリー編集相当）',
+      '邦楽 artists の編集入口。新規／AI生成／既存読込 → 保存。選曲でできた行は「選曲登録アーティスト」から',
     category: 'library',
   },
   {

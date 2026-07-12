@@ -106,6 +106,39 @@ assert(
   'strip trailing music video',
 );
 
+assert(
+  stripJpOfficialVideoDecorations('宇多田ヒカル「Mine or Yours」Music Video') ===
+    '宇多田ヒカル「Mine or Yours」',
+  'strip music video without space after corner bracket',
+);
+
+const utadaMine = parseArtistSongFromCornerBracketTitle(
+  '宇多田ヒカル「Mine or Yours」Music Video',
+);
+assert(
+  utadaMine?.artist === '宇多田ヒカル' && utadaMine?.song === 'Mine or Yours',
+  'utada corner + Music Video',
+);
+
+const utadaViz = parseArtistSongFromCornerBracketTitle(
+  '宇多田ヒカル「Electricity (Arca Remix)」official visualizer',
+);
+assert(
+  utadaViz?.artist === '宇多田ヒカル' && utadaViz?.song === 'Electricity (Arca Remix)',
+  'utada corner + official visualizer',
+);
+
+const utadaResolved = resolveDomesticArtistSongFromYoutube({
+  rawTitle: '宇多田ヒカル「桜流し」Music Video(4K UPGRADE)',
+  channelTitle: '宇多田ヒカル',
+});
+assert(
+  utadaResolved?.songTitle === '桜流し' &&
+    utadaResolved.mainArtist === '宇多田ヒカル' &&
+    utadaResolved.source === 'jp_corner_bracket',
+  'utada sakura nagashi 4k upgrade',
+);
+
 const mrChildrenCorner = parseArtistSongFromCornerBracketTitle(
   'Mr.Children 「Tomorrow never knows」 MUSIC VIDEO',
 );
@@ -126,6 +159,29 @@ assert(
     mrChildrenResolved.songTitle === 'Tomorrow never knows' &&
     mrChildrenResolved.source === 'jp_corner_bracket',
   'mrchildren official mv title',
+);
+
+// レーベル ch + 「Artist - 『曲名』 リリックビデオ」→ タイトルのアーティストを正とする
+const mrsGreenLyric = parseArtistSongFromCornerBracketTitle(
+  'Mrs. GREEN APPLE - 「僕のこと」 リリックビデオ short version',
+);
+assert(
+  mrsGreenLyric?.artist === 'Mrs. GREEN APPLE' && mrsGreenLyric?.song === '僕のこと',
+  'mrs green apple corner with dash before bracket',
+);
+
+const mrsGreenResolved = resolveDomesticArtistSongFromYoutube({
+  rawTitle: 'Mrs. GREEN APPLE - 「僕のこと」 リリックビデオ short version',
+  channelTitle: 'UNIVERSAL MUSIC JAPAN',
+  resolvedArtist: 'UNIVERSAL MUSIC JAPAN',
+  resolvedSong: '僕のこと',
+});
+assert(
+  mrsGreenResolved?.displayTitle === 'Mrs. GREEN APPLE - 僕のこと' &&
+    mrsGreenResolved.mainArtist === 'Mrs. GREEN APPLE' &&
+    mrsGreenResolved.songTitle === '僕のこと' &&
+    mrsGreenResolved.source === 'jp_corner_bracket',
+  'mrs green apple lyric video on label channel',
 );
 
 const yonezu1991 = resolveDomesticArtistSongFromYoutube({

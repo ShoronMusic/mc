@@ -103,4 +103,47 @@ assert.equal(
   'apply',
 );
 
+// slug エイリアス（sakanaction）で日本語 main_artist ↔ Spotify 英語名
+const kaiju: SpotifyTrackCandidate = {
+  spotifyTrackId: '6Fh',
+  spotifyName: '怪獣',
+  spotifyArtists: 'Sakanaction',
+  artistRefs: [{ id: 'sak', name: 'Sakanaction' }],
+  popularity: 70,
+};
+assert.equal(
+  scoreSpotifyTrackCandidate(kaiju, 'サカナクション', '怪獣', {
+    alternateArtistNames: ['sakanaction'],
+    crossScriptArtistNames: ['sakanaction'],
+  }).action,
+  'apply',
+);
+
+// Spotify 英題 Kaiju ↔ DB 日本語 怪獣（slug でアーティスト確定時）
+const kaijuEn: SpotifyTrackCandidate = {
+  spotifyTrackId: '7sMRDjjwsB7wQEBOkdfg0i',
+  spotifyName: 'Kaiju',
+  spotifyArtists: 'sakanaction',
+  artistRefs: [{ id: 'sak', name: 'sakanaction' }],
+  popularity: 70,
+};
+assert.equal(
+  scoreSpotifyTrackCandidate(kaijuEn, 'サカナクション', '怪獣', {
+    alternateArtistNames: ['sakanaction'],
+    crossScriptArtistNames: ['sakanaction'],
+  }).action,
+  'apply',
+);
+// name_en 汚染だけ（slug なし）では英題を自動採用しない
+assert.equal(
+  scoreSpotifyTrackCandidate(kaijuEn, 'サカナクション', '怪獣', {
+    alternateArtistNames: ['sakanaction'],
+  }).action,
+  'review',
+);
+assert.equal(
+  scoreSpotifyTrackCandidate(kaijuEn, 'サカナクション', '怪獣').action,
+  'review',
+);
+
 console.log('spotify-track-match.unit-test: ok');

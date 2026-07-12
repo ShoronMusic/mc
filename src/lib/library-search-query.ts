@@ -316,11 +316,13 @@ export async function fetchSongsForLibraryArtistSelection<T extends SongRowWithM
     }
   };
 
+  // Postgres の eq は大文字小文字を区別する。登録時の Title Case 化（Mrs. GREEN → Mrs. Green）と
+  // artists.name の表記ゆれで一覧が空になるのを防ぐため、完全一致は ILIKE にする。
   for (const variant of libraryArtistNameLookupVariants(sel)) {
     const { data: exact, error: exactErr } = await admin
       .from('songs')
       .select(select)
-      .eq('main_artist', variant)
+      .ilike('main_artist', escapeLikeForIlike(variant))
       .limit(limit);
     if (exactErr) throw new Error(exactErr.message);
     addFromMainArtist(exact);

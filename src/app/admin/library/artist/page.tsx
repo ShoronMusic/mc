@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { AdminMenuBar } from '@/components/admin/AdminMenuBar';
 import { AdminArtistJsonImportPanel } from '@/components/admin/AdminArtistJsonImportPanel';
+import { AdminArtistDeletePanel } from '@/components/admin/AdminArtistDeletePanel';
 import { artistNameToMusic8Slug } from '@/lib/music8-artist-display';
 
 type ArtistRow = {
@@ -37,18 +38,22 @@ function normalizeArtistNameLoose(name: string): string {
 export default async function AdminLibraryArtistPage({
   searchParams,
 }: {
-  searchParams: { name?: string };
+  searchParams: { name?: string; slug?: string };
 }) {
-  const artistName = (searchParams.name ?? '').trim();
+  const nameQuery = (searchParams.name ?? '').trim();
+  const slugQuery = (searchParams.slug ?? '').trim();
   const admin = createAdminClient();
   const supabase = admin ?? (await createClient());
 
-  if (!artistName) {
+  if (!nameQuery && !slugQuery) {
     return (
       <main className="mx-auto min-h-screen max-w-5xl bg-gray-950 p-4 text-gray-100 sm:p-6">
         <AdminMenuBar />
         <h1 className="text-xl font-semibold text-white sm:text-2xl">アーティスト情報</h1>
-        <p className="mt-3 text-sm text-gray-400">`name` クエリが必要です（例: `/admin/library/artist?name=The%20Police`）。</p>
+        <p className="mt-3 text-sm text-gray-400">
+          `name` または `slug` クエリが必要です（例: `/admin/library/artist?name=サカナクション` または
+          `/admin/library/artist?slug=sakanaction`）。
+        </p>
       </main>
     );
   }
@@ -65,33 +70,54 @@ export default async function AdminLibraryArtistPage({
 
   let artist: ArtistRow | null = null;
   try {
-    const { data } = await supabase
-      .from('artists')
-      .select('*')
-      .or(`name.ilike.${artistName},music8_artist_slug.eq.${artistNameToMusic8Slug(artistName)}`)
-      .limit(50);
-    const rows = (data as ArtistRow[] | null) ?? [];
-    if (rows.length > 0) {
-      const q = normalizeArtistNameLoose(artistName);
-      artist =
-        rows.find((r) => normalizeArtistNameLoose(r.name ?? '') === q) ??
-        rows.find((r) => typeof r.name === 'string' && r.name.toLowerCase() === artistName.toLowerCase()) ??
-        rows[0];
-    } else {
-      artist = null;
+    if (slugQuery) {
+      const { data } = await supabase
+        .from('artists')
+        .select('*')
+        .eq('music8_artist_slug', slugQuery)
+        .limit(5);
+      const rows = (data as ArtistRow[] | null) ?? [];
+      artist = rows[0] ?? null;
+    }
+    if (!artist && nameQuery) {
+      const { data } = await supabase
+        .from('artists')
+        .select('*')
+        .or(`name.ilike.${nameQuery},music8_artist_slug.eq.${artistNameToMusic8Slug(nameQuery)}`)
+        .limit(50);
+      const rows = (data as ArtistRow[] | null) ?? [];
+      if (rows.length > 0) {
+        const q = normalizeArtistNameLoose(nameQuery);
+        artist =
+          rows.find((r) => normalizeArtistNameLoose(r.name ?? '') === q) ??
+          rows.find((r) => typeof r.name === 'string' && r.name.toLowerCase() === nameQuery.toLowerCase()) ??
+          rows[0];
+      }
     }
   } catch {
     artist = null;
   }
 
+  const displayName =
+    (artist?.name_ja?.trim() || artist?.name?.trim() || nameQuery || slugQuery).trim() || '—';
+  const songArtistKeys = Array.from(
+    new Set(
+      [artist?.name, artist?.name_ja, nameQuery]
+        .map((s) => (typeof s === 'string' ? s.trim() : ''))
+        .filter(Boolean),
+    ),
+  );
+
   let songs: SongRow[] = [];
-  const { data: songsData } = await supabase
-    .from('songs')
-    .select('id, song_title, display_title, style, play_count, original_release_date')
-    .eq('main_artist', artistName)
-    .order('play_count', { ascending: false, nullsFirst: false })
-    .order('original_release_date', { ascending: false, nullsFirst: false });
-  songs = (songsData as SongRow[] | null) ?? [];
+  if (songArtistKeys.length > 0) {
+    const { data: songsData } = await supabase
+      .from('songs')
+      .select('id, song_title, display_title, style, play_count, original_release_date')
+      .in('main_artist', songArtistKeys)
+      .order('play_count', { ascending: false, nullsFirst: false })
+      .order('original_release_date', { ascending: false, nullsFirst: false });
+    songs = (songsData as SongRow[] | null) ?? [];
+  }
 
   const totalPlays = songs.reduce((sum, s) => sum + Math.max(0, s.play_count ?? 0), 0);
 
@@ -104,7 +130,45 @@ export default async function AdminLibraryArtistPage({
         </Link>
       </div>
       <h1 className="text-xl font-semibold text-white sm:text-2xl">アーティスト情報</h1>
-      <p className="mt-1 text-sm text-gray-300">{artistName}</p>
+      <p className="mt-1 text-sm text-gray-300">{displayName}</p>
+      <div className="mt-3 rounded-lg border border-amber-900/40 bg-amber-950/20 px-3 py-2 text-xs leading-relaxed text-gray-300">
+        <p className="font-medium text-amber-200/90">この画面は閲覧専用です</p>
+        <p className="mt-1">
+          基本情報・プロフィールの編集は「邦楽アーティスト登録」から行います（ここで直接編集はできません）。
+        </p>
+        <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
+          {artist?.id ? (
+            <Link
+              href={`/admin/domestic-artist-register/${artist.id}`}
+              className="font-medium text-emerald-400 hover:underline"
+            >
+              邦楽登録で編集
+            </Link>
+          ) : (
+            <Link
+              href={`/admin/domestic-artist-register/new?name=${encodeURIComponent(displayName === '—' ? nameQuery || slugQuery : displayName)}&autoload=1`}
+              className="font-medium text-emerald-400 hover:underline"
+            >
+              邦楽登録（名前で開く）
+            </Link>
+          )}
+          <Link href="/admin/domestic-artist-register" className="text-sky-400 hover:underline">
+            邦楽登録一覧
+          </Link>
+          <Link href="/admin/artists-newly-registered" className="text-sky-400 hover:underline">
+            選曲登録アーティスト（日別）
+          </Link>
+        </div>
+      </div>
+      {!artist ? (
+        <p className="mt-2 text-sm text-amber-200/90">
+          artists テーブルに一致する行がありません（クエリ:{' '}
+          {nameQuery ? `name=${nameQuery}` : ''}
+          {nameQuery && slugQuery ? ' / ' : ''}
+          {slugQuery ? `slug=${slugQuery}` : ''}
+          ）。曲一覧は名前一致のみ表示します。
+        </p>
+      ) : null}
 
       <section className="mt-6 rounded-lg border border-gray-800 bg-gray-900/40 p-4 text-sm">
         <h2 className="text-sm font-semibold text-amber-200">基本</h2>
@@ -112,6 +176,10 @@ export default async function AdminLibraryArtistPage({
           <div>
             <dt className="inline text-gray-500">artists.id: </dt>
             <dd className="inline font-mono text-xs">{artist?.id ?? '—'}</dd>
+          </div>
+          <div>
+            <dt className="inline text-gray-500">name: </dt>
+            <dd className="inline">{artist?.name ?? '—'}</dd>
           </div>
           <div>
             <dt className="inline text-gray-500">name_ja: </dt>
@@ -197,7 +265,7 @@ export default async function AdminLibraryArtistPage({
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={artist.image_url}
-              alt={artistName}
+              alt={displayName}
               className="max-h-64 w-auto rounded border border-gray-800 bg-gray-950"
               loading="lazy"
             />
@@ -211,7 +279,15 @@ export default async function AdminLibraryArtistPage({
         </p>
       </section>
 
-      <AdminArtistJsonImportPanel artistName={artistName} />
+      <AdminArtistJsonImportPanel artistName={displayName === '—' ? nameQuery || slugQuery : displayName} />
+
+      {artist?.id ? (
+        <AdminArtistDeletePanel
+          artistId={artist.id}
+          artistName={(artist.name ?? displayName).trim() || displayName}
+          songCount={songs.length}
+        />
+      ) : null}
 
       <section className="mt-6 rounded-lg border border-gray-800 bg-gray-900/40 p-4 text-sm">
         <h2 className="text-sm font-semibold text-amber-200">曲一覧</h2>

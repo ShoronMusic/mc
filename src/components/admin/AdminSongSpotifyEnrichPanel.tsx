@@ -103,8 +103,9 @@ export function AdminSongSpotifyEnrichPanel({
   return (
     <div className="mt-3 rounded border border-green-900/50 bg-green-950/15 p-3">
       <h3 className="text-sm font-semibold text-green-200">Spotify メタ取得</h3>
-      <p className="mt-1 text-xs leading-relaxed text-gray-400">
-        track ID / popularity / 曲名・アーティスト表記などを空欄補完します。既存の{' '}
+        <p className="mt-1 text-xs leading-relaxed text-gray-400">
+        track ID / popularity / 曲名・アーティスト表記などを空欄補完します（邦楽は Spotify{' '}
+        <code className="text-gray-500">market=JP</code>）。既存の{' '}
         <code className="text-gray-500">spotify_track_id</code> は上書きしません。曖昧な候補は{' '}
         <Link href="/admin/spotify-review-queue" className="text-sky-400 hover:underline">
           要確認キュー

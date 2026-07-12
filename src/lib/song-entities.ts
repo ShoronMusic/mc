@@ -799,9 +799,15 @@ export async function upsertSongAndVideo(params: UpsertSongAndVideoParams): Prom
     // 3) どちらにも無ければ insert（正規化したタイトルで1曲1行）
     const [canonArtist, ...canonTitleParts] = canonicalTitle.split(' - ');
     const canonSongTitle = canonTitleParts.join(' - ').trim() || (effectiveSongTitle ?? '').trim();
+    // 邦楽ライト: artists.name / 登録名の大文字表記（Mrs. GREEN APPLE 等）を Title Case で潰さない
+    const mainArtistForInsert = isDomesticLight
+      ? ((effectiveMainArtist ?? canonArtist ?? '').trim() || null)
+      : ((canonArtist ?? effectiveMainArtist ?? '').trim() || null);
     const insertPayload: Record<string, unknown> = {
-      main_artist: (canonArtist ?? effectiveMainArtist ?? '').trim() || null,
-      song_title: canonSongTitle || null,
+      main_artist: mainArtistForInsert,
+      song_title: isDomesticLight
+        ? ((effectiveSongTitle ?? '').trim() || canonSongTitle || null)
+        : canonSongTitle || null,
       display_title: canonicalTitle,
     };
     if (resolvedCatalogScope !== 'unknown') {

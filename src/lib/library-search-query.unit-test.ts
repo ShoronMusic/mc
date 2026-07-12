@@ -31,6 +31,8 @@ function run() {
   assert.equal(songMainArtistIncludesArtist('Lady Gaga, Bruno Mars', 'Lady Gaga'), true);
   assert.equal(songMainArtistIncludesArtist('Lady Gaga, Bruno Mars', 'Lady Gaga, Bruno Mars'), true);
   assert.equal(songMainArtistIncludesArtist('Bruno Mars', 'Bruno Mars'), true);
+  // 登録時 Title Case と artists.name の大文字表記のゆれ（一覧 API の ILIKE と整合）
+  assert.equal(songMainArtistIncludesArtist('Mrs. Green Apple', 'Mrs. GREEN APPLE'), true);
   assert.equal(songMainArtistIncludesArtist('Bruno Mars', 'Mars'), false);
   assert.equal(songMainArtistIncludesArtist('Die With A Smile', 'Die'), false);
   assert.equal(songMainArtistIncludesArtist('The Beatles', 'Beatles'), true);

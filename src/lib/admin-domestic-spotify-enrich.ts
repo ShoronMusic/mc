@@ -17,6 +17,8 @@ import {
   fetchSpotifyTrackById,
   getSpotifyAccessToken,
   searchSpotifyTrackCandidatesByArtistTitle,
+  searchSpotifyTrackCandidatesByFreeText,
+  SPOTIFY_MARKET_DOMESTIC,
   type SpotifyTrackWithArtists,
 } from '@/lib/spotify-search-track';
 import {
@@ -24,6 +26,7 @@ import {
   type SpotifyArtistMatchOptions,
   type SpotifyTrackCandidate,
 } from '@/lib/spotify-track-match';
+import { resolveSpotifyArtistMatchHints } from '@/lib/spotify-artist-match-hints';
 import {
   ensureWesternTreatedJpArtistCache,
   librarySongRowMatchesWesternTreatedJpArtist,
@@ -347,86 +350,11 @@ async function fetchSongsByArtistName(
   return rows;
 }
 
-async function resolveArtistSpotifyMatchHints(
-  admin: SupabaseClient,
-  mainArtist: string,
-): Promise<SpotifyArtistMatchOptions & { searchArtistName: string }> {
-  const name = mainArtist.split(',')[0]?.trim() || mainArtist.trim();
-  const alternateArtistNames: string[] = [];
-  const expectedSpotifyArtistIds: string[] = [];
-  let searchArtistName = name;
-
-  if (!name) {
-    return { alternateArtistNames, expectedSpotifyArtistIds, searchArtistName };
-  }
-
-  const esc = name.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-
-  const primary = await admin
-    .from('artists')
-    .select('name, name_en, name_ja, spotify_artist_id')
-    .or(`name.eq."${esc}",name_en.eq."${esc}",name_ja.eq."${esc}"`)
-    .limit(5);
-
-  type ArtistHintRow = {
-    name?: string | null;
-    name_en?: string | null;
-    name_ja?: string | null;
-    spotify_artist_id?: string | null;
-  };
-  let rows: ArtistHintRow[] | null = (primary.data as ArtistHintRow[] | null) ?? null;
-  if (primary.error?.code === '42703' || (primary.error && !rows)) {
-    const fallback = await admin
-      .from('artists')
-      .select('name, name_en, spotify_artist_id')
-      .or(`name.eq."${esc}",name_en.eq."${esc}"`)
-      .limit(5);
-    if (!fallback.error) rows = (fallback.data as ArtistHintRow[] | null) ?? null;
-  } else if (primary.error) {
-    console.warn('[admin-domestic-spotify-enrich] artist hints', primary.error.message);
-  }
-
-  for (const row of rows ?? []) {
-    if (row.name?.trim()) alternateArtistNames.push(row.name.trim());
-    if (row.name_en?.trim()) {
-      alternateArtistNames.push(row.name_en.trim());
-      if (/[A-Za-z]/.test(row.name_en)) searchArtistName = row.name_en.trim();
-    }
-    if (row.name_ja?.trim()) alternateArtistNames.push(row.name_ja.trim());
-    if (row.spotify_artist_id?.trim()) {
-      expectedSpotifyArtistIds.push(row.spotify_artist_id.trim());
-    }
-  }
-
-  // name_en が空でも spotify_artist_id があれば Spotify から英語表記を取って検索・照合に使う
-  if (
-    expectedSpotifyArtistIds.length > 0 &&
-    !/[A-Za-z]/.test(searchArtistName)
-  ) {
-    try {
-      const metas = await fetchSpotifyArtistsByIds(expectedSpotifyArtistIds.slice(0, 1));
-      const spName = metas[0]?.name?.trim();
-      if (spName) {
-        searchArtistName = spName;
-        alternateArtistNames.push(spName);
-      }
-    } catch {
-      /* ignore */
-    }
-  }
-
-  return {
-    alternateArtistNames: [...new Set(alternateArtistNames.filter((n) => n !== name))],
-    expectedSpotifyArtistIds: [...new Set(expectedSpotifyArtistIds)],
-    searchArtistName,
-  };
-}
-
 async function processOneSong(
   admin: SupabaseClient,
   row: DomesticSpotifySongRow,
   dryRun: boolean,
-  artistHintsCache: Map<string, Awaited<ReturnType<typeof resolveArtistSpotifyMatchHints>>>,
+  artistHintsCache: Map<string, Awaited<ReturnType<typeof resolveSpotifyArtistMatchHints>>>,
   ignoreCatalogFilter = false,
 ): Promise<DomesticSpotifyEnrichResult> {
   const base: DomesticSpotifyEnrichResult = {
@@ -448,7 +376,7 @@ async function processOneSong(
 
   try {
     if (existingId) {
-      const meta = await fetchSpotifyTrackById(existingId);
+      const meta = await fetchSpotifyTrackById(existingId, { market: SPOTIFY_MARKET_DOMESTIC });
       const payload = buildEmptyFillPayload(row, {
         spotifyTrackId: existingId,
         spotifyPopularity: meta.spotifyPopularity,
@@ -490,20 +418,58 @@ async function processOneSong(
       return { ...base, status: 'skipped_missing_meta' };
     }
 
-    const cacheKey = mainArtist.split(',')[0]?.trim() || mainArtist;
+    const cacheKey = [
+      mainArtist.split(',')[0]?.trim() || mainArtist,
+      row.music8_artist_slug?.trim() || '',
+    ].join('|');
     let hints = artistHintsCache.get(cacheKey);
     if (!hints) {
-      hints = await resolveArtistSpotifyMatchHints(admin, mainArtist);
+      hints = await resolveSpotifyArtistMatchHints(admin, mainArtist, {
+        songMusic8ArtistSlug: row.music8_artist_slug,
+      });
       artistHintsCache.set(cacheKey, hints);
     }
 
-    const searchArtist = hints.searchArtistName || mainArtist;
-    const searchQuery = `artist:${searchArtist.split(',')[0]?.trim() || searchArtist} track:${songTitle}`;
-    const rawCandidates = await searchSpotifyTrackCandidatesByArtistTitle(
-      searchArtist,
-      songTitle,
-      8,
-    );
+    const searchNames =
+      hints.searchArtistNames.length > 0
+        ? hints.searchArtistNames
+        : [hints.searchArtistName || mainArtist];
+    const seenIds = new Set<string>();
+    const rawCandidates: SpotifyTrackWithArtists[] = [];
+    const mergeCandidates = (list: SpotifyTrackWithArtists[]) => {
+      for (const t of list) {
+        const id = t.spotifyTrackId?.trim();
+        if (!id || seenIds.has(id)) continue;
+        seenIds.add(id);
+        rawCandidates.push(t);
+      }
+    };
+
+    for (const searchArtist of searchNames.slice(0, 2)) {
+      mergeCandidates(
+        await searchSpotifyTrackCandidatesByArtistTitle(searchArtist, songTitle, 8, {
+          market: SPOTIFY_MARKET_DOMESTIC,
+        }),
+      );
+    }
+    // 邦楽は artist:日本語 / track:日本語 でも Spotify 英題が返ることがある → フリーテキスト常時併用
+    {
+      const latin = searchNames.find((n) => /[A-Za-z]/.test(n));
+      const freeQ = [latin || mainArtist.split(',')[0]?.trim() || mainArtist, songTitle]
+        .filter(Boolean)
+        .join(' ');
+      mergeCandidates(
+        await searchSpotifyTrackCandidatesByFreeText(freeQ, 8, {
+          market: SPOTIFY_MARKET_DOMESTIC,
+        }),
+      );
+    }
+
+    const searchQuery = searchNames
+      .slice(0, 2)
+      .map((a) => `artist:${a.split(',')[0]?.trim() || a} track:${songTitle}`)
+      .join(' | ');
+
     if (rawCandidates.length === 0) {
       return { ...base, status: 'skipped_no_match', reason: 'no_candidates' };
     }
@@ -516,7 +482,7 @@ async function processOneSong(
       popularity: t.spotifyPopularity,
     }));
 
-    // artists.spotify_artist_id があるときは、その ID の候補を優先（取りこぼし抑制）
+    // spotify_artist_id 優先は、タイトルもそこそこ合う候補があるときだけ（誤紐づけ ID で全滅するのを防ぐ）
     const expectedIds = new Set(hints.expectedSpotifyArtistIds);
     const candidates =
       expectedIds.size > 0
@@ -524,13 +490,26 @@ async function processOneSong(
             const filtered = candidatesAll.filter((c) =>
               c.artistRefs.some((a) => expectedIds.has(a.id)),
             );
-            return filtered.length > 0 ? filtered : candidatesAll;
+            if (filtered.length === 0) return candidatesAll;
+            const { decision } = pickBestSpotifyCandidate(
+              filtered,
+              mainArtist,
+              songTitle,
+              {
+                alternateArtistNames: hints.alternateArtistNames,
+                expectedSpotifyArtistIds: hints.expectedSpotifyArtistIds,
+                crossScriptArtistNames: hints.crossScriptArtistNames,
+              },
+            );
+            if (decision.action === 'apply') return filtered;
+            return candidatesAll;
           })()
         : candidatesAll;
 
     const matchOpts: SpotifyArtistMatchOptions = {
       alternateArtistNames: hints.alternateArtistNames,
       expectedSpotifyArtistIds: hints.expectedSpotifyArtistIds,
+      crossScriptArtistNames: hints.crossScriptArtistNames,
     };
     const { best, decision } = pickBestSpotifyCandidate(
       candidates,
@@ -725,7 +704,7 @@ export async function runDomesticSongsSpotifyEnrich(
 
   const artistHintsCache = new Map<
     string,
-    Awaited<ReturnType<typeof resolveArtistSpotifyMatchHints>>
+    Awaited<ReturnType<typeof resolveSpotifyArtistMatchHints>>
   >();
 
   for (let i = 0; i < targets.length; i++) {
