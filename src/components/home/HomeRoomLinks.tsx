@@ -5,7 +5,6 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import {
   buildDevMockActiveRoomsData,
   getDevMockActiveRoomsCount,
-  isDevMockActiveRoomsEnabled,
 } from '@/lib/dev-mock-active-rooms';
 import { HOME_EXCLUDED_LIVE_ROOM_IDS } from '@/lib/home-excluded-live-room-ids';
 import { IS_MC_PRODUCT } from '@/lib/product-branding';
@@ -231,16 +230,25 @@ function RoomRow({
 }
 
 export function HomeRoomLinks({ viewOnly = false }: { viewOnly?: boolean }) {
-  const mockRoomCount = getDevMockActiveRoomsCount();
-  const mockEnabled = isDevMockActiveRoomsEnabled();
+  const [mockBoot] = useState(() => {
+    const count = getDevMockActiveRoomsCount();
+    if (count <= 0) {
+      return {
+        enabled: false as const,
+        count: 0,
+        liveRooms: [] as LiveRoom[],
+        byId: {} as Record<string, RoomPayload>,
+      };
+    }
+    const data = buildDevMockActiveRoomsData(count);
+    return { enabled: true as const, count, liveRooms: data.liveRooms, byId: data.byId };
+  });
+  const mockEnabled = mockBoot.enabled;
+  const mockRoomCount = mockBoot.count;
   const [configured, setConfigured] = useState<boolean | null>(mockEnabled ? true : null);
   const [loading, setLoading] = useState(!mockEnabled);
-  const [liveRooms, setLiveRooms] = useState<LiveRoom[]>(() =>
-    mockEnabled ? buildDevMockActiveRoomsData(mockRoomCount).liveRooms : [],
-  );
-  const [byId, setById] = useState<Record<string, RoomPayload>>(() =>
-    mockEnabled ? buildDevMockActiveRoomsData(mockRoomCount).byId : {},
-  );
+  const [liveRooms, setLiveRooms] = useState<LiveRoom[]>(mockBoot.liveRooms);
+  const [byId, setById] = useState<Record<string, RoomPayload>>(mockBoot.byId);
   const [message, setMessage] = useState<string>('');
   const [sortKey, setSortKey] = useState<LiveRoomSortKey>('new');
 

@@ -6,9 +6,8 @@ import { useEffect, useState } from 'react';
 import { hasGuestRoomPersistence } from '@/lib/guest-room-persistence';
 import { ConsentPageLiveChats } from '@/components/home/ConsentPageLiveChats';
 import { loadBrowserSupabaseClient } from '@/lib/supabase/load-browser-client';
-import { McMaPromoBanner } from '@/components/home/McMaPromoBanner';
 import { MusicChatTitleBrand } from '@/components/home/MusicChatTitleLogo';
-import { getMaPublicOrigin, IS_MC_PRODUCT } from '@/lib/product-branding';
+import { IS_MC_PRODUCT } from '@/lib/product-branding';
 
 /** サイト紹介動画（トップ・ご利用にあたっての説明内） */
 const SITE_INTRO_YOUTUBE_VIDEO_ID = 'gtwgUAcV3rE';
@@ -90,26 +89,15 @@ export function StartPageSiteIntro({
       <>
         <div className="mb-4 rounded-lg border border-gray-200 bg-white p-4 text-sm text-gray-700 shadow-sm">
           <p className="mb-2 font-medium text-gray-900">みんなで YouTube を同期視聴しながらチャット</p>
-          <ul className="mb-2 list-disc space-y-1 pl-5 leading-relaxed">
+          <ul className="list-disc space-y-1 pl-5 leading-relaxed">
             <li>邦楽・洋楽どちらも選曲 OK</li>
             <li>完全無料（登録・ゲスト参加）</li>
-            <li>マイリスト・視聴履歴は Music AI Chat と共通</li>
+            <li>同期視聴 × チャットに特化したサービスです</li>
           </ul>
-          <p className="text-xs leading-relaxed text-gray-600">
-            AI による曲解説・@ 質問は{' '}
-            <a
-              href={getMaPublicOrigin()}
-              className="font-medium text-gray-800 underline underline-offset-2 hover:text-gray-950"
-            >
-              Music AI Chat
-            </a>
-            {' '}
-            でご利用ください。
-          </p>
         </div>
         <figure className="space-y-1.5">
           <Image
-            src="/mc-service-sync-chat.png"
+            src="/mc-service-sync-chat-musicchat.png"
             alt="同じタイミングで YouTube を視聴し、チャットで交流するイメージ"
             width={920}
             height={518}
@@ -132,7 +120,6 @@ export function StartPageSiteIntro({
         <h1 className="mb-2 flex justify-center">
           <MusicChatTitleBrand />
         </h1>
-        <McMaPromoBanner className="mb-4" />
         {mcIntro}
       </>
     );

@@ -113,13 +113,14 @@ function StartPageLoggedInLayout() {
   return (
     <div className="w-full max-w-lg rounded-xl border border-gray-700 bg-gray-900 p-6 shadow-lg sm:p-8 lg:max-w-6xl">
       <div className="flex flex-col gap-8 lg:grid lg:grid-cols-2 lg:items-start lg:gap-10">
-        <div className="min-w-0 lg:sticky lg:top-20">
+        {/* sticky に長い開催中一覧を入れると、一覧下部が viewport 外に固定されスクロール不能になる */}
+        <div className="min-w-0">
           <StartPageTitle />
           <StartPageRoomEntryIntro showLoginHint={false} />
           <TopPageLoginAndLiveRooms part="live" />
           <StartPageFooter usePolicyModal />
         </div>
-        <div className="min-w-0">
+        <div className="min-w-0 lg:sticky lg:top-20">
           <MeetingStartPanel />
         </div>
       </div>
@@ -159,11 +160,11 @@ export function StartPageMainCard() {
   return (
     <div className="w-full max-w-lg rounded-xl border border-gray-700 bg-gray-900 p-6 shadow-lg sm:p-8 lg:max-w-6xl">
       <div className="flex flex-col gap-8 lg:grid lg:grid-cols-2 lg:items-start lg:gap-10">
-        <div className="min-w-0 lg:sticky lg:top-20">
+        <div className="min-w-0">
           <StartPageTitle />
           <StartPageGuestActionPanel />
         </div>
-        <div className="min-w-0">
+        <div className="min-w-0 lg:sticky lg:top-20">
           <StartPageSiteIntro section="content" />
         </div>
       </div>
