@@ -139,8 +139,9 @@ type Props =
   | { mode: 'new' }
   | { mode: 'edit'; artistId: string };
 
-export function DomesticArtistEditor({ mode, ...rest }: Props) {
-  const artistIdParam = mode === 'edit' ? rest.artistId : null;
+export function DomesticArtistEditor(props: Props) {
+  const { mode } = props;
+  const artistIdParam = props.mode === 'edit' ? props.artistId : null;
 
   const [artistName, setArtistName] = useState('');
   const [draft, setDraft] = useState<AdminArtistProfileDraft | null>(null);

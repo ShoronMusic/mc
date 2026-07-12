@@ -368,24 +368,25 @@ async function resolveArtistSpotifyMatchHints(
     .or(`name.eq."${esc}",name_en.eq."${esc}",name_ja.eq."${esc}"`)
     .limit(5);
 
-  let rows = primary.data;
+  type ArtistHintRow = {
+    name?: string | null;
+    name_en?: string | null;
+    name_ja?: string | null;
+    spotify_artist_id?: string | null;
+  };
+  let rows: ArtistHintRow[] | null = (primary.data as ArtistHintRow[] | null) ?? null;
   if (primary.error?.code === '42703' || (primary.error && !rows)) {
     const fallback = await admin
       .from('artists')
       .select('name, name_en, spotify_artist_id')
       .or(`name.eq."${esc}",name_en.eq."${esc}"`)
       .limit(5);
-    if (!fallback.error) rows = fallback.data;
+    if (!fallback.error) rows = (fallback.data as ArtistHintRow[] | null) ?? null;
   } else if (primary.error) {
     console.warn('[admin-domestic-spotify-enrich] artist hints', primary.error.message);
   }
 
-  for (const row of (rows ?? []) as Array<{
-    name?: string | null;
-    name_en?: string | null;
-    name_ja?: string | null;
-    spotify_artist_id?: string | null;
-  }>) {
+  for (const row of rows ?? []) {
     if (row.name?.trim()) alternateArtistNames.push(row.name.trim());
     if (row.name_en?.trim()) {
       alternateArtistNames.push(row.name_en.trim());
