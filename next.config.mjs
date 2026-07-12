@@ -1,7 +1,11 @@
 /** @type {import('next').NextConfig} */
 const product = process.env.NEXT_PUBLIC_PRODUCT?.trim().toLowerCase();
-/** ma / mc をローカルで同時 dev するとき、.next 共有で 404 になるため mc は別 dir */
-const distDir = product === 'musicchat' ? '.next-mc' : '.next';
+/**
+ * ローカルで ma/mc 同時 dev するときだけ .next-mc を使う。
+ * Vercel は常に .next を探すため、本番/プレビューでは distDir を変えない。
+ */
+const distDir =
+  process.env.VERCEL !== '1' && product === 'musicchat' ? '.next-mc' : '.next';
 
 const nextConfig = {
   distDir,
