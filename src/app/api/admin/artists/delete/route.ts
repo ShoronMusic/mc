@@ -54,11 +54,18 @@ export async function POST(request: Request) {
       );
     }
 
-    const result = await deleteArtistIfUnused(admin, artistId);
+    const result = await deleteArtistIfUnused(admin, artistId, {
+      unlinkOrphanArtistIds: true,
+    });
     if (!result.ok) {
       return NextResponse.json({ error: result.error, check: result.check }, { status: 409 });
     }
-    return NextResponse.json({ ok: true, deletedId: result.deletedId, check });
+    return NextResponse.json({
+      ok: true,
+      deletedId: result.deletedId,
+      unlinkedSongIds: result.unlinkedSongIds ?? [],
+      check,
+    });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     console.error('[admin/artists/delete]', msg);

@@ -1,0 +1,32 @@
+﻿**********************
+Windows PowerShell トランスクリプト開始
+開始時刻: 20260714112240
+ユーザー名: G15-5535\maeha
+RunAs ユーザー: G15-5535\maeha
+構成名: 
+コンピューター: G15-5535 (Microsoft Windows NT 10.0.26200.0)
+ホスト アプリケーション: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -ExecutionPolicy Bypass -NonInteractive -File C:\Users\maeha\AppData\Local\Temp\ps-script-6f02cb10-81f5-4225-8f54-9c8da18fe2a7.ps1
+プロセス ID: 32708
+PSVersion: 5.1.26100.8655
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.26100.8655
+BuildVersion: 10.0.26100.8655
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+[1/3] diff plan
+[log] step -> E:\mc\tmp\music8-sync-logs\2026-07-14T11-22-39\01-diff-plan.log
+[log] live output -> console + E:\mc\tmp\music8-sync-logs\2026-07-14T11-22-39\transcript.log (not E:\mc\tmp\music8-sync-logs\2026-07-14T11-22-39\01-diff-plan.log until end)
+
+[2/3] skipped (-SkipDryRun)
+[3/3] apply (DB update)
+[log] step -> E:\mc\tmp\music8-sync-logs\2026-07-14T11-22-39\03-apply-db.log
+[log] live output -> console + E:\mc\tmp\music8-sync-logs\2026-07-14T11-22-39\transcript.log (not E:\mc\tmp\music8-sync-logs\2026-07-14T11-22-39\03-apply-db.log until end)
+
+[log] done. combined=E:\mc\tmp\music8-sync-logs\2026-07-14T11-22-39\run.log errors=E:\mc\tmp\music8-sync-logs\2026-07-14T11-22-39\run-errors.log transcript=E:\mc\tmp\music8-sync-logs\2026-07-14T11-22-39\transcript.log
+**********************
+Windows PowerShell トランスクリプト終了
+終了時刻: 20260714133343
+**********************

@@ -3,8 +3,10 @@ import {
   artistSlugCandidates,
   isLikelyYoutubeVideoId,
   wpArtistSlugAliasesFromMusic8Slug,
+  wpRestCategoryToMusic8ArtistJson,
   wpRestPostToMusic8SongJson,
 } from '@/lib/music8-wp-rest';
+import { normalizeMusic8ArtistSource } from '@/lib/music8-artist-import';
 import { buildPersistableMusic8SongSnapshot } from '@/lib/music8-song-persist';
 import { extractMusic8SongFields, resolveOriginalReleaseDateFromMusic8Json } from '@/lib/music8-song-fields';
 
@@ -59,6 +61,30 @@ function run() {
   assert.equal((snap as { structured_style?: string }).structured_style, 'Metal');
   assert.equal((snap as { wp_published_date?: string }).wp_published_date, '2012-06-22');
   assert.equal(resolveOriginalReleaseDateFromMusic8Json(converted), '2012-06-22');
+
+  const whoSlugs = artistSlugCandidates('The Who');
+  assert.ok(whoSlugs.includes('who'), `expected who in ${JSON.stringify(whoSlugs)}`);
+
+  const artistJson = wpRestCategoryToMusic8ArtistJson({
+    id: 100,
+    name: 'Who',
+    slug: 'who',
+    description: 'The Who are an English rock band.',
+    the_prefix: '1',
+    acf: {
+      artistjpname: 'ザ・フー',
+      artistorigin: 'UK',
+      artistactiveyearstart: '1964',
+      spotify_artist_id: 'abc',
+    },
+  });
+  assert.ok(artistJson);
+  assert.equal(artistJson!.slug, 'who');
+  assert.equal(artistJson!.artistjpname, 'ザ・フー');
+  const normalized = normalizeMusic8ArtistSource(artistJson);
+  assert.ok(normalized);
+  assert.equal(normalized!.name, 'Who');
+  assert.equal(normalized!.artistjpname, 'ザ・フー');
 
   console.log('music8-wp-rest.unit-test: ok');
 }

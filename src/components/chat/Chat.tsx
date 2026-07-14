@@ -303,34 +303,8 @@ function resolveSelectorTextColor(
   return undefined;
 }
 
-function renderSelectionAnnounceBodyWithMusicNote(body: string): ReactNode {
-  const lines = body.split('\n');
-  if (lines.length < 2) return body;
-  const head = lines[0] ?? '';
-  const artistLine = lines[1] ?? '';
-  const rest = lines.slice(2).join('\n');
-  return (
-    <>
-      <span className="animate-song-intro-fade-in">{head}</span>
-      {'\n'}
-      <span className="animate-song-intro-fade-in">
-        <span className="mr-1 inline-flex items-center rounded border border-orange-400/75 bg-orange-900/35 px-1.5 py-0.5 text-[10px] font-semibold text-orange-200">
-          ♪
-        </span>
-      </span>
-      <span className="animate-song-intro-fade-in animate-song-line-fade-delayed">{artistLine}</span>
-      {rest ? (
-        <>
-          {'\n'}
-          <span className="animate-song-intro-fade-in">{rest}</span>
-        </>
-      ) : null}
-    </>
-  );
-}
-
-/** mc: 1行・「〇〇選曲♪」ラベル（BG=発言色・白抜き）＋曲名（発言色） */
-function renderMcSelectionAnnounceBody(
+/** 1行・「〇〇選曲♪」ラベル（BG=発言色・コントラスト文字）＋曲名（発言色）。MA/MC 共通 */
+function renderSelectionAnnounceBodyAsLabel(
   body: string,
   selectorName: string,
   speechColor?: string,
@@ -374,10 +348,12 @@ function renderSelectionAnnounceBody(
   selectorName: string | null,
   labelColor?: string,
 ): ReactNode {
-  if (IS_MC_PRODUCT && selectorName) {
-    return renderMcSelectionAnnounceBody(body, selectorName, labelColor);
+  if (selectorName) {
+    return renderSelectionAnnounceBodyAsLabel(body, selectorName, labelColor);
   }
-  return renderSelectionAnnounceBodyWithMusicNote(body);
+  const lines = body.split('\n');
+  const artistLine = (lines.length >= 2 ? lines[1] : lines[0] ?? '').trim();
+  return artistLine || body;
 }
 
 const DEFAULT_MESSAGE_COLOR = '#e5e7eb';
@@ -1647,12 +1623,6 @@ export default function Chat({
                       userTextColor,
                     )
                   : undefined;
-              const selectionAnnounceInlineColor =
-                !isYellowEmphasisAi && isSelectionAnnounce && IS_MC_PRODUCT
-                  ? mcParticipantSpeechColorForAnnounce(selectionAnnounceColor)
-                  : !isYellowEmphasisAi && isSelectionAnnounce && selectionAnnounceColor
-                    ? selectionAnnounceColor
-                    : undefined;
               const announceVideoId =
                 typeof m.videoId === 'string' && m.videoId.trim() ? m.videoId.trim() : '';
               const agentAnnounceName = (ownerAiCharacterName || AI_CHARACTER_DEFAULT_ANNOUNCE_NAME).trim();
@@ -1788,22 +1758,12 @@ export default function Chat({
                   <div className="flex items-baseline justify-between gap-2">
                     <div
                       className={`min-w-0 flex-1 break-words ${
-                        isSelectionAnnounce && IS_MC_PRODUCT ? '' : 'whitespace-pre-wrap'
+                        isSelectionAnnounce ? '' : 'whitespace-pre-wrap'
                       } ${
                         isYellowEmphasisAi
                           ? 'font-semibold text-yellow-300'
-                          : `${isCharacterChatMessage ? 'text-amber-100/85' : isSelectionAnnounce ? (IS_MC_PRODUCT ? '' : selectionAnnounceInlineColor ? '' : 'text-gray-300') : 'text-gray-200'} ${isSelectionAnnounce || isNextPromptMessage ? 'font-bold' : ''}`
+                          : `${isCharacterChatMessage ? 'text-amber-100/85' : isSelectionAnnounce ? '' : 'text-gray-200'} ${isSelectionAnnounce || isNextPromptMessage ? 'font-bold' : ''}`
                       }`}
-                      style={
-                        selectionAnnounceInlineColor && !(IS_MC_PRODUCT && isSelectionAnnounce)
-                          ? { color: selectionAnnounceInlineColor }
-                          : shouldApplyParticipantChatColorInline() &&
-                              !isYellowEmphasisAi &&
-                              isSelectionAnnounce &&
-                              selectionAnnounceColor
-                            ? { color: selectionAnnounceColor }
-                            : undefined
-                      }
                     >
                       {parsedUiLabel.label == null &&
                       !isSelectionAnnounce &&

@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { AdminMenuBar } from '@/components/admin/AdminMenuBar';
 import { AdminArtistJsonImportPanel } from '@/components/admin/AdminArtistJsonImportPanel';
 import { AdminArtistDeletePanel } from '@/components/admin/AdminArtistDeletePanel';
+import { WesternArtistPlaylistImportPanel } from '@/components/admin/WesternArtistPlaylistImportPanel';
 import { artistNameToMusic8Slug } from '@/lib/music8-artist-display';
 
 type ArtistRow = {
@@ -15,6 +16,7 @@ type ArtistRow = {
   origin_country?: string | null;
   active_period?: string | null;
   members?: string | null;
+  youtube_channel_id?: string | null;
   youtube_channel_title?: string | null;
   youtube_channel_url?: string | null;
   image_url?: string | null;
@@ -129,12 +131,13 @@ export default async function AdminLibraryArtistPage({
           ← ライブラリ一覧に戻る
         </Link>
       </div>
-      <h1 className="text-xl font-semibold text-white sm:text-2xl">アーティスト情報</h1>
+      <h1 className="text-xl font-semibold text-white sm:text-2xl">アーティスト情報（洋楽ライブラリ）</h1>
       <p className="mt-1 text-sm text-gray-300">{displayName}</p>
       <div className="mt-3 rounded-lg border border-amber-900/40 bg-amber-950/20 px-3 py-2 text-xs leading-relaxed text-gray-300">
-        <p className="font-medium text-amber-200/90">この画面は閲覧専用です</p>
+        <p className="font-medium text-amber-200/90">基本情報の編集について</p>
         <p className="mt-1">
-          基本情報・プロフィールの編集は「邦楽アーティスト登録」から行います（ここで直接編集はできません）。
+          プロフィール本文の本格編集は Music8 JSON 取込、または邦楽アーティスト登録画面を使います。
+          このページ下部から、当該アーティストの YouTube プレイリストで洋楽曲を一括登録できます。
         </p>
         <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
           {artist?.id ? (
@@ -142,7 +145,7 @@ export default async function AdminLibraryArtistPage({
               href={`/admin/domestic-artist-register/${artist.id}`}
               className="font-medium text-emerald-400 hover:underline"
             >
-              邦楽登録で編集
+              邦楽登録で編集（JP 向け）
             </Link>
           ) : (
             <Link
@@ -154,6 +157,9 @@ export default async function AdminLibraryArtistPage({
           )}
           <Link href="/admin/domestic-artist-register" className="text-sky-400 hover:underline">
             邦楽登録一覧
+          </Link>
+          <Link href="/admin/youtube-playlist-import" className="text-sky-400 hover:underline">
+            汎用プレイリスト取込
           </Link>
           <Link href="/admin/artists-newly-registered" className="text-sky-400 hover:underline">
             選曲登録アーティスト（日別）
@@ -279,7 +285,19 @@ export default async function AdminLibraryArtistPage({
         </p>
       </section>
 
-      <AdminArtistJsonImportPanel artistName={displayName === '—' ? nameQuery || slugQuery : displayName} />
+      <AdminArtistJsonImportPanel
+        artistName={(artist?.name ?? (displayName === '—' ? nameQuery || slugQuery : displayName)).trim()}
+        artistId={artist?.id ?? null}
+        music8ArtistSlug={artist?.music8_artist_slug ?? null}
+      />
+
+      <WesternArtistPlaylistImportPanel
+        artistName={
+          (artist?.name ?? (displayName === '—' ? nameQuery || slugQuery : displayName)).trim()
+        }
+        nameEn={artist?.name ?? null}
+        youtubeChannelId={artist?.youtube_channel_id ?? null}
+      />
 
       {artist?.id ? (
         <AdminArtistDeletePanel

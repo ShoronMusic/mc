@@ -88,15 +88,25 @@ export async function GET(request: Request) {
     music8_synced_at?: string | null;
     spotify_artist_id?: string | null;
     profile_text?: string | null;
+    description_en?: string | null;
+    ai_profile_generated_at?: string | null;
+    origin_country?: string | null;
+    youtube_channel_id?: string | null;
+    wikipedia_page?: string | null;
+    kind?: string | null;
+    occupations?: string[] | null;
     created_at: string;
   }> = [];
+
+  const SELECT_FULL =
+    'id, name, name_ja, name_en, name_base, the_prefix, music8_artist_slug, music8_artist_id, music8_synced_at, spotify_artist_id, profile_text, description_en, ai_profile_generated_at, origin_country, youtube_channel_id, wikipedia_page, kind, occupations, created_at';
+  const SELECT_FALLBACK =
+    'id, name, name_ja, name_base, the_prefix, music8_artist_slug, music8_artist_id, music8_synced_at, spotify_artist_id, profile_text, created_at';
 
   for (let offset = 0; ; offset += PAGE) {
     const { data, error } = await admin
       .from('artists')
-      .select(
-        'id, name, name_ja, name_en, name_base, the_prefix, music8_artist_slug, music8_artist_id, music8_synced_at, spotify_artist_id, profile_text, created_at',
-      )
+      .select(SELECT_FULL)
       .gte('created_at', sinceIso)
       .order('created_at', { ascending: false })
       .range(offset, offset + PAGE - 1);
@@ -104,9 +114,7 @@ export async function GET(request: Request) {
       if (error.code === '42703') {
         const { data: d2, error: e2 } = await admin
           .from('artists')
-          .select(
-            'id, name, name_ja, name_base, the_prefix, music8_artist_slug, music8_artist_id, music8_synced_at, created_at',
-          )
+          .select(SELECT_FALLBACK)
           .gte('created_at', sinceIso)
           .order('created_at', { ascending: false })
           .range(offset, offset + PAGE - 1);
@@ -116,12 +124,7 @@ export async function GET(request: Request) {
         }
         if (!d2?.length) break;
         for (const r of d2) {
-          if (
-            pendingOnly &&
-            !isSelectionRegisteredArtistPendingWp(
-              r as { music8_artist_id?: number | null; music8_synced_at?: string | null },
-            )
-          ) {
+          if (pendingOnly && !isSelectionRegisteredArtistPendingWp(r)) {
             continue;
           }
           rawRows.push(r as (typeof rawRows)[number]);
@@ -134,12 +137,7 @@ export async function GET(request: Request) {
     }
     if (!data?.length) break;
     for (const r of data) {
-      if (
-        pendingOnly &&
-        !isSelectionRegisteredArtistPendingWp(
-          r as { music8_artist_id?: number | null; music8_synced_at?: string | null },
-        )
-      ) {
+      if (pendingOnly && !isSelectionRegisteredArtistPendingWp(r)) {
         continue;
       }
       rawRows.push(r as (typeof rawRows)[number]);

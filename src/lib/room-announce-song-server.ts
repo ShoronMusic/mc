@@ -14,10 +14,16 @@ import {
   parseAdminPlaybackDisplayHint,
 } from '@/lib/video-playback-display-override';
 import {
+  appendOriginalReleaseYearSuffix,
+  yearFromOriginalReleaseDate,
+} from '@/lib/announce-original-release-year';
+import {
   buildLibrarySongAnnounceTitle,
   fetchLibrarySongDisplayByVideoId,
   preferPlaybackDisplaySources,
 } from '@/lib/library-song-display-by-video';
+import { fetchMusicaichatSongJsonForVideoId } from '@/lib/music8-musicaichat';
+import { resolveOriginalReleaseDateFromMusic8Json } from '@/lib/music8-song-fields';
 import { fetchOEmbed } from '@/lib/youtube-oembed';
 import { getVideoDurationSeconds, getVideoSnippet } from '@/lib/youtube-search';
 import {
@@ -86,12 +92,14 @@ export async function handleAnnounceSongPost(
 
     const supabase = await createClient();
     const reader = createAdminClient() ?? supabase;
-    const [adminOverride, librarySong] = reader
-      ? await Promise.all([
-          fetchPlaybackDisplayOverride(reader, videoId),
-          fetchLibrarySongDisplayByVideoId(reader, videoId),
-        ])
-      : [null, null];
+    const [adminOverride, librarySong, musicaichatSong] = await Promise.all([
+      reader ? fetchPlaybackDisplayOverride(reader, videoId) : Promise.resolve(null),
+      reader ? fetchLibrarySongDisplayByVideoId(reader, videoId) : Promise.resolve(null),
+      fetchMusicaichatSongJsonForVideoId(videoId).catch((e) => {
+        console.warn(`[api/${logTag}] musicaichat for announce year`, e);
+        return null;
+      }),
+    ]);
     const hintParsed = parseAdminPlaybackDisplayHint(body?.adminPlaybackDisplayHint);
     const hintAllowed =
       hintParsed && (await sessionMayEditRoomPlaybackHistoryFields(supabase)) ? hintParsed : null;
@@ -158,7 +166,14 @@ export async function handleAnnounceSongPost(
       !mcProduct &&
       isJapaneseDomestic &&
       !suppressJpDomesticAnnounceTagForArtist({ artist, artistDisplay });
-    const artistTitle = showJpDomesticTag ? `${artistTitleBase}（邦楽）` : artistTitleBase;
+    const originalReleaseIso =
+      librarySong?.originalReleaseDate ??
+      (musicaichatSong ? resolveOriginalReleaseDateFromMusic8Json(musicaichatSong) : null);
+    const releaseYear = yearFromOriginalReleaseDate(originalReleaseIso);
+    const artistTitleBaseWithYear = appendOriginalReleaseYearSuffix(artistTitleBase, releaseYear);
+    const artistTitle = showJpDomesticTag
+      ? appendOriginalReleaseYearSuffix(`${artistTitleBase}（邦楽）`, releaseYear)
+      : artistTitleBaseWithYear;
     const announceHead = themePlaylistThemeLabel
       ? `${displayName}さんの選曲 お題（${themePlaylistThemeLabel}）チャレンジです！`
       : `${displayName}さんの選曲です！`;
@@ -170,6 +185,7 @@ export async function handleAnnounceSongPost(
       durationSeconds: durationSeconds ?? undefined,
       japaneseDomestic: isJapaneseDomestic,
       jpDomesticSilence,
+      originalReleaseYear: releaseYear ?? undefined,
     });
   } catch (e) {
     console.error(`[api/${logTag}]`, e);

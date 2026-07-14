@@ -45,6 +45,7 @@ export default function AdminArtistsNewlyRegisteredPage() {
   const [hideSuperseded, setHideSuperseded] = useState(true);
   const [loading, setLoading] = useState(false);
   const [merging, setMerging] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [mergeMsg, setMergeMsg] = useState<string | null>(null);
   const [dayGroups, setDayGroups] = useState<ArtistsNewlyRegisteredDay[]>([]);
@@ -127,15 +128,51 @@ export default function AdminArtistsNewlyRegisteredPage() {
     }
   };
 
+  const deleteUnusedArtist = async (item: { id: string; name: string | null }) => {
+    const name = (item.name ?? '').trim();
+    if (!name) {
+      setError('表示名が空のため削除できません。');
+      return;
+    }
+    const ok = window.confirm(
+      `「${name}」を artists から削除します。\n曲参照（songs.artist_id / main_artist）がある場合は拒否されます。\nよろしいですか？`,
+    );
+    if (!ok) return;
+
+    setDeletingId(item.id);
+    setError(null);
+    setMergeMsg(null);
+    try {
+      const res = await fetch('/api/admin/artists/delete', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ artistId: item.id, confirmName: name }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        setError(typeof data.error === 'string' ? data.error : '削除に失敗しました。');
+        return;
+      }
+      setMergeMsg(`削除しました: ${name}`);
+      await load();
+    } catch {
+      setError('削除に失敗しました。');
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   return (
     <main className="min-h-screen bg-gray-950 text-gray-100">
       <AdminMenuBar />
       <div className="mx-auto max-w-5xl px-4 py-6">
         <h1 className="text-xl font-semibold">選曲登録アーティスト（日別）</h1>
         <p className="mt-1 text-sm text-gray-400">
-          選曲時に新規 insert された artists（WP / m8 未照会）の確認用です。
-          ライブラリ詳細は閲覧のみです。プロフィール整備は下の「邦楽登録で編集」から。
-          正本がある別名行は既定で非表示。重複削除は「高信頼を自動マージ」か、詳細の削除です。
+          選曲時に新規 insert された artists の確認用です（未整備のスタブ洗い出し）。
+          「WP 未照会のみ」は Music8 未照会かつ、邦楽登録のプロフィール／Spotify 等が未入力の行だけを表示します。
+          ライブラリ詳細は閲覧のみ。プロフィール整備は「邦楽登録で編集」から。
+          正本がある別名行は既定で非表示。レーベル名などの誤登録は各行の「削除」から。
         </p>
         <div className="mt-3 rounded-lg border border-sky-900/50 bg-sky-950/30 px-3 py-2 text-xs leading-relaxed text-sky-100/90">
           <p className="font-medium text-sky-200">邦楽アーティストを整備する手順</p>
@@ -177,7 +214,7 @@ export default function AdminArtistsNewlyRegisteredPage() {
               checked={pendingOnly}
               onChange={(e) => setPendingOnly(e.target.checked)}
             />
-            WP 未照会のみ
+            WP 未照会・未整備のみ
           </label>
           <label className="flex items-center gap-2 text-sm">
             <input
@@ -247,7 +284,7 @@ export default function AdminArtistsNewlyRegisteredPage() {
                         （「高信頼を自動マージ」で整理できます）
                       </p>
                     ) : null}
-                    <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1">
+                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
                       <Link
                         href={`/admin/domestic-artist-register/${item.id}`}
                         className="font-medium text-emerald-400 hover:underline"
@@ -267,6 +304,15 @@ export default function AdminArtistsNewlyRegisteredPage() {
                           名前で新規画面を開く
                         </Link>
                       ) : null}
+                      <button
+                        type="button"
+                        disabled={deletingId === item.id || merging || loading}
+                        onClick={() => void deleteUnusedArtist(item)}
+                        className="text-red-400 hover:underline disabled:opacity-50"
+                        title="曲参照が無いスタブ（レーベル名の誤登録など）向け"
+                      >
+                        {deletingId === item.id ? '削除中…' : '削除'}
+                      </button>
                     </div>
                   </li>
                 ))}

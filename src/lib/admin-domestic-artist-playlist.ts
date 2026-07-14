@@ -16,7 +16,10 @@ import {
 } from '@/lib/song-db-registration-gate';
 import { resolveSongCatalogScope } from '@/lib/song-catalog-scope';
 import { upsertSongAndVideo } from '@/lib/song-entities';
-import { ensureDomesticArtistForSongRegistration } from '@/lib/artist-selection-register';
+import {
+  ensureArtistForSongRegistration,
+  ensureDomesticArtistForSongRegistration,
+} from '@/lib/artist-selection-register';
 import {
   clearArtistLookupIndexCache,
   loadArtistLookupIndex,
@@ -26,6 +29,9 @@ import { resolveArtistSongForPackAsync } from '@/lib/youtube-artist-song-for-pac
 import { fetchOEmbed } from '@/lib/youtube-oembed';
 import { getVideoSnippet } from '@/lib/youtube-search';
 import { buildExplicitCreditArtists } from '@/lib/admin-domestic-playlist-artists-field';
+import {
+  fetchMusicBrainzRecordingMetadata,
+} from '@/lib/musicbrainz-recording-metadata';
 
 export {
   buildExplicitCreditArtists,
@@ -33,6 +39,9 @@ export {
   parseCreditArtistsInput,
   parsePlaylistArtistsField,
 } from '@/lib/admin-domestic-playlist-artists-field';
+
+/** 邦楽ライト DB / 洋楽通常登録 */
+export type ArtistPlaylistCatalogMode = 'domestic' | 'western';
 
 export type DomesticPlaylistRow = {
   videoId: string;
@@ -335,10 +344,14 @@ export async function fetchYoutubePlaylistNewRows(input: {
 async function resolvePlaylistItemMetadata(
   row: DomesticPlaylistRow,
   hints?: DomesticArtistPlaylistHints | null,
+  mode: ArtistPlaylistCatalogMode = 'domestic',
 ): Promise<Omit<DomesticArtistPlaylistItem, 'index' | 'url' | 'existingSongId'>> {
+  const isDomestic = mode === 'domestic';
   const artistHint = row.ownerChannel || row.channelTitle;
   const oembed = await fetchOEmbed(row.videoId).catch(() => null);
-  const snippet = await getVideoSnippet(row.videoId, { source: 'admin-domestic-artist-playlist' });
+  const snippet = await getVideoSnippet(row.videoId, {
+    source: isDomestic ? 'admin-domestic-artist-playlist' : 'admin-western-artist-playlist',
+  });
   const rawTitle = snippet?.title?.trim() || row.rawTitle || row.videoId;
   const channelTitle = snippet?.channelTitle?.trim() || row.channelTitle || null;
   const channelId = snippet?.channelId ?? null;
@@ -359,33 +372,65 @@ async function resolvePlaylistItemMetadata(
     '';
   const fallbackTitle = (resolved.song ?? '').trim() || (suggested.title || rawTitle).trim();
 
-  const domestic = await resolveDomesticSongMetadataForRegistration({
-    rawTitle,
-    channelTitle,
-    channelAuthor: authorName ?? artistHint ?? null,
-    resolvedArtist: fallbackArtist,
-    resolvedSong: fallbackTitle,
-    preferJapaneseScriptDisplay: true,
-  });
+  let artist = fallbackArtist;
+  let title = fallbackTitle;
+  let displayTitle = artist && title ? `${artist} - ${title}` : title;
+  let releaseDate: string | null = null;
+  let songTitleJa: string | null = null;
+  let genres: string[] = [];
+  let metadataSource: string | null = null;
+
+  if (isDomestic) {
+    const domestic = await resolveDomesticSongMetadataForRegistration({
+      rawTitle,
+      channelTitle,
+      channelAuthor: authorName ?? artistHint ?? null,
+      resolvedArtist: fallbackArtist,
+      resolvedSong: fallbackTitle,
+      preferJapaneseScriptDisplay: true,
+    });
+    if (domestic) {
+      artist = domestic.mainArtist || artist;
+      title = domestic.songTitle || title;
+      displayTitle = domestic.displayTitle || displayTitle;
+      releaseDate = domestic.originalReleaseDate;
+      songTitleJa = domestic.songTitleJa;
+      genres = domestic.genres ?? [];
+      metadataSource = domestic.source;
+    }
+  } else {
+    // 洋楽: MusicBrainz で原盤日・表記を補完（失敗時は YouTube 解決のまま）
+    try {
+      const mb = await fetchMusicBrainzRecordingMetadata(fallbackArtist, fallbackTitle);
+      if (mb) {
+        artist = mb.mainArtist || artist;
+        title = mb.songTitle || title;
+        displayTitle = mb.displayTitle || displayTitle;
+        releaseDate = mb.originalReleaseDate;
+        genres = mb.genres ?? [];
+        metadataSource = 'musicbrainz';
+      }
+    } catch {
+      /* ignore */
+    }
+  }
 
   let artistMatch: DomesticArtistPlaylistItem['artistMatch'] = 'unknown';
-  let artist = domestic?.mainArtist || fallbackArtist;
 
   if (hints?.name?.trim()) {
     const channelIdHint = hints.youtubeChannelId?.trim() || null;
     if (channelIdHint && channelId && youtubeChannelIdsLooselyMatch(channelIdHint, channelId)) {
       artistMatch = 'channel';
       artist = hints.name.trim();
+      displayTitle = `${artist} - ${title}`;
     } else if (artistNameMatchesRegisteredArtist(artist, hints)) {
       artistMatch = 'name';
       artist = hints.name.trim();
+      displayTitle = `${artist} - ${title}`;
     } else {
       artistMatch = 'mismatch';
     }
   }
-
-  const title = domestic?.songTitle || fallbackTitle;
-  const displayTitle = domestic?.displayTitle || (artist && title ? `${artist} - ${title}` : title);
 
   const gateInput = buildSongDbRegistrationInput({
     videoId: row.videoId,
@@ -397,7 +442,7 @@ async function resolvePlaylistItemMetadata(
     mainArtist: artist,
     songTitle: title,
     hasMusic8Match: false,
-    isJapaneseDomestic: true,
+    isJapaneseDomestic: isDomestic,
     channelAuthorName: authorName,
     viewCount: snippet?.viewCount ?? null,
   });
@@ -422,11 +467,11 @@ async function resolvePlaylistItemMetadata(
     rawTitle,
     channelTitle,
     channelId,
-    releaseDate: domestic?.originalReleaseDate ?? null,
-    songTitleJa: domestic?.songTitleJa ?? null,
+    releaseDate,
+    songTitleJa,
     youtubeDate: isoToDateOnly(snippet?.publishedAt),
-    genres: domestic?.genres ?? [],
-    metadataSource: domestic?.source ?? null,
+    genres,
+    metadataSource,
     officialGate: { persist: gate.persist, reason: gate.reason },
     include,
     note,
@@ -466,9 +511,12 @@ export async function fetchDomesticArtistPlaylist(input: {
   artistHints?: DomesticArtistPlaylistHints | null;
   existingVideoMap?: Map<string, string | null>;
   admin?: SupabaseClient | null;
+  /** 既定 domestic。洋楽アーティストページから呼ぶときは western */
+  catalogMode?: ArtistPlaylistCatalogMode;
 }): Promise<FetchDomesticArtistPlaylistResult> {
   const playlistId = parseYoutubePlaylistId(input.playlistUrl ?? '', input.playlistId ?? '');
   if (!playlistId) throw new Error('playlistUrl または playlistId が必要です。');
+  const catalogMode = input.catalogMode === 'western' ? 'western' : 'domestic';
 
   // maxItems = 未登録を何件まで表に出すか（既存は飛ばして続きから埋める）
   const collected = await fetchYoutubePlaylistNewRows({
@@ -480,7 +528,11 @@ export async function fetchDomesticArtistPlaylist(input: {
 
   const items: DomesticArtistPlaylistItem[] = [];
   for (let i = 0; i < collected.newRows.length; i += 1) {
-    const meta = await resolvePlaylistItemMetadata(collected.newRows[i]!, input.artistHints ?? null);
+    const meta = await resolvePlaylistItemMetadata(
+      collected.newRows[i]!,
+      input.artistHints ?? null,
+      catalogMode,
+    );
     items.push({
       index: i + 1,
       url: `https://www.youtube.com/watch?v=${meta.videoId}`,
@@ -505,6 +557,13 @@ export async function fetchDomesticArtistPlaylist(input: {
       skippedExisting: collected.skippedExisting,
     },
   };
+}
+
+/** 洋楽アーティストページ用エイリアス */
+export async function fetchWesternArtistPlaylist(
+  input: Omit<Parameters<typeof fetchDomesticArtistPlaylist>[0], 'catalogMode'>,
+): Promise<FetchDomesticArtistPlaylistResult> {
+  return fetchDomesticArtistPlaylist({ ...input, catalogMode: 'western' });
 }
 
 export type ApplyDomesticArtistPlaylistItemInput = {
@@ -541,12 +600,15 @@ export async function applyDomesticArtistPlaylistItems(
     forceAllow?: boolean;
     skipExisting?: boolean;
     registrationArtistName?: string | null;
+    catalogMode?: ArtistPlaylistCatalogMode;
   } = {},
 ): Promise<ApplyDomesticArtistPlaylistItemResult[]> {
   const dryRun = options.dryRun === true;
   const forceAllow = options.forceAllow === true;
   const skipExisting = options.skipExisting !== false;
   const registrationArtist = options.registrationArtistName?.trim() || null;
+  const catalogMode = options.catalogMode === 'western' ? 'western' : 'domestic';
+  const isDomestic = catalogMode === 'domestic';
 
   const existing = await loadExistingSongIdsByVideoIds(
     admin,
@@ -584,7 +646,11 @@ export async function applyDomesticArtistPlaylistItems(
       continue;
     }
 
-    const snippet = await getVideoSnippet(item.videoId, { source: 'admin-domestic-artist-playlist-apply' });
+    const snippet = await getVideoSnippet(item.videoId, {
+      source: isDomestic
+        ? 'admin-domestic-artist-playlist-apply'
+        : 'admin-western-artist-playlist-apply',
+    });
     const youtubePublishedAt =
       snippet?.publishedAt ?? dateOnlyToIso(item.youtubeDate) ?? null;
     const displayTitle = item.displayTitle?.trim() || `${artist} - ${title}`;
@@ -599,7 +665,7 @@ export async function applyDomesticArtistPlaylistItems(
       mainArtist: artist,
       songTitle: title,
       hasMusic8Match: false,
-      isJapaneseDomestic: true,
+      isJapaneseDomestic: isDomestic,
       viewCount: snippet?.viewCount ?? null,
       forceAllow,
     });
@@ -624,7 +690,9 @@ export async function applyDomesticArtistPlaylistItems(
     }
 
     try {
-      const artistSlugHint = latinArtistSlugHintFromChannel(item.channelTitle);
+      const artistSlugHint = isDomestic
+        ? latinArtistSlugHintFromChannel(item.channelTitle)
+        : null;
       const songId = await upsertSongAndVideo({
         supabase: admin,
         videoId: item.videoId,
@@ -633,15 +701,15 @@ export async function applyDomesticArtistPlaylistItems(
         variant: 'official',
         youtubePublishedAtIso: youtubePublishedAt,
         originalReleaseDateIso: item.releaseDate ?? undefined,
-        songTitleJa: item.songTitleJa ?? undefined,
+        songTitleJa: isDomestic ? item.songTitleJa ?? undefined : undefined,
         genres: item.genres && item.genres.length > 0 ? item.genres : undefined,
-        domesticLightDb: true,
+        domesticLightDb: isDomestic,
         artistSlugHint,
         catalogScope: resolveSongCatalogScope({
           mainArtist: artist,
           songTitle: title,
           displayTitle,
-          isJapaneseEconomy: true,
+          isJapaneseEconomy: isDomestic,
         }),
         registrationCheck: gateInput,
       });
@@ -658,7 +726,11 @@ export async function applyDomesticArtistPlaylistItems(
         try {
           const index = await loadArtistLookupIndex(admin);
           for (const name of extraCredits) {
-            await ensureDomesticArtistForSongRegistration(admin, name, { index });
+            if (isDomestic) {
+              await ensureDomesticArtistForSongRegistration(admin, name, { index });
+            } else {
+              await ensureArtistForSongRegistration(admin, name, index);
+            }
           }
           clearArtistLookupIndexCache();
           const freshIndex = await loadArtistLookupIndex(admin);
@@ -678,7 +750,7 @@ export async function applyDomesticArtistPlaylistItems(
           creditCount = creditSync.creditCount;
           creditUnresolved = creditSync.unresolved;
         } catch (e) {
-          console.warn('[admin-domestic-artist-playlist] song_credits sync', e);
+          console.warn('[admin-artist-playlist] song_credits sync', e);
           creditUnresolved = extraCredits;
         }
       }
@@ -697,4 +769,18 @@ export async function applyDomesticArtistPlaylistItems(
   }
 
   return results;
+}
+
+export async function applyWesternArtistPlaylistItems(
+  admin: SupabaseClient,
+  items: ApplyDomesticArtistPlaylistItemInput[],
+  options: Omit<
+    Parameters<typeof applyDomesticArtistPlaylistItems>[2],
+    'catalogMode'
+  > = {},
+): Promise<ApplyDomesticArtistPlaylistItemResult[]> {
+  return applyDomesticArtistPlaylistItems(admin, items, {
+    ...options,
+    catalogMode: 'western',
+  });
 }

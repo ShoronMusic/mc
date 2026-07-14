@@ -11,6 +11,8 @@ export type LibrarySongDisplay = {
   displayTitle: string;
   mainArtist: string | null;
   songTitle: string | null;
+  /** `songs.original_release_date`（YYYY-MM-DD 等）。無ければ null */
+  originalReleaseDate: string | null;
 };
 
 /** アナウンス／履歴用の「Artist - Song」行 */
@@ -67,7 +69,7 @@ export async function fetchLibrarySongDisplayByVideoId(
 
   const { data: song, error: songErr } = await client
     .from('songs')
-    .select('id, display_title, main_artist, song_title')
+    .select('id, display_title, main_artist, song_title, original_release_date')
     .eq('id', songId)
     .maybeSingle();
 
@@ -82,6 +84,7 @@ export async function fetchLibrarySongDisplayByVideoId(
     display_title?: string | null;
     main_artist?: string | null;
     song_title?: string | null;
+    original_release_date?: string | null;
   } | null;
   if (!row?.id) return null;
 
@@ -90,6 +93,10 @@ export async function fetchLibrarySongDisplayByVideoId(
     typeof row.main_artist === 'string' && row.main_artist.trim() ? row.main_artist.trim() : null;
   const songTitle =
     typeof row.song_title === 'string' && row.song_title.trim() ? row.song_title.trim() : null;
+  const originalReleaseDate =
+    typeof row.original_release_date === 'string' && row.original_release_date.trim()
+      ? row.original_release_date.trim()
+      : null;
 
   if (!displayTitle && !mainArtist && !songTitle) return null;
 
@@ -98,6 +105,7 @@ export async function fetchLibrarySongDisplayByVideoId(
     displayTitle,
     mainArtist,
     songTitle,
+    originalReleaseDate,
   };
 }
 

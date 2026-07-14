@@ -11,6 +11,7 @@ const sample: LibrarySongDisplay = {
   displayTitle: 'Mrs. GREEN APPLE - 僕のこと',
   mainArtist: 'Mrs. GREEN APPLE',
   songTitle: '僕のこと',
+  originalReleaseDate: '2018-01-01',
 };
 
 assert.equal(buildLibrarySongAnnounceTitle(sample), 'Mrs. GREEN APPLE - 僕のこと');
@@ -20,6 +21,7 @@ assert.equal(
     displayTitle: '',
     mainArtist: 'A',
     songTitle: 'B',
+    originalReleaseDate: null,
   }),
   'A - B',
 );

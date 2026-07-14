@@ -420,3 +420,75 @@ export async function fetchMusic8SongFromWpRest(
   const picked = pickBestPost(candidates, songLookupTitle, videoId);
   return picked ? wpRestPostToMusic8SongJson(picked) : null;
 }
+
+/**
+ * WP REST のアーティストカテゴリを、静的 artists/*.json と同系の形に変換。
+ */
+export function wpRestCategoryToMusic8ArtistJson(
+  cat: WpRestArtistCategory & {
+    id?: number;
+    description?: string;
+    the_prefix?: string | number | boolean;
+    thePrefix?: string;
+  },
+): Record<string, unknown> | null {
+  const name = typeof cat.name === 'string' ? cat.name.trim() : '';
+  if (!name) return null;
+  const acf = cat.acf && typeof cat.acf === 'object' ? cat.acf : {};
+  const slug = typeof cat.slug === 'string' ? cat.slug.trim().toLowerCase() : '';
+  const out: Record<string, unknown> = {
+    id: typeof cat.id === 'number' ? cat.id : undefined,
+    name,
+    slug,
+    description: typeof cat.description === 'string' ? cat.description : '',
+    acf,
+    ...acf,
+  };
+  if (typeof cat.thePrefix === 'string' && cat.thePrefix.trim()) {
+    out.thePrefix = cat.thePrefix.trim();
+  } else if (cat.the_prefix === '1' || cat.the_prefix === 1 || cat.the_prefix === true) {
+    out.the_prefix = '1';
+    out.thePrefix = 'The';
+  } else if (typeof cat.the_prefix === 'string' && cat.the_prefix.trim()) {
+    out.the_prefix = cat.the_prefix.trim();
+  }
+  return out;
+}
+
+async function fetchCategoryById(base: string, categoryId: number): Promise<WpRestArtistCategory | null> {
+  const row = await fetchWpJson<WpRestArtistCategory & { description?: string }>(
+    `${base}/wp/v2/categories/${categoryId}`,
+  );
+  if (!row || typeof row.name !== 'string') return null;
+  return row;
+}
+
+/**
+ * WordPress REST からアーティスト（category）を取得し Music8 アーティスト JSON 形で返す。
+ */
+export async function fetchMusic8ArtistFromWpRest(
+  artistNameOrSlug: string,
+): Promise<Record<string, unknown> | null> {
+  const base = getMusic8WpRestBaseUrl();
+  if (!base) return null;
+  const lookup = (artistNameOrSlug ?? '').trim();
+  if (!lookup) return null;
+
+  for (const slug of artistSlugCandidates(lookup)) {
+    const rows = await fetchWpJson<
+      Array<WpRestArtistCategory & { description?: string; the_prefix?: unknown; thePrefix?: string }>
+    >(`${base}/wp/v2/categories?slug=${encodeURIComponent(slug)}&per_page=1`);
+    const row = rows?.[0];
+    if (row?.name) {
+      const json = wpRestCategoryToMusic8ArtistJson(row);
+      if (json) return json;
+    }
+  }
+
+  const categoryId = await resolveArtistCategoryId(base, lookup);
+  if (!categoryId) return null;
+  const full = await fetchCategoryById(base, categoryId);
+  if (!full) return null;
+  return wpRestCategoryToMusic8ArtistJson(full);
+}
+

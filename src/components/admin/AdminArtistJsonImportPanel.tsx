@@ -4,8 +4,8 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { music8ArtistJsonUrl } from '@/lib/music8-data-urls';
 
-function buildDefaultArtistJsonUrl(artistName: string): string {
-  const slug = artistName
+function slugifyForArtistJson(raw: string): string {
+  return raw
     .trim()
     .replace(/^\s*(?:The|A|An)\s+/i, '')
     .normalize('NFKD')
@@ -16,21 +16,39 @@ function buildDefaultArtistJsonUrl(artistName: string): string {
     .replace(/-+/g, '-')
     .replace(/^-+|-+$/g, '')
     .toLowerCase();
-  return music8ArtistJsonUrl(slug || 'unknown');
 }
 
-export function AdminArtistJsonImportPanel({ artistName }: { artistName: string }) {
+function buildDefaultArtistJsonUrl(preferredSlug: string | null | undefined, artistName: string): string {
+  const fromSlug = (preferredSlug ?? '').trim().toLowerCase();
+  if (fromSlug) return music8ArtistJsonUrl(fromSlug);
+  return music8ArtistJsonUrl(slugifyForArtistJson(artistName) || 'unknown');
+}
+
+type Props = {
+  artistName: string;
+  artistId?: string | null;
+  /** GCS / WP 照合用（英語名側の music8_artist_slug） */
+  music8ArtistSlug?: string | null;
+};
+
+export function AdminArtistJsonImportPanel({
+  artistName,
+  artistId,
+  music8ArtistSlug,
+}: Props) {
   const router = useRouter();
   const [jsonText, setJsonText] = useState('');
-  const [jsonUrl, setJsonUrl] = useState(buildDefaultArtistJsonUrl(artistName));
+  const [jsonUrl, setJsonUrl] = useState(buildDefaultArtistJsonUrl(music8ArtistSlug, artistName));
   const [submitting, setSubmitting] = useState(false);
   const [loadingSample, setLoadingSample] = useState(false);
+  const [loadingWp, setLoadingWp] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const canSubmit = jsonText.trim().length > 0;
+  const busy = submitting || loadingSample || loadingWp;
 
   const loadSampleFromUrl = async () => {
-    const url = jsonUrl.trim() || buildDefaultArtistJsonUrl(artistName);
+    const url = jsonUrl.trim() || buildDefaultArtistJsonUrl(music8ArtistSlug, artistName);
     setLoadingSample(true);
     setMessage(null);
     setError(null);
@@ -51,9 +69,45 @@ export function AdminArtistJsonImportPanel({ artistName }: { artistName: string 
     }
   };
 
+  const importFromWpRest = async () => {
+    setLoadingWp(true);
+    setMessage(null);
+    setError(null);
+    try {
+      const res = await fetch('/api/admin/artist-music8-wp-rest-import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          artistId: artistId ?? undefined,
+          artistName,
+          music8ArtistSlug: music8ArtistSlug ?? undefined,
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        source?: string;
+        slug?: string | null;
+      };
+      if (!res.ok) {
+        setError(typeof data?.error === 'string' ? data.error : 'WP REST からの取得に失敗しました。');
+        return;
+      }
+      setMessage(
+        data.slug
+          ? `WordPress REST から補完しました（slug: ${data.slug}）。`
+          : 'WordPress REST から補完しました。',
+      );
+      router.refresh();
+    } catch {
+      setError('WP REST からの取得に失敗しました。');
+    } finally {
+      setLoadingWp(false);
+    }
+  };
+
   const onImport = async () => {
     const text = jsonText.trim();
-    if (!text) return;
+    if (!text && !jsonUrl.trim()) return;
     setSubmitting(true);
     setMessage(null);
     setError(null);
@@ -63,7 +117,7 @@ export function AdminArtistJsonImportPanel({ artistName }: { artistName: string 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           artistName,
-          jsonText: text,
+          jsonText: text || undefined,
           jsonUrl: jsonUrl.trim() || undefined,
         }),
       });
@@ -84,8 +138,11 @@ export function AdminArtistJsonImportPanel({ artistName }: { artistName: string 
   return (
     <section className="mt-6 rounded-lg border border-gray-800 bg-gray-900/40 p-4 text-sm">
       <h2 className="text-sm font-semibold text-amber-200">Music8 個別JSON 取り込み</h2>
-      <p className="mt-1 text-xs text-gray-500">
-        このアーティストの Music8 JSON を貼り付けると、基本情報を artists に補完します。
+      <p className="mt-1 text-xs leading-relaxed text-gray-500">
+        ① GCS のアーティスト JSON を URL／貼り付けで取り込む。② JSON
+        未エクスポートでも WP にカテゴリがあれば{' '}
+        <code className="text-gray-400">wp/v2/categories</code> から補完できます（曲詳細の「WP REST
+        から補完」と同系）。
       </p>
       <textarea
         value={jsonText}
@@ -103,36 +160,43 @@ export function AdminArtistJsonImportPanel({ artistName }: { artistName: string 
           className="mt-1 w-full rounded border border-gray-700 bg-gray-950 px-3 py-2 text-xs text-gray-100 outline-none focus:border-amber-600"
         />
       </label>
-      <div className="mt-3 flex items-center gap-3">
+      <div className="mt-3 flex flex-wrap items-center gap-3">
         <button
           type="button"
           onClick={() => void loadSampleFromUrl()}
-          disabled={loadingSample || submitting}
-          className="rounded border border-gray-700 bg-gray-800 px-3 py-2 text-xs text-gray-300 hover:bg-gray-700"
+          disabled={busy}
+          className="rounded border border-gray-700 bg-gray-800 px-3 py-2 text-xs text-gray-300 hover:bg-gray-700 disabled:opacity-50"
         >
           {loadingSample ? '読込中…' : 'サンプル入力（URLから）'}
         </button>
         <button
           type="button"
+          onClick={() => void importFromWpRest()}
+          disabled={busy}
+          className="rounded border border-cyan-700 bg-gray-950 px-3 py-2 text-xs font-medium text-cyan-100 hover:bg-cyan-950/40 disabled:opacity-50"
+        >
+          {loadingWp ? '取得中…' : 'WP REST から補完'}
+        </button>
+        <button
+          type="button"
           onClick={() => void onImport()}
-          disabled={submitting || !(canSubmit || jsonUrl.trim())}
+          disabled={busy || !(canSubmit || jsonUrl.trim())}
           className={`rounded px-4 py-2 text-xs font-medium transition-colors ${
-            submitting || !(canSubmit || jsonUrl.trim())
+            busy || !(canSubmit || jsonUrl.trim())
               ? 'cursor-not-allowed border border-gray-700 bg-gray-800 text-gray-500'
               : 'border border-amber-500 bg-amber-600 text-gray-950 hover:bg-amber-500 active:bg-amber-400'
           }`}
         >
           {submitting ? '取り込み中…' : 'JSONを取り込む'}
         </button>
-        <p className="text-[11px] text-gray-500">
-          {canSubmit || jsonUrl.trim()
-            ? '入力あり: 実行できます。'
-            : 'JSON を貼り付けるか URL を入力すると実行できます。'}
-        </p>
-        {message ? <p className="text-xs text-emerald-300">{message}</p> : null}
-        {error ? <p className="text-xs text-red-400">{error}</p> : null}
       </div>
+      <p className="mt-2 text-[11px] text-gray-500">
+        {canSubmit || jsonUrl.trim()
+          ? 'JSON 入力あり: 「JSONを取り込む」で実行できます。WP だけ使う場合は右側のボタンのみで可。'
+          : 'JSON なしでも「WP REST から補完」は実行できます。'}
+      </p>
+      {message ? <p className="mt-2 text-xs text-emerald-300">{message}</p> : null}
+      {error ? <p className="mt-2 text-xs text-red-400">{error}</p> : null}
     </section>
   );
 }
-

@@ -812,9 +812,9 @@ export default function UserBar({
                     : '選曲済み'
                   : isPassTurnReserved
                     ? 'パス予約済み'
-                  : isNextTurnPoster
-                    ? '次の選曲者'
-                    : undefined;
+                    : isNextTurnPoster
+                      ? '次の選曲者'
+                      : undefined;
               return (
                 <span
                   key={p.clientId}
@@ -830,7 +830,10 @@ export default function UserBar({
                   <span className="inline-flex max-w-full items-center gap-1">
                     <span className={`shrink-0 text-[10px] ${participantIndexClass()}`}>[{i + 1}]</span>
                     {isCurrentSongPoster ? (
-                      <span className="animate-now-playing-wave inline-flex h-3 shrink-0 items-end gap-0.5" aria-hidden>
+                      <span
+                        className="animate-now-playing-wave inline-flex h-3 shrink-0 items-end gap-0.5"
+                        aria-hidden
+                      >
                         {[1, 2, 3].map((j) => (
                           <span
                             key={j}
