@@ -476,7 +476,13 @@ export async function fetchMusic8ArtistFromWpRest(
 
   for (const slug of artistSlugCandidates(lookup)) {
     const rows = await fetchWpJson<
-      Array<WpRestArtistCategory & { description?: string; the_prefix?: unknown; thePrefix?: string }>
+      Array<
+        WpRestArtistCategory & {
+          description?: string;
+          the_prefix?: string | number | boolean;
+          thePrefix?: string;
+        }
+      >
     >(`${base}/wp/v2/categories?slug=${encodeURIComponent(slug)}&per_page=1`);
     const row = rows?.[0];
     if (row?.name) {
