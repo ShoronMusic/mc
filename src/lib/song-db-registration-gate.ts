@@ -328,6 +328,78 @@ function hasParseableMusicArtistTitle(input: SongDbRegistrationInput): boolean {
   return true;
 }
 
+export type RoomAnnounceMusicCheckInput = {
+  rawTitle: string;
+  authorName?: string | null;
+  channelTitle?: string | null;
+  categoryId?: number | null;
+  description?: string | null;
+};
+
+/**
+ * 部屋 announce で nonMusic 扱いするか（選曲紹介・AI 解説を止める粗い判定）。
+ * 曲 DB 登録ゲートよりやや寛容（MV・コラボ表記は音楽として通す）。
+ */
+export function isNonMusicYoutubeForRoomAnnounce(input: RoomAnnounceMusicCheckInput): boolean {
+  const rawTitle = (input.rawTitle ?? '').trim();
+  if (!rawTitle) return false;
+
+  const gateInput = buildSongDbRegistrationInput({
+    rawTitle,
+    channelTitle: input.channelTitle ?? input.authorName ?? null,
+    channelAuthorName: input.authorName ?? null,
+    categoryId: input.categoryId ?? null,
+    description: input.description ?? null,
+  });
+
+  if (gateInput.categoryId === YOUTUBE_CATEGORY_MUSIC) return false;
+  if (hasMusicTitleSignal(rawTitle)) return false;
+  if (
+    hasMusicChannelSignal(input.channelTitle) ||
+    hasMusicChannelSignal(input.authorName)
+  ) {
+    if (hasParseableMusicArtistTitle(gateInput)) return false;
+  }
+  if (hasMusicDistributionDescription(input.description)) return false;
+
+  const text = blobText(gateInput);
+  if (hasNonMusicTitleSignal(text)) return true;
+
+  const lowerTitle = rawTitle.toLowerCase();
+  const lowerAuthor = (input.authorName ?? '').toLowerCase();
+  const nonMusicKeywords = [
+    '切り抜き',
+    '切り抜き集',
+    '実況',
+    '解説',
+    'ランキング',
+    'top10',
+    'top 10',
+    'top30',
+    'top 30',
+    'おすすめアニメ',
+    'reaction',
+    'リアクション',
+    '生配信',
+    '雑談',
+    'vtuber',
+  ];
+  if (nonMusicKeywords.some((kw) => lowerTitle.includes(kw) || lowerAuthor.includes(kw))) {
+    return true;
+  }
+  if (/作業用|bgm|睡眠用|relax/i.test(rawTitle)) return true;
+
+  // アニメ本編・各話など（MV コラボの「TVアニメ」表記は hasMusicTitleSignal で除外済み）
+  if (
+    (lowerTitle.includes('アニメ') || lowerTitle.includes('anime')) &&
+    /本編|第\s*\d+\s*[話集]|切り抜き|まとめ|ランキング|episode\s+\d+/i.test(rawTitle)
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
 /** 新規 `songs` / `song_videos` 登録可否（既存行の更新判定には使わない）。 */
 export function shouldPersistVideoToSongDatabase(
   input: SongDbRegistrationInput,

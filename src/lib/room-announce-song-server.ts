@@ -30,6 +30,9 @@ import {
   resolveArtistSongForPackAsync,
   type ResolveArtistSongForPackOptions,
 } from '@/lib/youtube-artist-song-for-pack';
+import {
+  isNonMusicYoutubeForRoomAnnounce,
+} from '@/lib/song-db-registration-gate';
 import { isRoomJpAiUnlockEnabled } from '@/lib/room-jp-ai-unlock-server';
 import { resolveDomesticSongMetadataForRegistration } from '@/lib/domestic-song-registration';
 
@@ -58,30 +61,13 @@ export async function handleAnnounceSongPost(
     const rawYouTubeTitle = oembed?.title ?? videoId;
     const authorNameOembed = oembed?.author_name;
 
-    const lowerTitle = rawYouTubeTitle.toLowerCase();
-    const lowerAuthor = (authorNameOembed ?? '').toLowerCase();
-    const nonMusicKeywords = [
-      'アニメ',
-      'anime',
-      '切り抜き',
-      '切り抜き集',
-      '実況',
-      '解説',
-      'ランキング',
-      'top10',
-      'top 10',
-      'top30',
-      'top 30',
-      'おすすめアニメ',
-      'reaction',
-      'リアクション',
-      '生配信',
-      '雑談',
-      'vtuber',
-    ];
-    const isNonMusic =
-      nonMusicKeywords.some((kw) => lowerTitle.includes(kw) || lowerAuthor.includes(kw)) ||
-      /作業用|bgm|睡眠用|relax/i.test(rawYouTubeTitle);
+    const isNonMusic = isNonMusicYoutubeForRoomAnnounce({
+      rawTitle: rawYouTubeTitle,
+      authorName: authorNameOembed,
+      channelTitle: snippet?.channelTitle ?? null,
+      categoryId: snippet?.categoryId ?? null,
+      description: snippet?.description ?? null,
+    });
 
     if (isNonMusic) {
       return NextResponse.json({

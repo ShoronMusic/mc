@@ -1,5 +1,6 @@
 import {
   buildSongDbRegistrationInput,
+  isNonMusicYoutubeForRoomAnnounce,
   shouldPersistVideoToSongDatabase,
   YOUTUBE_CATEGORY_FILM_ANIMATION,
   YOUTUBE_CATEGORY_GAMING,
@@ -126,6 +127,33 @@ assert(
     }),
   ).persist,
   'jp bilingual hyphen on artist channel',
+);
+
+assert(
+  !isNonMusicYoutubeForRoomAnnounce({
+    rawTitle:
+      'SEKAI NO OWARI 「Stella」 × TVアニメ『天幕のジャードゥーガル』 コラボMUSIC VIDEO',
+    authorName: 'SEKAI NO OWARI',
+    channelTitle: 'SEKAI NO OWARI',
+  }),
+  'anime collab music video is music',
+);
+
+assert(
+  isNonMusicYoutubeForRoomAnnounce({
+    rawTitle: '人気アニメ 第1話 本編',
+    authorName: 'アニメチャンネル',
+  }),
+  'anime episode still non-music',
+);
+
+assert(
+  isNonMusicYoutubeForRoomAnnounce({
+    rawTitle: 'ゼルダの伝説 実況プレイ #1',
+    authorName: 'ゲーム実況者',
+    categoryId: YOUTUBE_CATEGORY_GAMING,
+  }),
+  'gameplay still non-music',
 );
 
 console.log('song-db-registration-gate.unit-test.ts: ok');
