@@ -4,6 +4,7 @@ import {
   buildMusicaichatFactsForAiPromptBlock,
   buildMusicaichatStructuredDiscographyFactLines,
   formatMusic8ReleaseDateForAiFacts,
+  isMusicaichatCoverRecording,
   shouldRegenerateLibraryWhenMusicaichatSong,
   skipMusic8FactInjectEnv,
 } from '@/lib/music8-musicaichat';
@@ -64,6 +65,23 @@ test('structured discography lines include releases even when facts lack year', 
   const block = buildMusicaichatFactsForAiPromptBlock(song);
   assert.match(block, /1975年10月/);
   assert.doesNotMatch(block, /Music8 に掲載/);
+});
+
+test('isMusicaichatCoverRecording detects Music8 cover kind', () => {
+  assert.equal(
+    isMusicaichatCoverRecording({
+      stable_key: { artist_slug: 'music-travel-love', song_slug: 'last-christmas' },
+      recording: { kind: 'cover' },
+    }),
+    true,
+  );
+  assert.equal(
+    isMusicaichatCoverRecording({
+      stable_key: { artist_slug: 'wham', song_slug: 'last-christmas' },
+      recording: { kind: 'original' },
+    }),
+    false,
+  );
 });
 
 test('Music8 listing boilerplate is stripped from facts block and song extract', () => {

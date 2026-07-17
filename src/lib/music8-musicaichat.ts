@@ -216,6 +216,16 @@ function asRecord(x: unknown): Record<string, unknown> | null {
     : null;
 }
 
+export function getMusicaichatRecordingKind(song: MusicaichatSongJson | null | undefined): string {
+  const rec = asRecord(song?.recording);
+  const kind = typeof rec?.kind === 'string' ? rec.kind.trim().toLowerCase() : '';
+  return kind;
+}
+
+export function isMusicaichatCoverRecording(song: MusicaichatSongJson | null | undefined): boolean {
+  return getMusicaichatRecordingKind(song) === 'cover';
+}
+
 /** extractMusic8SongFields の releaseDate（例 1975.10）を AI 事実行用の日本語表記へ */
 export function formatMusic8ReleaseDateForAiFacts(releaseYearMonth: string): string {
   const s = (releaseYearMonth ?? '').trim();

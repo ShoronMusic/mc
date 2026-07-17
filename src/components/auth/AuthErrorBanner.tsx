@@ -14,7 +14,7 @@ const NOTICE_MAP: Record<string, string> = {
 };
 
 const PKCE_HINT =
-  'Google 認証は「ボタンを押したページと同じドメイン」で戻る必要があります。いまのアドレスが本番（Vercel）なら、localhost で開き直してからやり直してください。ローカルで試すなら、Supabase の Authentication → URL Configuration の Redirect URLs に、そのときのアドレスに合わせた「…/auth/callback」（例: http://localhost:3002/auth/callback）を必ず追加してください。';
+  'Google 認証は「ボタンを押したページと同じドメイン」で戻る必要があります。別サイト（例: musicchat.jp ↔ musicai.jp）や localhost ↔ 本番に飛んだ場合は、Supabase の Authentication → URL Configuration の Redirect URLs に、押した側の「…/auth/callback」が無いことが多いです（例: https://www.musicchat.jp/auth/callback と https://www.musicai.jp/auth/callback、開発は http://localhost:3002/auth/callback と http://localhost:3003/auth/callback）。追加後、最初に開いていたドメインでやり直してください。';
 
 const RECOVERY_LINK_HINT =
   'パスワード再設定のリンクが無効か、期限切れです。次を試してください。（1）部屋への参加画面の「パスワードをお忘れですか？」から、新しい再設定メールを送る。（2）再設定メールを送ったのと同じ端末・同じブラウザで、メール内のリンクを開く（別アプリのブラウザやスマホだけだと失敗することがあります）。（3）職場メールの「安全なリンク」先読みでリンクが一度使われている場合があります。時間をおいて再送するか、別の受信箱で試してください。';

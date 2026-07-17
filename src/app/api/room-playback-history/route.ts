@@ -45,6 +45,7 @@ import {
   parseRoomPlaybackHistoryOffset,
   ROOM_PLAYBACK_HISTORY_PAGE_SIZE,
 } from '@/lib/room-playback-history-pagination';
+import type { RoomPlaybackHistoryRow } from '@/lib/room-playback-history-types';
 import {
   getRoomHistoryProductId,
   runRoomHistoryQueryScoped,
@@ -52,6 +53,8 @@ import {
 } from '@/lib/room-history-product';
 
 export const dynamic = 'force-dynamic';
+
+export type { RoomPlaybackHistoryRow } from '@/lib/room-playback-history-types';
 
 const TWO_MINUTES_MS = 2 * 60 * 1000;
 /** STYLE_ADMIN が視聴履歴の「アーティスト - タイトル」行を修正するときの最大文字数 */
@@ -68,22 +71,6 @@ function friendlySupabaseErrorMessage(raw: string): string {
   }
   return raw;
 }
-
-export type RoomPlaybackHistoryRow = {
-  id: string;
-  room_id: string;
-  video_id: string;
-  display_name: string;
-  is_guest: boolean;
-  played_at: string;
-  title: string | null;
-  artist_name: string | null;
-  style: string | null;
-  /** 同期部屋の選曲ラウンド（列未追加のDBでは null） */
-  selection_round: number | null;
-  /** `song_era` テーブル由来（GET 時に video_id で結合） */
-  era: string | null;
-};
 
 function parseSelectionRoundForHistory(raw: unknown): number | null {
   if (typeof raw !== 'number' || !Number.isFinite(raw)) return null;

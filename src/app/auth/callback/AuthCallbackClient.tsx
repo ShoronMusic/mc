@@ -2,13 +2,26 @@
 
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect } from 'react';
+import {
+  clearOAuthReturnPathCookie,
+  readOAuthReturnPathCookie,
+  safeOauthNextPath,
+} from '@/lib/oauth-return-path';
 import { safeAuthNextPath } from '@/lib/supabase-email-auth';
 import { createClient } from '@/lib/supabase/client';
 
-function safeNext(raw: string | null): string {
-  let n = raw ?? '/';
-  if (!n.startsWith('/')) n = '/';
-  return n;
+function resolveOAuthNext(raw: string | null): string {
+  const fromQuery = safeOauthNextPath(raw);
+  if (fromQuery) return fromQuery;
+  const fromCookie = readOAuthReturnPathCookie();
+  if (fromCookie) return fromCookie;
+  return '/';
+}
+
+function resolveForcedNext(forced: string): string {
+  const t = forced.trim();
+  if (!t.startsWith('/') || t.startsWith('//')) return '/';
+  return t;
 }
 
 export interface AuthCallbackClientProps {
@@ -35,17 +48,15 @@ export function AuthCallbackClient({ forcedNext }: AuthCallbackClientProps) {
     const run = async () => {
       const oauthError = searchParams.get('error');
       const errorDescription = searchParams.get('error_description') ?? '';
-      const queryNext = safeNext(searchParams.get('next'));
-      const next = forcedNext != null && forcedNext !== '' ? safeNext(forcedNext) : queryNext;
+      const next =
+        forcedNext != null && forcedNext !== ''
+          ? resolveForcedNext(forcedNext)
+          : resolveOAuthNext(searchParams.get('next'));
       const flow = searchParams.get('flow');
       const destination =
         flow === 'email_confirm' ? appendAuthNotice(safeAuthNextPath(next), 'email_confirmed') : next;
 
-      try {
-        document.cookie = 'mc_oauth_next=; Path=/; Max-Age=0';
-      } catch {
-        /* ignore */
-      }
+      clearOAuthReturnPathCookie();
 
       if (oauthError) {
         const isStateExpired = oauthError === 'invalid_request' && errorDescription.includes('expired');

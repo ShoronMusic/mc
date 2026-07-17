@@ -7,7 +7,7 @@
 
 import { CalendarDaysIcon, ChartBarIcon, ClockIcon } from '@heroicons/react/24/outline';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { RoomPlaybackHistoryRow } from '@/app/api/room-playback-history/route';
+import type { RoomPlaybackHistoryRow } from '@/lib/room-playback-history-types';
 import {
   appendRoomPlaybackHistoryPagination,
   ROOM_PLAYBACK_HISTORY_PAGE_SIZE,

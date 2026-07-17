@@ -11,7 +11,7 @@ import {
   GUEST_STORAGE_KEY,
 } from '@/lib/guest-room-storage-keys';
 import { resolveGuestDisplayNameForJoin, roomDisplayNameValidationMessage } from '@/lib/room-display-name';
-import { setOAuthReturnPathCookie } from '@/lib/oauth-return-path';
+import { setOAuthReturnPathCookie, buildOAuthCallbackRedirectTo } from '@/lib/oauth-return-path';
 import { getBrowserAppOrigin } from '@/lib/app-origin';
 import { getProductDisplayName, IS_MC_PRODUCT } from '@/lib/product-branding';
 import { MusicChatTitleBrand } from '@/components/home/MusicChatTitleLogo';
@@ -104,9 +104,9 @@ export function JoinChoice({ onJoin, roomId, joinVerifying = false }: JoinChoice
     const origin = getBrowserAppOrigin();
     const pathname = typeof window !== 'undefined' ? window.location.pathname : `/${roomId}`;
     setOAuthReturnPathCookie(pathname);
-    const redirectTo = `${origin}/auth/callback?next=${encodeURIComponent(pathname)}`;
+    // ?next= 付きは Redirect URLs 不一致→Site URL（musicai.jp）へ落ち PKCE 失敗することがある
+    const redirectTo = buildOAuthCallbackRedirectTo(origin);
     if (process.env.NODE_ENV === 'development') {
-      // Supabase が redirectTo を拒否すると Site URL（本番）へ ?code= だけ飛ばすことがある。Network タブの authorize URL と照合する。
       console.info('[OAuth] redirectTo →', redirectTo);
     }
     const { error: err } = await supabase.auth.signInWithOAuth({

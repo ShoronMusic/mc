@@ -116,6 +116,19 @@ import {
   shouldShowLeaveSiteFeedbackPrompt,
 } from '@/lib/site-feedback-prompt';
 import { extractVideoId, isStandaloneNonYouTubeUrl } from '@/lib/youtube';
+import { isMusic8PlaylistUrl } from '@/lib/music8-playlist-url';
+import { isYoutubePlaylistUrl } from '@/lib/youtube-playlist-url';
+import {
+  advanceMusic8PlaylistAutoplay,
+  createMusic8PlaylistAutoplayState,
+  formatMusic8PlaylistFinishedMessage,
+  formatMusic8PlaylistStartMessage,
+  formatMusic8PlaylistStoppedMessage,
+  formatMusic8PlaylistTrackMessage,
+  getMusic8PlaylistCurrentSong,
+  isMusic8PlaylistAutoplayCurrentVideo,
+  type Music8PlaylistAutoplayState,
+} from '@/lib/music8-playlist-autoplay';
 import { isYoutubeKeywordSearchEnabled } from '@/lib/youtube-keyword-search-ui';
 import { extractCharacterSongPickResolvedYoutube } from '@/lib/character-song-pick-youtube';
 import { CHARACTER_SONG_PICK_AUTO_USER_PROMPT } from '@/lib/ai-character-song-pick-cues';
@@ -825,6 +838,9 @@ export default function RoomWithSync({
     themeId: string;
     themeLabel?: string;
   } | null>(null);
+  /** Music8 プレイリスト連続再生（予約キューとは別系統） */
+  const music8PlaylistAutoplayRef = useRef<Music8PlaylistAutoplayState | null>(null);
+  const advanceMusic8PlaylistOnEndedRef = useRef<() => boolean>(() => false);
   type SongQuizAnswerRow = { clientId: string; displayName: string; pickedIndex: number };
   type SongQuizRoundMetaLocal = { correctIndex: number; choices: string[]; videoId: string };
   /** 三択クイズ: 締め切り後に正解者を発表するタイマー（quiz メッセージ id キー） */
@@ -3556,6 +3572,10 @@ export default function RoomWithSync({
       if (applyingRemoteRef.current) return;
       setCurrentTime(time);
       if (state === 'ended') {
+        // Music8 連続再生中は開始者だけが次曲へ進め、ターン適用を抑止する
+        if (advanceMusic8PlaylistOnEndedRef.current()) {
+          return;
+        }
         const endedVideoId = videoIdRef.current;
         playingRef.current = false;
         trackEndedGraceWindowUntilRef.current = Date.now() + TRACK_ENDED_GRACE_MS;
@@ -6200,6 +6220,13 @@ export default function RoomWithSync({
         /** キュー適用時: 予約時点の選曲者表示名 */
         publisherDisplayNameHint?: string;
         publisherAuthUserIdHint?: string;
+        /** Music8 連続再生など: 曲紹介アナウンスを出さない */
+        skipAnnounce?: boolean;
+        /**
+         * 同一 videoId の再選曲でも曲紹介・解説を出す（Music8 PL 先頭など）。
+         * 通常の sameVideoReplay 抑止を上書きする。
+         */
+        forceSongAi?: boolean;
       },
     ) => {
       playbackLog('applyImmediateChangeVideo', { id, publisherClientId });
@@ -6221,6 +6248,7 @@ export default function RoomWithSync({
       }
       const previousVideoId = videoIdRef.current;
       const sameVideoReplay = Boolean(previousVideoId && previousVideoId === id);
+      const forceSongAi = options?.forceSongAi === true;
       jpDomesticSilenceVideoIdRef.current = null;
       setVideoId(id);
       currentTrackStartedAtMsRef.current = Date.now();
@@ -6278,7 +6306,7 @@ export default function RoomWithSync({
       advanceTurnAfterPost(resolvedPosterClientId, nextTurnId);
       fetchAnnounceAndPublish(
         id,
-        (sameVideoReplay || isDevMinimalSongAi())
+        (options?.skipAnnounce || isDevMinimalSongAi() || (sameVideoReplay && !forceSongAi))
           ? { silent: true, displayNameOverride: publisherDisplayName }
           : { displayNameOverride: publisherDisplayName },
       );
@@ -6299,14 +6327,18 @@ export default function RoomWithSync({
         displayNameHint: options?.publisherDisplayNameHint,
         aiMode: selectionAiMode,
         sameVideoReplay,
+        forceSongAi,
         myClientId,
         coordinationClientId: coordinationRef.current,
         posterInRoom: posterInRoomApply,
         commentaryFetch: commentaryDecisionApply,
         source: options?.preserveReservationQueue ? 'queue_apply' : 'direct',
       });
-      if (!sameVideoReplay && commentaryDecisionApply.shouldFetch) {
-        fetchCommentaryAndPublish(id, { aiMode: selectionAiMode });
+      if ((!sameVideoReplay || forceSongAi) && commentaryDecisionApply.shouldFetch) {
+        fetchCommentaryAndPublish(id, {
+          aiMode: selectionAiMode,
+          ...(forceSongAi ? { skipCommentPackCache: true } : {}),
+        });
       }
       const roundAtPost = Math.max(1, Math.floor(selectionRoundNumberRef.current));
       if (resolvedPosterClientId === myClientId) saveSongHistory(id, roundAtPost);
@@ -7233,6 +7265,232 @@ export default function RoomWithSync({
     roomId,
   ]);
 
+  const handleMusic8PlaylistUrl = useCallback(
+    async (url: string) => {
+      if (isGuest) {
+        addSystemMessage('Music8プレイリストの連続再生はログインユーザーのみ利用できます。');
+        return;
+      }
+      if (!participatesInSelection) {
+        addSystemMessage('選曲に参加していないため、プレイリスト連続再生はできません。');
+        return;
+      }
+      const turnClientId = currentTurnClientIdRef.current;
+      const order = participatingOrderRef.current;
+      const normalizedNames = order.map((p) => (p.displayName ?? '').trim() || 'ゲスト');
+      const uniqueDisplayNameCount = new Set(normalizedNames).size;
+      const sameDisplayNameOnly = order.length > 1 && uniqueDisplayNameCount === 1;
+      const multipleParticipants = order.length > 1 && !sameDisplayNameOnly;
+      const isMyTurn = Boolean(turnClientId && turnClientId === myClientId);
+      if (multipleParticipants && !isMyTurn && !isOwner) {
+        const turnParticipant = order.find((p) => p.clientId === turnClientId) ?? null;
+        const nameLabel = turnParticipant?.displayName ?? '次の方';
+        addSystemMessage(
+          `今は${nameLabel}さんの選曲ターンです。プレイリスト連続再生は順番が回ってきてから行ってください。`,
+        );
+        return;
+      }
+      try {
+        const res = await fetch('/api/music8/playlist', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url }),
+        });
+        const data = (await res.json().catch(() => null)) as {
+          ok?: boolean;
+          message?: string;
+          playlist?: { slug?: string; title?: string };
+          songs?: Array<{ videoId: string; title?: string; artist?: string; music8SongId?: number }>;
+          truncated?: boolean;
+          totalFetched?: number;
+        } | null;
+        if (!res.ok || !data?.ok || !Array.isArray(data.songs) || data.songs.length === 0) {
+          addSystemMessage(
+            (typeof data?.message === 'string' && data.message.trim()) ||
+              'Music8プレイリストを読み込めませんでした。',
+          );
+          return;
+        }
+        const songs = data.songs
+          .filter((s) => typeof s?.videoId === 'string' && s.videoId.trim())
+          .map((s) => ({
+            videoId: s.videoId.trim(),
+            title: typeof s.title === 'string' ? s.title : s.videoId,
+            artist: typeof s.artist === 'string' ? s.artist : '',
+            ...(typeof s.music8SongId === 'number' ? { music8SongId: s.music8SongId } : {}),
+          }));
+        const state = createMusic8PlaylistAutoplayState({
+          slug: String(data.playlist?.slug ?? '').trim() || 'playlist',
+          title: String(data.playlist?.title ?? '').trim() || 'プレイリスト',
+          songs,
+        });
+        if (!state || !myClientId) {
+          addSystemMessage('再生できる曲がプレイリストにありませんでした。');
+          return;
+        }
+        music8PlaylistAutoplayRef.current = state;
+        addSystemMessage(
+          formatMusic8PlaylistStartMessage({
+            title: state.title,
+            songCount: state.songs.length,
+            truncated: Boolean(data.truncated),
+            totalFetched: typeof data.totalFetched === 'number' ? data.totalFetched : undefined,
+          }),
+        );
+        const first = getMusic8PlaylistCurrentSong(state);
+        if (first) {
+          const trackMsg = formatMusic8PlaylistTrackMessage(state);
+          if (trackMsg) addSystemMessage(trackMsg);
+          // 同一曲の再貼り付けでも forceSongAi で紹介・解説を出す。
+          applyImmediateChangeVideo(first.videoId, myClientId, {
+            aiMode: 'full',
+            forceSongAi: true,
+            nextTurnClientIdOverride: myClientId,
+            preserveReservationQueue: true,
+          });
+        }
+      } catch {
+        addSystemMessage('Music8プレイリストを読み込めませんでした。');
+      }
+    },
+    [
+      isGuest,
+      participatesInSelection,
+      isOwner,
+      myClientId,
+      addSystemMessage,
+      applyImmediateChangeVideo,
+    ],
+  );
+
+  const handleYoutubePlaylistUrl = useCallback(
+    async (url: string) => {
+      if (isGuest) {
+        addSystemMessage('YouTubeプレイリストの連続再生はログインユーザーのみ利用できます。');
+        return;
+      }
+      if (!participatesInSelection) {
+        addSystemMessage('選曲に参加していないため、プレイリスト連続再生はできません。');
+        return;
+      }
+      const turnClientId = currentTurnClientIdRef.current;
+      const order = participatingOrderRef.current;
+      const normalizedNames = order.map((p) => (p.displayName ?? '').trim() || 'ゲスト');
+      const uniqueDisplayNameCount = new Set(normalizedNames).size;
+      const sameDisplayNameOnly = order.length > 1 && uniqueDisplayNameCount === 1;
+      const multipleParticipants = order.length > 1 && !sameDisplayNameOnly;
+      const isMyTurn = Boolean(turnClientId && turnClientId === myClientId);
+      if (multipleParticipants && !isMyTurn && !isOwner) {
+        const turnParticipant = order.find((p) => p.clientId === turnClientId) ?? null;
+        const nameLabel = turnParticipant?.displayName ?? '次の方';
+        addSystemMessage(
+          `今は${nameLabel}さんの選曲ターンです。プレイリスト連続再生は順番が回ってきてから行ってください。`,
+        );
+        return;
+      }
+      try {
+        const res = await fetch('/api/youtube/playlist', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url }),
+        });
+        const data = (await res.json().catch(() => null)) as {
+          ok?: boolean;
+          message?: string;
+          playlist?: { id?: string; title?: string };
+          songs?: Array<{ videoId: string; title?: string; artist?: string }>;
+          truncated?: boolean;
+          totalFetched?: number;
+        } | null;
+        if (!res.ok || !data?.ok || !Array.isArray(data.songs) || data.songs.length === 0) {
+          addSystemMessage(
+            (typeof data?.message === 'string' && data.message.trim()) ||
+              'YouTubeプレイリストを読み込めませんでした。',
+          );
+          return;
+        }
+        const songs = data.songs
+          .filter((s) => typeof s?.videoId === 'string' && s.videoId.trim())
+          .map((s) => ({
+            videoId: s.videoId.trim(),
+            title: typeof s.title === 'string' ? s.title : s.videoId,
+            artist: typeof s.artist === 'string' ? s.artist : '',
+          }));
+        const state = createMusic8PlaylistAutoplayState({
+          slug: String(data.playlist?.id ?? '').trim() || 'youtube-playlist',
+          title: String(data.playlist?.title ?? '').trim() || 'YouTubeプレイリスト',
+          sourceLabel: 'YouTube',
+          orderLabel: 'プレイリスト順',
+          songs,
+        });
+        if (!state || !myClientId) {
+          addSystemMessage('再生できる曲がプレイリストにありませんでした。');
+          return;
+        }
+        music8PlaylistAutoplayRef.current = state;
+        addSystemMessage(
+          formatMusic8PlaylistStartMessage({
+            title: state.title,
+            songCount: state.songs.length,
+            sourceLabel: state.sourceLabel,
+            orderLabel: state.orderLabel,
+            truncated: Boolean(data.truncated),
+            totalFetched: typeof data.totalFetched === 'number' ? data.totalFetched : undefined,
+          }),
+        );
+        const first = getMusic8PlaylistCurrentSong(state);
+        if (first) {
+          const trackMsg = formatMusic8PlaylistTrackMessage(state);
+          if (trackMsg) addSystemMessage(trackMsg);
+          applyImmediateChangeVideo(first.videoId, myClientId, {
+            aiMode: 'full',
+            forceSongAi: true,
+            nextTurnClientIdOverride: myClientId,
+            preserveReservationQueue: true,
+          });
+        }
+      } catch {
+        addSystemMessage('YouTubeプレイリストを読み込めませんでした。');
+      }
+    },
+    [
+      isGuest,
+      participatesInSelection,
+      isOwner,
+      myClientId,
+      addSystemMessage,
+      applyImmediateChangeVideo,
+    ],
+  );
+
+  advanceMusic8PlaylistOnEndedRef.current = () => {
+    const ap = music8PlaylistAutoplayRef.current;
+    if (!ap || !myClientId) return false;
+    if (!isMusic8PlaylistAutoplayCurrentVideo(ap, videoIdRef.current)) return false;
+    const next = advanceMusic8PlaylistAutoplay(ap);
+    if (!next) {
+      music8PlaylistAutoplayRef.current = null;
+      addSystemMessage(formatMusic8PlaylistFinishedMessage(ap));
+      return false;
+    }
+    music8PlaylistAutoplayRef.current = next;
+    const song = getMusic8PlaylistCurrentSong(next);
+    if (!song) {
+      music8PlaylistAutoplayRef.current = null;
+      addSystemMessage(formatMusic8PlaylistFinishedMessage(next));
+      return false;
+    }
+    const trackMsg = formatMusic8PlaylistTrackMessage(next);
+    if (trackMsg) addSystemMessage(trackMsg);
+    applyImmediateChangeVideo(song.videoId, myClientId, {
+      aiMode: 'full',
+      forceSongAi: true,
+      nextTurnClientIdOverride: myClientId,
+      preserveReservationQueue: true,
+    });
+    return true;
+  };
+
   const handleVideoUrlFromChat = useCallback(
     (
       url: string,
@@ -7246,6 +7504,12 @@ export default function RoomWithSync({
     ) => {
       const id = extractVideoId(url);
       if (!id) return;
+
+      if (music8PlaylistAutoplayRef.current) {
+        const playlistState = music8PlaylistAutoplayRef.current;
+        music8PlaylistAutoplayRef.current = null;
+        addSystemMessage(formatMusic8PlaylistStoppedMessage(playlistState));
+      }
 
       const aiMode = resolveAiSelectionMode({
         explicitMode: opts?.aiMode,
@@ -7459,6 +7723,16 @@ export default function RoomWithSync({
       const limit = checkSendLimit(text, lastSendAtRef, sendTimestampsRef);
       if (!limit.ok) {
         addSystemMessage(getSendLimitMessage(limit.reason));
+        return;
+      }
+
+      if (isMusic8PlaylistUrl(text)) {
+        void handleMusic8PlaylistUrl(text);
+        return;
+      }
+
+      if (isYoutubePlaylistUrl(text)) {
+        void handleYoutubePlaylistUrl(text);
         return;
       }
 
@@ -8393,6 +8667,8 @@ export default function RoomWithSync({
       currentSongPosterClientId,
       participatesInSelection,
       aiTrialStatus,
+      handleMusic8PlaylistUrl,
+      handleYoutubePlaylistUrl,
     ]
   );
 
@@ -8434,6 +8710,8 @@ export default function RoomWithSync({
       ref={chatInputRef}
       onSendMessage={handleSendMessage}
       onVideoUrl={handleVideoUrlFromChat}
+      onMusic8PlaylistUrl={handleMusic8PlaylistUrl}
+      onYoutubePlaylistUrl={handleYoutubePlaylistUrl}
       themePlaylistRoomSubmit={themePlaylistRoomSubmit}
       isGuest={isGuest}
       aiTrialStatus={aiTrialStatus}

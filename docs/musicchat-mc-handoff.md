@@ -181,7 +181,7 @@ git log -5 --oneline
 | 高 | **Supabase SQL 実行** — `product` 列（本番・開発 DB） |
 | 高 | **musicchat.jp** ドメイン取得 · Vercel **mc 用プロジェクト** 作成 |
 | 高 | mc デプロイ env: `NEXT_PUBLIC_PRODUCT=musicchat` · `NEXT_PUBLIC_MA_PUBLIC_URL` |
-| 中 | Supabase Redirect URL に `localhost:3003` · `musicchat.jp` 追加 |
+| 中 | Supabase Redirect URL に `http://localhost:3003/auth/callback` · `https://www.musicchat.jp/auth/callback`（＋ recover-callback）追加。未登録だと mc の Google 認証が ma（Site URL）へ飛び PKCE 失敗する |
 | 中 | mc 用 manifest / OGP 画像の最終化 |
 | 低 | `from=musicchat` 深リンク・analytics 計測 |
 

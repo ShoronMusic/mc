@@ -1,0 +1,111 @@
+/**
+ * Music8 プレイリスト専用オートプレイキューの状態ヘルパー（UI 副作用なし）。
+ */
+
+export type Music8PlaylistAutoplaySong = {
+  videoId: string;
+  title: string;
+  artist: string;
+  music8SongId?: number;
+};
+
+export type Music8PlaylistAutoplayState = {
+  slug: string;
+  title: string;
+  songs: Music8PlaylistAutoplaySong[];
+  sourceLabel?: string;
+  orderLabel?: string;
+  /** 現在再生中の index */
+  index: number;
+  startedAt: string;
+};
+
+export function createMusic8PlaylistAutoplayState(params: {
+  slug: string;
+  title: string;
+  songs: Music8PlaylistAutoplaySong[];
+  sourceLabel?: string;
+  orderLabel?: string;
+}): Music8PlaylistAutoplayState | null {
+  if (!params.songs.length) return null;
+  return {
+    slug: params.slug,
+    title: params.title,
+    songs: params.songs,
+    ...(params.sourceLabel ? { sourceLabel: params.sourceLabel } : {}),
+    ...(params.orderLabel ? { orderLabel: params.orderLabel } : {}),
+    index: 0,
+    startedAt: new Date().toISOString(),
+  };
+}
+
+export function getMusic8PlaylistCurrentSong(
+  state: Music8PlaylistAutoplayState | null,
+): Music8PlaylistAutoplaySong | null {
+  if (!state) return null;
+  return state.songs[state.index] ?? null;
+}
+
+/** 現在曲が終わったあと次へ進める。終端なら null。 */
+export function advanceMusic8PlaylistAutoplay(
+  state: Music8PlaylistAutoplayState,
+): Music8PlaylistAutoplayState | null {
+  const nextIndex = state.index + 1;
+  if (nextIndex >= state.songs.length) return null;
+  return { ...state, index: nextIndex };
+}
+
+export function isMusic8PlaylistAutoplayCurrentVideo(
+  state: Music8PlaylistAutoplayState | null,
+  videoId: string | null | undefined,
+): boolean {
+  if (!state || !videoId) return false;
+  const cur = state.songs[state.index];
+  return Boolean(cur && cur.videoId === videoId);
+}
+
+export function formatMusic8PlaylistStartMessage(params: {
+  title: string;
+  songCount: number;
+  sourceLabel?: string;
+  orderLabel?: string;
+  truncated?: boolean;
+  totalFetched?: number;
+}): string {
+  const sourceLabel = params.sourceLabel?.trim() || 'Music8';
+  const orderLabel = params.orderLabel?.trim() || '公開日が新しい順';
+  const base = `${sourceLabel}「${params.title}」${params.songCount}曲を連続再生します（${orderLabel}）`;
+  if (params.truncated && params.totalFetched != null && params.totalFetched > params.songCount) {
+    return `${base}。全${params.totalFetched}曲中、先頭${params.songCount}曲まで再生します`;
+  }
+  return base;
+}
+
+/** 曲ごとの進捗行（例: Music8「Pop//New wave」2/13曲目: Olivia Rodrigo - expectations） */
+export function formatMusic8PlaylistTrackMessage(
+  state: Music8PlaylistAutoplayState,
+): string | null {
+  const song = state.songs[state.index];
+  if (!song) return null;
+  const sourceLabel = state.sourceLabel?.trim() || 'Music8';
+  const pos = `${state.index + 1}/${state.songs.length}曲目`;
+  const label = [song.artist, song.title].filter(Boolean).join(' - ');
+  return `${sourceLabel}「${state.title}」${pos}${label ? `: ${label}` : ''}`;
+}
+
+export const MUSIC8_PLAYLIST_STOPPED_MESSAGE = 'Music8プレイリストの連続再生を止めました。';
+export const MUSIC8_PLAYLIST_FINISHED_MESSAGE = 'Music8プレイリストの連続再生が終わりました。';
+
+export function formatMusic8PlaylistStoppedMessage(
+  state: Music8PlaylistAutoplayState | null,
+): string {
+  const sourceLabel = state?.sourceLabel?.trim() || 'Music8';
+  return `${sourceLabel}プレイリストの連続再生を止めました。`;
+}
+
+export function formatMusic8PlaylistFinishedMessage(
+  state: Music8PlaylistAutoplayState | null,
+): string {
+  const sourceLabel = state?.sourceLabel?.trim() || 'Music8';
+  return `${sourceLabel}プレイリストの連続再生が終わりました。`;
+}

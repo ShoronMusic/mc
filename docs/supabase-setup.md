@@ -100,10 +100,15 @@ Google認証で参加できるようにするには、Supabase 側で Google を
 
 1. Supabase ダッシュボード **Authentication** → **Providers** → **Email** を開く。
 2. **Confirm email** を **ON** にして **Save**。
-3. **Authentication** → **URL Configuration** → **Redirect URLs** に次を追加（未登録だと確認リンクが失敗します）:
-   - 開発: `http://localhost:3002/auth/callback`
-   - 本番: `https://（あなたのドメイン）/auth/callback`
-4. **Site URL** が本番ドメインの場合、ローカルで確認メールを試すときも上記 localhost の Redirect URL が必要です。
+3. **Authentication** → **URL Configuration** → **Redirect URLs** に次を追加（未登録だと確認リンク／Google OAuth が **Site URL 側ドメインへ飛ばされ**、PKCE エラーになります）:
+   - 開発 ma: `http://localhost:3002/auth/callback` · `http://localhost:3002/auth/recover-callback`
+   - 開発 mc: `http://localhost:3003/auth/callback` · `http://localhost:3003/auth/recover-callback`
+   - 本番 ma: `https://www.musicai.jp/auth/callback` · `https://www.musicai.jp/auth/recover-callback`
+   - 本番 mc: `https://www.musicchat.jp/auth/callback` · `https://www.musicchat.jp/auth/recover-callback`
+   - apex（www なし）を使う場合は同様に `https://musicai.jp/…` · `https://musicchat.jp/…` も追加
+   - 念のためワイルドカードも可: `https://www.musicchat.jp/**` · `https://musicchat.jp/**`
+4. **Site URL** はどちらか一方（例: `https://www.musicai.jp`）でよい。**Redirect URLs に無い redirectTo は Site URL にフォールバック**するため、姉妹サイト分は必ず Redirect URLs に列挙する。
+5. Google OAuth のアプリ側 `redirectTo` は **`{origin}/auth/callback` のみ**（`?next=` は付けない）。クエリ付きだと許可リスト不一致→Site URL 落ちが起きやすく、ma では同一ドメインのため気づきにくい。戻り先はクッキー `mc_oauth_next`。
 
 アプリ側（`SimpleAuthForm`）は登録時に `emailRedirectTo` を `/auth/callback?next=部屋パス&flow=email_confirm` に設定済みです。確認完了後、部屋またはトップに戻り「メールアドレスの確認が完了しました」と表示されます。
 

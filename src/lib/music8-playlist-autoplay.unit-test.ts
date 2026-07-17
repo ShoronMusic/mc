@@ -1,0 +1,73 @@
+/**
+ * `npx tsx src/lib/music8-playlist-autoplay.unit-test.ts`
+ */
+import assert from 'node:assert/strict';
+import {
+  advanceMusic8PlaylistAutoplay,
+  createMusic8PlaylistAutoplayState,
+  formatMusic8PlaylistStartMessage,
+  formatMusic8PlaylistTrackMessage,
+  getMusic8PlaylistCurrentSong,
+  isMusic8PlaylistAutoplayCurrentVideo,
+} from '@/lib/music8-playlist-autoplay';
+
+function run() {
+  const state = createMusic8PlaylistAutoplayState({
+    slug: 'dance-pop',
+    title: 'Dance-pop',
+    songs: [
+      { videoId: 'aaaaaaaaaaa', title: 'A', artist: 'X' },
+      { videoId: 'bbbbbbbbbbb', title: 'B', artist: 'Y' },
+    ],
+  });
+  assert.ok(state);
+  assert.equal(state!.index, 0);
+  assert.equal(getMusic8PlaylistCurrentSong(state!)!.videoId, 'aaaaaaaaaaa');
+  assert.equal(isMusic8PlaylistAutoplayCurrentVideo(state!, 'aaaaaaaaaaa'), true);
+
+  const next = advanceMusic8PlaylistAutoplay(state!);
+  assert.ok(next);
+  assert.equal(next!.index, 1);
+  assert.equal(advanceMusic8PlaylistAutoplay(next!), null);
+
+  const msg = formatMusic8PlaylistStartMessage({
+    title: 'Dance-pop',
+    songCount: 40,
+    truncated: true,
+    totalFetched: 55,
+  });
+  assert.ok(msg.includes('40曲'));
+  assert.ok(msg.includes('55'));
+
+  assert.equal(
+    formatMusic8PlaylistTrackMessage(state!),
+    'Music8「Dance-pop」1/2曲目: X - A',
+  );
+  assert.equal(
+    formatMusic8PlaylistTrackMessage(next!),
+    'Music8「Dance-pop」2/2曲目: Y - B',
+  );
+
+  const ytState = createMusic8PlaylistAutoplayState({
+    slug: 'PLabc',
+    title: 'My playlist',
+    sourceLabel: 'YouTube',
+    orderLabel: 'プレイリスト順',
+    songs: [{ videoId: 'ccccccccccc', title: 'Song', artist: 'Artist' }],
+  });
+  assert.ok(ytState);
+  assert.equal(
+    formatMusic8PlaylistStartMessage({
+      title: ytState!.title,
+      songCount: ytState!.songs.length,
+      sourceLabel: ytState!.sourceLabel,
+      orderLabel: ytState!.orderLabel,
+    }),
+    'YouTube「My playlist」1曲を連続再生します（プレイリスト順）',
+  );
+  assert.equal(formatMusic8PlaylistTrackMessage(ytState!), 'YouTube「My playlist」1/1曲目: Artist - Song');
+
+  console.log('music8-playlist-autoplay unit tests: OK');
+}
+
+run();

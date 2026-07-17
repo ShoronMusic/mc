@@ -46,6 +46,38 @@ export function setOAuthReturnPathCookie(pathname: string): void {
   }
 }
 
+/** クライアントのみ。`/auth/callback` で query の next が無いとき戻り先を読む */
+export function readOAuthReturnPathCookie(): string | null {
+  if (typeof document === 'undefined') return null;
+  try {
+    const match = document.cookie.match(new RegExp(`(?:^|; )${OAUTH_RETURN_COOKIE}=([^;]*)`));
+    if (!match?.[1]) return null;
+    return safeOauthNextPath(match[1]);
+  } catch {
+    return null;
+  }
+}
+
+/** クライアントのみ。交換後に消す */
+export function clearOAuthReturnPathCookie(): void {
+  if (typeof document === 'undefined') return;
+  try {
+    document.cookie = `${OAUTH_RETURN_COOKIE}=; Path=/; Max-Age=0`;
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * Google OAuth の redirectTo。
+ * `?next=` を付けると Redirect URLs の完全一致に落ちず Site URL（姉妹サイト）へ飛ばされることがあるため、
+ * パスのみにする。戻り先は {@link setOAuthReturnPathCookie} で保持する。
+ */
+export function buildOAuthCallbackRedirectTo(origin: string): string {
+  const base = origin.replace(/\/$/, '');
+  return `${base}/auth/callback`;
+}
+
 export function clearOauthReturnCookieOn(response: NextResponse): void {
   response.cookies.set(OAUTH_RETURN_COOKIE, '', { path: '/', maxAge: 0 });
 }

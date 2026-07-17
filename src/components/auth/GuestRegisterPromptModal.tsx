@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { EnvelopeIcon } from '@heroicons/react/24/outline';
 import { createClient, isSupabaseConfigured } from '@/lib/supabase/client';
-import { setOAuthReturnPathCookie } from '@/lib/oauth-return-path';
+import { setOAuthReturnPathCookie, buildOAuthCallbackRedirectTo } from '@/lib/oauth-return-path';
 import { getBrowserAppOrigin } from '@/lib/app-origin';
 import { SimpleAuthForm } from './SimpleAuthForm';
 import { clearGuestRoomPersistence } from '@/lib/guest-room-persistence';
@@ -66,7 +66,7 @@ export function GuestRegisterPromptModal({ open, onClose, roomId = '' }: GuestRe
     setError(null);
     const origin = getBrowserAppOrigin();
     setOAuthReturnPathCookie(pathname);
-    const redirectTo = `${origin}/auth/callback?next=${encodeURIComponent(pathname)}`;
+    const redirectTo = buildOAuthCallbackRedirectTo(origin);
     if (process.env.NODE_ENV === 'development') {
       console.info('[OAuth] redirectTo →', redirectTo);
     }

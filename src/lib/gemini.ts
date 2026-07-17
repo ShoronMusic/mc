@@ -21,6 +21,10 @@ import {
   touchAiMonthlyBudgetRefresh,
 } from '@/lib/ai-monthly-budget';
 import { isMcGeminiDisabled } from '@/lib/product-mode';
+import {
+  buildKnownCoverOriginalHint,
+  factsBlockHasCoverOriginalSignal,
+} from '@/lib/cover-original-hints';
 
 export {
   getGeminiGenerationRoutingSummary,
@@ -710,10 +714,21 @@ export async function generateCommentary(
     ? `\n【MusicBrainz から取得した事実（この範囲だけアルバム名・年・シングル／アルバム区分を述べてよい）】\n${groundedFactsBlock}\n`
     : '';
   const music8FactsSection = hasMusic8Facts ? `\n${music8FactsRaw}\n` : '';
+  const knownCoverOriginalHint = buildKnownCoverOriginalHint({
+    songTitle: title,
+    artistName: authorName ?? null,
+  });
+  const hasCoverOriginalSignal =
+    factsBlockHasCoverOriginalSignal(music8FactsRaw) || knownCoverOriginalHint.length > 0;
+  const coverOriginalRules = hasCoverOriginalSignal
+    ? `・この曲はカバー版として扱うこと。基本情報内でも、原曲アーティスト・時代感に短く触れ、${authorName || 'このアーティスト'}版の特徴（アレンジ、歌い方、共演/ゲスト等）を1点述べること。
+${knownCoverOriginalHint ? `・原曲ヒント: ${knownCoverOriginalHint}\n` : ''}`
+    : '';
 
   const discographyRules = hasReferenceFacts
     ? `・アルバム名・収録作・リリース年については、**直前の事実ブロック（MusicBrainz または Music8 参照事実）に書かれた内容に限って**触れてよい。それ以外の盤名・「デビュー／セカンド作」などの**補完・推測は禁止**。
 ・各国チャートの**具体順位**（○位・トップ10 等）は、事実ブロックに無い限り**禁止**。
+${hasCoverOriginalSignal ? '・ただし、カバー版であることや原曲アーティストへの短い言及は、上記の原曲ヒントまたは参照事実に基づく範囲で必ず入れてよい。\n' : ''}
 `
     : `・リリース時期は**西暦1年だけ**書いてよいが、自信がなければ「1980年代」など幅のある表現にするか**年は省略**してよい。
 ・**検証済みディスコグラフィーがこのプロンプトに無い**ため、次を**禁止**：アルバム名（『○○』）の列挙、「デビューアルバム／セカンドアルバムに収録」「サントラ『○○』に収録」などの**収録作の断定**、各国チャートの**具体順位**。取り違えで虚偽になりやすい。
@@ -739,6 +754,7 @@ ${mbFactsSection}${music8FactsSection}
 ・アーティスト欄やタイトルに複数名（共演・feat. 等）が関わる場合は、**それぞれの役割や対比**（例：歌とラップの掛け合い）に一言触れてください。裏付けのない「出会いの経緯」は書かないこと。
 ${discographyRules}
 ${factFirstRules}
+${coverOriginalRules}
 ・可能であれば、この曲のテーマや歌詞のメッセージを一言で要約して触れてよい（例：反戦歌、失恋ソング、社会問題を扱った曲など）。ただし歌詞全文の説明や長い意訳は避け、雰囲気が伝わる程度の短い説明にとどめること。
 ・「80年代といえば」「〇〇といえば」など年代・ジャンルの一般的な話題は出さないこと。あくまでこの曲とアーティストの基本情報だけを書くこと。
 ・アーティストが有名バンドのメンバーまたは元メンバーの場合は、必ずバンド名に触れること。例：Glenn Frey → Eaglesのメンバー、Steve Perry → Journeyの元ボーカル、など。

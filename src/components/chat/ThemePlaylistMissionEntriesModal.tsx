@@ -5,7 +5,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { RoomPlaybackHistoryRow } from '@/app/api/room-playback-history/route';
+import type { RoomPlaybackHistoryRow } from '@/lib/room-playback-history-types';
 import { appendRoomPlaybackHistoryPagination } from '@/lib/room-playback-history-pagination';
 import { getArtistAndSong, repairQuotedSongArtistPackInversion } from '@/lib/format-song-display';
 import {

@@ -70,10 +70,15 @@ import {
 } from '@/lib/comment-pack-session-context';
 import {
   buildMusicaichatFactsForAiPromptBlock,
+  isMusicaichatCoverRecording,
   resolveMusic8ContextForCommentPack,
   shouldRegenerateLibraryWhenMusicaichatSong,
   skipMusic8FactInjectEnv,
 } from '@/lib/music8-musicaichat';
+import {
+  buildKnownCoverOriginalHint,
+  factsBlockHasCoverOriginalSignal,
+} from '@/lib/cover-original-hints';
 import {
   buildSongIntroOnlyArtistFocusComment,
   shouldUseSongIntroOnlyDiscographyMode,
@@ -728,8 +733,16 @@ export async function POST(request: Request) {
     const rawYouTubeTitle = rawYouTubeTitleForPrompt;
     const isLikelyLiveVersion =
       isLikelyLiveVersionLabel(rawYouTubeTitle) || isLikelyLiveVersionLabel(songLabel);
+    const knownCoverOriginalHint = buildKnownCoverOriginalHint({
+      songTitle: songLabel,
+      artistName: artistLabel,
+    });
     const isLikelyCoverVersion =
-      isLikelyCoverVersionLabel(rawYouTubeTitle) || isLikelyCoverVersionLabel(songLabel);
+      isLikelyCoverVersionLabel(rawYouTubeTitle) ||
+      isLikelyCoverVersionLabel(songLabel) ||
+      isMusicaichatCoverRecording(musicaichatSong) ||
+      factsBlockHasCoverOriginalSignal(music8FactsBlockTrimmed) ||
+      knownCoverOriginalHint.length > 0;
     const isLikelyRemixVersion =
       isLikelyRemixVersionLabel(rawYouTubeTitle) || isLikelyRemixVersionLabel(songLabel);
 
@@ -780,6 +793,7 @@ ${adminTitleHint}・YouTube 動画タイトル（原文）: ${rawYouTubeTitle}
 ・重要：曲名に含まれる英単語「With」は**共演者をつなぐ語ではなくタイトルの一部**です（例: 『Die With A Smile』全体が曲名）。【曲名】を短くした別名にしたり、「With」以降を別人名として新たな共演者にしたりしないこと。架空のアルバム名・プロジェクト名を作らないこと。
 ${colorsOfficialLock}${geniusOfficialLock}${appleMusicOfficialLock}
 ${supergroupBlock}
+${knownCoverOriginalHint ? `・原曲ヒント: ${knownCoverOriginalHint}\n` : ''}
 ・YouTube タイトルに「 • 」「 · 」のあとに続く語（TopPop、番組名など）が付いていても、それは**曲名の一部ではない**。【曲名】は「${songLabel}」のみとし、番組名を曲名や『』の中に含めないこと。
 ・絶対禁止: 「${songLabel}」をアーティスト名のように扱い、「${artistLabel}」を曲名のように扱うこと（例:「${songLabel}の代表曲『${artistLabel}』」は誤り。正しくは「${artistLabel}の『${songLabel}』」）。
 ・禁止: 【曲名】を「の」の前に、【アーティスト】を全角かぎかっこ『』の内側に入れる書き方（例:「Back Togetherの『SZA ft. Tame Impala』は〜」）。『』で囲むのは【曲名】${songLabel}のみ。
@@ -804,6 +818,9 @@ ${music8SourcePolicyLine}
     const baseIncludeSupergroupLine = isSupergroupArtist
       ? `・スーパーグループのユニットの場合、**結成やラインナップの一端**を1文以内で触れてよいが、**主要メンバー全員の氏名の列挙は自由コメント1本目**に任せ、ここでは作品の年・雰囲気の核にとどめてください。\n`
       : '';
+    const baseIncludeCoverLine = isLikelyCoverVersion
+      ? `・カバー版として扱うこと。基本情報内でも、原曲のアーティスト・時代感に短く触れたうえで、${artistLabel}版の特徴（アレンジ、歌い方、共演/ゲスト等）を1点述べること。\n`
+      : '';
 
     const baseOptionalExtrasBlock = isSupergroupArtist
       ? `【基本情報に足してよい一言（任意）】
@@ -827,6 +844,7 @@ ${sessionPromptBlock}
 ・クレジットが複数いる場合は、**同じ段落内で**メインと客演の**役割の違い**をそれぞれ一言（例：一方が歌、他方がラップ／フック）触れてください。
 ・曲のテーマや雰囲気を1文（解釈は深掘りしない。概要だけ）
 ${baseIncludeSupergroupLine}
+${baseIncludeCoverLine}
 【事実優先ポリシー（必須）】
 ・リリース年や収録アルバムが断定できない場合は、その不足を1フレーズで明示したうえで、確認できる事実（曲調・テーマ・クレジット上の役割など）を続けること。
 ・不確実な固有名詞・年号・制作逸話は書かない（推測禁止）。
@@ -1056,7 +1074,12 @@ ${basePromptTail}`;
         extraRoleLeadingLines: string,
       ): string => {
         const topic = topics[i];
-        const isHonorsTopic = i === 0 && !isSupergroupArtist && !isLikelyLiveVersion;
+        const isHonorsTopic =
+          i === 0 &&
+          !isSupergroupArtist &&
+          !isLikelyLiveVersion &&
+          !isLikelyRemixVersion &&
+          !isLikelyCoverVersion;
         const isRemixFocusTopic = i === 0 && !isSupergroupArtist && isLikelyRemixVersion;
         const isCoverFocusTopic = i === 0 && !isSupergroupArtist && isLikelyCoverVersion;
         const isLiveFocusTopic = i === 0 && !isSupergroupArtist && isLikelyLiveVersion;
@@ -1136,7 +1159,12 @@ ${isRemixFocusTopic ? banBlockRemixFocus : isCoverFocusTopic ? banBlockCoverFocu
         freeComments.map((s) => (typeof s === 'string' ? s.trim() : '')).filter((s) => s.length > 0);
 
       for (const i of filteredFreeIndices) {
-        const isHonorsTopic = i === 0 && !isSupergroupArtist && !isLikelyLiveVersion;
+        const isHonorsTopic =
+          i === 0 &&
+          !isSupergroupArtist &&
+          !isLikelyLiveVersion &&
+          !isLikelyRemixVersion &&
+          !isLikelyCoverVersion;
         const isRemixFocusTopic = i === 0 && !isSupergroupArtist && isLikelyRemixVersion;
         const isCoverFocusTopic = i === 0 && !isSupergroupArtist && isLikelyCoverVersion;
         const isLiveFocusTopic = i === 0 && !isSupergroupArtist && isLikelyLiveVersion;

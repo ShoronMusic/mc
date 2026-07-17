@@ -21,6 +21,8 @@ import { SHARE_SET_CHAT_TEXT_EVENT } from '@/lib/share-target-delivery';
 import { consumePendingShareChatText } from '@/lib/share-target-pending';
 import { NON_YOUTUBE_URL_SYSTEM_MESSAGE } from '@/lib/chat-non-youtube-url';
 import { extractVideoId, isStandaloneNonYouTubeUrl } from '@/lib/youtube';
+import { isMusic8PlaylistUrl } from '@/lib/music8-playlist-url';
+import { isYoutubePlaylistUrl } from '@/lib/youtube-playlist-url';
 import type { AiTrialStatus } from '@/lib/ai-trial-status';
 import {
   resolveAiSelectionMode,
@@ -646,6 +648,10 @@ interface ChatInputProps {
       aiMode?: AiSelectionMode;
     },
   ) => void;
+  /** Music8 プレイリスト公開 URL（連続再生） */
+  onMusic8PlaylistUrl?: (url: string) => void | Promise<void>;
+  /** YouTube プレイリスト公開 URL（連続再生） */
+  onYoutubePlaylistUrl?: (url: string) => void | Promise<void>;
   /** ゲスト時は検索APIの制限を低めにするために送る */
   isGuest?: boolean;
   /** AI お試し残数（二段選曲ボタン用） */
@@ -702,6 +708,8 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
   {
     onSendMessage,
     onVideoUrl,
+    onMusic8PlaylistUrl,
+    onYoutubePlaylistUrl,
     isGuest = false,
     aiTrialStatus = null,
     participatesInSelection = true,
@@ -874,6 +882,16 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
     async (trimmed: string) => {
       if (!isYoutubeKeywordSearchEnabled()) return;
       if (!trimmed || !onVideoUrl) return;
+      if (isMusic8PlaylistUrl(trimmed) && onMusic8PlaylistUrl) {
+        void onMusic8PlaylistUrl(trimmed);
+        setValue('');
+        return;
+      }
+      if (isYoutubePlaylistUrl(trimmed) && onYoutubePlaylistUrl) {
+        void onYoutubePlaylistUrl(trimmed);
+        setValue('');
+        return;
+      }
       const asVideoId = extractVideoId(trimmed);
       if (asVideoId) {
         onVideoUrl(trimmed);
@@ -937,7 +955,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
         setSearching(false);
       }
     },
-    [onVideoUrl, onSystemMessage, isGuest],
+    [onVideoUrl, onMusic8PlaylistUrl, onYoutubePlaylistUrl, onSystemMessage, isGuest],
   );
 
   useEffect(() => {
@@ -969,6 +987,18 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
     if (roomInteractionLocked) return;
     const trimmed = value.trim();
     if (!trimmed) return;
+
+    if (isMusic8PlaylistUrl(trimmed) && onMusic8PlaylistUrl) {
+      void onMusic8PlaylistUrl(trimmed);
+      setValue('');
+      return;
+    }
+
+    if (isYoutubePlaylistUrl(trimmed) && onYoutubePlaylistUrl) {
+      void onYoutubePlaylistUrl(trimmed);
+      setValue('');
+      return;
+    }
 
     const videoId = extractVideoId(trimmed);
     if (videoId && onVideoUrl) {
