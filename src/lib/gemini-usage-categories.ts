@@ -23,7 +23,8 @@ export const GEMINI_USAGE_CATEGORIES: readonly GeminiUsageCategoryMeta[] = [
     shortJa: '解説',
     descriptionJa:
       'URL 選曲後の AI 解説（基本・自由枠）、曲クイズ、「次に聴くなら」、スタイル/年代分類など。',
-    typicalCostHintJa: '目安: フル1曲（解説5本+クイズ+おすすめ）通常 約 ¥1.4 · 多いとき 約 ¥3.6 前後',
+    typicalCostHintJa:
+      '運営原価の目安: フル1曲 通常 約 ¥1.4 · 多いとき 約 ¥3.6（請求は 1クレジット／約 ¥25）',
   },
   {
     id: 'at_question',
@@ -31,14 +32,15 @@ export const GEMINI_USAGE_CATEGORIES: readonly GeminiUsageCategoryMeta[] = [
     shortJa: '質問',
     descriptionJa:
       '「@」での AI 返答、音楽関連の自動判定、曲検索クエリ抽出。会話を続けるほど回数が増えます。',
-    typicalCostHintJa: '目安: @ 1回（判定＋返答）約 ¥0.4〜0.5 前後（会話文脈が長いと増えます）',
+    typicalCostHintJa:
+      '運営原価の目安: @ 1回 約 ¥0.4〜0.5（請求は 0.5クレジット／約 ¥12.5）',
   },
   {
     id: 'other',
     labelJa: 'その他',
     shortJa: '他',
     descriptionJa: 'お題講評、趣向要約など、上記以外のあなた名義の AI 呼び出し。',
-    typicalCostHintJa: '目安: 利用頻度は低め',
+    typicalCostHintJa: '運営原価の目安: 利用頻度は低め',
   },
 ] as const;
 
@@ -83,7 +85,7 @@ export function geminiUsageCategoryMeta(id: GeminiUsageCategoryId): GeminiUsageC
   return GEMINI_USAGE_CATEGORIES.find((x) => x.id === id) ?? GEMINI_USAGE_CATEGORIES[2]!;
 }
 
-/** 料金目安ベースの割合（0〜100）。calls がすべて 0 なら null */
+/** 運営原価目安ベースの割合（0〜100）。calls がすべて 0 なら null */
 export function geminiUsageCategoryCostPercents(
   byCategory: Record<GeminiUsageCategoryId, GeminiUsageTokenSummary>,
 ): Record<GeminiUsageCategoryId, number> | null {

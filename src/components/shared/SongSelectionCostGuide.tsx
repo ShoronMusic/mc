@@ -22,7 +22,7 @@ export function SongSelectionCostGuide({ className = '', variant = 'room' }: Son
   const titleClass = isRoom ? 'text-sm font-medium text-violet-200' : 'text-sm font-medium text-violet-200/95';
   const bodyClass = isRoom ? 'text-xs text-violet-100/90' : 'text-xs text-gray-200';
   const mutedClass = isRoom ? 'text-xs text-violet-200/80' : 'text-xs text-gray-400';
-  const priceClass = isRoom ? 'text-emerald-200/95' : 'text-emerald-300/95';
+  const priceClass = isRoom ? 'text-violet-100/80' : 'text-gray-300';
   const tagClass = isRoom
     ? 'rounded bg-violet-900/45 px-1.5 py-0.5 text-xs text-violet-100/90'
     : 'rounded bg-gray-800/90 px-1.5 py-0.5 text-xs text-gray-300';

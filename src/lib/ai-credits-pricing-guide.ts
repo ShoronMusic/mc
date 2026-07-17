@@ -28,7 +28,7 @@ export type AiCreditsBillableItem = {
   note?: string;
 };
 
-/** クレジット（またはお試し枠）を 1 単位消費する AI 機能 */
+/** クレジット（またはお試し枠）を消費する AI 機能 */
 export const AI_CREDITS_BILLABLE_ITEMS: readonly AiCreditsBillableItem[] = [
   {
     label: 'AI付き選曲',
@@ -66,5 +66,25 @@ export const AI_CREDITS_PACK_ROWS = [
   { yen: AI_CREDIT_PACK_500_JPY, credits: AI_CREDIT_PACK_500_CREDITS },
   { yen: AI_CREDIT_PACK_1000_JPY, credits: AI_CREDIT_PACK_1000_CREDITS },
 ] as const;
+
+/** ¥1,000＝40 基準の実効単価（円／クレジット） */
+export const AI_CREDIT_YEN_PER_CREDIT = AI_CREDIT_PACK_1000_JPY / AI_CREDIT_PACK_1000_CREDITS;
+
+export function formatAiCreditEffectiveYen(credits: number): string {
+  const yen = credits * AI_CREDIT_YEN_PER_CREDIT;
+  return Number.isInteger(yen) ? `約 ¥${yen}` : `約 ¥${Math.round(yen * 10) / 10}`;
+}
+
+/** 部屋・説明用: 請求単価（クレジット）の要約 */
+export const AI_CREDITS_BILLING_SUMMARY_TITLE = '有料化時の利用単位（予定）';
+
+export const AI_CREDITS_BILLING_SUMMARY_LINES = [
+  `AI付き選曲 1曲＝${AI_CREDIT_COST_PER_SONG}クレジット（${formatAiCreditEffectiveYen(AI_CREDIT_COST_PER_SONG)}）`,
+  `@ 質問 1回＝${AI_CREDIT_COST_PER_AT_QUESTION}クレジット（${formatAiCreditEffectiveYen(AI_CREDIT_COST_PER_AT_QUESTION)}・2回で1クレジット）`,
+  `チャージ例: ¥${AI_CREDIT_PACK_500_JPY}＝${AI_CREDIT_PACK_500_CREDITS}クレジット · ¥${AI_CREDIT_PACK_1000_JPY}＝${AI_CREDIT_PACK_1000_CREDITS}クレジット`,
+] as const;
+
+export const AI_CREDITS_BILLING_SUMMARY_FOOTNOTE =
+  '上記が参加者への請求イメージです。下の「約 ¥1.4」などの数字は運営が払うクラウド原価の目安であり、あなたの請求額ではありません。';
 
 export const AI_CREDITS_PRICING_PAGE_PATH = '/guide/ai-pricing';

@@ -69,12 +69,12 @@
 表示コンポーネント: `src/components/room/AiUsageBillingNotice.tsx`  
 文言定義: `src/lib/ai-usage-disclosure-copy.ts`
 
-### AI 機能ごとの料金目安（参考・3分類）
+### AI 機能ごとの運営原価目安（参考・3分類・請求ではない）
 
-| 分類 | 含むもの | 目安（試算） |
+| 分類 | 含むもの | 目安（運営原価の試算） |
 |------|----------|--------------|
-| **曲解説・選曲 AI** | comment-pack、曲クイズ、次に聴くなら 等 | 1曲フル（解説5本+クイズ+おすすめ）通常 **約 ¥1.4** · 多いとき **約 ¥3.6** 前後（原価+2割の参考料金） |
-| **@ 質問・会話** | chat_reply、question_guard、検索クエリ抽出 | @ 1回 約 ¥0.4〜0.5（会話が長いと増加） |
+| **曲解説・選曲 AI** | comment-pack、曲クイズ、次に聴くなら 等 | 1曲フル 通常 **約 ¥1.4** · 多いとき **約 ¥3.6**（原価+2割）。**請求は 1クレジット／約 ¥25** |
+| **@ 質問・会話** | chat_reply、question_guard、検索クエリ抽出 | @ 1回 約 ¥0.4〜0.5（会話が長いと増加）。**請求は 0.5クレジット／約 ¥12.5** |
 | **その他** | お題講評、趣向要約 等 | 利用頻度は低め |
 
 実装: `src/lib/gemini-usage-categories.ts` · UI: `src/components/mypage/GeminiUsageCategoryBreakdown.tsx`

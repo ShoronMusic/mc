@@ -8,6 +8,11 @@ import {
   AI_USAGE_DISCLOSURE_ROOM_SUMMARY,
   AI_USAGE_DISCLOSURE_TITLE,
 } from '@/lib/ai-usage-disclosure-copy';
+import {
+  AI_CREDITS_BILLING_SUMMARY_FOOTNOTE,
+  AI_CREDITS_BILLING_SUMMARY_LINES,
+  AI_CREDITS_BILLING_SUMMARY_TITLE,
+} from '@/lib/ai-credits-pricing-guide';
 import { formatAiTrialStatusPrimaryLine, formatAiTrialStatusSecondaryLine } from '@/lib/ai-trial-status';
 import { emptyGeminiUsageByCategory } from '@/lib/gemini-usage-categories';
 import { GeminiUsageCategoryBreakdown } from '@/components/mypage/GeminiUsageCategoryBreakdown';
@@ -71,6 +76,17 @@ export function AiUsageBillingNotice({ isGuest = false, className = '' }: AiUsag
             <span className="font-medium text-emerald-200/95">{AI_USAGE_DISCLOSURE_CURRENT_FREE}</span>
             <span className="mt-1.5 block text-violet-100/85">{AI_USAGE_DISCLOSURE_ROOM_SUMMARY}</span>
           </p>
+          <div className="rounded border border-emerald-900/40 bg-emerald-950/25 p-3">
+            <p className="text-sm font-medium text-emerald-100/95">{AI_CREDITS_BILLING_SUMMARY_TITLE}</p>
+            <ul className="mt-2 list-disc space-y-1 pl-4 text-violet-100/90">
+              {AI_CREDITS_BILLING_SUMMARY_LINES.map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
+            <p className="mt-2.5 text-[11px] leading-relaxed text-violet-200/80">
+              {AI_CREDITS_BILLING_SUMMARY_FOOTNOTE}
+            </p>
+          </div>
           <SongSelectionCostGuide variant="room" />
           <ul className="list-disc space-y-1 pl-4 text-xs leading-relaxed text-violet-100/85">
             {AI_USAGE_DISCLOSURE_ROOM_DETAIL_LINES.map((line) => (
@@ -79,7 +95,7 @@ export function AiUsageBillingNotice({ isGuest = false, className = '' }: AiUsag
           </ul>
           <GeminiUsageCategoryBreakdown
             byCategory={emptyGeminiUsageByCategory()}
-            title="AI 機能ごとの料金目安（参考）"
+            title="AI 機能ごとの運営原価目安（請求ではありません）"
             showTypicalHints
             className="rounded border border-violet-900/30 bg-violet-950/30 p-2 text-violet-100/90 [&_.text-gray-400]:text-violet-200/85 [&_.text-gray-300]:text-violet-100/90 [&_.text-gray-500]:text-violet-200/75"
           />

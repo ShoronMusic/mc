@@ -49,7 +49,7 @@
 - **曲・アーティスト DB 項目**（基本／拡張） → `docs/song-artist-db-fields.md`
 - **次に聴くなら（試験）**: `docs/next-song-recommend-beta-spec.md`
 - **ユーザー同席回数（部屋プロフィールモーダル）**: 暫定は `user_room_participation_history` 都度集計（`src/lib/user-co-attendance-count.ts`）。専用テーブル `user_co_attendance` は後対応 → `docs/user-co-attendance-count-db-plan.md`
-- **プリペイド課金（Phase D 価格正本）**: `docs/00-prepaid-pricing-summary.md`（¥500＝20曲 · ¥1,000＝40曲 · 1曲＝1クレジット）。実装マスタは `docs/00-ai-trial-and-billing-implementation.md`
+- **プリペイド課金（Phase D 価格正本）**: `docs/00-prepaid-pricing-summary.md`（¥500＝20曲 · ¥1,000＝40曲 · 1曲＝1クレジット · @＝0.5クレジット）。実装マスタは `docs/00-ai-trial-and-billing-implementation.md`
 - **開催履歴 × AI 課金帰属（継続実装）**: `docs/room-gathering-history-and-ai-billing-project.md`。**Phase 1–3 完了**: 帰属ログ（`billing_kind`/`billing_user_id`）・マイページ参加履歴（personal/roomCommon）・管理 **課金・原価** タブ（12h スロット `/admin/gathering-history` · ユーザー別 `/admin/user-billing-usage` · 部屋原価 `/admin/room-cost-summary`）· YT クォータ→¥・Ably 推定（`src/lib/infra-cost-estimates.ts`）。**Phase 2b 待ち**: `room_gathering_snapshots` SQL 実行後に終了会スナップショット記録開始。**Phase 4**: ⭐ `docs/00-ai-trial-and-billing-implementation.md`（10曲お試し・選曲のみ無料）→ プリペイド課金は **`docs/00-prepaid-pricing-summary.md`**（¥500＝20曲 · ¥1,000＝40曲）
 - **PWA・スマホアプリ化**（PC は Web のまま）: 索引 `docs/00-pwa-mobile-app.md`（詳細は `docs/pwa-*.md` に集約）。実装: `public/manifest.webmanifest`・`src/components/pwa/PwaInstallHint.tsx`・`npm run dev:lan`（スマホ実機確認は `docs/pwa-dev-verify-mobile.md`）
 - **本番障害・再発防止（2026-07-05）**: `docs/incident-20260705-musicai-jp-production.md`（Supabase Nano 枯渇・504 middleware・AI 選曲停止・対応 TODO）

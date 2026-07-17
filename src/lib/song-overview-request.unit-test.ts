@@ -41,7 +41,9 @@ assert.equal(canRequestSongOverviewAtQuestion(trialActive), true);
 assert.equal(canRequestSongOverviewAtQuestion({ ...trialActive, atQuestionsRemaining: 0 }), false);
 assert.equal(canRequestSongOverviewAtQuestion(creditsActive), true);
 assert.equal(canRequestSongOverviewAtQuestion({ ...creditsActive, creditsRemaining: 0 }), false);
-assert.match(formatSongOverviewRequestButtonLabel(creditsActive), /1クレジット消費/);
+assert.equal(canRequestSongOverviewAtQuestion({ ...creditsActive, creditsRemaining: 0.4 }), false);
+assert.equal(canRequestSongOverviewAtQuestion({ ...creditsActive, creditsRemaining: 0.5 }), true);
+assert.match(formatSongOverviewRequestButtonLabel(creditsActive), /0\.5クレジット消費/);
 assert.match(formatSongOverviewRequestButtonLabel(trialActive), /@1回消費/);
 
 assert.equal(

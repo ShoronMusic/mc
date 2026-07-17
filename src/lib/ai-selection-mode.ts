@@ -1,3 +1,4 @@
+import { AI_CREDIT_COST_PER_SONG } from '@/lib/ai-credits-config';
 import type { AiTrialStatus } from '@/lib/ai-trial-status';
 
 /** 選曲 1 回あたりの AI 利用モード（`docs/00-ai-trial-and-billing-implementation.md`） */
@@ -60,7 +61,10 @@ export function shouldShowAiDualSelectionButtons(params: {
   if (aiTrialStatus.phase === 'developer_unlimited' || aiTrialStatus.phase === 'supporter_unlimited') {
     return false;
   }
-  if (aiTrialStatus.phase === 'credits_active' && aiTrialStatus.creditsRemaining > 0) {
+  if (
+    aiTrialStatus.phase === 'credits_active' &&
+    aiTrialStatus.creditsRemaining >= AI_CREDIT_COST_PER_SONG
+  ) {
     return true;
   }
   return aiTrialStatus.phase === 'trial_active' && aiTrialStatus.songsRemaining > 0;

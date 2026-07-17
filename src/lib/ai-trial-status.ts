@@ -1,5 +1,7 @@
 /** 登録ユーザー向け AI お試し 10 曲（`docs/00-ai-trial-and-billing-implementation.md`） */
 
+import { formatAiCreditAmount } from '@/lib/ai-credits-config';
+
 export const AI_TRIAL_SONGS_GRANTED = 10;
 export const AI_TRIAL_AT_QUESTIONS_GRANTED = 5;
 
@@ -132,7 +134,7 @@ export function formatAiTrialStatusPrimaryLine(status: AiTrialStatus): string {
     return 'AI お試し 10 曲 使い切り — 選曲・再生・チャットは無料のまま';
   }
   if (status.phase === 'credits_active') {
-    return `AI クレジット 残 ${status.creditsRemaining}（1曲・@1回＝1）`;
+    return `AI クレジット 残 ${formatAiCreditAmount(status.creditsRemaining)}（1曲＝1・@1回＝0.5）`;
   }
   const songs = `AI お試し 残 ${status.songsRemaining}/${status.songsGranted} 曲`;
   const at = `@質問 残 ${status.atQuestionsRemaining}/${status.atQuestionsGranted}`;
@@ -145,7 +147,9 @@ export function formatAiTrialStatusHeaderLabel(status: AiTrialStatus): string {
   if (status.phase === 'supporter_unlimited') return 'AI制限なし（サポーター）';
   if (status.phase === 'email_unconfirmed') return 'AIお試し: 確認待ち';
   if (status.phase === 'trial_exhausted') return `AIお試し残 0/${status.songsGranted}`;
-  if (status.phase === 'credits_active') return `AIクレジット残 ${status.creditsRemaining}`;
+  if (status.phase === 'credits_active') {
+    return `AIクレジット残 ${formatAiCreditAmount(status.creditsRemaining)}`;
+  }
   return `AIお試し残 ${status.songsRemaining}/${status.songsGranted}`;
 }
 

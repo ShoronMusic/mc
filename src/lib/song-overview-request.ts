@@ -1,3 +1,7 @@
+import {
+  AI_CREDIT_COST_PER_AT_QUESTION,
+  formatAiCreditAmount,
+} from '@/lib/ai-credits-config';
 import { extractUiLabelFromBody, stripUiLabelPrefixFromBody } from '@/lib/chat-message-ui-labels';
 import type { AiTrialStatus } from '@/lib/ai-trial-status';
 
@@ -41,7 +45,9 @@ export function canRequestSongOverviewAtQuestion(status: AiTrialStatus | null | 
   if (!status) return false;
   if (status.phase === 'developer_unlimited' || status.phase === 'supporter_unlimited') return true;
   if (status.phase === 'email_unconfirmed' || status.phase === 'trial_exhausted') return false;
-  if (status.phase === 'credits_active') return status.creditsRemaining > 0;
+  if (status.phase === 'credits_active') {
+    return status.creditsRemaining >= AI_CREDIT_COST_PER_AT_QUESTION;
+  }
   if (status.phase === 'trial_active' || status.phase === 'preview') {
     if (status.phase === 'preview' && !status.enforcementEnabled) return true;
     return status.atQuestionsRemaining > 0;
@@ -53,7 +59,9 @@ export function formatSongOverviewRequestButtonLabel(status: AiTrialStatus): str
   if (status.phase === 'developer_unlimited' || status.phase === 'supporter_unlimited') {
     return 'この曲の概要を開く';
   }
-  if (status.phase === 'credits_active') return 'この曲の概要を開く（1クレジット消費）';
+  if (status.phase === 'credits_active') {
+    return `この曲の概要を開く（${formatAiCreditAmount(AI_CREDIT_COST_PER_AT_QUESTION)}クレジット消費）`;
+  }
   return 'この曲の概要を開く（@1回消費）';
 }
 

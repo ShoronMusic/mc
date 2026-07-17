@@ -389,9 +389,9 @@ IP 取得: 既存 `getChatAiClientIp()`（`x-forwarded-for`）を trial 消費�
 
 | 商品 | 概要（v1 確定目安） |
 |------|---------------------|
-| **プリペイド** | **¥500＝20曲** · **¥1,000＝40曲**（1曲＝1クレジット）。Stripe チャージ。NEW/DB 差は v1 では付けない |
+| **プリペイド** | **¥500＝20曲** · **¥1,000＝40曲**（1曲＝1クレジット · **@＝0.5クレジット**）。Stripe チャージ。NEW/DB 差は v1 では付けない |
 | 月額ライト | **第2段**（実績後）。例: ¥980 / 40 クレジット — 未採用 |
-| 表示参考 | 参加者向け **約 ¥1.4/曲**（`song-selection-cost-guide.ts`）は**請求単価ではない**（実請求は約 ¥25/曲相当） |
+| 表示参考 | 参加者向け **約 ¥1.4/曲**（`song-selection-cost-guide.ts`）は**請求単価ではない**（実請求は選曲約 ¥25・@約 ¥12.5） |
 
 ---
 
@@ -519,7 +519,7 @@ SQL 確定後は **`docs/supabase-user-ai-trial-table.md`** を新設（未作�
 - [ ] `user_ai_credits` + 取引ログ SQL
 - [ ] Stripe Checkout（¥500 / ¥1,000）+ Webhook でクレジット加算
 - [ ] trial 枯渇後のクレジット残による `full` 判定
-- [ ] 選曲・@ 成功時のクレジット消費（1回＝1）
+- [ ] 選曲・@ 成功時のクレジット消費（選曲 **1** · @ **0.5**）
 - [ ] UI: 残クレジット・枯渇時チャージ導線
 - [ ] 利用規約・FAQ 固定化
 - [ ] （後回し）月額サブスク · NEW/DB 差別消費
@@ -625,8 +625,8 @@ AI 解説・曲クイズ・@ による質問は、今後クレジットまたは
 | `docs/room-gathering-history-and-ai-billing-project.md` | 原価帰属・管理画面 Phase 1–3 |
 | `docs/ai-paid-service-reference-examples.md` | 他社 AI 有料事例 |
 | `docs/email-registration-spec.md` | メール登録・Confirm email |
-| `src/lib/song-selection-cost-guide.ts` | 1 曲参考料金（表示用） |
-| `src/lib/at-question-cost-guide.ts` | @ 1 回参考料金（表示用） |
+| `src/lib/song-selection-cost-guide.ts` | 運営原価目安（表示用・請求ではない） |
+| `src/lib/at-question-cost-guide.ts` | @ 運営原価目安（表示用・請求ではない） |
 | `docs/supabase-user-ai-trial-table.md` | `user_ai_trial` · `consumption_log` SQL |
 
 ---

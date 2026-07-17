@@ -81,11 +81,11 @@ export const MONETIZATION_PRICING_PLAN_CANDIDATES: readonly MonetizationPricingP
   },
   {
     id: 'display_ref',
-    labelJa: '参加者向け参考（1曲フル約¥1.4）',
+    labelJa: '運営原価の表示参考（1曲フル約¥1.4・請求ではない）',
     monthlyPriceJpy: 0,
     songsPerMonth: 0,
     noteJa:
-      'song-selection-cost-guide の表示目安（原価+2割）。請求単価ではなく透明性用。実請求はサブスク/クレジットでパッケージ化想定。',
+      'song-selection-cost-guide の運営原価目安（原価+2割）。実請求は ¥25/曲・@0.5クレジット。',
   },
 ] as const;
 

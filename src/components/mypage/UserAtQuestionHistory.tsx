@@ -107,8 +107,8 @@ export function UserAtQuestionHistory({
         <>
           {loggedCount > 0 ? (
             <p className="mb-3 text-xs text-gray-400">
-              表示中 {pairs.length} 件のうち {loggedCount} 件は API ログから試算済み（合計{' '}
-              <span className="text-emerald-300/95">{formatGeminiCostJpyApprox(loggedTotalJpy)}</span>
+              表示中 {pairs.length} 件のうち {loggedCount} 件は API ログから運営原価を試算済み（合計{' '}
+              <span className="text-gray-300">{formatGeminiCostJpyApprox(loggedTotalJpy)}</span>
               ）
             </p>
           ) : null}
@@ -128,8 +128,8 @@ export function UserAtQuestionHistory({
                       {formatTsJst(p.userCreatedAt)}
                       {p.roomLabel ? ` · ${p.roomLabel}` : p.roomId ? ` · ${p.roomId}` : ''}
                     </p>
-                    <p className="shrink-0 text-[11px] text-emerald-300/95">
-                      料金目安 {costLabel}
+                    <p className="shrink-0 text-[11px] text-gray-400">
+                      運営原価 {costLabel}
                       {p.costSource === 'logged' && typeof p.geminiCalls === 'number' && p.geminiCalls > 0
                         ? ` · API ${p.geminiCalls}回`
                         : null}

@@ -84,9 +84,9 @@ export function GeminiUsageCategoryBreakdown({
                   {' · '}
                   {row.calls} 回（{pct}%）
                   {' · '}
-                  入力 {formatTokenCount(row.promptTokens)}
+                  入力                   {formatTokenCount(row.promptTokens)}
                   {' · '}
-                  {formatGeminiCostJpyApprox(row.costJpyApprox)}
+                  運営原価 {formatGeminiCostJpyApprox(row.costJpyApprox)}
                 </li>
               );
             })}

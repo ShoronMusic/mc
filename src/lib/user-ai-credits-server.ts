@@ -5,6 +5,7 @@ import {
   AI_CREDIT_COST_PER_AT_QUESTION,
   AI_CREDIT_COST_PER_SONG,
   isAiCreditsEnabled,
+  normalizeAiCreditAmount,
 } from '@/lib/ai-credits-config';
 import {
   AI_TRIAL_AT_QUESTIONS_GRANTED,
@@ -95,7 +96,7 @@ export function composeAiTrialStatus(
     ? Math.max(0, Number(trialRow.songs_remaining) || 0)
     : 0;
   const creditsEnabled = isAiCreditsEnabled();
-  const credits = creditsEnabled ? Math.max(0, creditsRemaining) : 0;
+  const credits = creditsEnabled ? Math.max(0, normalizeAiCreditAmount(creditsRemaining)) : 0;
 
   const phase: AiTrialPhase = trialRow
     ? resolveTrialPhaseFromEntitlement({ songsRemaining, creditsEnabled, creditsRemaining: credits })
@@ -134,7 +135,9 @@ export async function loadComposedAiTrialStatus(
   if (credits.missingTable) {
     return rowToAiTrialStatus(trialRow);
   }
-  const remaining = credits.row?.credits_remaining ?? 0;
+  const remaining = credits.row
+    ? Math.max(0, normalizeAiCreditAmount(credits.row.credits_remaining))
+    : 0;
   return composeAiTrialStatus(trialRow, remaining);
 }
 
@@ -287,7 +290,10 @@ export async function consumeAiCredit(params: {
     return creditsDenied('credits_unavailable', 'クレジット残高の確認に失敗しました。', 503);
   }
 
-  const cost = Math.max(1, Math.floor(params.cost));
+  const cost = normalizeAiCreditAmount(params.cost);
+  if (!(cost > 0)) {
+    return creditsDenied('credits_invalid_cost', 'クレジット消費量が不正です。', 400);
+  }
   const { row, missingTable, error } = await fetchUserAiCreditsRow(admin, params.userId);
   if (missingTable) {
     return creditsDenied(
@@ -299,17 +305,18 @@ export async function consumeAiCredit(params: {
   if (error) {
     return creditsDenied('credits_load_failed', 'クレジット残高の取得に失敗しました。', 500);
   }
-  if (!row || row.credits_remaining < cost) {
+  const remaining = normalizeAiCreditAmount(row?.credits_remaining ?? 0);
+  if (!row || remaining < cost) {
     return creditsDenied(
       'credits_exhausted',
       'AI クレジットが不足しています。チャージ後に AI 付き選曲・@ 質問がご利用いただけます。',
       403,
-      { creditsRemaining: row?.credits_remaining ?? 0 },
+      { creditsRemaining: remaining },
     );
   }
 
-  const prev = row.credits_remaining;
-  const next = prev - cost;
+  const prev = remaining;
+  const next = normalizeAiCreditAmount(prev - cost);
   const now = new Date().toISOString();
 
   const { data: updated, error: updateErr } = await admin
@@ -322,18 +329,19 @@ export async function consumeAiCredit(params: {
 
   if (updateErr || !updated) {
     const retry = await fetchUserAiCreditsRow(admin, params.userId);
-    if (!retry.row || retry.row.credits_remaining < cost) {
+    const retryRemaining = normalizeAiCreditAmount(retry.row?.credits_remaining ?? 0);
+    if (!retry.row || retryRemaining < cost) {
       return creditsDenied(
         'credits_exhausted',
         'AI クレジットが不足しています。',
         403,
-        { creditsRemaining: retry.row?.credits_remaining ?? 0 },
+        { creditsRemaining: retryRemaining },
       );
     }
     return creditsDenied('credits_consume_failed', 'クレジットの消費に失敗しました。', 409);
   }
 
-  const balanceAfter = Math.max(0, Number(updated.credits_remaining) || 0);
+  const balanceAfter = Math.max(0, normalizeAiCreditAmount(Number(updated.credits_remaining) || 0));
   await insertCreditTransaction(admin, {
     userId: params.userId,
     kind: params.kind,

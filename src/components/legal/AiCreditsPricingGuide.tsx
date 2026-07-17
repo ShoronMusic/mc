@@ -42,7 +42,8 @@ export function AiCreditsPricingGuide({
       <section className="space-y-2">
         <h3 className="font-semibold text-white">AIクレジットが必要なこと</h3>
         <p className="text-xs text-gray-500">
-          お試し枠または購入クレジットから消費します。1 クレジット＝下表の 1 単位です。
+          お試し枠または購入クレジットから消費します。AI付き選曲は 1 クレジット／曲、@
+          質問は 0.5 クレジット／回（2 回で 1 クレジット）です。
         </p>
         <div className="overflow-x-auto rounded-lg border border-gray-700">
           <table className="w-full min-w-[480px] border-collapse text-left text-sm">

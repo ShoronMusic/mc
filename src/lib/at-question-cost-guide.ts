@@ -1,21 +1,22 @@
 /**
- * @ 質問 1回あたりの参加者向け料金目安（単一ソース）
+ * @ 質問 1回あたりの運営側 API 原価目安（単一ソース・請求単価ではない）
+ * 請求は 0.5 クレジット／回（約 ¥12.5）
  */
 
 import { geminiUsageCategoryMeta } from '@/lib/gemini-usage-categories';
 import { formatGeminiCostJpyApprox } from '@/lib/gemini-pricing';
 import type { UserAtQuestionHistoryPair } from '@/lib/user-at-question-history';
 
-export const AT_QUESTION_COST_GUIDE_TITLE = '@ 質問 1回の料金目安（参考）';
+export const AT_QUESTION_COST_GUIDE_TITLE = '@ 質問 1回の運営側原価目安（請求ではありません）';
 
 export const AT_QUESTION_COST_GUIDE_CONDITIONS =
-  '「@」で AI に質問した1回あたりの目安です。音楽関連の自動判定（質問ガード）と返答生成が含まれることがあります。';
+  '「@」で AI に質問した1回あたりの、サイト運営が負担するクラウド原価の目安です。音楽関連の自動判定（質問ガード）と返答生成が含まれることがあります。';
 
 export const AT_QUESTION_COST_GUIDE_FOOTNOTE =
-  'クラウド AI 利用原価に基づく試算です。現時点での請求額ではありません。【現在無料】';
+  'クラウド AI 利用原価に基づく試算です。参加者への請求は 0.5クレジット／回（約 ¥12.5）です。ここには請求単価を書いていません。【現在無料】';
 
-/** ログが取れないときの参考表示 */
-export const AT_QUESTION_TYPICAL_COST_JPY_LABEL = '約 ¥0.4〜0.5 前後';
+/** ログが取れないときの参考表示（運営原価） */
+export const AT_QUESTION_TYPICAL_COST_JPY_LABEL = '運営原価 約 ¥0.4〜0.5 前後';
 
 export function atQuestionTypicalCostHintJa(): string {
   return geminiUsageCategoryMeta('at_question').typicalCostHintJa;
