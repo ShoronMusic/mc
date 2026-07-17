@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {
+  buildGoogleOAuthSignInOptions,
   buildOAuthCallbackRedirectTo,
   safeOauthNextPath,
 } from './oauth-return-path';
@@ -22,5 +23,9 @@ assert.equal(
   buildOAuthCallbackRedirectTo('http://localhost:3003'),
   'http://localhost:3003/auth/callback',
 );
+
+const googleOpts = buildGoogleOAuthSignInOptions('https://www.musicchat.jp');
+assert.equal(googleOpts.redirectTo, 'https://www.musicchat.jp/auth/callback');
+assert.equal(googleOpts.queryParams.prompt, 'select_account');
 
 console.log('oauth-return-path.unit-test.ts: ok');

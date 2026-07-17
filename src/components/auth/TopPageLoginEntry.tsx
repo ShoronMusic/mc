@@ -3,7 +3,7 @@
 import { EnvelopeIcon } from '@heroicons/react/24/outline';
 import { useEffect, useState, type ComponentType } from 'react';
 import { getBrowserAppOrigin } from '@/lib/app-origin';
-import { setOAuthReturnPathCookie, buildOAuthCallbackRedirectTo } from '@/lib/oauth-return-path';
+import { setOAuthReturnPathCookie, buildGoogleOAuthSignInOptions } from '@/lib/oauth-return-path';
 import { TRIAL_ROOM_IDS, pickTrialRoomId } from '@/lib/trial-rooms';
 import { assignDefaultGuestDisplayName } from '@/lib/guest-display-name';
 import { FROM_START_KEY } from './FromStartMarker';
@@ -148,10 +148,9 @@ export function TopPageLoginEntry({
     const origin = getBrowserAppOrigin();
     const pathname = typeof window !== 'undefined' ? window.location.pathname : '/';
     setOAuthReturnPathCookie(pathname);
-    const redirectTo = buildOAuthCallbackRedirectTo(origin);
     const { error: err } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo },
+      options: buildGoogleOAuthSignInOptions(origin),
     });
     if (err) {
       setError(err.message || 'Google認証に失敗しました。');

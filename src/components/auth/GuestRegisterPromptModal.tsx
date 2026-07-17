@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { EnvelopeIcon } from '@heroicons/react/24/outline';
 import { createClient, isSupabaseConfigured } from '@/lib/supabase/client';
-import { setOAuthReturnPathCookie, buildOAuthCallbackRedirectTo } from '@/lib/oauth-return-path';
+import { setOAuthReturnPathCookie, buildGoogleOAuthSignInOptions } from '@/lib/oauth-return-path';
 import { getBrowserAppOrigin } from '@/lib/app-origin';
 import { SimpleAuthForm } from './SimpleAuthForm';
 import { clearGuestRoomPersistence } from '@/lib/guest-room-persistence';
@@ -66,13 +66,13 @@ export function GuestRegisterPromptModal({ open, onClose, roomId = '' }: GuestRe
     setError(null);
     const origin = getBrowserAppOrigin();
     setOAuthReturnPathCookie(pathname);
-    const redirectTo = buildOAuthCallbackRedirectTo(origin);
+    const oauthOptions = buildGoogleOAuthSignInOptions(origin);
     if (process.env.NODE_ENV === 'development') {
-      console.info('[OAuth] redirectTo →', redirectTo);
+      console.info('[OAuth] redirectTo →', oauthOptions.redirectTo);
     }
     const { error: err } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo },
+      options: oauthOptions,
     });
     if (err) {
       setError(err.message || 'Google認証に失敗しました。');

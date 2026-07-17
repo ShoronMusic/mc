@@ -11,7 +11,7 @@ import {
   GUEST_STORAGE_KEY,
 } from '@/lib/guest-room-storage-keys';
 import { resolveGuestDisplayNameForJoin, roomDisplayNameValidationMessage } from '@/lib/room-display-name';
-import { setOAuthReturnPathCookie, buildOAuthCallbackRedirectTo } from '@/lib/oauth-return-path';
+import { setOAuthReturnPathCookie, buildGoogleOAuthSignInOptions } from '@/lib/oauth-return-path';
 import { getBrowserAppOrigin } from '@/lib/app-origin';
 import { getProductDisplayName, IS_MC_PRODUCT } from '@/lib/product-branding';
 import { MusicChatTitleBrand } from '@/components/home/MusicChatTitleLogo';
@@ -104,14 +104,13 @@ export function JoinChoice({ onJoin, roomId, joinVerifying = false }: JoinChoice
     const origin = getBrowserAppOrigin();
     const pathname = typeof window !== 'undefined' ? window.location.pathname : `/${roomId}`;
     setOAuthReturnPathCookie(pathname);
-    // ?next= 付きは Redirect URLs 不一致→Site URL（musicai.jp）へ落ち PKCE 失敗することがある
-    const redirectTo = buildOAuthCallbackRedirectTo(origin);
+    const oauthOptions = buildGoogleOAuthSignInOptions(origin);
     if (process.env.NODE_ENV === 'development') {
-      console.info('[OAuth] redirectTo →', redirectTo);
+      console.info('[OAuth] redirectTo →', oauthOptions.redirectTo);
     }
     const { error: err } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo },
+      options: oauthOptions,
     });
     if (err) {
       setError(err.message || 'Google認証に失敗しました。');

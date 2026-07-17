@@ -78,6 +78,21 @@ export function buildOAuthCallbackRedirectTo(origin: string): string {
   return `${base}/auth/callback`;
 }
 
+/**
+ * Google ログイン用 options。
+ * `prompt=select_account` で、アプリからログアウト後も Google アカウント選択画面を出す
+ * （出さないとブラウザの Google セッションで同じアカウントに即ログインしてしまう）。
+ */
+export function buildGoogleOAuthSignInOptions(origin: string): {
+  redirectTo: string;
+  queryParams: { prompt: string };
+} {
+  return {
+    redirectTo: buildOAuthCallbackRedirectTo(origin),
+    queryParams: { prompt: 'select_account' },
+  };
+}
+
 export function clearOauthReturnCookieOn(response: NextResponse): void {
   response.cookies.set(OAUTH_RETURN_COOKIE, '', { path: '/', maxAge: 0 });
 }
