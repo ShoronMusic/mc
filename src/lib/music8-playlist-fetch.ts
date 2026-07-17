@@ -74,6 +74,21 @@ export function getMusic8PlaylistAutoplayMax(): number {
   return Math.min(ABSOLUTE_MAX_SONGS, Math.max(1, n));
 }
 
+/**
+ * `null` = 上限なし（STYLE_ADMIN 向け）。
+ * `undefined` = env / 既定（最大 ABSOLUTE_MAX）。
+ * 数値 = その件数（ABSOLUTE_MAX でクランプ）。
+ */
+export function resolveMusic8PlaylistAutoplayMax(
+  maxSongs: number | null | undefined,
+): number | null {
+  if (maxSongs === null) return null;
+  if (typeof maxSongs === 'number' && Number.isFinite(maxSongs)) {
+    return Math.min(ABSOLUTE_MAX_SONGS, Math.max(1, Math.floor(maxSongs)));
+  }
+  return getMusic8PlaylistAutoplayMax();
+}
+
 function postDateSortKey(postDate: string | undefined): number {
   if (!postDate || !String(postDate).trim()) return Number.NEGATIVE_INFINITY;
   const t = Date.parse(String(postDate).trim().replace(/ /g, 'T'));
@@ -82,13 +97,14 @@ function postDateSortKey(postDate: string | undefined): number {
 
 /**
  * 上流 songs を正規化: 空 ID 除外 → post_date DESC → 重複除外 → 上限。
+ * `maxSongs === null` のとき上限なし（切り捨てなし）。
  * （単体テスト用に export）
  */
 export function normalizeMusic8PlaylistSongs(
   rawSongs: Music8PlaylistRawSong[] | undefined | null,
-  maxSongs: number = getMusic8PlaylistAutoplayMax(),
+  maxSongs: number | null = getMusic8PlaylistAutoplayMax(),
 ): { songs: Music8PlaylistNormalizedSong[]; totalFetched: number; truncated: boolean } {
-  const cappedMax = Math.min(ABSOLUTE_MAX_SONGS, Math.max(1, maxSongs));
+  const cappedMax = resolveMusic8PlaylistAutoplayMax(maxSongs);
   const withIds: Music8PlaylistNormalizedSong[] = [];
   for (const s of Array.isArray(rawSongs) ? rawSongs : []) {
     const videoId = String(s?.yt_video_id ?? '').trim();
@@ -120,6 +136,9 @@ export function normalizeMusic8PlaylistSongs(
   }
 
   const totalFetched = deduped.length;
+  if (cappedMax == null) {
+    return { songs: deduped, totalFetched, truncated: false };
+  }
   const truncated = totalFetched > cappedMax;
   return {
     songs: truncated ? deduped.slice(0, cappedMax) : deduped,
@@ -164,6 +183,8 @@ export function buildMusic8PlaylistCanonicalUrl(slug: string): string {
 export async function fetchNormalizedMusic8Playlist(params: {
   url?: string;
   slug?: string;
+  /** `null` で曲数上限なし（STYLE_ADMIN） */
+  maxSongs?: number | null;
 }): Promise<Music8PlaylistFetchResult> {
   if (!isMusic8WpRestEnabled()) {
     return {
@@ -219,7 +240,10 @@ export async function fetchNormalizedMusic8Playlist(params: {
     };
   }
 
-  const { songs, totalFetched, truncated } = normalizeMusic8PlaylistSongs(json.songs);
+  const { songs, totalFetched, truncated } = normalizeMusic8PlaylistSongs(
+    json.songs,
+    params.maxSongs === undefined ? getMusic8PlaylistAutoplayMax() : params.maxSongs,
+  );
   if (songs.length === 0) {
     return {
       ok: false,

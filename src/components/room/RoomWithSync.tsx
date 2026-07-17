@@ -129,6 +129,7 @@ import {
   isMusic8PlaylistAutoplayCurrentVideo,
   type Music8PlaylistAutoplayState,
 } from '@/lib/music8-playlist-autoplay';
+import { buildLibraryArtistAutoplayLaunch } from '@/lib/library-artist-autoplay';
 import { isYoutubeKeywordSearchEnabled } from '@/lib/youtube-keyword-search-ui';
 import { extractCharacterSongPickResolvedYoutube } from '@/lib/character-song-pick-youtube';
 import { CHARACTER_SONG_PICK_AUTO_USER_PROMPT } from '@/lib/ai-character-song-pick-cues';
@@ -7479,6 +7480,71 @@ export default function RoomWithSync({
     ],
   );
 
+  const handleLibraryArtistAutoplay = useCallback(
+    (params: {
+      artistName: string;
+      songs: Array<{ videoId: string; title: string; artist: string }>;
+      orderLabel?: string;
+    }) => {
+      if (isGuest) {
+        addSystemMessage('ライブラリの全曲選曲はログインユーザーのみ利用できます。');
+        return;
+      }
+      if (!participatesInSelection) {
+        addSystemMessage('選曲に参加していないため、全曲選曲はできません。');
+        return;
+      }
+      const turnClientId = currentTurnClientIdRef.current;
+      const order = participatingOrderRef.current;
+      const normalizedNames = order.map((p) => (p.displayName ?? '').trim() || 'ゲスト');
+      const uniqueDisplayNameCount = new Set(normalizedNames).size;
+      const sameDisplayNameOnly = order.length > 1 && uniqueDisplayNameCount === 1;
+      const multipleParticipants = order.length > 1 && !sameDisplayNameOnly;
+      const isMyTurn = Boolean(turnClientId && turnClientId === myClientId);
+      if (multipleParticipants && !isMyTurn && !isOwner) {
+        const turnParticipant = order.find((p) => p.clientId === turnClientId) ?? null;
+        const nameLabel = turnParticipant?.displayName ?? '次の方';
+        addSystemMessage(
+          `今は${nameLabel}さんの選曲ターンです。全曲選曲は順番が回ってきてから行ってください。`,
+        );
+        return;
+      }
+      const launch = buildLibraryArtistAutoplayLaunch({
+        artistName: params.artistName,
+        songs: params.songs,
+        orderLabel: params.orderLabel,
+        // STYLE_ADMIN（表記ツール権限あり）は AI 解説保存用に上限なし
+        maxSongs: chatStyleAdminTools ? null : undefined,
+      });
+      if (!launch || !myClientId) {
+        addSystemMessage('再生できる曲がライブラリ一覧にありませんでした。');
+        return;
+      }
+      music8PlaylistAutoplayRef.current = launch.state;
+      addSystemMessage(launch.startMessage);
+      const first = getMusic8PlaylistCurrentSong(launch.state);
+      if (first) {
+        const trackMsg = formatMusic8PlaylistTrackMessage(launch.state);
+        if (trackMsg) addSystemMessage(trackMsg);
+        applyImmediateChangeVideo(first.videoId, myClientId, {
+          aiMode: 'full',
+          forceSongAi: true,
+          nextTurnClientIdOverride: myClientId,
+          preserveReservationQueue: true,
+        });
+      }
+    },
+    [
+      isGuest,
+      participatesInSelection,
+      isOwner,
+      myClientId,
+      chatStyleAdminTools,
+      addSystemMessage,
+      applyImmediateChangeVideo,
+    ],
+  );
+
   advanceMusic8PlaylistOnEndedRef.current = () => {
     const ap = music8PlaylistAutoplayRef.current;
     if (!ap || !myClientId) return false;
@@ -8687,6 +8753,7 @@ export default function RoomWithSync({
       aiTrialStatus,
       handleMusic8PlaylistUrl,
       handleYoutubePlaylistUrl,
+      handleLibraryArtistAutoplay,
     ]
   );
 
@@ -8730,6 +8797,7 @@ export default function RoomWithSync({
       onVideoUrl={handleVideoUrlFromChat}
       onMusic8PlaylistUrl={handleMusic8PlaylistUrl}
       onYoutubePlaylistUrl={handleYoutubePlaylistUrl}
+      onLibraryArtistAutoplay={handleLibraryArtistAutoplay}
       themePlaylistRoomSubmit={themePlaylistRoomSubmit}
       isGuest={isGuest}
       aiTrialStatus={aiTrialStatus}

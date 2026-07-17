@@ -34,6 +34,10 @@ import {
   compareLibraryReleaseSort,
   libraryEffectiveReleaseDateForSort,
 } from '@/lib/library-release-sort-date';
+import {
+  librarySongListSortOrderLabel,
+  type LibrarySongListSortKey,
+} from '@/lib/library-artist-autoplay';
 import type { SystemMessageOptions } from '@/types/chat';
 import { isAiQuestionGuardDisabledClient } from '@/lib/chat-system-copy';
 import {
@@ -652,6 +656,12 @@ interface ChatInputProps {
   onMusic8PlaylistUrl?: (url: string) => void | Promise<void>;
   /** YouTube プレイリスト公開 URL（連続再生） */
   onYoutubePlaylistUrl?: (url: string) => void | Promise<void>;
+  /** ライブラリで選択中アーティストの曲一覧を連続再生 */
+  onLibraryArtistAutoplay?: (params: {
+    artistName: string;
+    songs: Array<{ videoId: string; title: string; artist: string }>;
+    orderLabel?: string;
+  }) => void | Promise<void>;
   /** ゲスト時は検索APIの制限を低めにするために送る */
   isGuest?: boolean;
   /** AI お試し残数（二段選曲ボタン用） */
@@ -710,6 +720,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
     onVideoUrl,
     onMusic8PlaylistUrl,
     onYoutubePlaylistUrl,
+    onLibraryArtistAutoplay,
     isGuest = false,
     aiTrialStatus = null,
     participatesInSelection = true,
@@ -1839,6 +1850,56 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
     clearLibrarySongSelection();
     setLibraryOpen(false);
   }, [onVideoUrl, selectedLibraryUrl, clearLibrarySongSelection]);
+
+  const libraryArtistAutoplaySongs = useMemo(() => {
+    const artistFallback = (librarySelectedArtistName ?? '').trim();
+    const songs: Array<{ videoId: string; title: string; artist: string }> = [];
+    const seen = new Set<string>();
+    for (const row of librarySongRowsSortedForList) {
+      const videoId = row.video_id?.trim() ?? '';
+      if (!videoId || seen.has(videoId)) continue;
+      seen.add(videoId);
+      songs.push({
+        videoId,
+        title: librarySongListPrimaryTitle(row),
+        artist: (row.main_artist ?? '').trim() || artistFallback,
+      });
+    }
+    return songs;
+  }, [librarySongRowsSortedForList, librarySelectedArtistName]);
+
+  const canSubmitLibraryArtistAutoplay =
+    Boolean(onLibraryArtistAutoplay) &&
+    !isGuest &&
+    participatesInSelection &&
+    !roomInteractionLocked &&
+    Boolean(librarySelectedArtistName?.trim()) &&
+    libraryArtistAutoplaySongs.length > 0 &&
+    !libraryLoading;
+
+  const submitLibraryArtistAutoplay = useCallback(() => {
+    if (!canSubmitLibraryArtistAutoplay || !onLibraryArtistAutoplay) return;
+    const artistName = librarySelectedArtistName?.trim();
+    if (!artistName) return;
+    void onLibraryArtistAutoplay({
+      artistName,
+      songs: libraryArtistAutoplaySongs,
+      orderLabel: librarySongListSortOrderLabel(librarySongListSort as LibrarySongListSortKey),
+    });
+    setValue('');
+    if (librarySongListScrollRef.current) {
+      librarySongListScrollTopRef.current = librarySongListScrollRef.current.scrollTop;
+    }
+    clearLibrarySongSelection();
+    setLibraryOpen(false);
+  }, [
+    canSubmitLibraryArtistAutoplay,
+    onLibraryArtistAutoplay,
+    librarySelectedArtistName,
+    libraryArtistAutoplaySongs,
+    librarySongListSort,
+    clearLibrarySongSelection,
+  ]);
 
   useEffect(() => {
     if (!libraryOpen || libraryArtistsReady || libraryArtistsLoading) return;
@@ -3232,6 +3293,30 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                     })}
                   </ul>
                 </div>
+                {librarySelectedArtistName && librarySongRowsSortedForList.length > 0 ? (
+                  <div className="shrink-0 border-t border-lime-900/60 px-2 py-2">
+                    <button
+                      type="button"
+                      disabled={!canSubmitLibraryArtistAutoplay}
+                      onClick={submitLibraryArtistAutoplay}
+                      className={librarySelectSongBtnClass('w-full')}
+                      title={
+                        isGuest
+                          ? '連続選曲はログインユーザーのみ利用できます'
+                          : !participatesInSelection
+                            ? '選曲に参加していないため利用できません'
+                            : libraryArtistAutoplaySongs.length === 0
+                              ? '再生できる動画がある曲がありません'
+                              : `表示中の並び順で最大${libraryArtistAutoplaySongs.length}曲を連続再生します`
+                      }
+                    >
+                      全曲選曲
+                      {libraryArtistAutoplaySongs.length > 0
+                        ? `（${libraryArtistAutoplaySongs.length}）`
+                        : ''}
+                    </button>
+                  </div>
+                ) : null}
               </section>
               {isMobileLandscape && selectedLibraryRow ? (
                 <section className="min-h-0 grid grid-cols-[minmax(0,0.68fr)_minmax(0,0.32fr)] gap-2 max-lg:col-span-2">

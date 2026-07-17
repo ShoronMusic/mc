@@ -46,6 +46,23 @@ function run() {
   assert.equal(out.songs[0]!.artist, 'Boy Harsher');
   assert.equal(out.songs[0]!.title, 'Jeans');
 
+  const unlimited = normalizeYoutubePlaylistItems(
+    [
+      {
+        snippet: { title: 'One - A', videoOwnerChannelTitle: 'A' },
+        contentDetails: { videoId: 'aaaaaaaaaaa' },
+      },
+      {
+        snippet: { title: 'Two - B', videoOwnerChannelTitle: 'B' },
+        contentDetails: { videoId: 'bbbbbbbbbbb' },
+      },
+    ],
+    null,
+  );
+  assert.equal(unlimited.songs.length, 2);
+  assert.equal(unlimited.truncated, false);
+  assert.equal(unlimited.totalFetched, 2);
+
   console.log('youtube-playlist-fetch unit tests: OK');
 }
 

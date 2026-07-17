@@ -101,6 +101,7 @@ import {
   isMusic8PlaylistAutoplayCurrentVideo,
   type Music8PlaylistAutoplayState,
 } from '@/lib/music8-playlist-autoplay';
+import { buildLibraryArtistAutoplayLaunch } from '@/lib/library-artist-autoplay';
 import { isYoutubeKeywordSearchEnabled } from '@/lib/youtube-keyword-search-ui';
 import { extractCharacterSongPickResolvedYoutube } from '@/lib/character-song-pick-youtube';
 import {
@@ -1865,6 +1866,48 @@ export default function RoomWithoutSync({
     [isGuest, participatesInSelection, addSystemMessage, playMusic8PlaylistVideoLocal],
   );
 
+  const handleLibraryArtistAutoplay = useCallback(
+    (params: {
+      artistName: string;
+      songs: Array<{ videoId: string; title: string; artist: string }>;
+      orderLabel?: string;
+    }) => {
+      if (isGuest) {
+        addSystemMessage('ライブラリの全曲選曲はログインユーザーのみ利用できます。');
+        return;
+      }
+      if (!participatesInSelection) {
+        addSystemMessage('選曲に参加していないため、全曲選曲はできません。');
+        return;
+      }
+      const launch = buildLibraryArtistAutoplayLaunch({
+        artistName: params.artistName,
+        songs: params.songs,
+        orderLabel: params.orderLabel,
+        maxSongs: chatStyleAdminTools ? null : undefined,
+      });
+      if (!launch) {
+        addSystemMessage('再生できる曲がライブラリ一覧にありませんでした。');
+        return;
+      }
+      music8PlaylistAutoplayRef.current = launch.state;
+      addSystemMessage(launch.startMessage);
+      const first = getMusic8PlaylistCurrentSong(launch.state);
+      if (first) {
+        const trackMsg = formatMusic8PlaylistTrackMessage(launch.state);
+        if (trackMsg) addSystemMessage(trackMsg);
+        playMusic8PlaylistVideoLocal(first.videoId, { withAi: true });
+      }
+    },
+    [
+      isGuest,
+      participatesInSelection,
+      chatStyleAdminTools,
+      addSystemMessage,
+      playMusic8PlaylistVideoLocal,
+    ],
+  );
+
   const handleVideoUrlFromChat = useCallback(
     (
       url: string,
@@ -2532,6 +2575,7 @@ export default function RoomWithoutSync({
       displayNameProp,
       handleMusic8PlaylistUrl,
       handleYoutubePlaylistUrl,
+      handleLibraryArtistAutoplay,
     ]
   );
 
@@ -2542,6 +2586,7 @@ export default function RoomWithoutSync({
       onVideoUrl={handleVideoUrlFromChat}
       onMusic8PlaylistUrl={handleMusic8PlaylistUrl}
       onYoutubePlaylistUrl={handleYoutubePlaylistUrl}
+      onLibraryArtistAutoplay={handleLibraryArtistAutoplay}
       themePlaylistRoomSubmit={themePlaylistRoomSubmit}
       isGuest={isGuest}
       aiTrialStatus={aiTrialStatus}

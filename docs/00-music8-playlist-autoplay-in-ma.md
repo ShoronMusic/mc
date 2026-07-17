@@ -324,6 +324,7 @@ type Music8PlaylistAutoplayState = {
 ### Phase 5 — 任意強化
 
 - [ ] AI 解説を「先頭のみ」または「N 曲ごと」で有効化（フラグ）
+- [x] ライブラリ・アーティスト全曲選曲（E列下部「全曲選曲」→ 同一オートプレイキュー。`library-artist-autoplay.ts`）
 - [ ] マイリスト／再生履歴との連携
 - [ ] 静的 JSON キャッシュ（GCS）— ライブ API で十分な間は不要
 - [ ] m8 側 `order=date_desc` 正式対応（プロキシソートをやめる）
@@ -338,7 +339,7 @@ type Music8PlaylistAutoplayState = {
 |--------|----------|
 | 入力 | Music8 プレイリストの **公開ページ URL**（slug） |
 | 曲順 | 公開日が新しい順（`post_date` DESC） |
-| 上限 | 40 曲（超過は切り捨て + `truncated: true`） |
+| 上限 | 40 曲（超過は切り捨て + `truncated: true`）。**STYLE_ADMIN_USER_IDS** のログイン時のみ上限なし（AI 解説保存用） |
 | AI 解説 | **各曲**（紹介・解説あり。コストは曲数に比例） |
 | 既存 1曲予約キュー | 干渉しない（別系統） |
 | 手動選曲 | オートプレイ中止 |

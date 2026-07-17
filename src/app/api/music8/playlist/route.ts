@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { sessionIsStyleAdmin } from '@/lib/admin-access';
 import { getChatAiClientIp } from '@/lib/chat-ai-rate-limit';
 import { fetchNormalizedMusic8Playlist } from '@/lib/music8-playlist-fetch';
 import { checkMusic8PlaylistRateLimit } from '@/lib/music8-playlist-rate-limit';
@@ -33,8 +34,10 @@ export async function POST(request: Request) {
   const obj = body && typeof body === 'object' ? (body as Record<string, unknown>) : {};
   const url = typeof obj.url === 'string' ? obj.url : undefined;
   const slug = typeof obj.slug === 'string' ? obj.slug : undefined;
+  // STYLE_ADMIN は AI 解説保存用に曲数上限なし
+  const maxSongs = (await sessionIsStyleAdmin()) ? null : undefined;
 
-  const result = await fetchNormalizedMusic8Playlist({ url, slug });
+  const result = await fetchNormalizedMusic8Playlist({ url, slug, maxSongs });
   if (!result.ok) {
     const status =
       result.reason === 'invalid_url'

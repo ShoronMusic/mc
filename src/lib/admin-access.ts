@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { getStyleAdminUserIds } from '@/lib/style-admin';
+import { getStyleAdminUserIds, isStyleAdminUserId } from '@/lib/style-admin';
 
 /**
  * /admin 配下の画面を開ける条件（API の STYLE_ADMIN チェックと揃える）
@@ -82,4 +82,14 @@ export async function sessionMayEditRoomPlaybackHistoryFields(
   } = await supabase.auth.getUser();
   const uid = user?.id;
   return Boolean(uid && adminIds.includes(uid));
+}
+
+/** ログイン中ユーザーが STYLE_ADMIN_USER_IDS に含まれるか（プレイリスト上限撤廃など）。 */
+export async function sessionIsStyleAdmin(): Promise<boolean> {
+  const supabase = await createClient();
+  if (!supabase) return false;
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  return isStyleAdminUserId(user?.id);
 }

@@ -58,6 +58,21 @@ export function getYoutubePlaylistAutoplayMax(): number {
   return Math.min(ABSOLUTE_MAX_SONGS, Math.max(1, n));
 }
 
+/**
+ * `null` = 上限なし（STYLE_ADMIN 向け）。
+ * `undefined` = env / 既定（最大 ABSOLUTE_MAX）。
+ * 数値 = その件数（ABSOLUTE_MAX でクランプ）。
+ */
+export function resolveYoutubePlaylistAutoplayMax(
+  maxSongs: number | null | undefined,
+): number | null {
+  if (maxSongs === null) return null;
+  if (typeof maxSongs === 'number' && Number.isFinite(maxSongs)) {
+    return Math.min(ABSOLUTE_MAX_SONGS, Math.max(1, Math.floor(maxSongs)));
+  }
+  return getYoutubePlaylistAutoplayMax();
+}
+
 function normalizePlaylistTitle(raw: string | undefined, fallback: string): string {
   const title = String(raw ?? '').trim();
   return title && title !== 'Private video' && title !== 'Deleted video' ? title : fallback;
@@ -65,9 +80,9 @@ function normalizePlaylistTitle(raw: string | undefined, fallback: string): stri
 
 export function normalizeYoutubePlaylistItems(
   items: YoutubePlaylistApiItem[] | undefined | null,
-  maxSongs: number = getYoutubePlaylistAutoplayMax(),
+  maxSongs: number | null = getYoutubePlaylistAutoplayMax(),
 ): { songs: YoutubePlaylistNormalizedSong[]; totalFetched: number; truncated: boolean } {
-  const cappedMax = Math.min(ABSOLUTE_MAX_SONGS, Math.max(1, maxSongs));
+  const cappedMax = resolveYoutubePlaylistAutoplayMax(maxSongs);
   const seen = new Set<string>();
   const songsAll: YoutubePlaylistNormalizedSong[] = [];
 
@@ -93,6 +108,9 @@ export function normalizeYoutubePlaylistItems(
   }
 
   const totalFetched = songsAll.length;
+  if (cappedMax == null) {
+    return { songs: songsAll, totalFetched, truncated: false };
+  }
   const truncated = totalFetched > cappedMax;
   return {
     songs: truncated ? songsAll.slice(0, cappedMax) : songsAll,
@@ -121,11 +139,12 @@ async function fetchPlaylistTitle(playlistId: string, apiKey: string): Promise<s
 async function fetchPlaylistItems(
   playlistId: string,
   apiKey: string,
-  maxSongs: number,
+  maxSongs: number | null,
 ): Promise<{ status: number; items: YoutubePlaylistApiItem[] | null; errorMessage?: string }> {
   const items: YoutubePlaylistApiItem[] = [];
   let nextPageToken: string | null = null;
-  while (items.length < maxSongs) {
+  // maxSongs == null（STYLE_ADMIN）は全ページ取得。それ以外は上限件数まで。
+  while (maxSongs == null || items.length < maxSongs) {
     const params = new URLSearchParams({
       part: 'snippet,contentDetails',
       playlistId,
@@ -160,6 +179,8 @@ async function fetchPlaylistItems(
 export async function fetchNormalizedYoutubePlaylist(params: {
   url?: string;
   playlistId?: string;
+  /** `null` で曲数上限なし（STYLE_ADMIN） */
+  maxSongs?: number | null;
 }): Promise<YoutubePlaylistFetchResult> {
   const apiKey = process.env.YOUTUBE_API_KEY?.trim();
   if (!apiKey) {
@@ -200,7 +221,9 @@ export async function fetchNormalizedYoutubePlaylist(params: {
     };
   }
 
-  const maxSongs = getYoutubePlaylistAutoplayMax();
+  const maxSongs = resolveYoutubePlaylistAutoplayMax(
+    params.maxSongs === undefined ? getYoutubePlaylistAutoplayMax() : params.maxSongs,
+  );
   const [title, itemResult] = await Promise.all([
     fetchPlaylistTitle(playlistId, apiKey).catch(() => null),
     fetchPlaylistItems(playlistId, apiKey, maxSongs).catch(() => ({

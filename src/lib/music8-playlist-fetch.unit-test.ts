@@ -36,6 +36,20 @@ function run() {
   assert.equal(many.totalFetched, 5);
   assert.equal(many.songs[0]!.videoId, 'abcdefghij4'); // newest month
 
+  const unlimited = normalizeMusic8PlaylistSongs(
+    Array.from({ length: 5 }, (_, i) => ({
+      id: i,
+      title: `T${i}`,
+      yt_video_id: `abcdefghij${i}`,
+      first_artist: 'X',
+      post_date: `2026-0${i + 1}-01`,
+    })),
+    null,
+  );
+  assert.equal(unlimited.songs.length, 5);
+  assert.equal(unlimited.truncated, false);
+  assert.equal(unlimited.totalFetched, 5);
+
   console.log('music8-playlist-fetch unit tests: OK');
 }
 
