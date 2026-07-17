@@ -39,8 +39,15 @@ export async function POST(request: Request) {
   }
   const allowedPainPoints = new Set([
     '入室方法',
-    'YouTube URL貼り付け',
+    '選曲方法',
+    'チャットの進行',
+    'AIの解説やおススメ',
     'AIへの質問方法',
+    'マイページ',
+    'ライブラリ',
+    'その他',
+    // 旧選択肢（過去クライアント互換）
+    'YouTube URL貼り付け',
     '画面の見方',
     '特になし',
   ]);
@@ -50,7 +57,7 @@ export async function POST(request: Request) {
           .filter((v): v is string => typeof v === 'string')
           .map((v) => v.trim())
           .filter((v) => v.length > 0 && allowedPainPoints.has(v))
-          .slice(0, 5)
+          .slice(0, 8)
       : null;
 
   const roomId =
