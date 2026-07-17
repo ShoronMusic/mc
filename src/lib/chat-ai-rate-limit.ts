@@ -26,15 +26,18 @@ function getTimestampsMap(): Map<string, number[]> {
   return g.__chatAiRateTimestamps;
 }
 
-/** プロキシ経由のクライアント IP（同一 LAN 内の複数ユーザーはまとまる場合あり） */
+/** プロキシ経由のクライアント IP（Vercel 等の信頼できるプロキシ前提）。 */
 export function getChatAiClientIp(request: Request): string {
-  const fwd = request.headers.get('x-forwarded-for');
-  if (fwd) {
-    const first = fwd.split(',')[0]?.trim();
-    if (first) return first;
+  const trustProxy = process.env.TRUST_X_FORWARDED_FOR !== '0';
+  if (trustProxy) {
+    const fwd = request.headers.get('x-forwarded-for');
+    if (fwd) {
+      const first = fwd.split(',')[0]?.trim();
+      if (first) return first;
+    }
+    const real = request.headers.get('x-real-ip')?.trim();
+    if (real) return real;
   }
-  const real = request.headers.get('x-real-ip')?.trim();
-  if (real) return real;
   return 'unknown';
 }
 

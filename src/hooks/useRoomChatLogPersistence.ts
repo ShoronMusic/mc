@@ -96,7 +96,12 @@ export function useRoomChatLogPersistence(
         const res = await fetch('/api/room-chat-log', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ roomId: rid, gatheringId: gatheringIdRef.current, entries }),
+          body: JSON.stringify({
+            roomId: rid,
+            gatheringId: gatheringIdRef.current,
+            clientId: myClientId || undefined,
+            entries,
+          }),
           keepalive: opts.keepalive === true,
         });
         if (res.ok) {

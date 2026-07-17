@@ -4,8 +4,12 @@ import { formatArtistTitle } from '@/lib/format-song-display';
 import { generateChatReply } from '@/lib/gemini';
 import { fetchOEmbed } from '@/lib/youtube-oembed';
 import { getStyleFromDb } from '@/lib/song-style';
-import { checkChatAiRateLimit, getChatAiClientIp } from '@/lib/chat-ai-rate-limit';
+import { getChatAiClientIp } from '@/lib/chat-ai-rate-limit';
+import { checkAiCostRateLimit } from '@/lib/ai-cost-rate-limit';
+import { aiCostRateLimitResponse } from '@/lib/ai-cost-rate-limit-response';
+import { gateRoomCostRouteAccess } from '@/lib/room-cost-route-access';
 import { fetchUserTasteContextForChat } from '@/lib/user-ai-taste-context';
+import { isAiUnlimitedUserId } from '@/lib/ai-unlimited-user-ids';
 
 export const dynamic = 'force-dynamic';
 
@@ -63,19 +67,41 @@ export async function POST(request: Request) {
       return NextResponse.json({ text: null, skipped: true, reason: 'short_acknowledgement' });
     }
 
-    const isGuest = body?.isGuest === true;
-    const rate = checkChatAiRateLimit(getChatAiClientIp(request), isGuest);
-    if (!rate.ok) {
+    const roomId = typeof body?.roomId === 'string' ? body.roomId.trim() : '';
+    const clientId = typeof body?.clientId === 'string' ? body.clientId.trim() : '';
+    const supabase = await createClient();
+    let authUser = null;
+    if (supabase) {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      authUser = user ?? null;
+    }
+    const isGuest = !authUser?.id;
+    const unlimited = Boolean(authUser?.id && isAiUnlimitedUserId(authUser.id));
+
+    if (!unlimited) {
+      const rate = checkAiCostRateLimit({
+        bucket: 'character_chat',
+        clientIp: getChatAiClientIp(request),
+        userId: authUser?.id,
+        isGuest,
+      });
+      const limited = aiCostRateLimitResponse(rate);
+      if (limited) return limited;
+    }
+
+    const gate = await gateRoomCostRouteAccess({
+      supabase,
+      roomId,
+      clientId,
+      userId: authUser?.id ?? null,
+      allowWhenAblyUnconfigured: true,
+    });
+    if (!gate.allowed) {
       return NextResponse.json(
-        {
-          error: 'rate_limit',
-          message: 'AI への質問が短時間に集中しています。しばらく待ってから再度お試しください。',
-          retryAfterSec: rate.retryAfterSec,
-        },
-        {
-          status: 429,
-          headers: { 'Retry-After': String(rate.retryAfterSec) },
-        },
+        { error: gate.error, message: gate.message },
+        { status: gate.status },
       );
     }
 
@@ -83,7 +109,6 @@ export async function POST(request: Request) {
     let currentSongStyle: string | null = null;
     const videoId = typeof body?.videoId === 'string' ? body.videoId.trim() : '';
     if (videoId) {
-      const supabase = await createClient();
       const oembed = await fetchOEmbed(videoId);
       const title = oembed?.title ?? videoId;
       currentSong = formatArtistTitle(title, oembed?.author_name) || null;
@@ -94,17 +119,10 @@ export async function POST(request: Request) {
     }
 
     let userTasteSummary: string | null = null;
-    const supaAuth = await createClient();
-    if (supaAuth) {
-      const {
-        data: { user },
-      } = await supaAuth.auth.getUser();
-      if (user?.id) {
-        userTasteSummary = await fetchUserTasteContextForChat(supaAuth, user.id);
-      }
+    if (supabase && authUser?.id) {
+      userTasteSummary = await fetchUserTasteContextForChat(supabase, authUser.id);
     }
 
-    const roomId = typeof body?.roomId === 'string' ? body.roomId.trim() : '';
     const aiCharacterDisplayName =
       typeof body?.aiCharacterDisplayName === 'string' ? body.aiCharacterDisplayName.trim() : '';
     const songSelectorDisplayName =
@@ -119,6 +137,7 @@ export async function POST(request: Request) {
       {
         roomId: roomId || undefined,
         videoId: videoId || undefined,
+        userId: authUser?.id ?? null,
       },
       {
         forceReply: true,

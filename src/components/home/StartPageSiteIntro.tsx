@@ -2,10 +2,9 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
 import { hasGuestRoomPersistence } from '@/lib/guest-room-persistence';
 import { ConsentPageLiveChats } from '@/components/home/ConsentPageLiveChats';
-import { loadBrowserSupabaseClient } from '@/lib/supabase/load-browser-client';
+import { useTopPageLoggedIn } from '@/components/home/use-top-page-auth';
 import { MusicChatTitleBrand } from '@/components/home/MusicChatTitleLogo';
 import { SisterSiteAccountNote } from '@/components/home/SisterSiteAccountNote';
 import { IS_MC_PRODUCT } from '@/lib/product-branding';
@@ -29,30 +28,12 @@ interface StartPageSiteIntroProps {
 }
 
 export function useStartPageIntroVisible(forceShow = false) {
-  const [show, setShow] = useState<boolean | null>(null);
+  const isLoggedIn = useTopPageLoggedIn();
 
-  useEffect(() => {
-    if (forceShow) {
-      setShow(true);
-      return;
-    }
-    if (typeof window === 'undefined') return;
-    if (hasGuestRoomPersistence()) {
-      setShow(false);
-      return;
-    }
-    void loadBrowserSupabaseClient().then(({ client, configured }) => {
-      if (!configured || !client) {
-        setShow(true);
-        return;
-      }
-      void client.auth.getUser().then(({ data: { user } }) => {
-        setShow(!user);
-      });
-    });
-  }, [forceShow]);
-
-  return show;
+  if (forceShow) return true;
+  if (typeof window !== 'undefined' && hasGuestRoomPersistence()) return false;
+  if (isLoggedIn === null) return null;
+  return !isLoggedIn;
 }
 
 function SiteIntroVideo({ className = '' }: { className?: string }) {

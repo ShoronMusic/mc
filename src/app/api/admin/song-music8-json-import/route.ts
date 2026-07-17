@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { requireStyleAdminApi } from '@/lib/admin-access';
 import { attachMusic8SongDataIfFetched } from '@/lib/song-entities';
 import { buildPersistableMusic8SongSnapshot } from '@/lib/music8-song-persist';
+import { assertSafeOutboundUrl, getSafeFetchAllowedHostsFromEnv } from '@/lib/safe-outbound-url';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,8 +35,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'songId が無効です。' }, { status: 400 });
   }
   const jsonUrl = typeof body.jsonUrl === 'string' ? body.jsonUrl.trim() : '';
-  if (!jsonUrl || !/^https?:\/\/.+/i.test(jsonUrl)) {
-    return NextResponse.json({ error: 'jsonUrl が無効です。' }, { status: 400 });
+  const safeUrl = assertSafeOutboundUrl(jsonUrl, {
+    allowedHosts: getSafeFetchAllowedHostsFromEnv(),
+  });
+  if (!safeUrl.ok) {
+    return NextResponse.json({ error: safeUrl.error }, { status: 400 });
   }
 
   // 曲の存在確認
@@ -54,7 +58,7 @@ export async function POST(request: Request) {
   // URL から JSON を取得
   let music8Json: Record<string, unknown>;
   try {
-    const res = await fetch(jsonUrl, {
+    const res = await fetch(safeUrl.url.toString(), {
       headers: { 'User-Agent': 'musicaichat-admin/1.0' },
       signal: AbortSignal.timeout(15_000),
     });

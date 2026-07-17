@@ -22,6 +22,7 @@ import {
   userTextHasAiMention,
 } from '@/lib/user-ai-trial-server';
 import { isAiUnlimitedUserId } from '@/lib/ai-unlimited-user-ids';
+import { enforceServerAiQuestionGuard } from '@/lib/server-ai-question-guard';
 import {
   getRoomHistoryProductId,
   runRoomHistoryQueryScoped,
@@ -300,6 +301,18 @@ export async function POST(request: Request) {
       forceReply ||
       (userTextHasAiMention(newestUserText) && shouldGenerateChatReply(newestUserText));
     if (needsAtTrial) {
+      const roomIdForGuard = typeof body?.roomId === 'string' ? body.roomId.trim() : '';
+      const qGuard = await enforceServerAiQuestionGuard({
+        userText: newestUserText,
+        recentMessages: list,
+        roomId: roomIdForGuard || undefined,
+        userId: requestUserEarly?.id ?? null,
+        isGuest,
+      });
+      if (!qGuard.ok) {
+        return NextResponse.json(qGuard.body, { status: qGuard.status });
+      }
+
       const atGuard = await guardAndConsumeAiTrialAtQuestion({
         user: requestUserEarly,
         isGuest,

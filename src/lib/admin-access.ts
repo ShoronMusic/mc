@@ -69,13 +69,13 @@ export async function requireStyleAdminApi(): Promise<
 
 /**
  * 視聴履歴のスタイル／アーティスト-タイトル修正と同じセッション条件。
- * STYLE_ADMIN_USER_IDS 未設定時は従来どおり誰でも可（room-playback-history PATCH と揃える）。
+ * STYLE_ADMIN_USER_IDS 未設定時は誰も不可（/admin・管理 API と揃える fail-closed）。
  */
 export async function sessionMayEditRoomPlaybackHistoryFields(
   supabase: Awaited<ReturnType<typeof createClient>>,
 ): Promise<boolean> {
   const adminIds = getStyleAdminUserIds();
-  if (adminIds.length === 0) return true;
+  if (adminIds.length === 0) return false;
   if (!supabase) return false;
   const {
     data: { user },

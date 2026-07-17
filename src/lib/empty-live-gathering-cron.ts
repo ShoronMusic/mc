@@ -66,7 +66,7 @@ export async function sweepEmptyLiveGatherings(admin: SupabaseClient): Promise<C
   const firstUnconfigured = presenceResults.find((p) => p.count === 'unconfigured');
   if (firstUnconfigured) {
     result.skippedUnconfigured = true;
-    result.errors.push('NEXT_PUBLIC_ABLY_API_KEY 未設定のため在室確認できません');
+    result.errors.push('ABLY_API_KEY 未設定のため在室確認できません');
     return result;
   }
 

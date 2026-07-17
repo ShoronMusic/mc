@@ -21,6 +21,7 @@ import { AblyRoomTrafficProvider } from '@/lib/ably-room-traffic-context';
 import { useAblyBackgroundSuspend } from '@/hooks/useAblyBackgroundSuspend';
 import { createClient } from '@/lib/supabase/client';
 import { getAblyRoomChannelName, getRoomProductScopedStorageKey } from '@/lib/room-product-scope';
+import { isAblyClientAuthEnabled } from '@/lib/ably-client-auth';
 
 const DEFAULT_DISPLAY_NAME = 'ゲスト';
 
@@ -33,20 +34,36 @@ function getChannelName(roomId: string): string {
   return getAblyRoomChannelName(roomId);
 }
 
-function getValidKey(): string | null {
-  const key = process.env.NEXT_PUBLIC_ABLY_API_KEY;
-  if (typeof key === 'string' && key.trim() !== '') return key;
-  return null;
-}
-
-function buildAblyClient(key: string, clientId: string): Ably.Realtime {
+function buildAblyClient(roomId: string, clientId: string): Ably.Realtime {
+  const cid = clientId.trim();
   const opts: Ably.ClientOptions = {
-    key,
+    authCallback: (tokenParams, callback) => {
+      void fetch('/api/ably/token', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          roomId,
+          clientId: cid || (typeof tokenParams.clientId === 'string' ? tokenParams.clientId : ''),
+        }),
+      })
+        .then(async (res) => {
+          const data = await res.json().catch(() => null);
+          if (!res.ok) {
+            callback(data?.message || data?.error || `token HTTP ${res.status}`, null);
+            return;
+          }
+          callback(null, data);
+        })
+        .catch((err) => {
+          callback(err instanceof Error ? err.message : 'token fetch failed', null);
+        });
+    },
     disconnectedRetryTimeout: 15_000,
     suspendedRetryTimeout: 30_000,
     closeOnUnload: true,
   };
-  if (clientId.trim()) opts.clientId = clientId.trim();
+  if (cid) opts.clientId = cid;
   return new Ably.Realtime(opts);
 }
 
@@ -75,7 +92,7 @@ export function AblyProviderWrapper({
   clientId: clientIdProp = '',
 }: AblyProviderWrapperProps) {
   const router = useRouter();
-  const key = getValidKey();
+  const ablyEnabled = isAblyClientAuthEnabled();
   const { documentHidden, backgroundSuspended } = useAblyBackgroundSuspend();
   const [ablyClient, setAblyClient] = useState<Ably.Realtime | null>(null);
   const ablyClientRef = useRef<Ably.Realtime | null>(null);
@@ -91,7 +108,7 @@ export function AblyProviderWrapper({
   );
 
   useEffect(() => {
-    if (!key || backgroundSuspended) {
+    if (!ablyEnabled || backgroundSuspended) {
       closeAblyClientSafely(ablyClientRef.current);
       ablyClientRef.current = null;
       setAblyClient(null);
@@ -99,7 +116,14 @@ export function AblyProviderWrapper({
     }
 
     const cid = clientIdProp?.trim() ?? '';
-    const next = buildAblyClient(key, cid);
+    if (!cid) {
+      closeAblyClientSafely(ablyClientRef.current);
+      ablyClientRef.current = null;
+      setAblyClient(null);
+      return;
+    }
+
+    const next = buildAblyClient(roomId, cid);
     ablyClientRef.current = next;
     registerActiveAblyClient(next);
     setAblyClient(next);
@@ -118,7 +142,7 @@ export function AblyProviderWrapper({
         ablyClientRef.current = null;
       }
     };
-  }, [key, clientIdProp, backgroundSuspended]);
+  }, [ablyEnabled, roomId, clientIdProp, backgroundSuspended]);
 
   const channelName = getChannelName(roomId);
 
@@ -188,7 +212,7 @@ export function AblyProviderWrapper({
     [router, roomId, displayName, postParticipation],
   );
 
-  if (!key) {
+  if (!ablyEnabled) {
     return (
       <RoomWithoutSync
         displayName={displayName}

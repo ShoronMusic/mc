@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { sendFeedbackEmail } from '@/lib/send-feedback-email';
+import { getChatAiClientIp } from '@/lib/chat-ai-rate-limit';
+import { checkAiCostRateLimit } from '@/lib/ai-cost-rate-limit';
+import { aiCostRateLimitResponse } from '@/lib/ai-cost-rate-limit-response';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,6 +23,15 @@ export async function POST(request: Request) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
+
+  const rate = checkAiCostRateLimit({
+    bucket: 'feedback',
+    clientIp: getChatAiClientIp(request),
+    userId: user?.id,
+    isGuest: !user?.id,
+  });
+  const limited = aiCostRateLimitResponse(rate);
+  if (limited) return limited;
 
   let body: {
     songId?: string | null;

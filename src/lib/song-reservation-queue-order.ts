@@ -68,6 +68,31 @@ export type ResolveSongReservationQueueApplyResult =
   | { kind: 'idle' };
 
 /**
+ * 予約キュー走査の開始 clientId。
+ * 1人で選曲した直後はターンが投稿者のまま残る。後入室で輪が広がっても、
+ * 「いま流れている／ちょうど終わった曲の投稿者」を未選曲扱いにしない。
+ */
+export function resolveQueueScanStartClientId(params: {
+  currentTurnClientId: string;
+  /** 再生中または直前に終了した曲の投稿者 */
+  lastSongPosterClientId?: string;
+  participatingOrder: SelectionRoundParticipant[];
+  presentClientIds: ReadonlySet<string>;
+}): string {
+  const ring = getSelectablePresentRing(params.participatingOrder, params.presentClientIds);
+  if (ring.length === 0) return params.currentTurnClientId.trim();
+
+  const cur = params.currentTurnClientId.trim();
+  let start = cur && ring.includes(cur) ? cur : ring[0];
+  const poster = (params.lastSongPosterClientId ?? '').trim();
+  if (poster && start === poster && ring.length > 1) {
+    const i = ring.indexOf(poster);
+    if (i >= 0) return ring[(i + 1) % ring.length];
+  }
+  return start;
+}
+
+/**
  * 選曲予約キューから次に処理すべきエントリを決める。
  * ターン順で先の参加者が未予約なら再生せず prompt。予約済みならその人のキュー行を apply（FIFO 先頭が後ろの人でも可）。
  */
@@ -78,6 +103,11 @@ export function resolveSongReservationQueueApply(params: {
   queue: SongReservationQueueEntryLike[];
   /** authUserId 照合（省略時は participatingOrder の clientId のみ） */
   participantIdentities?: readonly QueueParticipantIdentity[];
+  /**
+   * 再生中／直前終了曲の投稿者。ターンが投稿者のまま残っているとき
+   * （単独選曲→後入室など）はその次から走査する。
+   */
+  lastSongPosterClientId?: string;
 }): ResolveSongReservationQueueApplyResult {
   const ring = getSelectablePresentRing(params.participatingOrder, params.presentClientIds);
   if (ring.length === 0 || params.queue.length === 0) return { kind: 'idle' };
@@ -86,12 +116,15 @@ export function resolveSongReservationQueueApply(params: {
     ? [...params.participantIdentities]
     : params.participatingOrder.map((p) => ({ clientId: p.clientId }));
 
-  const cur = params.currentTurnClientId.trim();
+  const startId = resolveQueueScanStartClientId({
+    currentTurnClientId: params.currentTurnClientId,
+    lastSongPosterClientId: params.lastSongPosterClientId,
+    participatingOrder: params.participatingOrder,
+    presentClientIds: params.presentClientIds,
+  });
   let startIdx = 0;
-  if (cur) {
-    const i = ring.indexOf(cur);
-    if (i >= 0) startIdx = i;
-  }
+  const i = ring.indexOf(startId);
+  if (i >= 0) startIdx = i;
 
   for (let step = 0; step < ring.length; step++) {
     const cid = ring[(startIdx + step) % ring.length];

@@ -5,6 +5,7 @@ import {
   normalizeMusic8ArtistSource,
   upsertArtistFromMusic8Json,
 } from '@/lib/music8-artist-import';
+import { assertSafeOutboundUrl, getSafeFetchAllowedHostsFromEnv } from '@/lib/safe-outbound-url';
 
 export const dynamic = 'force-dynamic';
 
@@ -43,17 +44,14 @@ export async function POST(request: Request) {
 
   let resolvedJsonText = jsonText;
   if (jsonUrl) {
-    let url: URL;
-    try {
-      url = new URL(jsonUrl);
-    } catch {
-      return NextResponse.json({ error: 'jsonUrl の形式が不正です。' }, { status: 400 });
-    }
-    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-      return NextResponse.json({ error: 'jsonUrl は http/https のみ対応です。' }, { status: 400 });
+    const safe = assertSafeOutboundUrl(jsonUrl, {
+      allowedHosts: getSafeFetchAllowedHostsFromEnv(),
+    });
+    if (!safe.ok) {
+      return NextResponse.json({ error: safe.error }, { status: 400 });
     }
     try {
-      const res = await fetch(url.toString(), { cache: 'no-store' });
+      const res = await fetch(safe.url.toString(), { cache: 'no-store' });
       if (!res.ok) {
         return NextResponse.json(
           { error: `jsonUrl の取得に失敗しました（HTTP ${res.status}）。` },

@@ -41,7 +41,9 @@ export function TopPageAuthBar() {
         setLoading(false);
         return;
       }
-      void client.auth.getUser().then(({ data: { user } }) => {
+      // getSession はローカル参照で速い（並列 getUser のロック待ちを避ける）
+      void client.auth.getSession().then(({ data }) => {
+        const user = data.session?.user;
         setDisplayName(user ? getDisplayName(user) : null);
         setIsGuest(false);
         setLoading(false);

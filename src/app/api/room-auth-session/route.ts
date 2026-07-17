@@ -5,11 +5,12 @@ import { hasLiveAuthClientInPresence } from '@/lib/room-auth-session-presence';
 import { buildAuthRoomClientId } from '@/lib/room-owner';
 import { getAblyRoomChannelName } from '@/lib/room-product-scope';
 import { createClient } from '@/lib/supabase/server';
+import { getAblyServerApiKey } from '@/lib/ably-server-key';
 
 export const dynamic = 'force-dynamic';
 
 function getAblyKey(): string {
-  return process.env.NEXT_PUBLIC_ABLY_API_KEY?.trim() ?? '';
+  return getAblyServerApiKey();
 }
 
 function safeRoomId(raw: string | null): string | null {

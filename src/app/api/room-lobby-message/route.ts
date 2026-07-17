@@ -18,6 +18,7 @@ import {
   withGatheringProductEq,
   withLobbyProductEq,
 } from '@/lib/room-product-scope';
+import { getAblyServerApiKey } from '@/lib/ably-server-key';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,7 +39,7 @@ function safeClientId(raw: unknown): string | null {
 }
 
 function getAblyKey(): string {
-  return process.env.NEXT_PUBLIC_ABLY_API_KEY?.trim() ?? '';
+  return getAblyServerApiKey();
 }
 
 /** presence + history を合算。サーバーレス（例: Vercel 10s 制限）内に収める */

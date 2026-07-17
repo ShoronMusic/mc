@@ -1,6 +1,7 @@
 /**
- * 用途1: 視聴履歴のスタイル変更を「管理者のみ」に制限（未設定なら誰でも変更可）。
- * 用途2: /admin と /api/admin/* は isStyleAdminUserId ではなく admin-access.ts の厳格ルール（未設定なら誰も不可）。
+ * 用途1: 視聴履歴のスタイル変更を「管理者のみ」に制限。
+ * 用途2: /admin と /api/admin/* は admin-access.ts の厳格ルール（未設定なら誰も不可）。
+ * STYLE_ADMIN_USER_IDS 未設定時は **誰も変更不可**（fail-closed。/admin と揃える）。
  * Supabase Authentication → Users の UUID をカンマ区切りで指定。
  */
 export function getStyleAdminUserIds(): string[] {
@@ -11,7 +12,7 @@ export function getStyleAdminUserIds(): string[] {
 export function isStyleAdminUserId(userId: string | null | undefined): boolean {
   if (!userId) return false;
   const ids = getStyleAdminUserIds();
-  if (ids.length === 0) return true;
+  if (ids.length === 0) return false;
   return ids.includes(userId);
 }
 

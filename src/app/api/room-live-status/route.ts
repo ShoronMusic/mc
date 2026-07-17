@@ -104,6 +104,7 @@ async function lobbyDisplayTitleByRoomIds(
  * GET /api/room-live-status
  * - Query roomId=01 : 単一部屋の live 判定
  * - Query rooms=01,02,03 : live 部屋一覧
+ * - Query lite=1 : 開催中 roomId のみ（主催者メニューの空き部屋判定向け。host 名解決などを省略）
  */
 export async function GET(request: Request) {
   const supabase = await createClient();
@@ -117,6 +118,7 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const roomId = safeRoomId(searchParams.get('roomId') ?? '');
   const roomsRaw = searchParams.get('rooms') ?? '';
+  const lite = searchParams.get('lite') === '1' || searchParams.get('lite') === 'true';
 
   /** 単一部屋照会時は Ably を1回だけ取得し、stale 判定と入室ゲートの在室数に共用する */
   let singleRoomPresenceCount: number | undefined;
@@ -197,6 +199,31 @@ export async function GET(request: Request) {
     return NextResponse.json(
       { configured: false, message: error.message, room: null, rooms: [] },
       { status: 500, headers: { 'Cache-Control': 'no-store' } },
+    );
+  }
+
+  /** 主催パネルの空き部屋判定など: roomId 一覧だけで足りる */
+  if (lite && !roomId) {
+    const rooms = (data ?? [])
+      .map((r) => {
+        const rid = String((r as RoomGatheringRow).room_id ?? '');
+        return rid
+          ? {
+              gatheringId: typeof (r as RoomGatheringRow).id === 'string' ? (r as RoomGatheringRow).id : '',
+              roomId: rid,
+              title: '',
+              startedAt: null,
+              displayTitle: '',
+              joinLocked: false,
+              canEnter: true,
+              hostDisplayName: null as string | null,
+            }
+          : null;
+      })
+      .filter((r): r is NonNullable<typeof r> => r != null);
+    return NextResponse.json(
+      { configured: true, rooms, room: null },
+      { headers: { 'Cache-Control': 'no-store' } },
     );
   }
 

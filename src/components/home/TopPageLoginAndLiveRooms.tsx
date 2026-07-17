@@ -6,8 +6,7 @@ import {
   type TopPageLoginEntryIntent,
 } from '@/components/auth/TopPageLoginEntry';
 import { HomeRoomLinks } from '@/components/home/HomeRoomLinks';
-import type { BrowserSupabaseClient } from '@/lib/supabase/load-browser-client';
-import { loadBrowserSupabaseClient } from '@/lib/supabase/load-browser-client';
+import { useTopPageLoggedIn } from '@/components/home/use-top-page-auth';
 import { IS_MC_PRODUCT } from '@/lib/product-branding';
 
 type TopPageLoginAndLiveRoomsProps = {
@@ -21,43 +20,7 @@ type TopPageLoginAndLiveRoomsProps = {
  */
 export function TopPageLoginAndLiveRooms({ part = 'all' }: TopPageLoginAndLiveRoomsProps) {
   const [authIntent, setAuthIntent] = useState<TopPageLoginEntryIntent | null>(null);
-  const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null);
-  const [hasSupabase, setHasSupabase] = useState(false);
-  const [supabase, setSupabase] = useState<BrowserSupabaseClient | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    void loadBrowserSupabaseClient().then(({ client, configured }) => {
-      if (!active) return;
-      setSupabase(client);
-      setHasSupabase(configured);
-    });
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!hasSupabase || !supabase) {
-      setIsLoggedIn(false);
-      return;
-    }
-    let active = true;
-    void supabase.auth.getUser().then(({ data }) => {
-      if (!active) return;
-      setIsLoggedIn(!!data.user);
-    });
-    const { data: sub } = supabase.auth.onAuthStateChange(() => {
-      void supabase.auth.getUser().then(({ data }) => {
-        if (!active) return;
-        setIsLoggedIn(!!data.user);
-      });
-    });
-    return () => {
-      active = false;
-      sub.subscription.unsubscribe();
-    };
-  }, [hasSupabase, supabase]);
+  const isLoggedIn = useTopPageLoggedIn();
 
   useEffect(() => {
     if (isLoggedIn === true) setAuthIntent(null);

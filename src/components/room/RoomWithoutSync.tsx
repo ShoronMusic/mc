@@ -2129,6 +2129,7 @@ export default function RoomWithoutSync({
             messages: listForCharacterAi,
             videoId: videoId ?? undefined,
             roomId: roomId ?? undefined,
+            clientId: 'local-client',
             roomTitle: roomDisplayTitleCurrent || roomTitle || undefined,
             isGuest,
             aiCharacterDisplayName: AI_CHARACTER_DEFAULT_NAME,
@@ -2566,7 +2567,7 @@ export default function RoomWithoutSync({
       data-mc-ui-font-size={mcUiFontSizeDataAttr(mcUiFontSize)}
     >
       <div className="mb-2 shrink-0 rounded border border-amber-700 bg-amber-900/50 px-3 py-2 text-sm leading-snug text-amber-200">
-        .env.local に <strong>NEXT_PUBLIC_ABLY_API_KEY</strong> を設定すると、複数ブラウザ・タブが「同じ部屋の別々の参加者」として扱われ、参加者一覧・同期再生・チャット共有が利用できます。未設定の場合は各ウィンドウが独立して動作します。
+        .env.local に <strong>ABLY_API_KEY</strong> と <strong>NEXT_PUBLIC_ABLY_ENABLED=1</strong> を設定すると、複数ブラウザ・タブが「同じ部屋の別々の参加者」として扱われ、参加者一覧・同期再生・チャット共有が利用できます（ブラウザには API キーを出しません）。未設定の場合は各ウィンドウが独立して動作します。
       </div>
       <header className={roomViewportHeaderClass()}>
         <div className="flex min-w-0 flex-1 items-center gap-2">

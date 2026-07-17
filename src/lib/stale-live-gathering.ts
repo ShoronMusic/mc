@@ -6,6 +6,7 @@ import {
   isMissingProductColumnError,
   withGatheringProductEq,
 } from '@/lib/room-product-scope';
+import { getAblyServerApiKey } from '@/lib/ably-server-key';
 
 /** 既定: 在室が一度でもあり、その後 0 が続いた時間がこの値を超えたら live を終了 */
 const DEFAULT_EMPTY_MS = 30 * 60 * 1000;
@@ -23,7 +24,7 @@ export function getEmptyLiveGatheringThresholdMs(): number {
 export type AblyPresenceCountResult = number | 'unconfigured' | 'error';
 
 export async function countAblyPresenceForRoom(roomId: string): Promise<AblyPresenceCountResult> {
-  const key = process.env.NEXT_PUBLIC_ABLY_API_KEY?.trim() ?? '';
+  const key = getAblyServerApiKey();
   if (!key) return 'unconfigured';
   try {
     const rest = new Ably.Rest({ key });

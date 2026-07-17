@@ -51,6 +51,9 @@ import {
   runRoomHistoryQueryScoped,
   withRoomHistoryProductEq,
 } from '@/lib/room-history-product';
+import { getChatAiClientIp } from '@/lib/chat-ai-rate-limit';
+import { checkAiCostRateLimit } from '@/lib/ai-cost-rate-limit';
+import { aiCostRateLimitResponse } from '@/lib/ai-cost-rate-limit-response';
 
 export const dynamic = 'force-dynamic';
 
@@ -252,11 +255,19 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'roomId and videoId are required' }, { status: 400 });
   }
 
+  const { data: { user } } = await supabase.auth.getUser();
+  const rate = checkAiCostRateLimit({
+    bucket: 'room_playback_history_write',
+    clientIp: getChatAiClientIp(request),
+    userId: user?.id,
+    isGuest: !user?.id || Boolean(body?.isGuest),
+  });
+  const limited = aiCostRateLimitResponse(rate);
+  if (limited) return limited;
+
   const displayNameToStore = displayName
     ? (isGuest ? `${displayName} (G)` : displayName)
     : (isGuest ? 'ゲスト (G)' : 'ゲスト');
-
-  const { data: { user } } = await supabase.auth.getUser();
   const userId = user?.id ?? null;
 
   const cutoff = new Date(Date.now() - TWO_MINUTES_MS).toISOString();
@@ -581,7 +592,7 @@ export async function POST(request: Request) {
 /**
  * PATCH: 視聴履歴のスタイル・表示タイトル（アーティスト - タイトル）を修正。
  * Body: { id, videoId, style? , title? } — style と title のどちらか一方以上が必要。
- * STYLE_ADMIN_USER_IDS 未設定時は従来どおり誰でも更新可。設定時はリスト内ユーザーのみ。
+ * STYLE_ADMIN_USER_IDS 未設定時は誰も不可。設定時はリスト内ユーザーのみ。
  */
 export async function PATCH(request: Request) {
   const supabase = await createClient();
@@ -625,20 +636,27 @@ export async function PATCH(request: Request) {
   }
 
   const adminIds = getStyleAdminUserIds();
-  if (adminIds.length > 0) {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    const uid = user?.id;
-    if (!uid || !adminIds.includes(uid)) {
-      return NextResponse.json(
-        {
-          error:
-            '視聴履歴の修正は管理者のみ行えます。STYLE_ADMIN_USER_IDS に含まれるアカウントでログインしてください。',
-        },
-        { status: 403 },
-      );
-    }
+  if (adminIds.length === 0) {
+    return NextResponse.json(
+      {
+        error:
+          'STYLE_ADMIN_USER_IDS が未設定のため視聴履歴の修正はできません。',
+      },
+      { status: 403 },
+    );
+  }
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const uid = user?.id;
+  if (!uid || !adminIds.includes(uid)) {
+    return NextResponse.json(
+      {
+        error:
+          '視聴履歴の修正は管理者のみ行えます。STYLE_ADMIN_USER_IDS に含まれるアカウントでログインしてください。',
+      },
+      { status: 403 },
+    );
   }
 
   const updates: Record<string, unknown> = {};

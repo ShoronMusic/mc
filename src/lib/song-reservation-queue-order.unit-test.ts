@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   resolveSongReservationQueueApply,
+  resolveQueueScanStartClientId,
   removePublisherReservationFromQueue,
   shouldForceReservationQueueWhilePending,
   participantHasQueuedReservation,
@@ -108,6 +109,56 @@ test('resolveSongReservationQueueApply: apply FIFO head when it matches turn ord
       participatingOrder: order,
       presentClientIds: present,
       queue: [{ publisherClientId: 'b' }, { publisherClientId: 'c' }],
+    }),
+    { kind: 'apply', queueIndex: 0 },
+  );
+});
+
+test('resolveQueueScanStartClientId: advances past solo poster when ring grew', () => {
+  assert.equal(
+    resolveQueueScanStartClientId({
+      currentTurnClientId: 'a',
+      lastSongPosterClientId: 'a',
+      participatingOrder: [{ clientId: 'a' }, { clientId: 'b' }],
+      presentClientIds: new Set(['a', 'b']),
+    }),
+    'b',
+  );
+});
+
+test('resolveQueueScanStartClientId: keeps turn when not the active poster', () => {
+  assert.equal(
+    resolveQueueScanStartClientId({
+      currentTurnClientId: 'b',
+      lastSongPosterClientId: 'a',
+      participatingOrder: [{ clientId: 'a' }, { clientId: 'b' }],
+      presentClientIds: new Set(['a', 'b']),
+    }),
+    'b',
+  );
+});
+
+test('resolveSongReservationQueueApply: late joiner queued after solo post is applied', () => {
+  assert.deepEqual(
+    resolveSongReservationQueueApply({
+      currentTurnClientId: 'a',
+      lastSongPosterClientId: 'a',
+      participatingOrder: [{ clientId: 'a' }, { clientId: 'b' }],
+      presentClientIds: new Set(['a', 'b']),
+      queue: [{ publisherClientId: 'b' }],
+    }),
+    { kind: 'apply', queueIndex: 0 },
+  );
+});
+
+test('resolveSongReservationQueueApply: solo poster alone still prompts self when queued empty for others', () => {
+  assert.deepEqual(
+    resolveSongReservationQueueApply({
+      currentTurnClientId: 'a',
+      lastSongPosterClientId: 'a',
+      participatingOrder: [{ clientId: 'a' }],
+      presentClientIds: new Set(['a']),
+      queue: [{ publisherClientId: 'a' }],
     }),
     { kind: 'apply', queueIndex: 0 },
   );

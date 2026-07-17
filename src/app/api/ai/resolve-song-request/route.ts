@@ -2,6 +2,10 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { shouldShortCircuitSongRequestForAtPrompt } from '@/lib/ai-question-about-detail-heuristic';
 import { extractSongSearchQuery } from '@/lib/gemini';
+import { getChatAiClientIp } from '@/lib/chat-ai-rate-limit';
+import { checkAiCostRateLimit } from '@/lib/ai-cost-rate-limit';
+import { aiCostRateLimitResponse } from '@/lib/ai-cost-rate-limit-response';
+import { isAiUnlimitedUserId } from '@/lib/ai-unlimited-user-ids';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,8 +30,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false }, { status: 200 });
     }
 
-    let requestUserId: string | null = null;
     const supabase = await createClient();
+    let requestUserId: string | null = null;
     if (supabase) {
       const {
         data: { user },
@@ -35,9 +39,30 @@ export async function POST(request: Request) {
       requestUserId = user?.id ?? null;
     }
 
+    if (!requestUserId) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'login_required',
+          message: '選曲リクエストの解析はログインユーザーのみ利用できます。',
+        },
+        { status: 401 },
+      );
+    }
+
+    if (!isAiUnlimitedUserId(requestUserId)) {
+      const rate = checkAiCostRateLimit({
+        bucket: 'resolve_song_request',
+        clientIp: getChatAiClientIp(request),
+        userId: requestUserId,
+      });
+      const limited = aiCostRateLimitResponse(rate);
+      if (limited) return limited;
+    }
+
     const intent = await extractSongSearchQuery(userMessage, recentMessages.length ? recentMessages : undefined, {
       roomId: roomId || undefined,
-      userId: requestUserId ?? undefined,
+      userId: requestUserId,
     });
     if (!intent) {
       console.log('[resolve-song-request] no intent for:', userMessage.slice(0, 50));

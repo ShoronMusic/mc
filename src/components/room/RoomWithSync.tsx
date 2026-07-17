@@ -803,6 +803,7 @@ export default function RoomWithSync({
       presentClientIds: presentClientIdsRef.current,
       queue: q,
       participantIdentities: getQueueParticipantIdentities(),
+      lastSongPosterClientId: lastChangeVideoPublisherRef.current,
     });
     if (decision.kind === 'apply') {
       const entry = q[decision.queueIndex];
@@ -4146,6 +4147,7 @@ export default function RoomWithSync({
           presentClientIds: presentClientIdsRef.current,
           queue: songReservationQueueRef.current,
           participantIdentities: getQueueParticipantIdentities(),
+          lastSongPosterClientId: lastChangeVideoPublisherRef.current,
         });
         if (queueDecision.kind === 'prompt' && queueDecision.clientId === sid) {
           cur = sid;
@@ -4914,6 +4916,7 @@ export default function RoomWithSync({
         presentClientIds: present,
         queue: qReserve,
         participantIdentities: getQueueParticipantIdentities(),
+        lastSongPosterClientId: lastChangeVideoPublisherRef.current,
       });
       if (queueDecision.kind === 'apply') {
         queueMicrotask(() => {
@@ -5025,11 +5028,11 @@ export default function RoomWithSync({
   }, [currentTurnClientId, participants, presenceData, buildTurnStatePayload, myClientId, addSystemMessage, removePassTurnReservation, promptSelectorTurnMessages, publishSelectorWaitingMessage]);
 
   /**
-   * changeVideo 直後のまれな競合で currentTurn が空/投稿者のままになることがある。
-   * AI参加ONかつ投稿者が人間なら、次ターンを再計算して補正する。
+   * 1人で選曲した直後はターンが投稿者のまま残る。後から選曲参加者が増えたら次へ進める。
+   * （進まないと後入室者の予約が「前の人が未選曲」扱いになり再生されない）
+   * changeVideo 直後の競合でターンが空/投稿者のままになる場合も同様に補正する。
    */
   useEffect(() => {
-    if (!ownerAiCharacterJoinEnabledRef.current) return;
     const poster = (currentSongPosterClientId ?? '').trim();
     if (!poster || poster === AI_CHARACTER_CLIENT_ID) return;
     const cur = (currentTurnClientId ?? '').trim();
@@ -5037,8 +5040,17 @@ export default function RoomWithSync({
     const next = resolveNextPresentTurnRef.current(poster);
     if (!next || next === poster) return;
     setCurrentTurnClientId(next);
-    publishRef.current?.(TURN_STATE_EVENT, buildTurnStatePayload(next));
-  }, [currentSongPosterClientId, currentTurnClientId, buildTurnStatePayload]);
+    currentTurnClientIdRef.current = next;
+    if (myClientId && myClientId === coordinationRef.current) {
+      publishRef.current?.(TURN_STATE_EVENT, buildTurnStatePayload(next));
+    }
+  }, [
+    currentSongPosterClientId,
+    currentTurnClientId,
+    participatingOrder,
+    buildTurnStatePayload,
+    myClientId,
+  ]);
 
   useEffect(() => {
     /* 曲開始時刻は applyImmediateChangeVideo / リモート changeVideo / 再生スナップショットで設定する */
@@ -7078,6 +7090,7 @@ export default function RoomWithSync({
         messages: listForCharacterAi,
         videoId: vid,
         roomId: roomId ?? undefined,
+        clientId: myClientId || undefined,
         isGuest,
         aiCharacterDisplayName: ownerAiCharacterNameRef.current || AI_CHARACTER_DEFAULT_NAME,
         songSelectorDisplayName: selectorDisplayName,
@@ -7139,6 +7152,7 @@ export default function RoomWithSync({
           presentClientIds: presentClientIdsRef.current,
           queue: qApply,
           participantIdentities: getQueueParticipantIdentities(),
+          lastSongPosterClientId: lastChangeVideoPublisherRef.current,
         });
         if (decision.kind === 'prompt') {
           const promptId = decision.clientId;
@@ -7225,6 +7239,7 @@ export default function RoomWithSync({
           presentClientIds: presentClientIdsRef.current,
           queue: songReservationQueueRef.current,
           participantIdentities: getQueueParticipantIdentities(),
+          lastSongPosterClientId: lastChangeVideoPublisherRef.current,
         });
         if (decision.kind === 'prompt') {
           tryApplyQueued();
@@ -7248,6 +7263,7 @@ export default function RoomWithSync({
             presentClientIds: presentClientIdsRef.current,
             queue: songReservationQueueRef.current,
             participantIdentities: getQueueParticipantIdentities(),
+            lastSongPosterClientId: lastChangeVideoPublisherRef.current,
           });
           if (decNow.kind === 'apply' && songReservationQueueRef.current[decNow.queueIndex]?.videoId !== vidSnapshot) {
             return;
@@ -7903,6 +7919,7 @@ export default function RoomWithSync({
             messages: listForCharacterAi,
             videoId: videoId ?? undefined,
             roomId: roomId ?? undefined,
+            clientId: myClientId || undefined,
             roomTitle: roomDisplayTitleCurrent || roomTitle || undefined,
             isGuest,
             aiCharacterDisplayName: ownerAiCharacterNameRef.current || AI_CHARACTER_DEFAULT_NAME,
@@ -7967,6 +7984,7 @@ export default function RoomWithSync({
             messages: listForCharacterAi,
             videoId: videoId ?? undefined,
             roomId: roomId ?? undefined,
+            clientId: myClientId || undefined,
             isGuest,
             aiCharacterDisplayName: ownerAiCharacterNameRef.current || AI_CHARACTER_DEFAULT_NAME,
             songSelectorDisplayName: resolvePublisherNameForClientId(currentSongPosterClientId),
@@ -9412,6 +9430,7 @@ export default function RoomWithSync({
           roomId={roomId}
           gatheringId={roomGatheringId}
           liveMessages={messages}
+          clientId={myClientId}
         />
       ) : null}
 

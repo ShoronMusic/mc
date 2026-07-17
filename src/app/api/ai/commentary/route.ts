@@ -43,6 +43,9 @@ import { insertAiCommentaryUnavailableEntry } from '@/lib/ai-commentary-unavaila
 import { buildSongQuizApiExtension } from '@/lib/song-quiz-after-commentary';
 import { getChatAiClientIp } from '@/lib/chat-ai-rate-limit';
 import { guardAiTrialSongSelection } from '@/lib/user-ai-trial-server';
+import { checkAiCostRateLimit } from '@/lib/ai-cost-rate-limit';
+import { aiCostRateLimitResponse } from '@/lib/ai-cost-rate-limit-response';
+import { isAiUnlimitedUserId } from '@/lib/ai-unlimited-user-ids';
 
 export const dynamic = 'force-dynamic';
 
@@ -63,7 +66,19 @@ export async function POST(request: Request) {
       authUser = authData.user ?? null;
       selectorUserId = authUser?.id ?? null;
     }
-    const requestIsGuest = body?.isGuest === true;
+    const requestIsGuest = !authUser?.id;
+
+    if (!(authUser?.id && isAiUnlimitedUserId(authUser.id))) {
+      const rate = checkAiCostRateLimit({
+        bucket: 'commentary',
+        clientIp: getChatAiClientIp(request),
+        userId: authUser?.id,
+        isGuest: requestIsGuest,
+      });
+      const limited = aiCostRateLimitResponse(rate);
+      if (limited) return limited;
+    }
+
     const trialGuard = await guardAiTrialSongSelection({
       user: authUser,
       isGuest: requestIsGuest,

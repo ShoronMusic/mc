@@ -3,16 +3,13 @@
 import { StartPageFirstReadModal } from '@/components/home/StartPageFirstReadModal';
 import { MeetingStartPanel } from '@/components/home/MeetingStartPanel';
 import { StartPageFooter } from '@/components/home/StartPageFooter';
-import {
-  StartPageSiteIntro,
-  useStartPageIntroVisible,
-} from '@/components/home/StartPageSiteIntro';
+import { StartPageSiteIntro } from '@/components/home/StartPageSiteIntro';
 import { TopPageLoginAndLiveRooms } from '@/components/home/TopPageLoginAndLiveRooms';
-import { hasGuestRoomPersistence } from '@/lib/guest-room-persistence';
-import { loadBrowserSupabaseClient } from '@/lib/supabase/load-browser-client';
+import { useTopPageLoggedIn } from '@/components/home/use-top-page-auth';
 import { MusicChatTitleBrand } from '@/components/home/MusicChatTitleLogo';
 import { getProductDisplayName, IS_MC_PRODUCT } from '@/lib/product-branding';
-import { useEffect, useState } from 'react';
+import { hasGuestRoomPersistence } from '@/lib/guest-room-persistence';
+import { useState } from 'react';
 
 function StartPageTitle() {
   const [firstReadOpen, setFirstReadOpen] = useState(false);
@@ -69,42 +66,28 @@ function StartPageRoomEntryIntro({ showLoginHint = true }: { showLoginHint?: boo
   );
 }
 
-function useTopPageLoggedIn() {
-  const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    if (hasGuestRoomPersistence()) {
-      setIsLoggedIn(false);
-      return;
-    }
-    let active = true;
-    let unsubscribe: (() => void) | undefined;
-    void loadBrowserSupabaseClient().then(({ client, configured }) => {
-      if (!active) return;
-      if (!configured || !client) {
-        setIsLoggedIn(false);
-        return;
-      }
-      void client.auth.getUser().then(({ data }) => {
-        if (!active) return;
-        setIsLoggedIn(!!data.user);
-      });
-      const { data: sub } = client.auth.onAuthStateChange(() => {
-        void client.auth.getUser().then(({ data }) => {
-          if (!active) return;
-          setIsLoggedIn(!!data.user);
-        });
-      });
-      unsubscribe = () => sub.subscription.unsubscribe();
-    });
-    return () => {
-      active = false;
-      unsubscribe?.();
-    };
-  }, []);
-
-  return isLoggedIn;
+function RightColumnAuthSkeleton() {
+  return (
+    <div
+      className="rounded-xl border border-dashed border-slate-600/90 bg-slate-900/60 p-4 sm:p-5"
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
+    >
+      <p className="text-center text-sm font-medium text-slate-100">メニューを準備しています…</p>
+      <p className="mt-1.5 text-center text-[11px] leading-relaxed text-slate-400">
+        ログイン状態を確認しています。しばらくお待ちください。
+      </p>
+      <div className="relative mt-4 h-1.5 w-full overflow-hidden rounded-full bg-slate-700/90">
+        <div
+          className={`absolute inset-y-0 left-0 w-2/5 rounded-full motion-safe:animate-[gatherings-load-bar_1.4s_ease-in-out_infinite] ${
+            IS_MC_PRODUCT ? 'bg-gray-400' : 'bg-sky-500/90'
+          }`}
+          aria-hidden
+        />
+      </div>
+    </div>
+  );
 }
 
 function StartPageLoggedInLayout() {
@@ -139,31 +122,51 @@ function StartPageGuestActionPanel() {
 
 /** ログイン前トップのメインカード。PC 幅では入室導線（左）と紹介（右）の 2 カラム。 */
 export function StartPageMainCard() {
-  const introVisible = useStartPageIntroVisible();
   const isLoggedIn = useTopPageLoggedIn();
 
-  if (introVisible === false) {
-    if (isLoggedIn !== false) {
-      return <StartPageLoggedInLayout />;
+  // ログイン確定（またはセッション仮判定）後はすぐ主催者レイアウトへ（右が空のまま待たない）
+  if (isLoggedIn === true) {
+    return <StartPageLoggedInLayout />;
+  }
+
+  if (isLoggedIn === false) {
+    // ゲスト参加確定後は紹介カラムを出さず、従来どおり単カラム
+    if (hasGuestRoomPersistence()) {
+      return (
+        <div className="w-full max-w-lg rounded-xl border border-gray-700 bg-gray-900 p-8 shadow-lg">
+          <StartPageTitle />
+          <StartPageGuestActionPanel />
+        </div>
+      );
     }
 
     return (
-      <div className="w-full max-w-lg rounded-xl border border-gray-700 bg-gray-900 p-8 shadow-lg">
-        <StartPageTitle />
-        <StartPageGuestActionPanel />
+      <div className="w-full max-w-lg rounded-xl border border-gray-700 bg-gray-900 p-6 shadow-lg sm:p-8 lg:max-w-6xl">
+        <div className="flex flex-col gap-8 lg:grid lg:grid-cols-2 lg:items-start lg:gap-10">
+          <div className="min-w-0">
+            <StartPageTitle />
+            <StartPageGuestActionPanel />
+          </div>
+          <div className="min-w-0 lg:sticky lg:top-20">
+            <StartPageSiteIntro section="content" forceShow />
+          </div>
+        </div>
       </div>
     );
   }
 
+  // auth 未解決: 右を空にせずスケルトンを出す
   return (
     <div className="w-full max-w-lg rounded-xl border border-gray-700 bg-gray-900 p-6 shadow-lg sm:p-8 lg:max-w-6xl">
       <div className="flex flex-col gap-8 lg:grid lg:grid-cols-2 lg:items-start lg:gap-10">
         <div className="min-w-0">
           <StartPageTitle />
-          <StartPageGuestActionPanel />
+          <StartPageRoomEntryIntro />
+          <TopPageLoginAndLiveRooms part="live" />
+          <StartPageFooter usePolicyModal />
         </div>
         <div className="min-w-0 lg:sticky lg:top-20">
-          <StartPageSiteIntro section="content" />
+          <RightColumnAuthSkeleton />
         </div>
       </div>
     </div>

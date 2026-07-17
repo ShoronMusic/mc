@@ -35,6 +35,9 @@ import {
 } from '@/lib/song-db-registration-gate';
 import { isRoomJpAiUnlockEnabled } from '@/lib/room-jp-ai-unlock-server';
 import { resolveDomesticSongMetadataForRegistration } from '@/lib/domestic-song-registration';
+import { getChatAiClientIp } from '@/lib/chat-ai-rate-limit';
+import { checkAiCostRateLimit } from '@/lib/ai-cost-rate-limit';
+import { aiCostRateLimitResponse } from '@/lib/ai-cost-rate-limit-response';
 
 export async function handleAnnounceSongPost(
   request: Request,
@@ -51,6 +54,23 @@ export async function handleAnnounceSongPost(
     if (!videoId) {
       return NextResponse.json({ error: 'videoId is required' }, { status: 400 });
     }
+
+    const supabaseEarly = await createClient();
+    let announceUserId: string | null = null;
+    if (supabaseEarly) {
+      const {
+        data: { user },
+      } = await supabaseEarly.auth.getUser();
+      announceUserId = user?.id ?? null;
+    }
+    const rate = checkAiCostRateLimit({
+      bucket: 'announce_song',
+      clientIp: getChatAiClientIp(request),
+      userId: announceUserId,
+      isGuest: !announceUserId,
+    });
+    const limited = aiCostRateLimitResponse(rate);
+    if (limited) return limited;
 
     const ytSource = `api/${logTag}`;
     const [oembed, durationSeconds, snippet] = await Promise.all([

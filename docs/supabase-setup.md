@@ -230,7 +230,7 @@ alter table public.room_live_presence_watch enable row level security;
 ```
 
 - **Vercel Cron** は `vercel.json` で約 10 分おきに上記 API を呼びます。環境変数 **`CRON_SECRET`** を設定し、Cron から送られる `Authorization: Bearer …` と一致させてください（未設定時は API は 503）。
-- **`NEXT_PUBLIC_ABLY_API_KEY` が未設定**の環境では在室数が取れないため、自動終了処理は実行されません。
+- **`ABLY_API_KEY` が未設定**の環境では在室数が取れないため、自動終了処理は実行されません（クライアント側は `NEXT_PUBLIC_ABLY_ENABLED=1` + Token Auth）。
 - テーブルを作っていない場合、Cron は **`room_live_presence_watch` 未作成**として終了処理をスキップします（本番では上記 SQL の実行を推奨）。
 
 ---

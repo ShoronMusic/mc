@@ -6,6 +6,11 @@ import {
   runRoomHistoryQueryScoped,
   withRoomHistoryProductEq,
 } from '@/lib/room-history-product';
+import { canUserAccessAdminPanel } from '@/lib/admin-access';
+import { gateRoomPlaybackHistoryRead } from '@/lib/room-playback-history-access';
+import { getChatAiClientIp } from '@/lib/chat-ai-rate-limit';
+import { checkAiCostRateLimit } from '@/lib/ai-cost-rate-limit';
+import { aiCostRateLimitResponse } from '@/lib/ai-cost-rate-limit-response';
 
 export const dynamic = 'force-dynamic';
 
@@ -90,11 +95,26 @@ function toJsonRow(r: LogRow): LogRowJson | null {
   };
 }
 
+async function assertRoomChatLogAccess(
+  supabase: NonNullable<Awaited<ReturnType<typeof createClient>>>,
+  roomId: string,
+  clientId: string | null,
+): Promise<NextResponse | null> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (canUserAccessAdminPanel(user?.id)) return null;
+
+  const gate = await gateRoomPlaybackHistoryRead(supabase, roomId, clientId);
+  if (gate.allowed) return null;
+  return NextResponse.json({ error: gate.reason }, { status: 403 });
+}
+
 /**
  * GET: 指定部屋の会話ログ。
  * Query: roomId（必須）, format=json（UI用）, scope=gathering|day（省略時 day）,
  *   date=YYYY-MM-DD（day 時・省略時は今日 JST）, gatheringId（scope=gathering 時必須）,
- *   download=1（プレーンテキストファイル）
+ *   download=1（プレーンテキストファイル）, clientId（在室確認・管理者以外）
  */
 export async function GET(request: Request) {
   const supabase = await createClient();
@@ -107,6 +127,10 @@ export async function GET(request: Request) {
   if (!roomId || roomId.length > 128) {
     return NextResponse.json({ error: 'roomId が必要です' }, { status: 400 });
   }
+
+  const clientId = searchParams.get('clientId')?.trim() || null;
+  const denied = await assertRoomChatLogAccess(supabase, roomId, clientId);
+  if (denied) return denied;
 
   const dateParam = searchParams.get('date')?.trim();
   const gatheringId = safeGatheringId(searchParams.get('gatheringId'));
@@ -210,7 +234,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'DBが利用できません。' }, { status: 503 });
   }
 
-  let body: { roomId?: string; gatheringId?: string | null; entries?: unknown };
+  let body: { roomId?: string; gatheringId?: string | null; clientId?: string; entries?: unknown };
   try {
     body = await request.json();
   } catch {
@@ -219,9 +243,27 @@ export async function POST(request: Request) {
 
   const roomId = typeof body.roomId === 'string' ? body.roomId.trim() : '';
   const gatheringId = safeGatheringId(body.gatheringId);
+  const clientId = typeof body.clientId === 'string' ? body.clientId.trim() : '';
   if (!roomId || roomId.length > 128) {
     return NextResponse.json({ error: 'roomId is required' }, { status: 400 });
   }
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const sessionUserId = user?.id ?? null;
+
+  const rate = checkAiCostRateLimit({
+    bucket: 'room_chat_log_write',
+    clientIp: getChatAiClientIp(request),
+    userId: sessionUserId,
+    isGuest: !sessionUserId,
+  });
+  const limited = aiCostRateLimitResponse(rate);
+  if (limited) return limited;
+
+  const denied = await assertRoomChatLogAccess(supabase, roomId, clientId || null);
+  if (denied) return denied;
 
   const raw = Array.isArray(body.entries) ? body.entries : [];
   if (raw.length === 0) {
@@ -230,11 +272,6 @@ export async function POST(request: Request) {
   if (raw.length > MAX_BATCH) {
     return NextResponse.json({ error: `entries は最大 ${MAX_BATCH} 件です` }, { status: 400 });
   }
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const sessionUserId = user?.id ?? null;
 
   const rows: Array<{
     room_id: string;

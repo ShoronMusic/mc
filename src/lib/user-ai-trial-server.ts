@@ -256,7 +256,12 @@ function trialDenied(
   return { ok: false, status, body: { error, message, ...extra } };
 }
 
-/** 選曲付随 AI（comment-pack base で消費、frees 以降は aiMode のみ検証） */
+/**
+ * 選曲付随 AI。
+ * - packPhase=frees: 直前の base 消費済み前提で枠残のみ検証（消費しない）
+ * - packPhase=base / 省略（一括生成）: 1 曲分を消費
+ * - user_ai_trial テーブル欠落時は fail-closed（枠なし生成を防ぐ）
+ */
 export async function guardAiTrialSongSelection(params: {
   user: User | null | undefined;
   isGuest: boolean;
@@ -296,13 +301,30 @@ export async function guardAiTrialSongSelection(params: {
     return trialDenied('trial_unavailable', 'AI お試しの確認に失敗しました。', 503);
   }
 
+  /** frees 以外（base / 一括 null）は消費する */
+  const shouldConsumeSong = params.packPhase !== 'frees';
+  /** credits 側も同一判定に揃える */
+  const consumePhase: 'base' | 'frees' | null = shouldConsumeSong ? 'base' : 'frees';
+
   const { row, missingTable, error } = await fetchUserAiTrialRow(admin, params.user.id);
-  if (missingTable) return { ok: true };
+  if (missingTable) {
+    return trialDenied(
+      'trial_unavailable',
+      'AI お試し枠の確認ができません。しばらくしてから再度お試しください。',
+      503,
+    );
+  }
   if (error) return trialDenied('trial_load_failed', 'AI お試し残数の取得に失敗しました。', 500);
 
   if (!row) {
     const grant = await ensureUserAiTrialGrant(params.user, params.clientIp);
-    if (grant.missingTable) return { ok: true };
+    if (grant.missingTable) {
+      return trialDenied(
+        'trial_unavailable',
+        'AI お試し枠の確認ができません。しばらくしてから再度お試しください。',
+        503,
+      );
+    }
     if (!grant.row) {
       return trialDenied('trial_not_granted', 'AI お試し枠が付与されていません。', 403);
     }
@@ -310,21 +332,21 @@ export async function guardAiTrialSongSelection(params: {
       return consumeSongFromCreditsOrDeny({
         user: params.user,
         clientIp: params.clientIp,
-        packPhase: params.packPhase,
+        packPhase: consumePhase,
       });
     }
-    if (params.packPhase === 'base') {
+    if (shouldConsumeSong) {
       return consumeAiTrialSong(admin, params.user.id, params.clientIp);
     }
     return { ok: true, songsRemaining: grant.row.songs_remaining };
   }
 
-  if (params.packPhase === 'base') {
+  if (shouldConsumeSong) {
     if (row.songs_remaining <= 0) {
       return consumeSongFromCreditsOrDeny({
         user: params.user,
         clientIp: params.clientIp,
-        packPhase: params.packPhase,
+        packPhase: consumePhase,
       });
     }
     return consumeAiTrialSong(admin, params.user.id, params.clientIp);
@@ -334,7 +356,7 @@ export async function guardAiTrialSongSelection(params: {
     return consumeSongFromCreditsOrDeny({
       user: params.user,
       clientIp: params.clientIp,
-      packPhase: params.packPhase,
+      packPhase: consumePhase,
     });
   }
 
@@ -347,7 +369,13 @@ async function consumeAiTrialSong(
   clientIp?: string,
 ): Promise<AiTrialGuardAllow | AiTrialGuardDeny> {
   const { row, error, missingTable } = await fetchUserAiTrialRow(admin, userId);
-  if (missingTable) return { ok: true };
+  if (missingTable) {
+    return trialDenied(
+      'trial_unavailable',
+      'AI お試し枠の確認ができません。しばらくしてから再度お試しください。',
+      503,
+    );
+  }
   if (error || !row) {
     return trialDenied('trial_load_failed', 'AI お試し残数の取得に失敗しました。', 500);
   }
@@ -436,10 +464,22 @@ export async function guardAndConsumeAiTrialAtQuestion(params: {
   }
 
   let { row, missingTable, error } = await fetchUserAiTrialRow(admin, params.user.id);
-  if (missingTable) return { ok: true };
+  if (missingTable) {
+    return trialDenied(
+      'trial_unavailable',
+      'AI お試し枠の確認ができません。しばらくしてから再度お試しください。',
+      503,
+    );
+  }
   if (!row) {
     const grant = await ensureUserAiTrialGrant(params.user, params.clientIp);
-    if (grant.missingTable) return { ok: true };
+    if (grant.missingTable) {
+      return trialDenied(
+        'trial_unavailable',
+        'AI お試し枠の確認ができません。しばらくしてから再度お試しください。',
+        503,
+      );
+    }
     row = grant.row;
     error = grant.error;
   }

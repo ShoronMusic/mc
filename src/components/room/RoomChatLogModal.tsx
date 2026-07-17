@@ -22,6 +22,8 @@ type RoomChatLogModalProps = {
   liveMessages?: ChatMessage[];
   /** 非同期部屋など gathering が無いとき */
   sessionOnly?: boolean;
+  /** 在室確認用（管理者以外） */
+  clientId?: string;
 };
 
 type FetchState = {
@@ -34,7 +36,13 @@ type FetchState = {
   truncated: boolean;
 };
 
-function buildDownloadUrl(roomId: string, scope: RoomChatLogScope, gatheringId: string | null, dateJst: string | null): string | null {
+function buildDownloadUrl(
+  roomId: string,
+  scope: RoomChatLogScope,
+  gatheringId: string | null,
+  dateJst: string | null,
+  clientId?: string,
+): string | null {
   const q = new URLSearchParams({ roomId, download: '1' });
   if (scope === 'gathering' && gatheringId) {
     q.set('scope', 'gathering');
@@ -42,6 +50,7 @@ function buildDownloadUrl(roomId: string, scope: RoomChatLogScope, gatheringId: 
   } else if (dateJst) {
     q.set('date', dateJst);
   }
+  if (clientId?.trim()) q.set('clientId', clientId.trim());
   return `/api/room-chat-log?${q.toString()}`;
 }
 
@@ -52,6 +61,7 @@ export function RoomChatLogModal({
   gatheringId = null,
   liveMessages = [],
   sessionOnly = false,
+  clientId = '',
 }: RoomChatLogModalProps) {
   const [state, setState] = useState<FetchState>({
     loading: false,
@@ -94,6 +104,7 @@ export function RoomChatLogModal({
         q.set('scope', 'gathering');
         q.set('gatheringId', gid);
       }
+      if (clientId.trim()) q.set('clientId', clientId.trim());
       const res = await fetch(`/api/room-chat-log?${q.toString()}`, { credentials: 'include' });
       const data = (await res.json().catch(() => null)) as {
         error?: string;
@@ -133,7 +144,7 @@ export function RoomChatLogModal({
         persistedRows: [],
       }));
     }
-  }, [roomId, gatheringId, sessionOnly]);
+  }, [roomId, gatheringId, sessionOnly, clientId]);
 
   useEffect(() => {
     if (!open) return;
@@ -148,7 +159,7 @@ export function RoomChatLogModal({
   const scopeLabel = roomChatLogScopeLabel(state.scope, state.dateJst ?? undefined);
   const downloadUrl = sessionOnly
     ? null
-    : buildDownloadUrl(roomId, state.scope, gatheringId ?? null, state.dateJst);
+    : buildDownloadUrl(roomId, state.scope, gatheringId ?? null, state.dateJst, clientId);
 
   if (!open) return null;
 

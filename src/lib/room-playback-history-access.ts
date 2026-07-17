@@ -19,8 +19,10 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
   });
 }
 
+import { getAblyServerApiKey } from '@/lib/ably-server-key';
+
 function getAblyKey(): string {
-  return process.env.NEXT_PUBLIC_ABLY_API_KEY?.trim() ?? '';
+  return getAblyServerApiKey();
 }
 
 /**

@@ -1,9 +1,10 @@
 import Ably from 'ably';
 import { allPresenceMembers } from '@/lib/ably-channel-presence';
 import { getAblyRoomChannelName } from '@/lib/room-product-scope';
+import { getAblyServerApiKey } from '@/lib/ably-server-key';
 
 function getAblyKey(): string {
-  return process.env.NEXT_PUBLIC_ABLY_API_KEY?.trim() ?? '';
+  return getAblyServerApiKey();
 }
 
 function safeRoomId(raw: string | null | undefined): string | null {

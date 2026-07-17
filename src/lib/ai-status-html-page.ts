@@ -64,6 +64,13 @@ export function renderAiStatusHtmlPage(snapshot: AiStatusSnapshot, pageUrl: stri
       label: '次に聴くなら',
       value: boolJa(snapshot.nextSongRecommend.masterEnabled),
     },
+    {
+      label: 'セキュリティ警告',
+      value:
+        snapshot.securityHardening.warnings.length > 0
+          ? esc(snapshot.securityHardening.warnings.join(' / '))
+          : 'なし',
+    },
     { label: '集計更新', value: formatJst(ops.checkedAtIso) },
     { label: 'ページ取得', value: formatJst(snapshot.fetchedAtIso) },
   ];

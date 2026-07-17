@@ -3,13 +3,14 @@ import { NextResponse } from 'next/server';
 import { allPresenceMembers } from '@/lib/ably-channel-presence';
 import { getAblyRoomChannelName, runLobbyQueryScoped, withLobbyProductEq } from '@/lib/room-product-scope';
 import { createClient } from '@/lib/supabase/server';
+import { getAblyServerApiKey } from '@/lib/ably-server-key';
 
 export const dynamic = 'force-dynamic';
 
 const MAX_ROOMS = 24;
 
 function getAblyKey(): string {
-  return process.env.NEXT_PUBLIC_ABLY_API_KEY?.trim() ?? '';
+  return getAblyServerApiKey();
 }
 
 function safeRoomId(raw: string): string | null {

@@ -11,6 +11,9 @@ import type { SongQuizPayload } from '@/lib/song-quiz-types';
 import { insertSongQuizLog } from '@/lib/song-quiz-log';
 import { getChatAiClientIp } from '@/lib/chat-ai-rate-limit';
 import { guardAiTrialSongSelection } from '@/lib/user-ai-trial-server';
+import { checkAiCostRateLimit } from '@/lib/ai-cost-rate-limit';
+import { aiCostRateLimitResponse } from '@/lib/ai-cost-rate-limit-response';
+import { isAiUnlimitedUserId } from '@/lib/ai-unlimited-user-ids';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,7 +41,19 @@ export async function POST(request: Request) {
       const { data: authData } = await supabase.auth.getUser();
       authUser = authData.user ?? null;
     }
-    const requestIsGuest = body?.isGuest === true;
+    const requestIsGuest = !authUser?.id;
+
+    if (!(authUser?.id && isAiUnlimitedUserId(authUser.id))) {
+      const rate = checkAiCostRateLimit({
+        bucket: 'song_quiz',
+        clientIp: getChatAiClientIp(request),
+        userId: authUser?.id,
+        isGuest: requestIsGuest,
+      });
+      const limited = aiCostRateLimitResponse(rate);
+      if (limited) return limited;
+    }
+
     const trialGuard = await guardAiTrialSongSelection({
       user: authUser,
       isGuest: requestIsGuest,

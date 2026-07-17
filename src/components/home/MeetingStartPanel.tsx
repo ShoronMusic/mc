@@ -6,6 +6,7 @@ import { loadBrowserSupabaseClient } from '@/lib/supabase/load-browser-client';
 import { startRoomGatheringClient } from '@/lib/start-room-gathering-client';
 import { hasGuestRoomPersistence } from '@/lib/guest-room-persistence';
 import { IS_MC_PRODUCT } from '@/lib/product-branding';
+import { useTopPageLoggedIn } from '@/components/home/use-top-page-auth';
 
 const DEFAULT_ROOM_COUNT = 90;
 const MAX_LIVE_GATHERINGS_PER_USER = 2;
@@ -72,8 +73,9 @@ function GatheringsLoadingCard() {
  * ログイン済みユーザー向け: 部屋での開催の開始・終了（運用・検証用の最小UI）
  */
 export function MeetingStartPanel() {
-  const [authChecked, setAuthChecked] = useState(false);
-  const [visible, setVisible] = useState(false);
+  const isLoggedIn = useTopPageLoggedIn();
+  const authChecked = isLoggedIn !== null;
+  const visible = isLoggedIn === true;
   const [joinRoomId, setJoinRoomId] = useState<string>(DEFAULT_ROOM_IDS[0]);
   const [joinTitle, setJoinTitle] = useState('');
   const [newTitle, setNewTitle] = useState('');
@@ -83,71 +85,80 @@ export function MeetingStartPanel() {
   const [liveRoomIds, setLiveRoomIds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [defaultTitleReady, setDefaultTitleReady] = useState(false);
 
   useEffect(() => {
+    if (!visible || defaultTitleReady) return;
     if (typeof window === 'undefined') return;
-    if (hasGuestRoomPersistence()) {
-      setVisible(false);
-      setAuthChecked(true);
-      return;
-    }
+    if (hasGuestRoomPersistence()) return;
     void loadBrowserSupabaseClient().then(({ client, configured }) => {
-      if (!configured || !client) {
-        setVisible(false);
-        setAuthChecked(true);
-        return;
-      }
-      void client.auth
-      .getUser()
-      .then(({ data: { user } }) => {
-        const loggedIn = !!user;
+      if (!configured || !client) return;
+      void client.auth.getSession().then(({ data }) => {
+        const user = data.session?.user;
         if (user) {
-          const defaultTitle = defaultGatheringTitleFromUser(user);
+          setJoinTitle(defaultGatheringTitleFromUser(user));
           setNewTitle('');
-          setJoinTitle(defaultTitle);
         }
-        setVisible(loggedIn);
-        if (!loggedIn) return;
-        fetch('/api/room-gatherings', { credentials: 'include' })
-          .then(async (res) => {
-            if (!res.ok) return;
-            const data = (await res.json().catch(() => ({}))) as { rooms?: OrganizerRoom[] };
-            const rooms = Array.isArray(data.rooms) ? data.rooms.filter((r) => !!r?.roomId) : [];
-            setMyRooms(rooms);
-            if (rooms.length > 0) {
-              setJoinRoomId(rooms[0].roomId);
-              if (rooms[0].title?.trim()) {
-                setJoinTitle(rooms[0].title.trim());
-              }
-            }
-          })
-          .catch(() => {
-            // 選択肢取得失敗時は myRooms 空のまま（第1枠は非表示、新規作成のみ）
-          })
-          .finally(() => {
-            setGatheringsLoaded(true);
-          });
-
-        fetch('/api/room-live-status', { credentials: 'include' })
-          .then(async (res) => {
-            if (!res.ok) return;
-            const data = (await res.json().catch(() => ({}))) as LiveStatusResponse;
-            const ids = Array.isArray(data.rooms)
-              ? data.rooms
-                  .map((r) => (typeof r.roomId === 'string' ? r.roomId : ''))
-                  .filter((id): id is string => !!id)
-              : [];
-            setLiveRoomIds(ids);
-          })
-          .catch(() => {
-            // 失敗時は既定値のまま
-          });
-      })
-      .finally(() => {
-        setAuthChecked(true);
+        setDefaultTitleReady(true);
       });
     });
-  }, []);
+  }, [visible, defaultTitleReady]);
+
+  useEffect(() => {
+    if (!visible) {
+      setGatheringsLoaded(false);
+      setMyRooms([]);
+      return;
+    }
+    let cancelled = false;
+    setGatheringsLoaded(false);
+
+    fetch('/api/room-gatherings', { credentials: 'include' })
+      .then(async (res) => {
+        if (!res.ok || cancelled) return;
+        const data = (await res.json().catch(() => ({}))) as { rooms?: OrganizerRoom[] };
+        if (cancelled) return;
+        const rooms = Array.isArray(data.rooms) ? data.rooms.filter((r) => !!r?.roomId) : [];
+        setMyRooms(rooms);
+        if (rooms.length > 0) {
+          setJoinRoomId(rooms[0].roomId);
+          if (rooms[0].title?.trim()) {
+            setJoinTitle(rooms[0].title.trim());
+          }
+        }
+      })
+      .catch(() => {
+        // 選択肢取得失敗時は myRooms 空のまま（第1枠は非表示、新規作成のみ）
+      })
+      .finally(() => {
+        if (!cancelled) setGatheringsLoaded(true);
+      });
+
+    // 空き部屋判定のみ必要。host 名解決などを省略する lite で API を軽くする
+    // gatherings と競合しにくいよう少し遅らせる
+    const liveTimer = window.setTimeout(() => {
+      fetch('/api/room-live-status?lite=1', { credentials: 'include' })
+        .then(async (res) => {
+          if (!res.ok || cancelled) return;
+          const data = (await res.json().catch(() => ({}))) as LiveStatusResponse;
+          if (cancelled) return;
+          const ids = Array.isArray(data.rooms)
+            ? data.rooms
+                .map((r) => (typeof r.roomId === 'string' ? r.roomId : ''))
+                .filter((id): id is string => !!id)
+            : [];
+          setLiveRoomIds(ids);
+        })
+        .catch(() => {
+          // 失敗時は既定値のまま
+        });
+    }, 50);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(liveTimer);
+    };
+  }, [visible]);
 
   const selectedRoom = myRooms.find((r) => r.roomId === joinRoomId);
   const createRoomOptions = DEFAULT_ROOM_IDS.filter((id) => !liveRoomIds.includes(id));
