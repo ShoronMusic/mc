@@ -396,6 +396,42 @@ function isDeferredNextSongRecommendMessage(m: ChatMessageType): boolean {
   );
 }
 
+/**
+ * モバイル一体スクロール: 最新メッセージ上端をプレイヤー直下（読める位置）に合わせる。
+ * PC / 通常ペイン: 従来どおり末尾へ。
+ */
+function scrollChatToLatestBestPoint(opts: {
+  bottomEl: HTMLElement;
+  scrollPane: HTMLElement | null;
+}): void {
+  const { bottomEl, scrollPane } = opts;
+  const below = bottomEl.closest('.mc-room-mobile-below--unified') as HTMLElement | null;
+  const scrollRoot = below ?? scrollPane;
+  if (!scrollRoot) return;
+
+  if (!below) {
+    scrollRoot.scrollTop = scrollRoot.scrollHeight;
+    return;
+  }
+
+  const pane = scrollPane ?? (below.querySelector('.mc-room-scroll-pane') as HTMLElement | null);
+  const lastLi = pane?.querySelector('ul.flex.flex-col.gap-2 > li:last-child') as HTMLElement | null;
+  if (!lastLi) {
+    scrollRoot.scrollTop = scrollRoot.scrollHeight;
+    return;
+  }
+
+  const PAD_PX = 4;
+  const rootRect = scrollRoot.getBoundingClientRect();
+  const player = scrollRoot
+    .closest('.mc-room-mobile-grid')
+    ?.querySelector('.mc-room-mobile-player') as HTMLElement | null;
+  const playerBottom = player?.getBoundingClientRect().bottom ?? rootRect.top;
+  /** プレイヤーが sticky で下領域に重なる場合も、カード上端がバーの下に来るようにする */
+  const targetY = Math.max(rootRect.top, playerBottom) + PAD_PX;
+  scrollRoot.scrollTop += lastLi.getBoundingClientRect().top - targetY;
+}
+
 function tuningReportAnchorPreviewBody(m: ChatMessageType): string {
   if (m.systemKind === 'song_quiz' && m.songQuiz) return formatSongQuizFeedbackBody(m.songQuiz);
   return m.body;
@@ -905,13 +941,17 @@ export default function Chat({
   useEffect(() => {
     const bottom = bottomRef.current;
     if (!bottom) return;
-    const below = bottom.closest('.mc-room-mobile-below--unified') as HTMLElement | null;
-    if (below) {
-      below.scrollTop = below.scrollHeight;
-      return;
-    }
-    const pane = scrollPaneRef.current;
-    if (pane) pane.scrollTop = pane.scrollHeight;
+    const run = () =>
+      scrollChatToLatestBestPoint({
+        bottomEl: bottom,
+        scrollPane: scrollPaneRef.current,
+      });
+    run();
+    // レイアウト確定後にもう一度（曲解説カードの高さ計測ずれ対策）
+    const raf = requestAnimationFrame(() => {
+      requestAnimationFrame(run);
+    });
+    return () => cancelAnimationFrame(raf);
   }, [messages.length]);
 
   useEffect(() => {
