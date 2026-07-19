@@ -905,8 +905,8 @@ export default function Chat({
   useEffect(() => {
     const bottom = bottomRef.current;
     if (!bottom) return;
-    const below = bottom.closest('.mc-room-mobile-below') as HTMLElement | null;
-    if (below && below.classList.contains('mc-room-scroll-pane')) {
+    const below = bottom.closest('.mc-room-mobile-below--unified') as HTMLElement | null;
+    if (below) {
       below.scrollTop = below.scrollHeight;
       return;
     }

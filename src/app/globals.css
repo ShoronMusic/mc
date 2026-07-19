@@ -170,7 +170,7 @@ html.mc-prevent-pull-refresh .mc-room-viewport {
   background: var(--mc-bg-page, #030712);
 }
 
-/* プレイヤー下（チャット＋発言欄）。縦向きはここが唯一の縦スクロール面 */
+/* プレイヤー下（チャット＋発言欄）。既定は内側チャット用。一体スクロールは --unified */
 .mc-room-mobile-below {
   display: flex;
   min-height: 0;
@@ -196,36 +196,42 @@ html.mc-prevent-pull-refresh .mc-room-viewport {
   height: 100%;
 }
 
-/* スマホ縦: プレイヤー下を一体スクロール。チャットは中身の高さ分だけ伸びる */
-@media (max-width: 1023px) and (orientation: portrait) {
-  .mc-room-mobile-below.mc-room-scroll-pane {
-    overflow-x: hidden;
-    overflow-y: auto;
-    overscroll-behavior-y: contain;
-    -webkit-overflow-scrolling: touch;
-  }
+/**
+ * スマホ縦（JS が composer を中に入れたとき）:
+ * プレイヤー下全体を唯一の縦スクロール面にし、チャットは内容高さまで伸ばす。
+ */
+.mc-room-mobile-below--unified {
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+}
 
-  .mc-room-mobile-chat {
-    flex: 0 0 auto;
-    overflow: visible;
-    height: auto;
-  }
+.mc-room-mobile-below--unified .mc-room-mobile-chat {
+  flex: 0 0 auto;
+  overflow: visible;
+  height: auto;
+}
 
-  .mc-room-mobile-chat > * {
-    height: auto !important;
-    flex: none !important;
-    min-height: 0;
-  }
+.mc-room-mobile-below--unified .mc-room-mobile-chat > * {
+  height: auto !important;
+  max-height: none !important;
+  flex: none !important;
+  min-height: 0 !important;
+  overflow: visible !important;
+}
 
-  .mc-room-mobile-chat .mc-room-scroll-pane {
-    overflow: visible !important;
-    flex: none !important;
-    max-height: none !important;
-  }
+.mc-room-mobile-below--unified .mc-room-mobile-chat .mc-room-scroll-pane {
+  overflow: visible !important;
+  flex: none !important;
+  max-height: none !important;
+  height: auto !important;
+  min-height: 0 !important;
+}
 
-  .mc-room-mobile-composer {
-    flex: 0 0 auto;
-  }
+.mc-room-mobile-below--unified .mc-room-mobile-composer {
+  flex: 0 0 auto;
 }
 
 @media (max-width: 1023px) and (orientation: landscape) and (hover: none) and (pointer: coarse) {

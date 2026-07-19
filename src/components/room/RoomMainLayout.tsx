@@ -114,7 +114,7 @@ export default function RoomMainLayout({
             <div
               className={
                 unifyBelowPlayerScroll
-                  ? 'mc-room-mobile-below mc-room-scroll-pane'
+                  ? 'mc-room-mobile-below mc-room-mobile-below--unified mc-room-scroll-pane'
                   : 'mc-room-mobile-below'
               }
             >
