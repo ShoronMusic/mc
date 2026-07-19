@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { PencilSquareIcon } from '@heroicons/react/24/outline';
 import { loadBrowserSupabaseClient } from '@/lib/supabase/load-browser-client';
 import { startRoomGatheringClient } from '@/lib/start-room-gathering-client';
 import { hasGuestRoomPersistence } from '@/lib/guest-room-persistence';
@@ -64,6 +65,88 @@ function GatheringsLoadingCard() {
           }`}
           aria-hidden
         />
+      </div>
+    </div>
+  );
+}
+
+/** 部屋名入力（鉛筆アイコンで編集可であることを示す） */
+function RoomNameEditableField({
+  label,
+  value,
+  onChange,
+  disabled,
+  placeholder,
+  inputClassName,
+  required = false,
+  name,
+  autoComplete,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  disabled?: boolean;
+  placeholder?: string;
+  inputClassName: string;
+  required?: boolean;
+  name?: string;
+  autoComplete?: string;
+}) {
+  const inputId = useId();
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  return (
+    <div className="flex min-w-0 flex-col gap-1 text-xs text-slate-400">
+      <label htmlFor={inputId} className="inline-flex items-center gap-1.5">
+        <span>{label}</span>
+        <span
+          className={`inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-[10px] font-medium ${
+            IS_MC_PRODUCT
+              ? 'bg-gray-200 text-gray-700'
+              : 'bg-slate-700/80 text-sky-200/90'
+          }`}
+        >
+          <PencilSquareIcon className="h-3 w-3" aria-hidden />
+          編集可
+        </span>
+      </label>
+      <div className="relative min-w-0">
+        <input
+          ref={inputRef}
+          id={inputId}
+          type="text"
+          name={name}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          maxLength={120}
+          required={required}
+          autoComplete={autoComplete}
+          className={`${inputClassName} pr-9`}
+          disabled={disabled}
+          placeholder={placeholder}
+          aria-description="タップまたはクリックして部屋の名前を編集できます"
+        />
+        <button
+          type="button"
+          tabIndex={-1}
+          disabled={disabled}
+          aria-label="部屋の名前を編集"
+          title="部屋の名前を編集"
+          onClick={() => {
+            const el = inputRef.current;
+            if (!el || disabled) return;
+            el.focus();
+            const len = el.value.length;
+            el.setSelectionRange(len, len);
+          }}
+          className={`absolute inset-y-0 right-0 flex w-9 items-center justify-center rounded-r-md disabled:opacity-40 ${
+            IS_MC_PRODUCT
+              ? 'text-gray-500 hover:text-gray-800'
+              : 'text-sky-300/80 hover:text-sky-100'
+          }`}
+        >
+          <PencilSquareIcon className="h-4 w-4" aria-hidden />
+        </button>
       </div>
     </div>
   );
@@ -374,18 +457,14 @@ export function MeetingStartPanel() {
                   </span>
                 )}
               </div>
-              <label className="flex min-w-0 flex-col gap-1 text-xs text-slate-400">
-                部屋の名前
-                <input
-                  type="text"
-                  value={joinTitle}
-                  onChange={(e) => setJoinTitle(e.target.value)}
-                  maxLength={120}
-                  className="w-full rounded-md border border-slate-600 bg-slate-900 px-2.5 py-2 text-sm text-white"
-                  disabled={busy}
-                  placeholder="例: 土曜洋楽会"
-                />
-              </label>
+              <RoomNameEditableField
+                label="部屋の名前"
+                value={joinTitle}
+                onChange={setJoinTitle}
+                disabled={busy}
+                placeholder="例: 土曜洋楽会"
+                inputClassName="w-full rounded-md border border-slate-600 bg-slate-900 px-2.5 py-2 text-sm text-white"
+              />
               <div className="mt-3 grid grid-cols-1 gap-2">
                 <button
                   type="button"
@@ -468,18 +547,14 @@ export function MeetingStartPanel() {
                 })}
               </ul>
               <div className="grid grid-cols-1 gap-2.5">
-                <label className="flex min-w-0 flex-col gap-1 text-xs text-slate-400">
-                  部屋の名前
-                  <input
-                    type="text"
-                    value={joinTitle}
-                    onChange={(e) => setJoinTitle(e.target.value)}
-                    maxLength={120}
-                    className="w-full rounded-md border border-slate-600 bg-slate-800 px-2.5 py-2 text-sm text-white"
-                    disabled={busy}
-                    placeholder="例: 土曜洋楽会"
-                  />
-                </label>
+                <RoomNameEditableField
+                  label="部屋の名前"
+                  value={joinTitle}
+                  onChange={setJoinTitle}
+                  disabled={busy}
+                  placeholder="例: 土曜洋楽会"
+                  inputClassName="w-full rounded-md border border-slate-600 bg-slate-800 px-2.5 py-2 text-sm text-white"
+                />
               </div>
               <div className="mt-3 grid grid-cols-1 gap-2">
                 <button
@@ -543,25 +618,21 @@ export function MeetingStartPanel() {
           >
             割当予定の部屋: {createRoomOptions[0] ?? '空きの部屋なし'}
           </p>
-          <label className="flex min-w-0 flex-col gap-1 text-xs text-slate-300">
-            部屋の名前（必須）
-            <input
-              type="text"
-              name="newGatheringTitle"
-              value={newTitle}
-              onChange={(e) => setNewTitle(e.target.value)}
-              maxLength={120}
-              required
-              autoComplete="off"
-              className={`w-full rounded-md border px-2.5 py-2 text-sm ${
-                IS_MC_PRODUCT
-                  ? 'border-gray-300 bg-white text-gray-900'
-                  : 'border-emerald-700/70 bg-slate-800 text-white'
-              }`}
-              disabled={busy || createRoomOptions.length === 0}
-              placeholder="例: 土曜洋楽会"
-            />
-          </label>
+          <RoomNameEditableField
+            label="部屋の名前（必須）"
+            value={newTitle}
+            onChange={setNewTitle}
+            disabled={busy || createRoomOptions.length === 0}
+            placeholder="例: 土曜洋楽会"
+            required
+            name="newGatheringTitle"
+            autoComplete="off"
+            inputClassName={`w-full rounded-md border px-2.5 py-2 text-sm ${
+              IS_MC_PRODUCT
+                ? 'border-gray-300 bg-white text-gray-900'
+                : 'border-emerald-700/70 bg-slate-800 text-white'
+            }`}
+          />
           <button
             type="submit"
             disabled={busy || createRoomOptions.length === 0}
