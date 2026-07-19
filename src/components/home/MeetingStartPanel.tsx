@@ -386,15 +386,17 @@ export function MeetingStartPanel() {
                   placeholder="例: 土曜洋楽会"
                 />
               </label>
-              <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <div className="mt-3 grid grid-cols-1 gap-2">
                 <button
                   type="button"
                   onClick={() => void enterRoom()}
                   disabled={busy}
-                  className={`block w-full rounded-md border px-4 py-2.5 text-center text-sm font-medium ${
+                  className={`block w-full rounded-md border px-4 py-3 text-center text-sm font-bold shadow-md transition disabled:opacity-50 ${
                     IS_MC_PRODUCT
                       ? 'mc-accent-primary'
-                      : 'border border-sky-500/50 bg-sky-900/25 text-sky-100 hover:bg-sky-900/40'
+                      : soleOrganizerRoom.isLive
+                        ? 'border-emerald-300 bg-emerald-600 text-white shadow-emerald-950/50 ring-2 ring-emerald-400/60 hover:bg-emerald-500'
+                        : 'border-sky-400/70 bg-sky-600 text-white shadow-sky-950/40 ring-2 ring-sky-400/45 hover:bg-sky-500'
                   }`}
                 >
                   {soleOrganizerRoom.isLive ? 'この部屋へ入る' : '開催を再開して入室'}
@@ -479,15 +481,17 @@ export function MeetingStartPanel() {
                   />
                 </label>
               </div>
-              <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <div className="mt-3 grid grid-cols-1 gap-2">
                 <button
                   type="button"
                   onClick={() => void enterRoom()}
                   disabled={busy}
-                  className={`block w-full rounded-md border px-4 py-2 text-center text-sm font-medium ${
+                  className={`block w-full rounded-md border px-4 py-3 text-center text-sm font-bold shadow-md transition disabled:opacity-50 ${
                     IS_MC_PRODUCT
                       ? 'mc-accent-primary'
-                      : 'border border-sky-500/50 bg-sky-900/20 text-sky-200 hover:bg-sky-900/35'
+                      : selectedRoom?.isLive
+                        ? 'border-emerald-300 bg-emerald-600 text-white shadow-emerald-950/50 ring-2 ring-emerald-400/60 hover:bg-emerald-500'
+                        : 'border-sky-400/70 bg-sky-600 text-white shadow-sky-950/40 ring-2 ring-sky-400/45 hover:bg-sky-500'
                   }`}
                 >
                   {selectedRoom?.isLive ? 'この部屋へ入る' : '開催を再開して入室'}
@@ -496,7 +500,7 @@ export function MeetingStartPanel() {
                   type="button"
                   onClick={() => void run('end', { roomId: joinRoomId })}
                   disabled={busy || !selectedRoom?.isLive}
-                  className="rounded-md border border-slate-500 bg-slate-800 px-4 py-2 text-sm text-slate-200 hover:bg-slate-700 disabled:opacity-50"
+                  className="rounded-md border border-slate-500 bg-slate-800 px-4 py-2.5 text-sm text-slate-200 hover:bg-slate-700 disabled:opacity-50"
                 >
                   この部屋の開催を終了
                 </button>
