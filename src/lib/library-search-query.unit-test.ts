@@ -6,6 +6,7 @@ import {
   primaryArtistForLibraryIndex,
   songMainArtistIncludesArtist,
   dedupeLibraryArtistDisplayNames,
+  compareLibrarySearchArtistRowsByCountDesc,
   mergeLibraryArtistIndexItems,
 } from '@/lib/library-search-query';
 
@@ -59,6 +60,17 @@ function run() {
       { main_artist: 'The Beatles', count: 200, indexLetter: 'B' },
     ]),
     [{ main_artist: 'The Beatles', count: 203, indexLetter: 'B' }],
+  );
+
+  const sortedSearchArtists = [
+    { main_artist: 'Aminé', count: 1 },
+    { main_artist: 'Prince', count: 68 },
+    { main_artist: 'King Princess', count: 3 },
+    { main_artist: 'Apollonia', count: 1 },
+  ].sort(compareLibrarySearchArtistRowsByCountDesc);
+  assert.deepEqual(
+    sortedSearchArtists.map((a) => a.main_artist),
+    ['Prince', 'King Princess', 'Aminé', 'Apollonia'],
   );
 
   const vSmith = expandLibrarySearchQueryVariants('スミス');

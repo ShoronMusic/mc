@@ -1,9 +1,38 @@
 # プリペイド AI クレジット（`user_ai_credits`）
 
-お試し10曲枯渇後の **有料クレジット残高** と取引ログ。  
+お試し枯渇後の **有料クレジット残高** と取引ログ。  
 仕様: `docs/00-prepaid-pricing-summary.md` · Phase D 段階1（Stripe なし）。
 
 **消費**: AI付き選曲 **1** クレジット · @ 質問 **0.5** クレジット（小数のため残高は `numeric(12,1)`）。
+
+**正本の置き場**: 購入者の残高・取引は **Supabase**（`user_ai_credits` / `user_ai_credit_transactions`）。Stripe は決済のみ。
+
+## バックアップ・保全（本番は Supabase Pro 契約済み）
+
+購入者の所有クレジットは **消えてはならないデータ**。現状と強化方針は次のとおり。
+
+| 層 | 内容 | 状態 |
+|----|------|------|
+| **Supabase Pro 日次バックアップ** | Dashboard → Database → Backups。**直近 7 日**のスナップショットから復元可 | **契約済み・有効**（本番） |
+| **取引ログ** | `user_ai_credit_transactions`（付与・消費・残高スナップ） | 実装済み（監査・再計算の材料） |
+| **Stripe 決済履歴** | 購入の証拠（金額・日時・Session）。**残クレジットの正本ではない** | 段階2で利用 |
+| **PITR（任意）** | Point-in-Time Recovery アドオン。数分粒度まで戻せる | 販売規模拡大時に検討 |
+| **オフサイト dump（推奨）** | `user_ai_credits` + `user_ai_credit_transactions` を定期エクスポートし GCS 等へ | 販売開始前後に運用追加 |
+
+### Pro 日次バックアップで分かること
+
+- **できる**: 障害・誤操作後に、直近7日以内のバックアップ時点へプロジェクト復元
+- **限界**: 7日より古い時点には戻れない。日次のため、最悪 **最大約1日分**の更新が失われうる
+- **確認場所**: [Supabase Dashboard](https://supabase.com/dashboard) → 対象プロジェクト → **Database → Backups**
+
+### 運用ルール（クレジット保全）
+
+1. 残高行の **物理 DELETE をしない**（管理は減算・付与ログで監査）。`auth.users` 削除は cascade でクレジットも消えるため、アカウント削除ポリシーは慎重に。
+2. 段階2実装時、`grant_purchase` に **Stripe Session / PaymentIntent ID** を紐づけ、決済と残高を照合できるようにする。
+3. 販売開始後は、週次または日次でクレジット2表の **オフサイト dump** を検討（Pro 7日の外側の保険）。
+4. 復元手順は Dashboard の Backups から実施。実施前に現状のエクスポートを取る。
+
+参照: [Supabase Database Backups](https://supabase.com/docs/guides/platform/backups)
 
 ## 作成手順
 

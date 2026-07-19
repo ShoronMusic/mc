@@ -4,7 +4,7 @@ import type { AiTrialStatus } from '@/lib/ai-trial-status';
 
 const trialActive: AiTrialStatus = {
   phase: 'trial_active',
-  songsGranted: 10,
+  songsGranted: 20,
   songsRemaining: 10,
   atQuestionsGranted: 5,
   atQuestionsRemaining: 5,
@@ -15,7 +15,7 @@ const trialActive: AiTrialStatus = {
 
 const preview: AiTrialStatus = {
   phase: 'preview',
-  songsGranted: 10,
+  songsGranted: 20,
   songsRemaining: 10,
   atQuestionsGranted: 5,
   atQuestionsRemaining: 5,
@@ -26,7 +26,7 @@ const preview: AiTrialStatus = {
 
 const exhausted: AiTrialStatus = {
   phase: 'trial_exhausted',
-  songsGranted: 10,
+  songsGranted: 20,
   songsRemaining: 0,
   atQuestionsGranted: 5,
   atQuestionsRemaining: 0,
@@ -37,7 +37,7 @@ const exhausted: AiTrialStatus = {
 
 const creditsActive: AiTrialStatus = {
   phase: 'credits_active',
-  songsGranted: 10,
+  songsGranted: 20,
   songsRemaining: 0,
   atQuestionsGranted: 5,
   atQuestionsRemaining: 0,
@@ -48,7 +48,7 @@ const creditsActive: AiTrialStatus = {
 
 const developerUnlimited: AiTrialStatus = {
   phase: 'developer_unlimited',
-  songsGranted: 10,
+  songsGranted: 20,
   songsRemaining: 10,
   atQuestionsGranted: 5,
   atQuestionsRemaining: 5,

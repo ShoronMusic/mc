@@ -7,6 +7,7 @@
  * 照合は大文字小文字無視。`and` と `&` は同一視してマッチする。
  *
  * **マスタは `src/config/artist-compound-extra.json` のみ**（編集後は再ビルド要）。
+ * Chrome 拡張（yttowp / yttom7）へは `E:\wp\scripts\sync-exclusion-artists.mjs` で同梱 JSON を同期する。
  * 配列要素は文字列、または `{ "canonical": "正式名", "aliases": ["略称1", …] }`（略称も同一アーティストとして正規化）。
  */
 

@@ -317,7 +317,7 @@ type Music8PlaylistAutoplayState = {
 
 - [ ] Ably でキュー状態を部屋に共有
 - [ ] 「連続再生を停止」ボタン or チャットコマンド（例: `プレイリスト停止`）
-- [ ] スキップ（次へ）— オーナー／開始者のみ
+- [ ] スキップ（次へ）— オーナー／開始者のみ → **実装済み**: 参加者欄の「次曲へ」（連続再生維持）。従来の「スキップ」は連続再生を終了
 - [ ] 複数人ターンとの衝突ルールを [`room-selection-turn-order-spec.md`](./room-selection-turn-order-spec.md) に追記
 - [ ] `RoomWithoutSync` でも同等動作
 
@@ -390,7 +390,7 @@ type Music8PlaylistAutoplayState = {
 | リスク | 対策 |
 |--------|------|
 | WP 一時ダウン | 明確なエラー。再送でリトライ |
-| 削除・非公開 YouTube | 再生失敗時は次曲へスキップ（任意） |
+| 削除・非公開 YouTube | 再生失敗時は次曲へスキップ（`YouTubePlayer` onError → 連続再生キュー進行） |
 | 長尺 PL で部屋が「放置再生」 | 上限 40・手動選曲で中止 |
 | AI コスト爆発 | MVP で解説オフを厳守 |
 | 既存 queueSong と衝突 | 専用キュー。仕様書に明記 |

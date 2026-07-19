@@ -11,7 +11,7 @@ import type { AiTrialStatus } from '@/lib/ai-trial-status';
 
 const trialActive: AiTrialStatus = {
   phase: 'trial_active',
-  songsGranted: 10,
+  songsGranted: 20,
   songsRemaining: 3,
   atQuestionsGranted: 5,
   atQuestionsRemaining: 2,
@@ -22,7 +22,7 @@ const trialActive: AiTrialStatus = {
 
 const creditsActive: AiTrialStatus = {
   phase: 'credits_active',
-  songsGranted: 10,
+  songsGranted: 20,
   songsRemaining: 0,
   atQuestionsGranted: 5,
   atQuestionsRemaining: 0,

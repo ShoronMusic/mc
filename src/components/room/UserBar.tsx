@@ -169,6 +169,10 @@ interface UserBarProps {
   skipCurrentTrackActive?: boolean;
   /** 上記以外: グレーアウト（クリック不可） */
   skipCurrentTrackDisabled?: boolean;
+  /** ライブラリ／PL 連続再生中（「次曲へ」表示用） */
+  playlistAutoplayActive?: boolean;
+  /** 連続再生の次曲へ（キューは維持） */
+  onSkipPlaylistTrack?: () => void;
   /** 次の選曲ターン（再生終了後に仮アクティブとして表示するため） */
   nextTurnClientId?: string;
   /** チャットオーナー基準の選曲ラウンド数（同期部屋。未指定は 1） */
@@ -271,6 +275,8 @@ export default function UserBar({
   hideMobileRoundBadge = false,
   skipCurrentTrackActive = false,
   skipCurrentTrackDisabled = false,
+  playlistAutoplayActive = false,
+  onSkipPlaylistTrack,
   onSkipCurrentTrack,
   onManageSongReservation,
   onOwnerPickSelector,
@@ -291,6 +297,70 @@ export default function UserBar({
   /** 在室の人間ユーザーが1人だけ（AI・退席中は除く） */
   const soleHumanInRoom =
     participants.filter((p) => isHumanParticipant(p.clientId) && p.isAway !== true).length <= 1;
+
+  const skipTrackButtons = (opts: { forCurrentPoster: boolean; className?: string }) => {
+    if (!opts.forCurrentPoster) return null;
+    const wrapClass = opts.className ?? 'mt-0.5 flex flex-wrap items-center gap-1';
+    const nextBtn =
+      playlistAutoplayActive && skipCurrentTrackActive && onSkipPlaylistTrack ? (
+        <button
+          type="button"
+          onClick={onSkipPlaylistTrack}
+          className="rounded border border-lime-600/70 bg-lime-950/45 px-2 py-0.5 text-[10px] font-medium leading-tight text-lime-100 hover:bg-lime-900/55"
+          aria-label="連続再生の次の曲へスキップ"
+          title="ライブラリ／プレイリストの次の曲へ進みます（連続再生は続行）"
+        >
+          次曲へ
+        </button>
+      ) : null;
+    if (skipCurrentTrackActive && onSkipCurrentTrack) {
+      return (
+        <span className={wrapClass}>
+          {nextBtn}
+          <button
+            type="button"
+            onClick={onSkipCurrentTrack}
+            className="rounded border border-amber-600/60 bg-amber-950/40 px-2 py-0.5 text-[10px] font-medium leading-tight text-amber-100 hover:bg-amber-900/50"
+            aria-label={
+              playlistAutoplayActive
+                ? '連続再生を終了してスキップ'
+                : 'この曲を終了扱いにスキップ'
+            }
+            title={
+              playlistAutoplayActive
+                ? '連続再生を止め、選曲ターンへ進みます'
+                : '再生を最後まで進め、曲終了と同じ扱いにします'
+            }
+          >
+            スキップ
+          </button>
+        </span>
+      );
+    }
+    if (skipCurrentTrackDisabled) {
+      return (
+        <span className={wrapClass}>
+          {playlistAutoplayActive ? (
+            <span
+              className="inline-flex rounded border border-gray-700 bg-gray-800/50 px-2 py-0.5 text-[10px] font-medium leading-tight text-gray-500"
+              aria-hidden
+              title="選曲した方かチャットオーナーのみ使えます"
+            >
+              次曲へ
+            </span>
+          ) : null}
+          <span
+            className="inline-flex rounded border border-gray-700 bg-gray-800/50 px-2 py-0.5 text-[10px] font-medium leading-tight text-gray-500"
+            aria-hidden
+            title="選曲した方かチャットオーナーのみスキップできます"
+          >
+            スキップ
+          </span>
+        </span>
+      );
+    }
+    return nextBtn ? <span className={wrapClass}>{nextBtn}</span> : null;
+  };
 
   const participantNamesTitle =
     participants.length > 0
@@ -600,25 +670,7 @@ export default function UserBar({
                   NEXT（選曲待ち）
                 </span>
               )}
-              {isCurrentSongPoster && skipCurrentTrackActive && onSkipCurrentTrack ? (
-                <button
-                  type="button"
-                  onClick={onSkipCurrentTrack}
-                  className="mt-0.5 rounded border border-amber-600/60 bg-amber-950/40 px-2 py-0.5 text-[10px] font-medium leading-tight text-amber-100 hover:bg-amber-900/50"
-                  aria-label="この曲を終了扱いにスキップ"
-                  title="再生を最後まで進め、曲終了と同じ扱いにします"
-                >
-                  スキップ
-                </button>
-              ) : isCurrentSongPoster && skipCurrentTrackDisabled ? (
-                <span
-                  className="mt-0.5 inline-flex rounded border border-gray-700 bg-gray-800/50 px-2 py-0.5 text-[10px] font-medium leading-tight text-gray-500"
-                  aria-hidden
-                  title="選曲した方かチャットオーナーのみスキップできます"
-                >
-                  スキップ
-                </span>
-              ) : null}
+              {skipTrackButtons({ forCurrentPoster: isCurrentSongPoster })}
             </span>
           );
         })}
@@ -626,25 +678,7 @@ export default function UserBar({
     ) : (
       <span className="flex flex-col items-start gap-1">
         <span className={`text-sm ${IS_MC_PRODUCT ? 'text-gray-800' : 'text-gray-200'}`}>{label}</span>
-        {skipCurrentTrackActive && onSkipCurrentTrack ? (
-          <button
-            type="button"
-            onClick={onSkipCurrentTrack}
-            className="rounded border border-amber-600/60 bg-amber-950/40 px-2 py-0.5 text-[10px] font-medium text-amber-100 hover:bg-amber-900/50"
-            aria-label="この曲を終了扱いにスキップ"
-            title="再生を最後まで進め、曲終了と同じ扱いにします"
-          >
-            スキップ
-          </button>
-        ) : skipCurrentTrackDisabled ? (
-          <span
-            className="inline-flex rounded border border-gray-700 bg-gray-800/50 px-2 py-0.5 text-[10px] font-medium text-gray-500"
-            aria-hidden
-            title="選曲した方かチャットオーナーのみスキップできます"
-          >
-            スキップ
-          </span>
-        ) : null}
+        {skipTrackButtons({ forCurrentPoster: true })}
       </span>
     );
 
@@ -901,24 +935,7 @@ export default function UserBar({
                       NEXT
                     </span>
                   ) : null}
-                  {isCurrentSongPoster && skipCurrentTrackActive && onSkipCurrentTrack ? (
-                    <button
-                      type="button"
-                      onClick={onSkipCurrentTrack}
-                      className="mt-0.5 rounded border border-amber-600/60 bg-amber-950/40 px-2 py-0.5 text-[10px] font-medium leading-tight text-amber-100 hover:bg-amber-900/50"
-                      aria-label="この曲を終了扱いにスキップ"
-                      title="再生を最後まで進め、曲終了と同じ扱いにします"
-                    >
-                      スキップ
-                    </button>
-                  ) : isCurrentSongPoster && skipCurrentTrackDisabled ? (
-                    <span
-                      className="mt-0.5 inline-flex rounded border border-gray-700 bg-gray-800/50 px-2 py-0.5 text-[10px] font-medium leading-tight text-gray-500"
-                      aria-hidden
-                    >
-                      スキップ
-                    </span>
-                  ) : null}
+                  {skipTrackButtons({ forCurrentPoster: isCurrentSongPoster })}
                 </span>
               );
             })

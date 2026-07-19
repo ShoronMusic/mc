@@ -36,6 +36,7 @@ declare namespace YT {
         events?: {
           onReady?: () => void;
           onStateChange?: (event: { data: number }) => void;
+          onError?: (event: { data: number }) => void;
         };
       }
     );
@@ -81,10 +82,12 @@ export interface YouTubePlayerHandle {
 interface YouTubePlayerProps {
   videoId: string | null;
   onStateChange?: (state: 'play' | 'pause' | 'ended', currentTime: number) => void;
+  /** IFrame API onError（削除・非公開・埋め込み不可など）。data がエラーコード */
+  onError?: (errorCode: number) => void;
 }
 
 const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>(
-  function YouTubePlayer({ videoId, onStateChange }, ref) {
+  function YouTubePlayer({ videoId, onStateChange, onError }, ref) {
     const reactId = useId().replace(/:/g, '');
     const containerId = `yt-player-${reactId}`;
     const playerRef = useRef<YT.Player | null>(null);
@@ -92,6 +95,8 @@ const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>(
     const [apiReady, setApiReady] = useState(false);
     const onStateChangeRef = useRef(onStateChange);
     onStateChangeRef.current = onStateChange;
+    const onErrorRef = useRef(onError);
+    onErrorRef.current = onError;
 
     const syncPlayerSize = useCallback(() => {
       const shell = shellRef.current;
@@ -176,6 +181,10 @@ const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>(
               } else if (ev.data === window.YT.PlayerState.ENDED) {
                 onStateChangeRef.current('ended', t);
               }
+            },
+            onError(ev: { data: number }) {
+              playbackLog('YT: onError', { errorCode: ev.data, videoId });
+              onErrorRef.current?.(ev.data);
             },
           },
         });

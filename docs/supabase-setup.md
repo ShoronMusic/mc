@@ -96,7 +96,7 @@ Google認証で参加できるようにするには、Supabase 側で Google を
 
 ## 5.1 メール登録：Confirm email（必須）
 
-メールアドレス＋パスワード登録では **Confirm email を ON** にしてください（捨てメール対策・10 曲お試し付与の前提）。
+メールアドレス＋パスワード登録では **Confirm email を ON** にしてください（捨てメール対策・20 曲お試し付与の前提）。
 
 1. Supabase ダッシュボード **Authentication** → **Providers** → **Email** を開く。
 2. **Confirm email** を **ON** にして **Save**。
@@ -970,11 +970,11 @@ alter table public.song_external_metrics enable row level security;
 
 ---
 
-## 23. AI お試し 10 曲（`user_ai_trial`）
+## 23. AI お試し 20 曲（`user_ai_trial`）
 
-登録ユーザー向け **生涯 10 曲** の AI 付き選曲お試しと **@ 5 回** 枠。
+登録ユーザー向け **生涯 20 曲** の AI 付き選曲お試しと **@ 5 回** 枠。
 
-**SQL・列説明・付与/消費**は **`docs/supabase-user-ai-trial-table.md`** を参照し、Supabase SQL Editor で実行してください。
+**SQL・列説明・付与/消費**は **`docs/supabase-user-ai-trial-table.md`** を参照し、Supabase SQL Editor で実行してください。アプリ付与定数は `AI_TRIAL_SONGS_GRANTED`（20）。
 
 - **有効化**: テーブル作成後、アプリの `.env.local` に **`AI_TRIAL_ENFORCEMENT_ENABLED=1`**（コミット禁止）。未設定時は preview（枠非消費）。
 - **付与**: メール確認済みユーザーが `GET /api/user/ai-trial` を初めて呼んだとき（Google 等は即）。

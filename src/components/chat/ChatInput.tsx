@@ -48,6 +48,8 @@ import {
   HeartIcon,
   MusicalNoteIcon,
   QuestionMarkCircleIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
 } from '@heroicons/react/24/outline';
 import { HeartIcon as HeartIconSolid } from '@heroicons/react/24/solid';
 import {
@@ -89,6 +91,7 @@ import {
   libraryCatalogTabBtnClass,
   librarySearchInputClass,
   libraryListItemBtnClass,
+  libraryArtistChipBtnClass,
   librarySortChipBtnClass,
   libraryMobileDetailPanelClass,
   libraryMobileSongDetailShellClass,
@@ -102,6 +105,7 @@ import {
   expandMainArtistNamesForLibraryFilter,
   songMainArtistIncludesArtist,
   dedupeLibraryArtistDisplayNames,
+  compareLibrarySearchArtistRowsByCountDesc,
   mergeLibraryArtistIndexItems,
   artistNamesMatchIgnoringLeadingArticle,
 } from '@/lib/library-search-query';
@@ -229,15 +233,24 @@ function resolveLibraryMobileFocus(input: {
   return 'idle';
 }
 
-function libraryMobileArtistListSectionExtra(focus: LibraryMobileFocus, isMobileLandscape: boolean): string {
+function libraryMobileArtistListSectionExtra(
+  focus: LibraryMobileFocus,
+  isMobileLandscape: boolean,
+  searchArtistChips = false,
+  browseArtistSelectedCompact = false,
+): string {
   if (isMobileLandscape) {
     return 'max-lg:flex-1 max-lg:min-h-0 max-lg:max-h-none';
+  }
+  // 検索チップ / 選択済みアーティスト表示は縦を畳む（選択名はヘッダー側で見せる）
+  if (searchArtistChips || browseArtistSelectedCompact) {
+    return 'max-lg:shrink-0 max-lg:max-h-none';
   }
   switch (focus) {
     case 'artists':
       return 'max-lg:flex-1 max-lg:min-h-0 max-lg:max-h-none';
     case 'songs':
-      return 'max-lg:max-h-[24vh] max-lg:shrink-0';
+      return 'max-lg:max-h-[22vh] max-lg:shrink-0';
     case 'split':
       return 'max-lg:hidden';
     default:
@@ -250,9 +263,19 @@ function libraryMobileArtistDetailSectionExtra(focus: LibraryMobileFocus, isMobi
   return focus === 'idle' ? 'max-lg:max-h-[18vh] max-lg:shrink-0' : 'max-lg:hidden';
 }
 
-function libraryMobileSongListSectionExtra(focus: LibraryMobileFocus, isMobileLandscape: boolean): string {
+function libraryMobileSongListSectionExtra(
+  focus: LibraryMobileFocus,
+  isMobileLandscape: boolean,
+  searchArtistChips = false,
+): string {
   if (isMobileLandscape) {
     return 'max-lg:flex-1 max-lg:min-h-0 max-lg:max-h-none';
+  }
+  if (searchArtistChips) {
+    // 検索チップ行は薄いので、曲詳細表示中も E を広めに
+    return focus === 'split'
+      ? 'max-lg:min-h-0 max-lg:flex-[2] max-lg:basis-0'
+      : 'max-lg:flex-1 max-lg:min-h-0 max-lg:max-h-none';
   }
   switch (focus) {
     case 'artists':
@@ -261,7 +284,8 @@ function libraryMobileSongListSectionExtra(focus: LibraryMobileFocus, isMobileLa
     case 'songs':
       return 'max-lg:flex-1 max-lg:min-h-0 max-lg:max-h-none';
     case 'split':
-      return 'max-lg:flex-1 max-lg:min-h-0 max-lg:max-h-none max-lg:basis-1/2';
+      // 曲詳細より曲一覧を優先
+      return 'max-lg:min-h-0 max-lg:flex-[2] max-lg:basis-0';
     default:
       return '';
   }
@@ -364,6 +388,108 @@ const LIBRARY_MOBILE_PANEL = {
     body: 'max-lg:bg-violet-950/25 max-lg:p-2',
   },
 } as const;
+
+function LibrarySearchArtistChipsScroller({
+  selectedArtistName,
+  artists,
+  onSelectAll,
+  onSelectArtist,
+}: {
+  selectedArtistName: string | null;
+  artists: Array<{ main_artist: string; count: number }>;
+  onSelectAll: () => void;
+  onSelectArtist: (name: string) => void;
+}) {
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  const updateScrollState = useCallback(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const { scrollLeft, scrollWidth, clientWidth } = el;
+    setCanScrollLeft(scrollLeft > 2);
+    setCanScrollRight(scrollLeft + clientWidth < scrollWidth - 2);
+  }, []);
+
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    updateScrollState();
+    el.addEventListener('scroll', updateScrollState, { passive: true });
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(updateScrollState) : null;
+    ro?.observe(el);
+    return () => {
+      el.removeEventListener('scroll', updateScrollState);
+      ro?.disconnect();
+    };
+  }, [updateScrollState, artists]);
+
+  const scrollByDir = (dir: -1 | 1) => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    el.scrollBy({ left: dir * Math.max(140, Math.round(el.clientWidth * 0.65)), behavior: 'smooth' });
+  };
+
+  const navBtnClass = (enabled: boolean) =>
+    `inline-flex h-8 w-7 shrink-0 items-center justify-center rounded border text-lime-100 ${
+      enabled
+        ? 'border-lime-600/55 bg-lime-950/80 hover:bg-lime-900/80'
+        : 'cursor-default border-lime-900/40 bg-lime-950/30 text-lime-100/30'
+    }`;
+
+  return (
+    <div className="flex min-w-0 items-center gap-1">
+      <button
+        type="button"
+        className={navBtnClass(canScrollLeft)}
+        disabled={!canScrollLeft}
+        aria-label="アーティスト候補を左へスクロール"
+        onClick={() => scrollByDir(-1)}
+      >
+        <ChevronLeftIcon className="h-4 w-4" aria-hidden />
+      </button>
+      <div
+        ref={scrollerRef}
+        className="mc-scrollbar-stable flex min-w-0 flex-1 flex-nowrap items-center justify-start gap-1.5 overflow-x-auto"
+        role="listbox"
+        aria-label="検索結果のアーティストで絞り込み"
+      >
+        <button
+          type="button"
+          role="option"
+          aria-selected={selectedArtistName === null}
+          onClick={onSelectAll}
+          className={libraryArtistChipBtnClass(selectedArtistName === null)}
+        >
+          全アーティスト
+        </button>
+        {artists.map((a) => (
+          <button
+            key={a.main_artist}
+            type="button"
+            role="option"
+            aria-selected={selectedArtistName === a.main_artist}
+            onClick={() => onSelectArtist(a.main_artist)}
+            className={libraryArtistChipBtnClass(selectedArtistName === a.main_artist)}
+          >
+            <span className="whitespace-nowrap">{a.main_artist}</span>
+            <span className="shrink-0 opacity-90">({a.count})</span>
+          </button>
+        ))}
+      </div>
+      <button
+        type="button"
+        className={navBtnClass(canScrollRight)}
+        disabled={!canScrollRight}
+        aria-label="アーティスト候補を右へスクロール"
+        onClick={() => scrollByDir(1)}
+      >
+        <ChevronRightIcon className="h-4 w-4" aria-hidden />
+      </button>
+    </div>
+  );
+}
 
 /** タブ画像 PNG の表示サイズ（元画像高さ 44px 前提） */
 const LIBRARY_TAB_IMAGE_HEIGHT_PX = 24;
@@ -533,6 +659,11 @@ function LibrarySongDetailTitleCard({
   onFavoriteVideoToggle,
   favoriteTitle,
   favoriteArtistName,
+  videoLoading = false,
+  videoError = null,
+  videos = [],
+  videoChipKeyPrefix = '',
+  onSelectVideo,
 }: {
   title: string;
   subtitle: string;
@@ -551,6 +682,11 @@ function LibrarySongDetailTitleCard({
   }) => void | Promise<void>;
   favoriteTitle?: string | null;
   favoriteArtistName?: string | null;
+  videoLoading?: boolean;
+  videoError?: string | null;
+  videos?: LibrarySongVideoRow[];
+  videoChipKeyPrefix?: string;
+  onSelectVideo?: (videoId: string) => void;
 }) {
   const favoritedSet = useMemo(() => new Set(favoritedVideoIds), [favoritedVideoIds]);
   const matchedIds = useMemo(() => {
@@ -576,6 +712,7 @@ function LibrarySongDetailTitleCard({
     songVideoIds[0]?.trim() ??
     null;
   const canToggle = Boolean(toggleVideoId && onFavoriteVideoToggle && !isGuest);
+  const showVideoVariants = Boolean(onSelectVideo);
 
   return (
     <div className={libraryTitleCardClass()}>
@@ -620,7 +757,37 @@ function LibrarySongDetailTitleCard({
           </button>
         ) : null}
       </div>
-      <p className="mt-1 text-xs text-gray-400">{subtitle}</p>
+      <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+        <p className="min-w-0 truncate text-xs text-gray-400">{subtitle}</p>
+        {showVideoVariants ? (
+          <>
+            <span className="shrink-0 text-[11px] text-gray-500">動画バージョン</span>
+            {videoLoading ? (
+              <span className="text-xs text-gray-500">読み込み中…</span>
+            ) : videoError ? (
+              <span className="truncate text-xs text-amber-300">{videoError}</span>
+            ) : videos.length === 0 ? (
+              <span className="text-xs text-gray-500">候補なし</span>
+            ) : (
+              <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                {videos.map((v) => {
+                  const active = v.video_id === selectedVideoId;
+                  return (
+                    <button
+                      key={`${videoChipKeyPrefix}${v.video_id}`}
+                      type="button"
+                      onClick={() => onSelectVideo?.(v.video_id)}
+                      className={libraryChipBtnClass(active)}
+                    >
+                      {libraryVariantLabel(v.variant)}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -1432,19 +1599,21 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
     );
   }, [libraryRows, libraryArtistLetter, librarySongSource]);
 
-  /** 検索モード: 表示中の曲行からユニークなアーティスト名＋曲数 */
+  /** 検索モード: 表示中の曲行からユニークなアーティスト名＋曲数（曲数多い順・同数は名前順） */
   const searchArtistRows = useMemo(() => {
     const names = dedupeLibraryArtistDisplayNames(
       letterFilteredLibraryRows.flatMap((row) =>
         expandMainArtistNamesForLibraryFilter(row.main_artist ?? ''),
       ),
     );
-    return names.map((main_artist) => ({
-      main_artist,
-      count: letterFilteredLibraryRows.filter((r) =>
-        songMainArtistIncludesArtist(r.main_artist, main_artist),
-      ).length,
-    }));
+    return names
+      .map((main_artist) => ({
+        main_artist,
+        count: letterFilteredLibraryRows.filter((r) =>
+          songMainArtistIncludesArtist(r.main_artist, main_artist),
+        ).length,
+      }))
+      .sort(compareLibrarySearchArtistRowsByCountDesc);
   }, [letterFilteredLibraryRows]);
 
   const searchArtistNameCandidates = useMemo(
@@ -1727,6 +1896,19 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
       libraryQuery,
     ],
   );
+
+  /** モバイル: 検索結果アーティストを C タブ横チップにする */
+  const librarySearchArtistChips =
+    librarySongSource === 'search' &&
+    !libraryLoading &&
+    !libraryError &&
+    searchArtistNameCandidates.length > 0;
+
+  /** モバイル: 索引からアーティスト決定後は一覧を畳み、選択名を見える位置に出す */
+  const libraryBrowseArtistSelectedCompact =
+    !librarySearchArtistChips &&
+    librarySongSource === 'browse' &&
+    Boolean(librarySelectedArtistName?.trim());
 
   const selectedLibraryUrl = librarySelectedVideoId
     ? `https://www.youtube.com/watch?v=${encodeURIComponent(librarySelectedVideoId)}`
@@ -2049,10 +2231,8 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
     libraryMyListAddBusy,
   ]);
 
-  const libraryDetailActionGridClass =
-    !isGuest && onSystemMessage
-      ? 'mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3'
-      : 'mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2';
+  const libraryDetailActionGridClass = 'mt-3 grid grid-cols-2 gap-2';
+  const libraryDetailSelectSongBtnClass = `${librarySelectSongBtnClass()} col-span-2`;
 
   useEffect(() => {
     if (!librarySelectedSongId) {
@@ -2788,11 +2968,11 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
               </div>
               <div
                 className={`flex min-w-0 items-center gap-2 ${
-                  isMobileLandscape ? 'shrink-0 gap-1' : 'lg:ml-auto lg:shrink-0'
+                  isMobileLandscape ? 'shrink-0 gap-1' : 'w-full max-lg:w-full lg:ml-auto lg:w-auto lg:shrink-0'
                 }`}
               >
                 {!isMobileLandscape ? (
-                  <div className="flex items-center gap-1.5 sm:w-[16rem] sm:flex-none md:w-[18rem]">
+                  <div className="flex min-w-0 flex-1 items-center gap-1.5 lg:w-[18rem] lg:flex-none">
                     <LibrarySectionBadge section="search" title="A：検索" />
                     <input
                       type="search"
@@ -2809,30 +2989,36 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                     />
                   </div>
                 ) : null}
-                <button
-                  type="button"
-                  onClick={handleLibrarySearch}
-                  disabled={libraryLoading}
-                  className={libraryHeaderSearchBtnClass(isMobileLandscape)}
+                <div
+                  className={`flex min-w-0 items-center gap-2 ${
+                    isMobileLandscape ? 'shrink-0' : 'flex-1 lg:flex-none'
+                  }`}
                 >
-                  検索
-                </button>
-                <button
-                  type="button"
-                  className={libraryHeaderSecondaryBtnClass(isMobileLandscape)}
-                  onClick={resetLibraryExpanded}
-                  disabled={!libraryHasExpandedContent}
-                  aria-label="ライブラリの展開状態をリセット"
-                >
-                  リセット
-                </button>
-                <button
-                  type="button"
-                  className={libraryHeaderSecondaryBtnClass(isMobileLandscape)}
-                  onClick={closeLibraryModal}
-                >
-                  閉じる
-                </button>
+                  <button
+                    type="button"
+                    onClick={handleLibrarySearch}
+                    disabled={libraryLoading}
+                    className={libraryHeaderSearchBtnClass(isMobileLandscape, !isMobileLandscape)}
+                  >
+                    検索
+                  </button>
+                  <button
+                    type="button"
+                    className={libraryHeaderSecondaryBtnClass(isMobileLandscape, !isMobileLandscape)}
+                    onClick={resetLibraryExpanded}
+                    disabled={!libraryHasExpandedContent}
+                    aria-label="ライブラリの展開状態をリセット"
+                  >
+                    リセット
+                  </button>
+                  <button
+                    type="button"
+                    className={libraryHeaderSecondaryBtnClass(isMobileLandscape, !isMobileLandscape)}
+                    onClick={closeLibraryModal}
+                  >
+                    閉じる
+                  </button>
+                </div>
               </div>
               {libraryEntryIdle && !isMobileLandscape ? (
                 <p className="w-full text-[11px] leading-snug text-gray-400 lg:order-last lg:basis-full">
@@ -2907,7 +3093,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
               </aside>
               {/* アーティスト一覧（索引と密着・選択後も表示） */}
               <section
-                className={`flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden border-b border-lime-900/60 lg:w-[11rem] lg:shrink-0 lg:border-b-0 xl:w-[12.5rem] ${LIBRARY_MOBILE_PANEL.artistList.section} ${libraryMobileArtistListSectionExtra(libraryMobileFocus, isMobileLandscape)}`}
+                className={`flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden border-b border-lime-900/60 lg:w-[11rem] lg:shrink-0 lg:border-b-0 xl:w-[12.5rem] ${LIBRARY_MOBILE_PANEL.artistList.section} ${libraryMobileArtistListSectionExtra(libraryMobileFocus, isMobileLandscape, librarySearchArtistChips, libraryBrowseArtistSelectedCompact)}`}
               >
                 <div className="shrink-0 border-b border-lime-900/60 px-2 py-2 max-lg:border-lime-700/35 max-lg:bg-lime-950/40 lg:hidden">
                   <div className="flex items-center gap-2">
@@ -2927,9 +3113,21 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                   </div>
                 </div>
                 <div className={`shrink-0 lg:hidden ${LIBRARY_MOBILE_PANEL.artistList.header}`}>
-                  <div className="flex min-w-0 items-center gap-2">
+                  <div className="flex min-w-0 flex-1 items-center gap-2">
                     <LibrarySectionTabImage section="artistList" active={libraryTabCActive} />
-                    {libraryArtistIndexActive && libraryArtistLetter ? (
+                    {librarySearchArtistChips ? (
+                      <p className={`min-w-0 tabular-nums ${LIBRARY_MOBILE_PANEL.artistList.title}`}>
+                        検索結果 {searchArtistRows.length}件
+                      </p>
+                    ) : libraryBrowseArtistSelectedCompact ? (
+                      <p
+                        className={`min-w-0 truncate ${LIBRARY_MOBILE_PANEL.artistList.title}`}
+                        title={librarySelectedArtistName ?? undefined}
+                      >
+                        {libraryArtistLetter ? `（${libraryArtistLetter}） ` : ''}
+                        {librarySelectedArtistName}
+                      </p>
+                    ) : libraryArtistIndexActive && libraryArtistLetter ? (
                       <p className={`min-w-0 tabular-nums ${LIBRARY_MOBILE_PANEL.artistList.title}`}>
                         （{libraryArtistLetter}）
                       </p>
@@ -2952,6 +3150,28 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                     </button>
                   ) : null}
                 </div>
+                {librarySearchArtistChips ? (
+                  <div className="shrink-0 border-b border-lime-600/45 bg-lime-950/40 px-2 py-2 lg:hidden">
+                    <LibrarySearchArtistChipsScroller
+                      selectedArtistName={librarySelectedArtistName}
+                      artists={searchArtistRows}
+                      onSelectAll={() => setLibrarySelectedArtistName(null)}
+                      onSelectArtist={(name) => setLibrarySelectedArtistName(name)}
+                    />
+                  </div>
+                ) : null}
+                {libraryBrowseArtistSelectedCompact ? (
+                  <div className="shrink-0 border-b border-lime-600/45 bg-lime-950/40 px-2 py-2 lg:hidden">
+                    <div className="flex min-w-0 items-center gap-1.5">
+                      <span
+                        className={libraryArtistChipBtnClass(true)}
+                        title={librarySelectedArtistName ?? undefined}
+                      >
+                        <span className="max-w-[14rem] truncate">{librarySelectedArtistName}</span>
+                      </span>
+                    </div>
+                  </div>
+                ) : null}
                 <div className="hidden shrink-0 items-center justify-between gap-1 border-b border-lime-900/50 px-2.5 py-2 lg:flex">
                   <div className="flex min-w-0 items-center gap-1.5">
                     <LibrarySectionTabImage section="artistList" active={libraryTabCActive} />
@@ -2979,7 +3199,9 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                   ) : null}
                 </div>
                 <div
-                  className={`mc-scrollbar-stable flex min-h-0 flex-1 flex-col gap-0 overflow-y-auto lg:overflow-x-hidden ${LIBRARY_MOBILE_PANEL.artistList.body}`}
+                  className={`mc-scrollbar-stable flex min-h-0 flex-1 flex-col gap-0 overflow-y-auto lg:overflow-x-hidden ${LIBRARY_MOBILE_PANEL.artistList.body} ${
+                    librarySearchArtistChips || libraryBrowseArtistSelectedCompact ? 'max-lg:hidden' : ''
+                  }`}
                 >
                   {!libraryArtistsLoading && libraryArtistsError ? (
                     <p className="border-b border-lime-900/50 px-3 py-2 text-[11px] text-amber-300">
@@ -3159,13 +3381,20 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
               </section>
               {/* 4列目: 曲一覧 */}
               <section
-                className={`flex min-h-0 flex-col border-b border-lime-900/60 lg:col-span-3 lg:border-b-0 lg:border-r lg:border-r-lime-900/60 ${LIBRARY_MOBILE_PANEL.songList.section} ${libraryMobileSongListSectionExtra(libraryMobileFocus, isMobileLandscape)}`}
+                className={`flex min-h-0 flex-col border-b border-lime-900/60 lg:col-span-3 lg:border-b-0 lg:border-r lg:border-r-lime-900/60 ${LIBRARY_MOBILE_PANEL.songList.section} ${libraryMobileSongListSectionExtra(libraryMobileFocus, isMobileLandscape, librarySearchArtistChips)}`}
               >
                 <div
                   className={`flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-lime-900/60 px-3 py-2 ${LIBRARY_MOBILE_PANEL.songList.header}`}
                 >
                   <div className="flex min-w-0 items-center gap-2">
                     <LibrarySectionTabImage section="songList" active={libraryTabEActive} />
+                    {!libraryLoading && librarySongRowsSortedForList.length > 0 ? (
+                      <p className="min-w-0 truncate text-xs font-semibold tabular-nums text-gray-400 max-lg:text-violet-50">
+                        {librarySelectedArtistName
+                          ? `${librarySelectedArtistName} ${librarySongRowsSortedForList.length}曲`
+                          : `${librarySongRowsSortedForList.length}曲`}
+                      </p>
+                    ) : null}
                   </div>
                   <div
                     className="flex flex-wrap items-center gap-x-2 gap-y-1"
@@ -3173,7 +3402,6 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                     aria-label="曲一覧の並べ替え"
                   >
                     <div className="flex items-center gap-1">
-                      <span className="text-[10px] text-gray-500">公開日</span>
                       <button
                         type="button"
                         onClick={() => setLibrarySongListSort('release_new')}
@@ -3335,36 +3563,15 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                       onFavoriteVideoToggle={onFavoriteVideoToggle}
                       favoriteTitle={selectedLibraryRow.song_title ?? selectedLibraryRow.title}
                       favoriteArtistName={selectedLibraryRow.main_artist}
+                      videoLoading={libraryVideoLoading}
+                      videoError={libraryVideoError}
+                      videos={librarySongVideos}
+                      videoChipKeyPrefix="landscape-variant-"
+                      onSelectVideo={(videoId) => {
+                        setLibrarySelectedVideoId(videoId);
+                        setLibraryCopyState('idle');
+                      }}
                     />
-                    <div className="mb-2">
-                      <p className="mb-1 text-[11px] text-gray-500">動画バージョン</p>
-                      {libraryVideoLoading ? (
-                        <p className="text-xs text-gray-500">読み込み中…</p>
-                      ) : libraryVideoError ? (
-                        <p className="text-xs text-amber-300">{libraryVideoError}</p>
-                      ) : librarySongVideos.length === 0 ? (
-                        <p className="text-xs text-gray-500">候補動画がありません。</p>
-                      ) : (
-                        <div className="flex flex-wrap gap-1.5">
-                          {librarySongVideos.map((v) => {
-                            const active = v.video_id === librarySelectedVideoId;
-                            return (
-                              <button
-                                key={`landscape-variant-${v.video_id}`}
-                                type="button"
-                                onClick={() => {
-                                  setLibrarySelectedVideoId(v.video_id);
-                                  setLibraryCopyState('idle');
-                                }}
-                                className={libraryChipBtnClass(active)}
-                              >
-                                {libraryVariantLabel(v.variant)}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
                     {librarySelectedVideoId ? (
                       <div className="aspect-video overflow-hidden rounded border border-gray-800 bg-black">
                         <iframe
@@ -3392,29 +3599,33 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                     >
                       この曲を選曲
                     </button>
-                    <button
-                      type="button"
-                      disabled={!selectedLibraryUrl}
-                      className={librarySecondaryBtnClass('px-2')}
-                      onClick={() => {
-                        void copyLibraryUrl();
-                      }}
-                    >
-                      URLをコピー
-                    </button>
-                    {!isGuest && onSystemMessage ? (
+                    <div className="grid grid-cols-2 gap-2">
                       <button
                         type="button"
-                        disabled={!selectedLibraryUrl || libraryMyListAddBusy}
-                        className={librarySecondaryBtnClass('px-2')}
-                        title="マイページのマイリストに追加（部屋の選曲とは別）"
+                        disabled={!selectedLibraryUrl}
+                        className={`${librarySecondaryBtnClass('px-2')}${
+                          !isGuest && onSystemMessage ? '' : ' col-span-2'
+                        }`}
                         onClick={() => {
-                          void addLibrarySelectionToMyList();
+                          void copyLibraryUrl();
                         }}
                       >
-                        {libraryMyListAddBusy ? '追加中…' : 'マイリスト追加'}
+                        URLをコピー
                       </button>
-                    ) : null}
+                      {!isGuest && onSystemMessage ? (
+                        <button
+                          type="button"
+                          disabled={!selectedLibraryUrl || libraryMyListAddBusy}
+                          className={librarySecondaryBtnClass('px-2')}
+                          title="マイページのマイリストに追加（部屋の選曲とは別）"
+                          onClick={() => {
+                            void addLibrarySelectionToMyList();
+                          }}
+                        >
+                          {libraryMyListAddBusy ? '追加中…' : 'マイリスト追加'}
+                        </button>
+                      ) : null}
+                    </div>
                     <button
                       type="button"
                       onClick={clearLibrarySongSelection}
@@ -3462,36 +3673,14 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                         onFavoriteVideoToggle={onFavoriteVideoToggle}
                         favoriteTitle={selectedLibraryRow.song_title ?? selectedLibraryRow.title}
                         favoriteArtistName={selectedLibraryRow.main_artist}
+                        videoLoading={libraryVideoLoading}
+                        videoError={libraryVideoError}
+                        videos={librarySongVideos}
+                        onSelectVideo={(videoId) => {
+                          setLibrarySelectedVideoId(videoId);
+                          setLibraryCopyState('idle');
+                        }}
                       />
-                      <div className="mb-2">
-                        <p className="mb-1 text-[11px] text-gray-500">動画バージョン</p>
-                        {libraryVideoLoading ? (
-                          <p className="text-xs text-gray-500">読み込み中…</p>
-                        ) : libraryVideoError ? (
-                          <p className="text-xs text-amber-300">{libraryVideoError}</p>
-                        ) : librarySongVideos.length === 0 ? (
-                          <p className="text-xs text-gray-500">候補動画がありません。</p>
-                        ) : (
-                          <div className="flex flex-wrap gap-1.5">
-                            {librarySongVideos.map((v) => {
-                              const active = v.video_id === librarySelectedVideoId;
-                              return (
-                                <button
-                                  key={v.video_id}
-                                  type="button"
-                                  onClick={() => {
-                                    setLibrarySelectedVideoId(v.video_id);
-                                    setLibraryCopyState('idle');
-                                  }}
-                                  className={libraryChipBtnClass(active)}
-                                >
-                                  {libraryVariantLabel(v.variant)}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
                       {librarySelectedVideoId ? (
                         <div className="aspect-video overflow-hidden rounded border border-gray-800 bg-black">
                           <iframe
@@ -3513,7 +3702,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                         <button
                           type="button"
                           disabled={!onVideoUrl || !selectedLibraryUrl}
-                          className={librarySelectSongBtnClass()}
+                          className={libraryDetailSelectSongBtnClass}
                           onClick={submitLibrarySongSelection}
                         >
                           この曲を選曲
@@ -3521,7 +3710,9 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                         <button
                           type="button"
                           disabled={!selectedLibraryUrl}
-                          className={librarySecondaryBtnClass()}
+                          className={`${librarySecondaryBtnClass()}${
+                            !isGuest && onSystemMessage ? '' : ' col-span-2'
+                          }`}
                           onClick={() => {
                             void copyLibraryUrl();
                           }}
@@ -3637,38 +3828,16 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                       onFavoriteVideoToggle={onFavoriteVideoToggle}
                       favoriteTitle={selectedLibraryRow.song_title ?? selectedLibraryRow.title}
                       favoriteArtistName={selectedLibraryRow.main_artist}
+                      videoLoading={libraryVideoLoading}
+                      videoError={libraryVideoError}
+                      videos={librarySongVideos}
+                      onSelectVideo={(videoId) => {
+                        setLibrarySelectedVideoId(videoId);
+                        setLibraryCopyState('idle');
+                      }}
                     />
-                    <div className="mb-2">
-                      <p className="mb-1 text-[11px] text-gray-500">動画バージョン</p>
-                      {libraryVideoLoading ? (
-                        <p className="text-xs text-gray-500">読み込み中…</p>
-                      ) : libraryVideoError ? (
-                        <p className="text-xs text-amber-300">{libraryVideoError}</p>
-                      ) : librarySongVideos.length === 0 ? (
-                        <p className="text-xs text-gray-500">候補動画がありません。</p>
-                      ) : (
-                        <div className="flex flex-wrap gap-1.5">
-                          {librarySongVideos.map((v) => {
-                            const active = v.video_id === librarySelectedVideoId;
-                            return (
-                              <button
-                                key={v.video_id}
-                                type="button"
-                                onClick={() => {
-                                  setLibrarySelectedVideoId(v.video_id);
-                                  setLibraryCopyState('idle');
-                                }}
-                                className={libraryChipBtnClass(active)}
-                              >
-                                {libraryVariantLabel(v.variant)}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
                     {librarySelectedVideoId ? (
-                      <div className="aspect-video overflow-hidden rounded border border-gray-800 bg-black">
+                      <div className="aspect-video max-h-36 overflow-hidden rounded border border-gray-800 bg-black">
                         <iframe
                           title="Library preview"
                           src={`https://www.youtube.com/embed/${encodeURIComponent(
@@ -3680,7 +3849,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                         />
                       </div>
                     ) : (
-                      <div className="flex aspect-video items-center justify-center rounded border border-gray-800 bg-black/50 text-xs text-gray-500">
+                      <div className="flex aspect-video max-h-36 items-center justify-center rounded border border-gray-800 bg-black/50 text-xs text-gray-500">
                         動画候補を選んでください
                       </div>
                     )}
@@ -3688,7 +3857,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                       <button
                         type="button"
                         disabled={!onVideoUrl || !selectedLibraryUrl}
-                        className={librarySelectSongBtnClass()}
+                        className={libraryDetailSelectSongBtnClass}
                         onClick={submitLibrarySongSelection}
                       >
                         この曲を選曲
@@ -3696,7 +3865,9 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                       <button
                         type="button"
                         disabled={!selectedLibraryUrl}
-                        className={librarySecondaryBtnClass()}
+                        className={`${librarySecondaryBtnClass()}${
+                          !isGuest && onSystemMessage ? '' : ' col-span-2'
+                        }`}
                         onClick={() => {
                           void copyLibraryUrl();
                         }}

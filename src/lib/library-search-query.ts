@@ -158,6 +158,15 @@ export function dedupeLibraryArtistDisplayNames(names: string[]): string[] {
   return [...byKey.values()].sort((a, b) => a.localeCompare(b, 'en', { sensitivity: 'base' }));
 }
 
+/** 検索結果のアーティスト一覧: 曲数の多い順、同数は名前順 */
+export function compareLibrarySearchArtistRowsByCountDesc(
+  a: { main_artist: string; count: number },
+  b: { main_artist: string; count: number },
+): number {
+  if (b.count !== a.count) return b.count - a.count;
+  return a.main_artist.localeCompare(b.main_artist, 'en', { sensitivity: 'base' });
+}
+
 export type LibraryArtistIndexMergeItem = {
   main_artist: string;
   count: number;

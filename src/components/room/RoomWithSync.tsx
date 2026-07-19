@@ -122,11 +122,14 @@ import {
   advanceMusic8PlaylistAutoplay,
   createMusic8PlaylistAutoplayState,
   formatMusic8PlaylistFinishedMessage,
+  formatMusic8PlaylistManualNextMessage,
+  formatMusic8PlaylistSkipUnplayableMessage,
   formatMusic8PlaylistStartMessage,
   formatMusic8PlaylistStoppedMessage,
   formatMusic8PlaylistTrackMessage,
   getMusic8PlaylistCurrentSong,
   isMusic8PlaylistAutoplayCurrentVideo,
+  isYoutubePlayerErrorWorthPlaylistSkip,
   type Music8PlaylistAutoplayState,
 } from '@/lib/music8-playlist-autoplay';
 import { buildLibraryArtistAutoplayLaunch } from '@/lib/library-artist-autoplay';
@@ -842,7 +845,15 @@ export default function RoomWithSync({
   } | null>(null);
   /** Music8 プレイリスト連続再生（予約キューとは別系統） */
   const music8PlaylistAutoplayRef = useRef<Music8PlaylistAutoplayState | null>(null);
+  const [playlistAutoplayUiActive, setPlaylistAutoplayUiActive] = useState(false);
+  const assignMusic8PlaylistAutoplay = useCallback((next: Music8PlaylistAutoplayState | null) => {
+    music8PlaylistAutoplayRef.current = next;
+    setPlaylistAutoplayUiActive(Boolean(next));
+  }, []);
   const advanceMusic8PlaylistOnEndedRef = useRef<() => boolean>(() => false);
+  /** 連続再生中の同一 video への onError 連打を抑止 */
+  const music8PlaylistSkipErrorVideoIdRef = useRef<string | null>(null);
+  const skipMusic8PlaylistOnPlayerErrorRef = useRef<(errorCode: number) => void>(() => {});
   type SongQuizAnswerRow = { clientId: string; displayName: string; pickedIndex: number };
   type SongQuizRoundMetaLocal = { correctIndex: number; choices: string[]; videoId: string };
   /** 三択クイズ: 締め切り後に正解者を発表するタイマー（quiz メッセージ id キー） */
@@ -3049,6 +3060,14 @@ export default function RoomWithSync({
       }
 
       // キューが無い場合は、同曲を再始動させず停止して次の選曲案内へ進む
+      // 連続再生中の通常スキップはキューごと終了
+      if (music8PlaylistAutoplayRef.current) {
+        const playlistState = music8PlaylistAutoplayRef.current;
+        assignMusic8PlaylistAutoplay(null);
+        if (imCoordinatorForSkip) {
+          addSystemMessage(formatMusic8PlaylistStoppedMessage(playlistState));
+        }
+      }
       try {
         playerRef.current?.pauseVideo();
       } catch {
@@ -3371,6 +3390,11 @@ export default function RoomWithSync({
     } as PlaybackMessage);
   }, [myClientId, safePublish, canUseOwnerPlaybackProxy]);
 
+  const skipPlaylistTrackManualRef = useRef<() => void>(() => {});
+  const handleSkipPlaylistTrack = useCallback(() => {
+    skipPlaylistTrackManualRef.current();
+  }, []);
+
   const handleRequestManageSongReservation = useCallback(() => {
     if (!myClientId) return;
     const entry = songReservationQueueRef.current.find((e) => e.publisherClientId === myClientId);
@@ -3621,6 +3645,10 @@ export default function RoomWithSync({
     },
     [safePublish]
   );
+
+  const handlePlayerError = useCallback((errorCode: number) => {
+    skipMusic8PlaylistOnPlayerErrorRef.current(errorCode);
+  }, []);
 
   const addAiMessage = useCallback(
     (
@@ -5137,6 +5165,8 @@ export default function RoomWithSync({
       })
         .then((r) => (r.ok ? r.json() : null))
         .then((data) => {
+          // 再生不可スキップ等で既に次曲へ進んでいる場合は紹介を出さない
+          if (videoIdRef.current !== vid) return;
           // 音楽以外のコンテンツと判定された場合は、注意メッセージのみ出して曲としては扱わない
           if (data?.nonMusic) {
             addSystemMessage(
@@ -5319,6 +5349,8 @@ export default function RoomWithSync({
           return r.json();
         })
         .then((pack) => {
+          // 再生不可スキップ等で既に次曲へ進んでいる場合は解説を出さない
+          if (videoIdRef.current !== vid) return null;
           if (pack && selectionAiMode === 'full' && typeof window !== 'undefined') {
             window.dispatchEvent(new Event(AI_TRIAL_STATUS_UPDATED_EVENT));
           }
@@ -6263,6 +6295,8 @@ export default function RoomWithSync({
       const sameVideoReplay = Boolean(previousVideoId && previousVideoId === id);
       const forceSongAi = options?.forceSongAi === true;
       jpDomesticSilenceVideoIdRef.current = null;
+      // setState 前に ref を更新し、進行中の announce / comment-pack が旧曲を投稿しないようにする
+      videoIdRef.current = id;
       setVideoId(id);
       currentTrackStartedAtMsRef.current = Date.now();
       const posterParticipantRows = participants.map((p) => ({
@@ -7345,7 +7379,7 @@ export default function RoomWithSync({
           addSystemMessage('再生できる曲がプレイリストにありませんでした。');
           return;
         }
-        music8PlaylistAutoplayRef.current = state;
+        assignMusic8PlaylistAutoplay(state);
         addSystemMessage(
           formatMusic8PlaylistStartMessage({
             title: state.title,
@@ -7444,7 +7478,7 @@ export default function RoomWithSync({
           addSystemMessage('再生できる曲がプレイリストにありませんでした。');
           return;
         }
-        music8PlaylistAutoplayRef.current = state;
+        assignMusic8PlaylistAutoplay(state);
         addSystemMessage(
           formatMusic8PlaylistStartMessage({
             title: state.title,
@@ -7520,7 +7554,7 @@ export default function RoomWithSync({
         addSystemMessage('再生できる曲がライブラリ一覧にありませんでした。');
         return;
       }
-      music8PlaylistAutoplayRef.current = launch.state;
+      assignMusic8PlaylistAutoplay(launch.state);
       addSystemMessage(launch.startMessage);
       const first = getMusic8PlaylistCurrentSong(launch.state);
       if (first) {
@@ -7551,14 +7585,14 @@ export default function RoomWithSync({
     if (!isMusic8PlaylistAutoplayCurrentVideo(ap, videoIdRef.current)) return false;
     const next = advanceMusic8PlaylistAutoplay(ap);
     if (!next) {
-      music8PlaylistAutoplayRef.current = null;
+      assignMusic8PlaylistAutoplay(null);
       addSystemMessage(formatMusic8PlaylistFinishedMessage(ap));
       return false;
     }
-    music8PlaylistAutoplayRef.current = next;
+    assignMusic8PlaylistAutoplay(next);
     const song = getMusic8PlaylistCurrentSong(next);
     if (!song) {
-      music8PlaylistAutoplayRef.current = null;
+      assignMusic8PlaylistAutoplay(null);
       addSystemMessage(formatMusic8PlaylistFinishedMessage(next));
       return false;
     }
@@ -7571,6 +7605,44 @@ export default function RoomWithSync({
       preserveReservationQueue: true,
     });
     return true;
+  };
+
+  skipMusic8PlaylistOnPlayerErrorRef.current = (errorCode: number) => {
+    if (applyingRemoteRef.current) return;
+    if (!isYoutubePlayerErrorWorthPlaylistSkip(errorCode)) return;
+    const ap = music8PlaylistAutoplayRef.current;
+    const vid = videoIdRef.current;
+    if (!ap || !vid) return;
+    if (!isMusic8PlaylistAutoplayCurrentVideo(ap, vid)) return;
+    if (music8PlaylistSkipErrorVideoIdRef.current === vid) return;
+    music8PlaylistSkipErrorVideoIdRef.current = vid;
+    // 進行中の自由コメントタイマーを止め、次曲へ進む前に旧曲の投稿を無効化する
+    if (freeCommentTimeoutsRef.current.length > 0) {
+      freeCommentTimeoutsRef.current.forEach((t) => clearTimeout(t));
+      freeCommentTimeoutsRef.current = [];
+    }
+    clearPendingSongQuizRoundState();
+    const cur = getMusic8PlaylistCurrentSong(ap);
+    addSystemMessage(formatMusic8PlaylistSkipUnplayableMessage(ap, cur));
+    advanceMusic8PlaylistOnEndedRef.current();
+  };
+
+  skipPlaylistTrackManualRef.current = () => {
+    const vid = videoIdRef.current;
+    const poster = lastChangeVideoPublisherRef.current;
+    if (!vid || !myClientId) return;
+    const ap = music8PlaylistAutoplayRef.current;
+    if (!ap || !isMusic8PlaylistAutoplayCurrentVideo(ap, vid)) return;
+    const isPoster = Boolean(poster && myClientId === poster);
+    const isOwnerSkip = canUseOwnerPlaybackProxy;
+    if (!isPoster && !isOwnerSkip) return;
+    if (freeCommentTimeoutsRef.current.length > 0) {
+      freeCommentTimeoutsRef.current.forEach((t) => clearTimeout(t));
+      freeCommentTimeoutsRef.current = [];
+    }
+    clearPendingSongQuizRoundState();
+    addSystemMessage(formatMusic8PlaylistManualNextMessage(ap));
+    advanceMusic8PlaylistOnEndedRef.current();
   };
 
   const handleVideoUrlFromChat = useCallback(
@@ -7589,7 +7661,7 @@ export default function RoomWithSync({
 
       if (music8PlaylistAutoplayRef.current) {
         const playlistState = music8PlaylistAutoplayRef.current;
-        music8PlaylistAutoplayRef.current = null;
+        assignMusic8PlaylistAutoplay(null);
         addSystemMessage(formatMusic8PlaylistStoppedMessage(playlistState));
       }
 
@@ -9114,6 +9186,8 @@ export default function RoomWithSync({
               ),
           )}
           onSkipCurrentTrack={handleSkipCurrentTrack}
+          playlistAutoplayActive={playlistAutoplayUiActive}
+          onSkipPlaylistTrack={handleSkipPlaylistTrack}
           onManageSongReservation={handleRequestManageSongReservation}
           onOwnerPickSelector={
             canUseOwnerPlaybackProxy ? () => setOwnerPickSelectorOpen(true) : undefined
@@ -9625,6 +9699,7 @@ export default function RoomWithSync({
               ref={playerRef}
               videoId={videoId}
               onStateChange={handlePlayerStateChange}
+              onError={handlePlayerError}
             />
             <div className="absolute left-2 top-2 z-20 sm:hidden">
               <span

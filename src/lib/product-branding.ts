@@ -331,21 +331,23 @@ export function librarySongRowMetaClass(): string {
 }
 
 /** ライブラリヘッダー検索ボタン */
-export function libraryHeaderSearchBtnClass(compact: boolean): string {
+export function libraryHeaderSearchBtnClass(compact: boolean, grow = false): string {
   const size = compact ? 'h-8 px-2.5' : 'h-9 px-3';
+  const flex = grow ? 'min-w-0 flex-1' : 'shrink-0';
   if (IS_MC_PRODUCT) {
-    return `mc-accent-primary inline-flex shrink-0 items-center justify-center rounded border text-xs disabled:opacity-50 ${size}`;
+    return `mc-accent-primary inline-flex ${flex} items-center justify-center rounded border text-xs disabled:opacity-50 ${size}`;
   }
-  return `inline-flex shrink-0 items-center justify-center rounded border border-lime-500/70 bg-lime-900/30 text-xs text-lime-100 hover:bg-lime-900/60 disabled:opacity-50 ${size}`;
+  return `inline-flex ${flex} items-center justify-center rounded border border-lime-500/70 bg-lime-900/30 text-xs text-lime-100 hover:bg-lime-900/60 disabled:opacity-50 ${size}`;
 }
 
 /** ライブラリヘッダー副ボタン（リセット・閉じる） */
-export function libraryHeaderSecondaryBtnClass(compact: boolean): string {
+export function libraryHeaderSecondaryBtnClass(compact: boolean, grow = false): string {
   const size = compact ? 'h-8 px-2.5' : 'h-9 px-3';
+  const flex = grow ? 'min-w-0 flex-1' : 'shrink-0';
   if (IS_MC_PRODUCT) {
-    return `inline-flex shrink-0 items-center justify-center rounded border border-gray-300 bg-gray-50 text-xs text-gray-800 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40 ${size}`;
+    return `inline-flex ${flex} items-center justify-center rounded border border-gray-300 bg-gray-50 text-xs text-gray-800 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40 ${size}`;
   }
-  return `inline-flex shrink-0 items-center justify-center rounded border border-lime-700/60 bg-gray-800 text-xs text-lime-100 hover:bg-gray-700 ${size}`;
+  return `inline-flex ${flex} items-center justify-center rounded border border-lime-700/60 bg-gray-800 text-xs text-lime-100 hover:bg-gray-700 ${size}`;
 }
 
 export function libraryPanelDividerClass(): string {
@@ -413,6 +415,20 @@ export function libraryListItemBtnClass(active: boolean, textSize = 'text-[10px]
     : `${base} border border-gray-700 bg-gray-900 text-gray-300 hover:bg-gray-800`;
 }
 
+/** ライブラリ — モバイル検索結果のアーティスト横スクロールチップ */
+export function libraryArtistChipBtnClass(active: boolean): string {
+  const base =
+    'inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded px-2.5 py-1.5 text-xs font-medium tabular-nums';
+  if (IS_MC_PRODUCT) {
+    return active
+      ? `${base} mc-accent-primary border`
+      : `${base} border border-gray-300 bg-gray-50 text-gray-700 hover:bg-gray-100`;
+  }
+  return active
+    ? `${base} bg-lime-700 text-white`
+    : `${base} border border-lime-700/45 bg-lime-950/70 text-lime-100 hover:bg-lime-900/70`;
+}
+
 /** ライブラリ — 曲一覧ソートチップ（小） */
 export function librarySortChipBtnClass(active: boolean): string {
   const base = 'rounded px-2 py-0.5 text-[10px] font-medium tabular-nums';
@@ -437,7 +453,7 @@ export function libraryMobileDetailPanelClass(): string {
 export function libraryMobileSongDetailShellClass(focusSplit: boolean): string {
   const focus =
     focusSplit
-      ? 'max-lg:flex-1 max-lg:min-h-0 max-lg:basis-1/2 max-lg:border-t max-lg:shadow-none'
+      ? 'max-lg:min-h-0 max-lg:max-h-[38vh] max-lg:flex-1 max-lg:basis-0 max-lg:border-t max-lg:shadow-none'
       : 'max-lg:hidden';
   if (IS_MC_PRODUCT) {
     return `flex min-h-0 flex-col border-t border-gray-200 bg-white lg:hidden ${focus}`;

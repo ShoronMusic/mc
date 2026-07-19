@@ -92,7 +92,7 @@ export const ADMIN_SECTIONS: AdminSection[] = [
     href: '/admin/monetization-simulation',
     title: '収支シミュレーション（案）',
     description:
-      'Vercel Pro 移行後の固定費ティア・料金候補・改訂シナリオA\'。お試し10曲は docs/00-ai-trial-and-billing-implementation.md',
+      'Vercel Pro 移行後の固定費ティア・料金候補・改訂シナリオA\'。お試し20曲は docs/00-ai-trial-and-billing-implementation.md',
     category: 'billing',
   },
   {

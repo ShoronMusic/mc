@@ -5,10 +5,13 @@ import assert from 'node:assert/strict';
 import {
   advanceMusic8PlaylistAutoplay,
   createMusic8PlaylistAutoplayState,
+  formatMusic8PlaylistManualNextMessage,
+  formatMusic8PlaylistSkipUnplayableMessage,
   formatMusic8PlaylistStartMessage,
   formatMusic8PlaylistTrackMessage,
   getMusic8PlaylistCurrentSong,
   isMusic8PlaylistAutoplayCurrentVideo,
+  isYoutubePlayerErrorWorthPlaylistSkip,
 } from '@/lib/music8-playlist-autoplay';
 
 function run() {
@@ -66,6 +69,16 @@ function run() {
     'YouTube「My playlist」1曲を連続再生します（プレイリスト順）',
   );
   assert.equal(formatMusic8PlaylistTrackMessage(ytState!), 'YouTube「My playlist」1/1曲目: Artist - Song');
+
+  const skipMsg = formatMusic8PlaylistSkipUnplayableMessage(state, state!.songs[0]!);
+  assert.match(skipMsg, /スキップ/);
+  assert.match(skipMsg, /X - A/);
+  assert.equal(
+    formatMusic8PlaylistManualNextMessage(state),
+    'Music8: この曲をスキップして次の曲へ進みます。',
+  );
+  assert.equal(isYoutubePlayerErrorWorthPlaylistSkip(100), true);
+  assert.equal(isYoutubePlayerErrorWorthPlaylistSkip(150), true);
 
   console.log('music8-playlist-autoplay unit tests: OK');
 }

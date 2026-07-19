@@ -109,3 +109,31 @@ export function formatMusic8PlaylistFinishedMessage(
   const sourceLabel = state?.sourceLabel?.trim() || 'Music8';
   return `${sourceLabel}プレイリストの連続再生が終わりました。`;
 }
+
+/** 再生不可（削除・埋め込み不可など）で次曲へ進むときの一行 */
+export function formatMusic8PlaylistSkipUnplayableMessage(
+  state: Music8PlaylistAutoplayState | null,
+  song?: Music8PlaylistAutoplaySong | null,
+): string {
+  const sourceLabel = state?.sourceLabel?.trim() || 'Music8';
+  const label = song
+    ? [song.artist, song.title].map((s) => s?.trim()).filter(Boolean).join(' - ')
+    : '';
+  if (label) {
+    return `${sourceLabel}: 再生できないためスキップしました（${label}）`;
+  }
+  return `${sourceLabel}: 再生できない動画をスキップし、次の曲へ進みます。`;
+}
+
+/** ユーザーが「次曲へ」を押したとき */
+export function formatMusic8PlaylistManualNextMessage(
+  state: Music8PlaylistAutoplayState | null,
+): string {
+  const sourceLabel = state?.sourceLabel?.trim() || 'Music8';
+  return `${sourceLabel}: この曲をスキップして次の曲へ進みます。`;
+}
+
+/** YouTube IFrame API onError の data。連続再生ではいずれも次曲スキップ対象。 */
+export function isYoutubePlayerErrorWorthPlaylistSkip(errorCode: number): boolean {
+  return Number.isFinite(errorCode);
+}

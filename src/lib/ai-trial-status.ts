@@ -1,8 +1,9 @@
-/** 登録ユーザー向け AI お試し 10 曲（`docs/00-ai-trial-and-billing-implementation.md`） */
+/** 登録ユーザー向け AI お試し（`docs/00-ai-trial-and-billing-implementation.md`） */
 
 import { formatAiCreditAmount } from '@/lib/ai-credits-config';
 
-export const AI_TRIAL_SONGS_GRANTED = 10;
+/** 初回付与: AI 付き選曲（1曲＝1消費。有料クレジットと同単位） */
+export const AI_TRIAL_SONGS_GRANTED = 20;
 export const AI_TRIAL_AT_QUESTIONS_GRANTED = 5;
 
 /** 消費後に部屋 UI が残数を再取得する */
@@ -128,10 +129,10 @@ export function formatAiTrialStatusPrimaryLine(status: AiTrialStatus): string {
     return 'サポータアカウント（AI 制限なし）';
   }
   if (status.phase === 'email_unconfirmed') {
-    return 'メール確認後に AI お試し 10 曲が使えます（今は選曲のみ）';
+    return `メール確認後に AI お試し ${AI_TRIAL_SONGS_GRANTED} 曲が使えます（今は選曲のみ）`;
   }
   if (status.phase === 'trial_exhausted') {
-    return 'AI お試し 10 曲 使い切り — 選曲・再生・チャットは無料のまま';
+    return `AI お試し ${AI_TRIAL_SONGS_GRANTED} 曲 使い切り — 選曲・再生・チャットは無料のまま`;
   }
   if (status.phase === 'credits_active') {
     return `AI クレジット 残 ${formatAiCreditAmount(status.creditsRemaining)}（1曲＝1・@1回＝0.5）`;
@@ -141,7 +142,7 @@ export function formatAiTrialStatusPrimaryLine(status: AiTrialStatus): string {
   return `${songs} · ${at}`;
 }
 
-/** チャットヘッダー用の短いラベル（例: AIお試し残 7/10） */
+/** チャットヘッダー用の短いラベル（例: AIお試し残 7/20） */
 export function formatAiTrialStatusHeaderLabel(status: AiTrialStatus): string {
   if (status.phase === 'developer_unlimited') return 'AI制限なし（開発者）';
   if (status.phase === 'supporter_unlimited') return 'AI制限なし（サポーター）';

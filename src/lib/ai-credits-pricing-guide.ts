@@ -10,6 +10,7 @@ import {
   AI_CREDIT_COST_PER_AT_QUESTION,
   AI_CREDIT_COST_PER_SONG,
 } from '@/lib/ai-credits-config';
+import { AI_TRIAL_AT_QUESTIONS_GRANTED, AI_TRIAL_SONGS_GRANTED } from '@/lib/ai-trial-status';
 
 export const AI_CREDITS_PRICING_PAGE_TITLE = 'AI利用料金・クレジット';
 
@@ -58,7 +59,7 @@ export const AI_CREDITS_TRIAL_ROWS = [
   { audience: 'ゲスト', detail: 'AI 不可。選曲・同時視聴・通常チャットのみ無料' },
   {
     audience: '無料登録ユーザー',
-    detail: '生涯目安：AI付き選曲 10 曲・@ 5 回（お試し枠。枯渇後はクレジット購入）',
+    detail: `生涯目安：AI付き選曲 ${AI_TRIAL_SONGS_GRANTED} 曲・@ ${AI_TRIAL_AT_QUESTIONS_GRANTED} 回（お試し枠。枯渇後はクレジット購入）`,
   },
 ] as const;
 

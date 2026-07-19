@@ -12,7 +12,6 @@ import { requiresEmailConfirmation } from '@/lib/supabase-email-auth';
 import { getChatAiClientIp } from '@/lib/chat-ai-rate-limit';
 import {
   ensureUserAiTrialGrant,
-  fetchUserAiTrialRow,
   rowToAiTrialStatus,
 } from '@/lib/user-ai-trial-server';
 import { loadComposedAiTrialStatus } from '@/lib/user-ai-credits-server';
@@ -52,29 +51,18 @@ export async function GET(request: Request) {
     }
 
     const clientIp = getChatAiClientIp(request);
-    const admin = createAdminClient();
-    const reader = admin ?? supabase;
 
-    let { row, error, missingTable } = await fetchUserAiTrialRow(reader, user.id);
-    if (missingTable) {
+    const grant = await ensureUserAiTrialGrant(user, clientIp);
+    if (grant.missingTable) {
       return NextResponse.json(buildPreviewAiTrialStatus());
     }
-    if (error) {
-      console.error('[api/user/ai-trial GET]', error);
-      return NextResponse.json({ error: 'Failed to load.' }, { status: 500 });
+    if (grant.error || !grant.row) {
+      console.error('[api/user/ai-trial GET grant]', grant.error);
+      return NextResponse.json({ error: 'Failed to grant trial.' }, { status: 500 });
     }
 
-    if (!row) {
-      const grant = await ensureUserAiTrialGrant(user, clientIp);
-      if (grant.missingTable) {
-        return NextResponse.json(buildPreviewAiTrialStatus());
-      }
-      if (grant.error || !grant.row) {
-        console.error('[api/user/ai-trial GET grant]', grant.error);
-        return NextResponse.json({ error: 'Failed to grant trial.' }, { status: 500 });
-      }
-      row = grant.row;
-    }
+    const row = grant.row;
+    const admin = createAdminClient();
 
     if (!admin) {
       return NextResponse.json(rowToAiTrialStatus(row));

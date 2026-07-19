@@ -2,6 +2,7 @@
 
 import type { AiTrialStatus } from '@/lib/ai-trial-status';
 import {
+  AI_TRIAL_SONGS_GRANTED,
   formatAiTrialStatusHeaderLabel,
   formatAiTrialStatusPrimaryLine,
   formatAiTrialStatusSecondaryLine,
@@ -88,7 +89,8 @@ export function AiTrialStatusBadge({
       {secondary ? <p className="mt-1 text-[11px] opacity-90">{secondary}</p> : null}
       {variant === 'mypage' && status.phase === 'preview' ? (
         <p className="mt-1.5 text-[11px] text-gray-400">
-          登録ユーザー（メール確認済み）向けの生涯 10 曲お試しです。1 回の AI 付き選曲で 1 曲消費する予定です。
+          登録ユーザー（メール確認済み）向けの生涯 {AI_TRIAL_SONGS_GRANTED}{' '}
+          曲お試しです。1 回の AI 付き選曲で 1 曲消費する予定です。
         </p>
       ) : null}
     </div>

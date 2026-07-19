@@ -1,22 +1,24 @@
-# AI お試し 10 曲（`user_ai_trial`）
+# AI お試し 20 曲（`user_ai_trial`）
 
-登録ユーザー向けの **生涯 10 曲** AI 付き選曲お試しと **@ 質問 5 回** 枠を保持します。  
-仕様: `docs/00-ai-trial-and-billing-implementation.md` · Phase B。
+登録ユーザー向けの **生涯 20 曲** AI 付き選曲お試しと **@ 質問 5 回** 枠を保持します。  
+仕様: `docs/00-ai-trial-and-billing-implementation.md` · Phase B。  
+付与曲数のアプリ正本: `AI_TRIAL_SONGS_GRANTED`（`src/lib/ai-trial-status.ts`）＝ **20**。
 
 ## 作成手順
 
 1. Supabase ダッシュボードで **SQL Editor** を開く。
 2. 次の SQL を実行する（**再実行しても安全** — 既存テーブル・ポリシーはスキップ）。
-3. アプリ側で `AI_TRIAL_ENFORCEMENT_ENABLED=1` を設定すると消費・API ガードが有効になります（未設定時は preview のまま）。
+3. 既に `default 10` で作済みの場合は、末尾の **ALTER DEFAULT** も実行（新規行の DB 既定用。アプリ INSERT は定数 20 を使う）。
+4. アプリ側で `AI_TRIAL_ENFORCEMENT_ENABLED=1` を設定すると消費・API ガードが有効になります（未設定時は preview のまま）。
 
-> **ポリシーだけ `already exists` で止まった場合** — テーブルと RLS は**すでに作成済み**です。エラーは無視して 3 へ進んでください。
+> **ポリシーだけ `already exists` で止まった場合** — テーブルと RLS は**すでに作成済み**です。エラーは無視して 4 へ進んでください。
 
 ```sql
--- 1 ユーザー 1 行: AI お試し 10 曲 + @ 5 回
+-- 1 ユーザー 1 行: AI お試し 20 曲 + @ 5 回
 create table if not exists public.user_ai_trial (
   user_id uuid primary key references auth.users (id) on delete cascade,
-  songs_granted int not null default 10 check (songs_granted >= 0),
-  songs_remaining int not null default 10 check (songs_remaining >= 0),
+  songs_granted int not null default 20 check (songs_granted >= 0),
+  songs_remaining int not null default 20 check (songs_remaining >= 0),
   at_questions_granted int not null default 5 check (at_questions_granted >= 0),
   at_questions_remaining int not null default 5 check (at_questions_remaining >= 0),
   first_ip text,
@@ -37,6 +39,11 @@ create policy "Users can select own ai trial"
   using (auth.uid() = user_id);
 
 -- INSERT / UPDATE / decrement は service_role 経由（GET 付与・消費 API）
+
+-- 既存テーブルの列既定を 20 に揃える（未実行なら実行）
+alter table public.user_ai_trial
+  alter column songs_granted set default 20,
+  alter column songs_remaining set default 20;
 ```
 
 ## カラム説明
@@ -44,7 +51,7 @@ create policy "Users can select own ai trial"
 | 列 | 型 | 説明 |
 |----|-----|------|
 | user_id | uuid | auth.users（PK） |
-| songs_granted | int | 付与曲数（既定 10） |
+| songs_granted | int | 付与曲数（既定 **20**） |
 | songs_remaining | int | 残曲数 |
 | at_questions_granted | int | 付与 @ 回数（既定 5） |
 | at_questions_remaining | int | @ 残 |
@@ -56,16 +63,30 @@ create policy "Users can select own ai trial"
 
 ## 付与タイミング
 
-- **メール確認済み**の登録ユーザーが `GET /api/user/ai-trial` を初めて呼んだとき、行がなければ **10 曲 + @ 5 回** を service_role で INSERT。
+- **メール確認済み**の登録ユーザーが `GET /api/user/ai-trial` を初めて呼んだとき、行がなければ **20 曲 + @ 5 回** を service_role で INSERT。
 - Google OAuth 等、確認済みで入ったユーザーは初回 GET で即付与。
-- **既存ユーザー**も初回 GET 時に同様（一括バッチは別途任意）。
+- **既存で `songs_granted < 20` の行**は、次回 `ensureUserAiTrialGrant`（GET / 選曲ガード）時に **差分を `songs_remaining` に加算**して 20 に揃える（使用済み曲数は維持）。
+
+### 一括更新（任意・SQL Editor）
+
+アプリ側の自動補正と同等。本番・ローカルで一度実行してよい。
+
+```sql
+-- 付与が 20 未満の既存行を 20 に揃える（残数 += 差分）
+update public.user_ai_trial
+set
+  songs_remaining = songs_remaining + (20 - songs_granted),
+  songs_granted = 20,
+  updated_at = now()
+where songs_granted < 20;
+```
 
 ## 消費
 
 | kind | タイミング | 備考 |
 |------|------------|------|
 | `song_full` | `POST /api/ai/comment-pack` · `packPhase=base` · `aiMode=full` | 1 選曲 1 回のみ |
-| `at_question` | `POST /api/ai/chat` · AI メンション時 | 10 曲枠とは別 |
+| `at_question` | `POST /api/ai/chat` · AI メンション時 | 選曲枠とは別 |
 
 監査ログ `user_ai_trial_consumption_log` は消費成功時に service_role で INSERT（テーブル未作成時はアプリは継続、サーバーログのみ）。
 
