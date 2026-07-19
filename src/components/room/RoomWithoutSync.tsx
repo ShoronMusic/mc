@@ -118,6 +118,7 @@ import { scheduleNextSongRecommendAfterCommentary } from '@/lib/schedule-next-so
 import { scheduleThemePlaylistRoomBlurbAfterPack } from '@/lib/schedule-theme-playlist-room-blurb';
 import type { ChatMessage, SystemMessageOptions } from '@/types/chat';
 import { useIsLgViewport } from '@/hooks/useLgViewport';
+import { useIsMobileLandscapeViewport } from '@/hooks/useMobileLandscapeViewport';
 import { mcUiFontSizeDataAttr, useMcUiFontSize } from '@/hooks/useMcUiFontSize';
 import { useMcUiAccentTheme } from '@/hooks/useMcUiAccentTheme';
 import { useRoomChatLogPersistence } from '@/hooks/useRoomChatLogPersistence';
@@ -387,6 +388,7 @@ export default function RoomWithoutSync({
 
   const [chatSummary, setChatSummary] = useState<RoomSessionChatSummaryDisplay | null>(null);
   const isLg = useIsLgViewport();
+  const isMobileLandscape = useIsMobileLandscapeViewport();
   const [mcUiFontSize] = useMcUiFontSize();
   useMcUiAccentTheme();
   const [userTextColor, setUserTextColor] = useState(defaultChatTextColor);
@@ -3107,13 +3109,23 @@ export default function RoomWithoutSync({
         }
         playbackHistoryModalOpen={playbackHistoryModalOpen}
         onPlaybackHistoryModalClose={() => setPlaybackHistoryModalOpen(false)}
+        mobileBelowChat={
+          !isLg && !isMobileLandscape ? (
+            <>
+              <AiUsageBillingNotice isGuest={isGuest} />
+              {chatInputNode}
+            </>
+          ) : undefined
+        }
       />
       </div>
 
+      {isLg || isMobileLandscape ? (
       <section className="mt-2 shrink-0 space-y-2">
         <AiUsageBillingNotice isGuest={isGuest} />
         {chatInputNode}
       </section>
+      ) : null}
     </main>
   );
 }

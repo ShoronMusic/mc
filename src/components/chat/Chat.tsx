@@ -903,9 +903,15 @@ export default function Chat({
   const visibleMessages = messages.filter((m) => !isDeferredNextSongRecommendMessage(m));
 
   useEffect(() => {
+    const bottom = bottomRef.current;
+    if (!bottom) return;
+    const below = bottom.closest('.mc-room-mobile-below') as HTMLElement | null;
+    if (below && below.classList.contains('mc-room-scroll-pane')) {
+      below.scrollTop = below.scrollHeight;
+      return;
+    }
     const pane = scrollPaneRef.current;
-    if (!pane) return;
-    pane.scrollTop = pane.scrollHeight;
+    if (pane) pane.scrollTop = pane.scrollHeight;
   }, [messages.length]);
 
   useEffect(() => {

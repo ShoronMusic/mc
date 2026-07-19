@@ -162,7 +162,7 @@ html.mc-prevent-pull-refresh .mc-room-viewport {
 
 .mc-room-mobile-player {
   min-width: 0;
-  /* 縦向き: グリッド上段に置きつつ、下のチャットが重なっても透けないよう sticky */
+  /* 縦向き: 上段に置き、下の一体スクロールが重なっても透けないよう sticky */
   position: sticky;
   top: 0;
   z-index: 20;
@@ -170,20 +170,62 @@ html.mc-prevent-pull-refresh .mc-room-viewport {
   background: var(--mc-bg-page, #030712);
 }
 
+/* プレイヤー下（チャット＋発言欄）。縦向きはここが唯一の縦スクロール面 */
+.mc-room-mobile-below {
+  display: flex;
+  min-height: 0;
+  min-width: 0;
+  flex-direction: column;
+  overflow: hidden;
+}
+
 .mc-room-mobile-chat {
   display: flex;
   min-height: 0;
   min-width: 0;
+  flex: 1 1 0%;
   flex-direction: column;
   overflow: hidden;
   border-top: 1px solid var(--mc-border, rgb(31 41 55));
   padding-top: 0.25rem;
 }
 
-/* Chat ルートが flex 高さを受け取れるようにする */
+/* Chat ルートが flex 高さを受け取れるようにする（横向き・PC 向け） */
 .mc-room-mobile-chat > * {
   min-height: 0;
   height: 100%;
+}
+
+/* スマホ縦: プレイヤー下を一体スクロール。チャットは中身の高さ分だけ伸びる */
+@media (max-width: 1023px) and (orientation: portrait) {
+  .mc-room-mobile-below.mc-room-scroll-pane {
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .mc-room-mobile-chat {
+    flex: 0 0 auto;
+    overflow: visible;
+    height: auto;
+  }
+
+  .mc-room-mobile-chat > * {
+    height: auto !important;
+    flex: none !important;
+    min-height: 0;
+  }
+
+  .mc-room-mobile-chat .mc-room-scroll-pane {
+    overflow: visible !important;
+    flex: none !important;
+    max-height: none !important;
+  }
+
+  .mc-room-mobile-composer {
+    flex: 0 0 auto;
+  }
 }
 
 @media (max-width: 1023px) and (orientation: landscape) and (hover: none) and (pointer: coarse) {
@@ -200,13 +242,20 @@ html.mc-prevent-pull-refresh .mc-room-viewport {
     flex: none;
   }
 
-  .mc-room-mobile-chat {
+  .mc-room-mobile-below {
     grid-column: 1;
     grid-row: 1;
+    min-height: min(70vh, 28rem);
+    overflow: hidden;
+  }
+
+  .mc-room-mobile-chat {
+    flex: 1 1 0%;
     border-top: none;
     padding-top: 0;
     border-right: 1px solid var(--mc-border, rgb(31 41 55));
     padding-right: 0.25rem;
+    overflow: hidden;
   }
 
   .mc-room-mobile-player {

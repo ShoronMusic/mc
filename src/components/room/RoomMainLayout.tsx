@@ -2,16 +2,17 @@
 
 /**
  * 部屋中央エリア:
- * - モバイル: YouTube は常時表示。視聴履歴はモーダル（ヘッダー時計ボタン／視聴履歴タブ）。
- * - PC: 通常は右下パネル。モーダル表示中はパネルにプレースホルダー（視聴履歴タブ・ヘッダー時計で拡大）。
- * - PC: ResizableSection（左チャット / 右は上下リサイズ）。
+ * - モバイル縦: 上プレイヤー固定相当、下はチャット＋発言欄の一体スクロール。
+ * - モバイル横: 左チャット / 右プレイヤー（発言欄は親の下部）。
+ * - PC: ResizableSection。視聴履歴はモーダルまたは右下パネル。
  *
  * モバイル/PC で同一 {rightTop} を同時マウントしない（YouTube 二重化防止）— useIsLgViewport で排他レンダー。
  * モバイル縦横は CSS のみでレイアウト切替（向き変更でプレイヤーを再マウントしない）。
  */
 
-import { useCallback } from 'react';
+import { useCallback, type ReactNode } from 'react';
 import { useIsLgViewport } from '@/hooks/useLgViewport';
+import { useIsMobileLandscapeViewport } from '@/hooks/useMobileLandscapeViewport';
 import ResizableSection from '@/components/room/ResizableSection';
 
 interface RoomMainLayoutProps {
@@ -23,6 +24,11 @@ interface RoomMainLayoutProps {
   /** モバイル: 視聴履歴モーダル表示（UserBar のボタンから親が true にする） */
   playbackHistoryModalOpen?: boolean;
   onPlaybackHistoryModalClose?: () => void;
+  /**
+   * モバイル縦向きのみ: プレイヤー下の一体スクロール内に置く発言欄など。
+   * PC・横向きでは親側で下部固定表示する。
+   */
+  mobileBelowChat?: ReactNode;
 }
 
 export default function RoomMainLayout({
@@ -32,10 +38,13 @@ export default function RoomMainLayout({
   desktopSwapColumns = false,
   playbackHistoryModalOpen = false,
   onPlaybackHistoryModalClose,
+  mobileBelowChat,
 }: RoomMainLayoutProps) {
   const isLg = useIsLgViewport();
+  const isMobileLandscape = useIsMobileLandscapeViewport();
   const showHistoryInline = isLg && !playbackHistoryModalOpen;
   const showHistoryModal = playbackHistoryModalOpen;
+  const unifyBelowPlayerScroll = !isLg && !isMobileLandscape;
 
   const closeHistoryModal = useCallback(() => {
     onPlaybackHistoryModalClose?.();
@@ -102,7 +111,18 @@ export default function RoomMainLayout({
         <div className="mc-room-mobile-shell">
           <div className="mc-room-mobile-grid">
             <div className="mc-room-mobile-player">{rightTop}</div>
-            <div className="mc-room-mobile-chat">{left}</div>
+            <div
+              className={
+                unifyBelowPlayerScroll
+                  ? 'mc-room-mobile-below mc-room-scroll-pane'
+                  : 'mc-room-mobile-below'
+              }
+            >
+              <div className="mc-room-mobile-chat">{left}</div>
+              {unifyBelowPlayerScroll && mobileBelowChat ? (
+                <div className="mc-room-mobile-composer mt-2 space-y-2 pb-1">{mobileBelowChat}</div>
+              ) : null}
+            </div>
           </div>
         </div>
       )}

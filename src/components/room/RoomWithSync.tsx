@@ -262,6 +262,7 @@ import {
   favoriteHeartActiveTextClass,
 } from '@/lib/favorite-heart-ui';
 import { useIsLgViewport } from '@/hooks/useLgViewport';
+import { useIsMobileLandscapeViewport } from '@/hooks/useMobileLandscapeViewport';
 import { useRoomChatLogPersistence } from '@/hooks/useRoomChatLogPersistence';
 import { useRoomAccessLogReport } from '@/hooks/useRoomAccessLogReport';
 import { usePreventRoomPullToRefresh } from '@/hooks/usePreventRoomPullToRefresh';
@@ -681,6 +682,7 @@ export default function RoomWithSync({
   }, [isGuest]);
   const [chatSummary, setChatSummary] = useState<RoomSessionChatSummaryDisplay | null>(null);
   const isLg = useIsLgViewport();
+  const isMobileLandscape = useIsMobileLandscapeViewport();
   const [mcUiFontSize] = useMcUiFontSize();
   useMcUiAccentTheme();
   const [userTextColor, setUserTextColor] = useState(() => {
@@ -9830,13 +9832,23 @@ export default function RoomWithSync({
         }
         playbackHistoryModalOpen={playbackHistoryModalOpen}
         onPlaybackHistoryModalClose={() => setPlaybackHistoryModalOpen(false)}
+        mobileBelowChat={
+          !isLg && !isMobileLandscape ? (
+            <>
+              <AiUsageBillingNotice isGuest={isGuest} />
+              {chatInputNode}
+            </>
+          ) : undefined
+        }
       />
       </div>
 
+      {isLg || isMobileLandscape ? (
       <section className="mt-2 shrink-0 space-y-2">
         <AiUsageBillingNotice isGuest={isGuest} />
         {chatInputNode}
       </section>
+      ) : null}
 
       {candidateOpen && isYoutubeKeywordSearchEnabled() && (
         <div
