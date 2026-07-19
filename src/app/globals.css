@@ -99,6 +99,17 @@ html.mc-prevent-pull-refresh body {
   min-height: 100svh;
 }
 
+/* スマホ縦向き: ビューポート高に収め、チャット内側スクロールを成立させる */
+@media (max-width: 1023px) and (orientation: portrait) {
+  .mc-room-viewport {
+    height: 100vh;
+    height: 100dvh;
+    max-height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+  }
+}
+
 /* PC: 視聴履歴をパネル内スクロールに収め、ページ全体が縦に伸びないようにする */
 @media (min-width: 1024px) {
   .mc-room-viewport {
@@ -151,6 +162,12 @@ html.mc-prevent-pull-refresh .mc-room-viewport {
 
 .mc-room-mobile-player {
   min-width: 0;
+  /* 縦向き: グリッド上段に置きつつ、下のチャットが重なっても透けないよう sticky */
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  align-self: start;
+  background: var(--mc-bg-page, #030712);
 }
 
 .mc-room-mobile-chat {
@@ -161,6 +178,12 @@ html.mc-prevent-pull-refresh .mc-room-viewport {
   overflow: hidden;
   border-top: 1px solid var(--mc-border, rgb(31 41 55));
   padding-top: 0.25rem;
+}
+
+/* Chat ルートが flex 高さを受け取れるようにする */
+.mc-room-mobile-chat > * {
+  min-height: 0;
+  height: 100%;
 }
 
 @media (max-width: 1023px) and (orientation: landscape) and (hover: none) and (pointer: coarse) {

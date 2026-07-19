@@ -867,6 +867,7 @@ export default function Chat({
   );
 
   const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollPaneRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!nextRecPreview?.videoId) {
@@ -902,7 +903,9 @@ export default function Chat({
   const visibleMessages = messages.filter((m) => !isDeferredNextSongRecommendMessage(m));
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const pane = scrollPaneRef.current;
+    if (!pane) return;
+    pane.scrollTop = pane.scrollHeight;
   }, [messages.length]);
 
   useEffect(() => {
@@ -1349,10 +1352,10 @@ export default function Chat({
   ] as const;
 
   return (
-    <div className={roomFrameBlockClass('flex flex-1 flex-col')}>
+    <div className={roomFrameBlockClass('flex min-h-0 flex-1 flex-col')}>
       <div
         className={roomFrameInnerHeaderClass(
-          'flex flex-nowrap items-center gap-x-2 gap-y-0 max-lg:py-1.5 lg:flex-wrap lg:items-center lg:gap-x-3 lg:gap-y-1.5',
+          'flex shrink-0 flex-nowrap items-center gap-x-2 gap-y-0 max-lg:py-1.5 lg:flex-wrap lg:items-center lg:gap-x-3 lg:gap-y-1.5',
         )}
       >
         {onChatLogClick ? (
@@ -1569,7 +1572,7 @@ export default function Chat({
           </span>
         </div>
       ) : null}
-      <div className="mc-room-scroll-pane flex-1 overflow-y-auto p-2">
+      <div ref={scrollPaneRef} className="mc-room-scroll-pane min-h-0 flex-1 overflow-y-auto p-2">
         {messages.length === 0 ? (
           <p className="py-4 text-center text-sm text-gray-500">
             メッセージがまだありません
