@@ -26,28 +26,32 @@ type YtNamespace = {
   ) => YtPlayer;
 };
 
-declare global {
-  interface Window {
-    YT?: YtNamespace;
-    onYouTubeIframeAPIReady?: () => void;
-  }
+/** YouTubePlayer.tsx の global Window.YT と修飾子衝突しないよう、ここでは局所型のみ使う */
+type YtApiWindow = Window & {
+  YT?: YtNamespace;
+  onYouTubeIframeAPIReady?: () => void;
+};
+
+function ytWindow(): YtApiWindow {
+  return window as unknown as YtApiWindow;
 }
 
 let youtubeApiPromise: Promise<void> | null = null;
 
 function loadYoutubeIframeApi(): Promise<void> {
   if (typeof window === 'undefined') return Promise.resolve();
-  if (window.YT?.Player) return Promise.resolve();
+  const w = ytWindow();
+  if (w.YT?.Player) return Promise.resolve();
   if (youtubeApiPromise) return youtubeApiPromise;
 
   youtubeApiPromise = new Promise<void>((resolve) => {
-    if (window.YT?.Player) {
+    if (w.YT?.Player) {
       resolve();
       return;
     }
 
-    const prev = window.onYouTubeIframeAPIReady;
-    window.onYouTubeIframeAPIReady = () => {
+    const prev = w.onYouTubeIframeAPIReady;
+    w.onYouTubeIframeAPIReady = () => {
       try {
         prev?.();
       } finally {
@@ -98,7 +102,8 @@ export function AdminYoutubePlayerWithVolume({
     void (async () => {
       try {
         await loadYoutubeIframeApi();
-        if (cancelled || !window.YT?.Player) return;
+        const w = ytWindow();
+        if (cancelled || !w.YT?.Player) return;
 
         if (playerRef.current) {
           try {
@@ -112,7 +117,7 @@ export function AdminYoutubePlayerWithVolume({
         const el = document.getElementById(containerId);
         if (!el) return;
 
-        playerRef.current = new window.YT.Player(containerId, {
+        playerRef.current = new w.YT.Player(containerId, {
           videoId,
           width: '100%',
           height: '100%',
@@ -124,7 +129,7 @@ export function AdminYoutubePlayerWithVolume({
             enablejsapi: 1,
           },
           events: {
-            onReady: (event) => {
+            onReady: (event: { target: YtPlayer }) => {
               if (cancelled) return;
               try {
                 event.target.setVolume(volume);
