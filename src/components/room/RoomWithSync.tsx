@@ -2999,69 +2999,73 @@ export default function RoomWithSync({
         addSystemMessage(`${posterName}さんの曲がスキップされました`);
       }
 
-      // キューが残っているなら、即座に待機中の曲へ切り替える
-      const pv = pendingQueuedVideoIdRef.current;
-      const pp = pendingQueuedPublisherRef.current;
-      if (pv && pv !== targetVid) {
-        // 次曲への確定遷移はスキップ操作を送信したクライアントだけが行う。
-        // 全員が applyImmediateChangeVideo を実行すると、曲紹介生成が重複する。
-        if (!myClientId || !msgClientId || myClientId !== msgClientId) {
-          return;
-        }
-        const qSkip = songReservationQueueRef.current;
-        let queuedAiMode: AiSelectionMode = 'none';
-        let queueEntry: SongReservationQueueEntry | undefined;
-        if (
-          qSkip.length > 0 &&
-          qSkip[0].videoId === pv &&
-          qSkip[0].publisherClientId === (pp || '')
-        ) {
-          queueEntry = qSkip[0];
-          queuedAiMode = qSkip[0].aiMode;
-          qSkip.shift();
-          syncSongReservationQueueHead();
-        } else if (qSkip.length > 0) {
-          const idx = qSkip.findIndex(
-            (e) => e.videoId === pv && e.publisherClientId === (pp || ''),
-          );
-          if (idx >= 0) {
-            queueEntry = qSkip[idx];
-            queuedAiMode = qSkip[idx].aiMode;
-            qSkip.splice(idx, 1);
-            syncSongReservationQueueHead();
+      // キューが残っているなら、ターン順で次に適用すべき予約へ切り替える。
+      // pendingQueued* は直前の投稿者基準で古くなることがあるため、スキップ時は都度 resolve する。
+      const qSkip = songReservationQueueRef.current;
+      if (qSkip.length > 0) {
+        const skipDecision = resolveSongReservationQueueApply({
+          currentTurnClientId: currentTurnClientIdRef.current,
+          participatingOrder: participatingOrderRef.current,
+          presentClientIds: presentClientIdsRef.current,
+          queue: qSkip,
+          participantIdentities: getQueueParticipantIdentities(),
+          lastSongPosterClientId: lastChangeVideoPublisherRef.current,
+        });
+        if (skipDecision.kind === 'apply') {
+          // 次曲への確定遷移はスキップ操作を送信したクライアントだけが行う。
+          // 全員が applyImmediateChangeVideo を実行すると、曲紹介生成が重複する。
+          if (!myClientId || !msgClientId || myClientId !== msgClientId) {
+            return;
+          }
+          const queueEntry = qSkip[skipDecision.queueIndex];
+          if (!queueEntry?.videoId || queueEntry.videoId === targetVid) {
+            // fall through to stop/prompt
+          } else {
+            const pv = queueEntry.videoId;
+            const pp = resolveActivePublisherClientId(
+              queueEntry.publisherClientId,
+              queueEntry.publisherAuthUserId,
+              participantsRef.current.map((p) => ({
+                clientId: p.clientId,
+                authUserId: (p as { authUserId?: string }).authUserId,
+              })),
+            );
+            const queuedAiMode = queueEntry.aiMode;
+            qSkip.splice(skipDecision.queueIndex, 1);
+            if (playbackQueueFallbackTimerRef.current) {
+              clearTimeout(playbackQueueFallbackTimerRef.current);
+              playbackQueueFallbackTimerRef.current = null;
+            }
+            applyingRemoteRef.current = true;
+            try {
+              roomSyncLog('queue:apply', {
+                roomId,
+                videoId: pv,
+                publisherClientId: pp,
+                displayNameHint: queueEntry.publisherDisplayName,
+                aiMode: queuedAiMode,
+                myClientId,
+                coordinationClientId: coordinationRef.current,
+                trigger: 'skipToEnd',
+              });
+              applyImmediateChangeVideo(pv, pp || myClientId, {
+                preserveReservationQueue: true,
+                aiMode: queuedAiMode,
+                publisherDisplayNameHint: queueEntry.publisherDisplayName,
+                publisherAuthUserIdHint: queueEntry.publisherAuthUserId,
+              });
+            } finally {
+              setTimeout(() => {
+                applyingRemoteRef.current = false;
+              }, 300);
+            }
+            return;
           }
         }
-        if (playbackQueueFallbackTimerRef.current) {
-          clearTimeout(playbackQueueFallbackTimerRef.current);
-          playbackQueueFallbackTimerRef.current = null;
-        }
-        applyingRemoteRef.current = true;
-        try {
-          roomSyncLog('queue:apply', {
-            roomId,
-            videoId: pv,
-            publisherClientId: pp,
-            displayNameHint: queueEntry?.publisherDisplayName,
-            aiMode: queuedAiMode,
-            myClientId,
-            coordinationClientId: coordinationRef.current,
-            trigger: 'skipToEnd',
-          });
-          applyImmediateChangeVideo(pv, pp || myClientId, {
-            preserveReservationQueue: true,
-            aiMode: queuedAiMode,
-            publisherDisplayNameHint: queueEntry?.publisherDisplayName,
-            publisherAuthUserIdHint: queueEntry?.publisherAuthUserId,
-          });
-        } finally {
-          setTimeout(() => {
-            applyingRemoteRef.current = false;
-          }, 300);
-        }
-        return;
+        // prompt / idle: 下の停止＋選曲案内へ（予約はキューに残す）
       }
 
-      // キューが無い場合は、同曲を再始動させず停止して次の選曲案内へ進む
+      // キューが無い／いま適用できる予約が無い場合は、同曲を再始動させず停止して次の選曲案内へ進む
       // 連続再生中の通常スキップはキューごと終了
       if (music8PlaylistAutoplayRef.current) {
         const playlistState = music8PlaylistAutoplayRef.current;
@@ -3166,6 +3170,9 @@ export default function RoomWithSync({
               ? ''
               : resolveNextPresentTurnRef.current(pubId);
         setCurrentTurnClientId(nextId);
+        currentTurnClientIdRef.current = nextId;
+        // 投稿者更新後に再同期（スナップショット適用時点の旧投稿者基準の pending を捨てる）
+        syncSongReservationQueueHead();
         playerRef.current?.loadVideoById(data.videoId);
         const remoteAiMode = parseAiSelectionMode(data.aiMode) ?? 'none';
         lastSelectionAiModeRef.current = remoteAiMode;
@@ -6353,6 +6360,9 @@ export default function RoomWithSync({
       playerRef.current?.loadVideoById(id);
       scheduleAutoPlayAfterChangeVideo();
       advanceTurnAfterPost(resolvedPosterClientId, nextTurnId);
+      // 投稿者・ターン更新後にキュー頭を再計算（スキップ連打で予約が捨てられるのを防ぐ）
+      currentTurnClientIdRef.current = nextTurnId;
+      syncSongReservationQueueHead();
       fetchAnnounceAndPublish(
         id,
         (options?.skipAnnounce || isDevMinimalSongAi() || (sameVideoReplay && !forceSongAi))
@@ -7724,10 +7734,37 @@ export default function RoomWithSync({
         pendingThemePlaylistBlurbRef.current = null;
         safePublish('queueSong', buildQueueSongPlaybackMessage(id, myClientId, aiMode));
         if (fromRecommend) {
+          const optimisticQueue = [...songReservationQueueRef.current];
+          if (
+            myClientId &&
+            !optimisticQueue.some((e) => e.publisherClientId === myClientId)
+          ) {
+            optimisticQueue.push({
+              videoId: id,
+              publisherClientId: myClientId,
+              aiMode,
+            });
+          }
+          const nextDecision = resolveSongReservationQueueApply({
+            currentTurnClientId: currentTurnClientIdRef.current,
+            participatingOrder: participatingOrderRef.current,
+            presentClientIds: presentClientIdsRef.current,
+            queue: optimisticQueue,
+            participantIdentities: getQueueParticipantIdentities(),
+            lastSongPosterClientId: lastChangeVideoPublisherRef.current,
+          });
+          const othersAhead =
+            nextDecision.kind === 'prompt' ||
+            (nextDecision.kind === 'apply' &&
+              optimisticQueue[nextDecision.queueIndex]?.publisherClientId !== myClientId);
           addSystemMessage(
             alreadyQueued
-              ? 'おすすめの曲で予約を差し替えました。この曲が終わったあとに再生されます。'
-              : 'おすすめの曲を予約しました。この曲が終わったあとに再生されます。',
+              ? othersAhead
+                ? 'おすすめの曲で予約を差し替えました。あなたの次の番で再生されます。'
+                : 'おすすめの曲で予約を差し替えました。この曲が終わったあとに再生されます。'
+              : othersAhead
+                ? 'おすすめの曲を予約しました。あなたの次の番で再生されます。'
+                : 'おすすめの曲を予約しました。この曲が終わったあとに再生されます。',
           );
         }
         return;

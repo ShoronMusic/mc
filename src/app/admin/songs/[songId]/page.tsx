@@ -9,6 +9,7 @@ import { AdminSongMusic8RefreshPanel } from '@/components/admin/AdminSongMusic8R
 import { AdminSongMusic8JsonImportPanel } from '@/components/admin/AdminSongMusic8JsonImportPanel';
 import { AdminSongSpotifyEnrichPanel } from '@/components/admin/AdminSongSpotifyEnrichPanel';
 import { AdminSongBasicInfoEditPanel } from '@/components/admin/AdminSongBasicInfoEditPanel';
+import { AdminYoutubePlayerWithVolume } from '@/components/admin/AdminYoutubePlayerWithVolume';
 import {
   AdminSongCreditsPanel,
   type AdminSongCreditRow,
@@ -18,7 +19,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 
 interface SongDetailPageProps {
   params: { songId: string };
-  searchParams?: { q?: string };
+  searchParams?: { q?: string; modal?: string; from?: string };
 }
 
 interface SongRow {
@@ -156,6 +157,8 @@ function isDetailFeedbackRow(row: CommentFeedbackRow): boolean {
 
 export default async function SongDetailPage({ params, searchParams }: SongDetailPageProps) {
   const listQuery = typeof searchParams?.q === 'string' ? searchParams.q.trim() : '';
+  const isModalEmbed = searchParams?.modal === '1';
+  const fromYoutubePlaylistImport = searchParams?.from === 'youtube-playlist-import';
   const supabase = await createClient();
   if (!supabase) {
     return (
@@ -434,6 +437,7 @@ export default async function SongDetailPage({ params, searchParams }: SongDetai
 
   const primaryVideoId =
     (typeof song.music8_video_id === 'string' && song.music8_video_id.trim()) ||
+    videos.find((v) => (v.variant ?? '').trim().toLowerCase() === 'official')?.video_id.trim() ||
     videos.find((v) => v.video_id.trim())?.video_id.trim() ||
     null;
 
@@ -441,7 +445,14 @@ export default async function SongDetailPage({ params, searchParams }: SongDetai
     <main className="mx-auto max-w-4xl bg-gray-950 p-4 text-gray-100">
       <AdminMenuBar />
       <p className="mb-2">
-        {listQuery ? (
+        {fromYoutubePlaylistImport ? (
+          <Link
+            href="/admin/youtube-playlist-import"
+            className="text-sm text-sky-300 hover:underline"
+          >
+            ← YouTube プレイリスト取込に戻る
+          </Link>
+        ) : listQuery ? (
           <Link
             href={`/admin/songs?q=${encodeURIComponent(listQuery)}`}
             className="text-sm text-sky-300 hover:underline"
@@ -460,71 +471,96 @@ export default async function SongDetailPage({ params, searchParams }: SongDetai
       </h1>
 
       {/* 曲メイン情報 */}
-      <section className="mb-4 space-y-2 rounded border border-gray-700 bg-gray-900 p-4 text-sm">
+      <section className="mb-4 space-y-3 rounded border border-gray-700 bg-gray-900 p-4 text-sm">
         <h2 className="text-sm font-semibold text-gray-200">基本情報（songs）</h2>
-        <p>
-          <span className="text-gray-500">ID：</span>
-          {song.id}
-        </p>
-        <p>
-          <span className="text-gray-500">display_title：</span>
-          {song.display_title || '(なし)'}
-          {isJapaneseDomestic ? (
-            <span className="ml-2 inline-block align-middle">
-              <AdminDomesticSongBadge />
-            </span>
-          ) : null}
-        </p>
-        <p>
-          <span className="text-gray-500">メインアーティスト：</span>
-          {song.main_artist || '(なし)'}
-        </p>
-        <p>
-          <span className="text-gray-500">曲タイトル：</span>
-          {song.song_title || '(なし)'}
-        </p>
-        <p>
-          <span className="text-gray-500">日本語読み（song_title_ja）：</span>
-          {song.song_title_ja || '—'}
-        </p>
-        <p>
-          <span className="text-gray-500">スタイル：</span>
-          {song.style || '(未設定)'}
-        </p>
-        <p>
-          <span className="text-gray-500">play_count：</span>
-          {song.play_count ?? 0}
-        </p>
-        <p>
-          <span className="text-gray-500">original_release_date（原盤）：</span>
-          {song.original_release_date ?? '—'}
-        </p>
-        {song.music8_song_data && typeof song.music8_song_data === 'object' ? (
-          <details className="rounded border border-gray-800 bg-gray-950/80 p-2">
-            <summary className="cursor-pointer text-gray-400">music8_song_data（Music8 スナップショット）</summary>
-            <pre className="mt-2 max-h-96 overflow-auto whitespace-pre-wrap break-all text-[11px] text-gray-300">
-              {JSON.stringify(song.music8_song_data, null, 2)}
-            </pre>
-          </details>
-        ) : (
-          <p>
-            <span className="text-gray-500">music8_song_data：</span>
-            <span className="text-gray-400">—</span>
-          </p>
-        )}
+        <div
+          className={
+            isModalEmbed
+              ? 'min-w-0 space-y-2'
+              : 'grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(22rem,32rem)] lg:items-start'
+          }
+        >
+          <div className="min-w-0 space-y-2">
+            <p>
+              <span className="text-gray-500">ID：</span>
+              {song.id}
+            </p>
+            <p>
+              <span className="text-gray-500">display_title：</span>
+              {song.display_title || '(なし)'}
+              {isJapaneseDomestic ? (
+                <span className="ml-2 inline-block align-middle">
+                  <AdminDomesticSongBadge />
+                </span>
+              ) : null}
+            </p>
+            <p>
+              <span className="text-gray-500">メインアーティスト：</span>
+              {song.main_artist || '(なし)'}
+            </p>
+            <p>
+              <span className="text-gray-500">曲タイトル：</span>
+              {song.song_title || '(なし)'}
+            </p>
+            <p>
+              <span className="text-gray-500">日本語読み（song_title_ja）：</span>
+              {song.song_title_ja || '—'}
+            </p>
+            <p>
+              <span className="text-gray-500">スタイル：</span>
+              {song.style || '(未設定)'}
+            </p>
+            <p>
+              <span className="text-gray-500">play_count：</span>
+              {song.play_count ?? 0}
+            </p>
+            <p>
+              <span className="text-gray-500">original_release_date（原盤）：</span>
+              {song.original_release_date ?? '—'}
+            </p>
+            {song.music8_song_data && typeof song.music8_song_data === 'object' ? (
+              <details className="rounded border border-gray-800 bg-gray-950/80 p-2">
+                <summary className="cursor-pointer text-gray-400">music8_song_data（Music8 スナップショット）</summary>
+                <pre className="mt-2 max-h-96 overflow-auto whitespace-pre-wrap break-all text-[11px] text-gray-300">
+                  {JSON.stringify(song.music8_song_data, null, 2)}
+                </pre>
+              </details>
+            ) : (
+              <p>
+                <span className="text-gray-500">music8_song_data：</span>
+                <span className="text-gray-400">—</span>
+              </p>
+            )}
 
-        {primaryVideoId ? (
-          <p>
-            <a
-              href={`https://www.youtube.com/watch?v=${encodeURIComponent(primaryVideoId)}`}
-              target="_blank"
-              rel="noreferrer"
-              className="text-sm text-sky-400 hover:text-sky-300"
-            >
-              YouTube を開く
-            </a>
-          </p>
-        ) : null}
+            {primaryVideoId ? (
+              <p>
+                <a
+                  href={`https://www.youtube.com/watch?v=${encodeURIComponent(primaryVideoId)}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-sm text-sky-400 hover:text-sky-300"
+                >
+                  YouTube を開く
+                </a>
+              </p>
+            ) : null}
+          </div>
+
+          {!isModalEmbed ? (
+            <div className="min-w-0">
+              {primaryVideoId ? (
+                <AdminYoutubePlayerWithVolume
+                  videoId={primaryVideoId}
+                  playerClassName="min-h-[12.5rem]"
+                />
+              ) : (
+                <div className="flex aspect-video min-h-[12.5rem] items-center justify-center rounded border border-dashed border-gray-700 bg-black/40 px-3 text-center text-xs text-gray-500">
+                  紐づく YouTube 動画がありません
+                </div>
+              )}
+            </div>
+          ) : null}
+        </div>
 
         {/* Music8 詳細メタ */}
         <div className="rounded border border-gray-800 bg-gray-950/40 p-3">
@@ -603,6 +639,7 @@ export default async function SongDetailPage({ params, searchParams }: SongDetai
           initialSongTitleJa={song.song_title_ja ?? null}
           initialStyle={song.style ?? null}
           initialOriginalReleaseDate={song.original_release_date ?? null}
+          highlightStyle={fromYoutubePlaylistImport}
         />
         <AdminSongCreditsPanel
           songId={song.id}

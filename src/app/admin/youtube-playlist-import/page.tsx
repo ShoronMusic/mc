@@ -75,6 +75,7 @@ export default function AdminYoutubePlaylistImportPage() {
   const [bulkArtistSource, setBulkArtistSource] = useState('__all__');
   const [bulkArtistApplying, setBulkArtistApplying] = useState(false);
   const [bulkArtistMessage, setBulkArtistMessage] = useState<string | null>(null);
+  const [bulkStyleScope, setBulkStyleScope] = useState<'imported_only' | 'all_with_song_id'>('imported_only');
 
   function buildRunKey(url: string, max: number): string {
     return `${url.trim()}::${max}`;
@@ -92,6 +93,8 @@ export default function AdminYoutubePlaylistImportPage() {
     setItems([]);
     setWarnings([]);
     setPlaylistId(null);
+    setBulkMessage(null);
+    setBulkArtistMessage(null);
     try {
       const res = await fetch('/api/admin/youtube-playlist-import', {
         method: 'POST',
@@ -123,9 +126,16 @@ export default function AdminYoutubePlaylistImportPage() {
   }
 
   const canRunImport = lastDryRunKey === buildRunKey(playlistUrl, maxItems);
-  const bulkSongIds = Array.from(
+
+  const bulkStyleTargetSongIds = Array.from(
     new Set(
       items
+        .filter((x) => {
+          const songId = typeof x.songId === 'string' ? x.songId.trim() : '';
+          if (!songId) return false;
+          if (bulkStyleScope === 'all_with_song_id') return true;
+          return x.status === 'imported';
+        })
         .map((x) => (typeof x.songId === 'string' ? x.songId.trim() : ''))
         .filter(Boolean),
     ),
@@ -148,8 +158,8 @@ export default function AdminYoutubePlaylistImportPage() {
   );
 
   async function applyStyleBulk(): Promise<void> {
-    if (bulkSongIds.length === 0) {
-      setBulkMessage('対象の song_id がありません。まず本番取り込みを実行してください。');
+    if (bulkStyleTargetSongIds.length === 0) {
+      setBulkMessage('対象の song_id がありません。本番取り込み後、取込済み行があれば一括登録できます。');
       return;
     }
     setBulkApplying(true);
@@ -160,7 +170,7 @@ export default function AdminYoutubePlaylistImportPage() {
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          songIds: bulkSongIds,
+          songIds: bulkStyleTargetSongIds,
           style: bulkStyle,
         }),
       });
@@ -169,7 +179,15 @@ export default function AdminYoutubePlaylistImportPage() {
         setBulkMessage(data.error ?? '一括スタイル登録に失敗しました。');
         return;
       }
-      setBulkMessage(`スタイル「${bulkStyle}」を ${data.updatedCount ?? 0} 件に登録しました。`);
+      const targetIdSet = new Set(bulkStyleTargetSongIds);
+      setItems((prev) =>
+        prev.map((row) =>
+          row.songId && targetIdSet.has(row.songId.trim()) ? { ...row, style: bulkStyle } : row,
+        ),
+      );
+      setBulkMessage(
+        `スタイル「${bulkStyle}」を ${data.updatedCount ?? 0} 件に登録しました。例外曲は song_id から曲詳細で個別修正してください。`,
+      );
     } catch {
       setBulkMessage('一括スタイル登録に失敗しました。');
     } finally {
@@ -297,7 +315,11 @@ export default function AdminYoutubePlaylistImportPage() {
 
       {items.length > 0 ? (
         <section className="mt-4 rounded-lg border border-gray-800 bg-gray-900/40 p-3">
-          <h2 className="text-sm font-semibold text-amber-200">スタイル一括登録（10分類）</h2>
+          <h2 className="text-sm font-semibold text-amber-200">スタイル登録（10分類）</h2>
+          <p className="mt-1 text-xs text-gray-400">
+            取込直後は style 未設定です。同ジャンルのプレイリストならここで一括登録し、混在や例外は下表の{' '}
+            <code className="rounded bg-gray-800 px-1">song_id</code> から曲詳細の「基本情報の修正」で個別に設定してください。
+          </p>
           <div className="mt-2 flex flex-wrap items-center gap-3 text-sm">
             <select
               value={bulkStyle}
@@ -310,13 +332,21 @@ export default function AdminYoutubePlaylistImportPage() {
                 </option>
               ))}
             </select>
+            <select
+              value={bulkStyleScope}
+              onChange={(e) => setBulkStyleScope(e.target.value as 'imported_only' | 'all_with_song_id')}
+              className="rounded border border-gray-700 bg-gray-950 px-2 py-1.5 text-gray-100"
+            >
+              <option value="imported_only">対象: 取込済み行のみ</option>
+              <option value="all_with_song_id">対象: song_id あり全行</option>
+            </select>
             <button
               type="button"
               onClick={() => void applyStyleBulk()}
-              disabled={bulkApplying || bulkSongIds.length === 0}
+              disabled={bulkApplying || bulkStyleTargetSongIds.length === 0}
               className="rounded bg-violet-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-violet-500 disabled:opacity-40"
             >
-              {bulkApplying ? '登録中…' : `この表の曲に一括登録（${bulkSongIds.length}件）`}
+              {bulkApplying ? '登録中…' : `一括登録（${bulkStyleTargetSongIds.length}件）`}
             </button>
           </div>
           {bulkMessage ? <p className="mt-2 text-xs text-gray-300">{bulkMessage}</p> : null}
@@ -399,7 +429,17 @@ export default function AdminYoutubePlaylistImportPage() {
                   <td className="whitespace-nowrap px-3 py-2 font-mono text-xs text-violet-200">
                     {row.music8ArtistSlug ?? '—'}
                   </td>
-                  <td className="whitespace-nowrap px-3 py-2 text-xs text-gray-300">{row.style ?? '—'}</td>
+                  <td className="whitespace-nowrap px-3 py-2 text-xs text-gray-300">
+                    {row.style ?? '—'}
+                    {row.songId ? (
+                      <Link
+                        href={`/admin/songs/${row.songId}?from=youtube-playlist-import#style-edit`}
+                        className="ml-1.5 text-violet-300 hover:underline"
+                      >
+                        個別修正
+                      </Link>
+                    ) : null}
+                  </td>
                   <td className="whitespace-nowrap px-3 py-2 text-xs text-gray-300">{row.variant}</td>
                   <td className="px-3 py-2 text-gray-100">{row.title}</td>
                   <td className="px-3 py-2 font-mono text-xs text-gray-400">{row.videoId}</td>
@@ -434,7 +474,10 @@ export default function AdminYoutubePlaylistImportPage() {
                   </td>
                   <td className="px-3 py-2 text-xs">
                     {row.songId ? (
-                      <Link href={`/admin/songs/${row.songId}`} className="font-mono text-amber-200 hover:underline">
+                      <Link
+                        href={`/admin/songs/${row.songId}?from=youtube-playlist-import#style-edit`}
+                        className="font-mono text-amber-200 hover:underline"
+                      >
                         {row.songId}
                       </Link>
                     ) : (

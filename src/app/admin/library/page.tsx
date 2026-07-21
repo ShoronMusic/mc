@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { AdminMenuBar } from '@/components/admin/AdminMenuBar';
+import { AdminYoutubePlayerWithVolume } from '@/components/admin/AdminYoutubePlayerWithVolume';
 import type { AdminLibraryArtistItem } from '@/app/api/admin/library/artists/route';
 import type { AdminLibrarySongItem } from '@/app/api/admin/library/songs/route';
 
@@ -40,9 +41,11 @@ export default function AdminLibraryPage() {
   const [songsError, setSongsError] = useState<string | null>(null);
   const [loadingArtistInfo, setLoadingArtistInfo] = useState(false);
   const [artistInfoError, setArtistInfoError] = useState<string | null>(null);
-  const [dbDetailModalSong, setDbDetailModalSong] = useState<{ id: string; title: string } | null>(
-    null,
-  );
+  const [dbDetailModalSong, setDbDetailModalSong] = useState<{
+    id: string;
+    title: string;
+    videoId: string | null;
+  } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -126,15 +129,6 @@ export default function AdminLibraryPage() {
     if (!selectedArtist) return;
     void loadArtistInfo(selectedArtist);
   }, [selectedArtist, loadArtistInfo]);
-
-  useEffect(() => {
-    if (!dbDetailModalSong) return;
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setDbDetailModalSong(null);
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [dbDetailModalSong]);
 
   const filteredArtists = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -411,6 +405,7 @@ export default function AdminLibraryPage() {
                                   title:
                                     (s.song_title ?? s.display_title ?? '（タイトル不明）').trim() ||
                                     '（タイトル不明）',
+                                  videoId: s.video_id?.trim() || null,
                                 })
                               }
                               className="text-amber-200/90 hover:underline"
@@ -435,13 +430,9 @@ export default function AdminLibraryPage() {
           role="dialog"
           aria-modal="true"
           aria-label="曲詳細（DB）"
-          onClick={() => setDbDetailModalSong(null)}
         >
-          <div
-            className="flex h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-lg border border-gray-700 bg-gray-950 shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between border-b border-gray-800 px-4 py-2">
+          <div className="flex h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-lg border border-gray-700 bg-gray-950 shadow-2xl">
+            <div className="flex shrink-0 items-center justify-between border-b border-gray-800 px-4 py-2">
               <p className="min-w-0 truncate text-sm text-gray-200">
                 曲詳細（DB）: {dbDetailModalSong.title}
               </p>
@@ -463,11 +454,19 @@ export default function AdminLibraryPage() {
                 </button>
               </div>
             </div>
-            <iframe
-              title={`song-detail-${dbDetailModalSong.id}`}
-              src={`/admin/songs/${dbDetailModalSong.id}`}
-              className="h-full w-full border-0 bg-gray-950"
-            />
+            <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+              <iframe
+                title={`song-detail-${dbDetailModalSong.id}`}
+                src={`/admin/songs/${dbDetailModalSong.id}?modal=1`}
+                className="min-h-0 w-full flex-1 border-0 bg-gray-950"
+              />
+              {/* 右側プレイヤー＋外側音量（入れ子 iframe 内の YT 音量は掴みにくい） */}
+              {dbDetailModalSong.videoId ? (
+                <div className="shrink-0 border-t border-gray-800 p-3 lg:w-[min(42%,26rem)] lg:border-l lg:border-t-0 lg:border-gray-800">
+                  <AdminYoutubePlayerWithVolume videoId={dbDetailModalSong.videoId} />
+                </div>
+              ) : null}
+            </div>
           </div>
         </div>
       )}

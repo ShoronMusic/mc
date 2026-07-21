@@ -164,6 +164,34 @@ test('resolveSongReservationQueueApply: solo poster alone still prompts self whe
   );
 });
 
+test('resolveSongReservationQueueApply: after human song, AI reservation plays before human recommend', () => {
+  // ログ再現: 小龍の曲終了直後。キューに小龍おすすめ＋AI予約があっても次は AI
+  assert.deepEqual(
+    resolveSongReservationQueueApply({
+      currentTurnClientId: 'ai',
+      lastSongPosterClientId: 'a',
+      participatingOrder: [{ clientId: 'a' }, { clientId: 'ai' }],
+      presentClientIds: new Set(['a', 'ai']),
+      queue: [{ publisherClientId: 'ai' }, { publisherClientId: 'a' }],
+    }),
+    { kind: 'apply', queueIndex: 0 },
+  );
+});
+
+test('resolveSongReservationQueueApply: after AI song, human recommend reservation applies', () => {
+  // 同上の続き: AI 曲をスキップ／終了したあと、残った小龍の予約が適用される
+  assert.deepEqual(
+    resolveSongReservationQueueApply({
+      currentTurnClientId: 'a',
+      lastSongPosterClientId: 'ai',
+      participatingOrder: [{ clientId: 'a' }, { clientId: 'ai' }],
+      presentClientIds: new Set(['a', 'ai']),
+      queue: [{ publisherClientId: 'a' }],
+    }),
+    { kind: 'apply', queueIndex: 0 },
+  );
+});
+
 test('removePublisherReservationFromQueue: keeps other publishers', () => {
   const q = [
     { publisherClientId: 'ai', videoId: 'v1' },

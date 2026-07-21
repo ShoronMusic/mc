@@ -8,7 +8,11 @@ export const GEMINI_PRICING_URL = 'https://ai.google.dev/pricing';
 export const GEMINI_PRICING_PER_1M_USD: Record<string, { input: number; output: number }> = {
   'gemini-2.5-flash': { input: 0.3, output: 2.5 },
   'gemini-2.5-pro': { input: 1.25, output: 10 },
+  /** 3.5 世代の高速・低コスト帯（2.5 Flash と同単価帯） */
+  'gemini-3.5-flash-lite': { input: 0.3, output: 2.5 },
   'gemini-3.1-pro-preview': { input: 2.0, output: 12 },
+  /** 日常向け上位 Flash（単価は 2.5 Flash より高い） */
+  'gemini-3.6-flash': { input: 1.5, output: 7.5 },
 };
 
 /** 目安表示用の固定レート（課金試算ツールと同じ） */

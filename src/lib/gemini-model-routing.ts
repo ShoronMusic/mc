@@ -1,6 +1,12 @@
 /**
  * Gemini API のモデル ID 解決（プライマリ / セカンダリ切替・料金検証用）
  * `gemini.ts` と `gemini-usage-log.ts` から参照（相互 import 回避）
+ *
+ * 切替例（`.env.local`、再起動後に有効）:
+ * - 全体を 3.5 Flash-Lite 試用: `GEMINI_GENERATION_MODEL=gemini-3.5-flash-lite`
+ * - 戻す: 行を削除または `GEMINI_GENERATION_MODEL=gemini-2.5-flash`
+ * - 一部だけ: `GEMINI_MODEL_SECONDARY=gemini-3.5-flash-lite` + `GEMINI_USE_SECONDARY_FOR=comment_pack,chat_reply`
+ * 実モデルは `/api/ai/status` の `geminiGeneration` と `gemini_usage_logs.model` で確認。
  */
 
 const DEFAULT_GENERATION_MODEL = 'gemini-2.5-flash';

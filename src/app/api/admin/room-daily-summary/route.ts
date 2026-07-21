@@ -10,16 +10,11 @@ import {
   type ProductId,
 } from '@/lib/room-history-product';
 import { isMissingProductColumnError } from '@/lib/room-product-scope';
+import { calcGeminiCostUsd, calcGeminiCostJpyApprox } from '@/lib/gemini-pricing';
 
 export const dynamic = 'force-dynamic';
 
 const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
-
-const PRICING_PER_1M_USD: Record<string, { input: number; output: number }> = {
-  'gemini-2.5-flash': { input: 0.3, output: 2.5 },
-  'gemini-2.5-pro': { input: 1.25, output: 10 },
-  'gemini-3.1-pro-preview': { input: 2.0, output: 12 },
-};
 
 type ChatLogRow = {
   created_at: string;
@@ -92,12 +87,6 @@ function fmtJstHm(iso: string): string {
   } catch {
     return '--:--';
   }
-}
-
-function calcCostUsd(promptTokens: number, outputTokens: number, model: string): number {
-  const p = PRICING_PER_1M_USD[model];
-  if (!p) return 0;
-  return (promptTokens / 1_000_000) * p.input + (outputTokens / 1_000_000) * p.output;
 }
 
 async function requireAdmin() {
@@ -288,7 +277,7 @@ async function generateDailySummary(
     m.calls += 1;
     m.prompt += p;
     m.output += o;
-    m.costUsd += calcCostUsd(p, o, model);
+    m.costUsd += calcGeminiCostUsd(p, o, model);
     usageByModelMap.set(model, m);
   });
 
@@ -299,7 +288,7 @@ async function generateDailySummary(
     .map(([model, v]) => ({ model, ...v }))
     .sort((a, b) => b.calls - a.calls);
   const usageCostUsd = usageByModel.reduce((s, v) => s + v.costUsd, 0);
-  const usageCostJpy = usageCostUsd * 160;
+  const usageCostJpy = calcGeminiCostJpyApprox(usageCostUsd);
 
   const styleTop = styleDistribution.slice(0, 2).map((v) => v.style).join('・') || '偏りなし';
   const eraTop = eraDistribution.slice(0, 2).map((v) => v.era).join('・') || '偏りなし';

@@ -4,6 +4,11 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { AdminMenuBar } from '@/components/admin/AdminMenuBar';
 import { AdminProductFilterSelect } from '@/components/admin/AdminProductFilterSelect';
+import {
+  calcGeminiCostUsd,
+  GEMINI_PRICING_URL,
+  GEMINI_USD_TO_JPY_APPROX,
+} from '@/lib/gemini-pricing';
 
 type LogRow = {
   id: string;
@@ -23,26 +28,11 @@ type TokenSummary = {
   outputTokens: number;
 };
 
-/** Gemini Developer API の公式料金（モデル別の入力・出力単価） */
-const GEMINI_PRICING_URL = 'https://ai.google.dev/pricing';
-
 /** Google AI Studio 左メニュー「使用量」に相当（リクエスト・トークン・エラーなど） */
 const GOOGLE_AI_STUDIO_USAGE_URL = 'https://aistudio.google.com/usage?timeRange=last-28-days';
 
 /** Google AI Studio 左メニュー「利用額」に相当（日別の利用額・上限） */
 const GOOGLE_AI_STUDIO_SPEND_URL = 'https://aistudio.google.com/spend';
-
-const PRICING_PER_1M_USD: Record<string, { input: number; output: number }> = {
-  'gemini-2.5-flash': { input: 0.3, output: 2.5 },
-  'gemini-2.5-pro': { input: 1.25, output: 10 },
-  'gemini-3.1-pro-preview': { input: 2.0, output: 12 },
-};
-
-function calcCostUsd(promptTokens: number, outputTokens: number, model: string): number {
-  const p = PRICING_PER_1M_USD[model];
-  if (!p) return 0;
-  return (promptTokens / 1_000_000) * p.input + (outputTokens / 1_000_000) * p.output;
-}
 
 const CONTEXT_HELP: Record<string, string> = {
   chat_reply: 'チャットへの AI 返答',
@@ -121,12 +111,12 @@ export default function AdminGeminiUsagePage() {
   const ctxEntries = Object.entries(byContext).sort((a, b) => b[1].calls - a[1].calls);
   const modelEntries = Object.entries(byModel).sort((a, b) => b[1].calls - a[1].calls);
   const totalCostUsd = modelEntries.reduce(
-    (sum, [model, v]) => sum + calcCostUsd(v.promptTokens, v.outputTokens, model),
+    (sum, [model, v]) => sum + calcGeminiCostUsd(v.promptTokens, v.outputTokens, model),
     0
   );
   const approxSongCount = byContext.comment_pack_base?.calls ?? 0;
   const perSongUsd = approxSongCount > 0 ? totalCostUsd / approxSongCount : 0;
-  const usdToJpy = 160;
+  const usdToJpy = GEMINI_USD_TO_JPY_APPROX;
   const estimatedSongsPerDay = days > 0 ? approxSongCount / days : 0;
   const projectedMonthlySongsFromTrend = estimatedSongsPerDay * 30;
   const projectedMonthlyUsdFromTrend = projectedMonthlySongsFromTrend * perSongUsd;
@@ -141,12 +131,12 @@ export default function AdminGeminiUsagePage() {
 
   const blendedInputUsdPerM =
     totals.promptTokens > 0
-      ? modelEntries.reduce((sum, [model, v]) => sum + calcCostUsd(v.promptTokens, 0, model), 0) *
+      ? modelEntries.reduce((sum, [model, v]) => sum + calcGeminiCostUsd(v.promptTokens, 0, model), 0) *
         (1_000_000 / totals.promptTokens)
       : 0;
   const blendedOutputUsdPerM =
     totals.outputTokens > 0
-      ? modelEntries.reduce((sum, [model, v]) => sum + calcCostUsd(0, v.outputTokens, model), 0) *
+      ? modelEntries.reduce((sum, [model, v]) => sum + calcGeminiCostUsd(0, v.outputTokens, model), 0) *
         (1_000_000 / totals.outputTokens)
       : 0;
 

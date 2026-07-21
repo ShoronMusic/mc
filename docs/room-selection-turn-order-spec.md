@@ -109,7 +109,9 @@ AI キャラの自動選曲も同系の `shouldAiCharacterUseReservationQueue` �
 | オーナー（在室） | オーナースキップ可 |
 | 協調役（オーナー不在・5分猶予中のみ） | オーナースキップを **代理** 可 |
 
-`skipToEnd` 受信後、キューに次曲があれば送信者クライアントだけが `applyImmediateChangeVideo`（重複曲解説防止）。協調役が「○○さんの曲がスキップされました」をローカル表示。
+`skipToEnd` 受信後、**その時点で** `resolveSongReservationQueueApply` し直し、適用可能な予約があれば送信者クライアントだけが `applyImmediateChangeVideo`（重複曲解説防止）。`pendingQueued*` のキャッシュだけに頼らない（直前曲の投稿者基準のまま古くなると、残予約を捨てて再生停止することがある）。協調役が「○○さんの曲がスキップされました」をローカル表示。
+
+曲適用後は投稿者・ターン更新のうえで `syncSongReservationQueueHead` し直し、次スキップに備える。
 
 スキップ後の選曲促しは **次の選曲者本人のみ** に AI メッセージ。他参加者はシステム「○○さんの選曲待ち」（`audienceClientId` / `audienceExcludeClientId`）。
 

@@ -998,6 +998,8 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
   const previewWatchedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const librarySongListScrollRef = useRef<HTMLDivElement | null>(null);
+  /** 曲一覧の並行リクエストを無効化（キーワード検索 vs アーティスト全曲） */
+  const librarySongListRequestIdRef = useRef(0);
   /** モーダルを閉じる前の曲一覧スクロール位置（閉じて開き直しても維持） */
   const librarySongListScrollTopRef = useRef(0);
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -1296,16 +1298,19 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
 
   const loadLibraryRows = useCallback(
     async (rawQuery: string) => {
+      const q = rawQuery.trim();
+      if (!q) return;
+      const requestId = ++librarySongListRequestIdRef.current;
       setLibraryLoading(true);
       setLibraryError(null);
       try {
-        const q = rawQuery.trim();
         const params = new URLSearchParams();
-        if (q) params.set('q', q);
+        params.set('q', q);
         params.set('limit', '100');
         params.set('catalog', libraryCatalog);
         const res = await fetch(`/api/library/search?${params.toString()}`);
         const data = await res.json().catch(() => null);
+        if (requestId !== librarySongListRequestIdRef.current) return;
         if (!res.ok) {
           setLibraryError(
             typeof data?.error === 'string' ? data.error : 'ライブラリの取得に失敗しました。',
@@ -1341,15 +1346,19 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
               }))
           : [];
         setLibraryRows(rows);
+        setLibrarySelectedArtistName(null);
         setLibrarySelectedSongId((prev) => (prev && rows.some((r) => r.id === prev) ? prev : null));
       } catch {
+        if (requestId !== librarySongListRequestIdRef.current) return;
         setLibraryError('ライブラリの取得に失敗しました。');
         setLibraryRows([]);
         setLibrarySelectedSongId(null);
         setLibrarySongVideos([]);
         setLibrarySelectedVideoId(null);
       } finally {
-        setLibraryLoading(false);
+        if (requestId === librarySongListRequestIdRef.current) {
+          setLibraryLoading(false);
+        }
       }
     },
     [libraryCatalog],
@@ -1413,65 +1422,75 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
     [loadLibraryArtists],
   );
 
-  const loadLibrarySongsForArtist = useCallback(async (artist: string) => {
-    const name = artist.trim();
-    if (!name) return;
-    setLibraryLoading(true);
-    setLibraryError(null);
-    try {
-      const params = new URLSearchParams({ artist: name, sort: 'release', catalog: libraryCatalog });
-      const res = await fetch(`/api/library/songs-by-artist?${params.toString()}`);
-      const data = await res.json().catch(() => null);
-      if (!res.ok) {
-        setLibraryError(
-          typeof data?.error === 'string' ? data.error : '曲一覧の取得に失敗しました。',
-        );
+  const loadLibrarySongsForArtist = useCallback(
+    async (artist: string, options?: { keepSearchMode?: boolean }) => {
+      const name = artist.trim();
+      if (!name) return;
+      const requestId = ++librarySongListRequestIdRef.current;
+      setLibraryLoading(true);
+      setLibraryError(null);
+      try {
+        const params = new URLSearchParams({ artist: name, sort: 'release', catalog: libraryCatalog });
+        const res = await fetch(`/api/library/songs-by-artist?${params.toString()}`);
+        const data = await res.json().catch(() => null);
+        if (requestId !== librarySongListRequestIdRef.current) return;
+        if (!res.ok) {
+          setLibraryError(
+            typeof data?.error === 'string' ? data.error : '曲一覧の取得に失敗しました。',
+          );
+          setLibraryRows([]);
+          setLibrarySelectedSongId(null);
+          setLibrarySongVideos([]);
+          setLibrarySelectedVideoId(null);
+          return;
+        }
+        const rows: LibrarySongRow[] = Array.isArray(data?.items)
+          ? data.items
+              .filter((r: any) => r && typeof r.id === 'string')
+              .map((r: any) => ({
+                id: r.id,
+                title:
+                  (typeof r.display_title === 'string' ? r.display_title : '').trim() ||
+                  (typeof r.song_title === 'string' ? r.song_title : '').trim() ||
+                  '（タイトル不明）',
+                song_title: typeof r.song_title === 'string' ? r.song_title : null,
+                main_artist: typeof r.main_artist === 'string' ? r.main_artist : null,
+                style: typeof r.style === 'string' ? r.style : null,
+                genres: typeof r.genres === 'string' ? r.genres : null,
+                vocal: typeof r.vocal === 'string' ? r.vocal : null,
+                play_count: typeof r.play_count === 'number' ? r.play_count : null,
+                my_play_count: typeof r.my_play_count === 'number' ? r.my_play_count : null,
+                original_release_date:
+                  typeof r.original_release_date === 'string' ? r.original_release_date : null,
+                youtube_published_at:
+                  typeof r.youtube_published_at === 'string' ? r.youtube_published_at : null,
+                spotify_popularity:
+                  typeof r.spotify_popularity === 'number' && Number.isFinite(r.spotify_popularity)
+                    ? r.spotify_popularity
+                    : null,
+                video_id: typeof r.video_id === 'string' ? r.video_id : null,
+              }))
+          : [];
+        setLibraryRows(rows);
+        if (!options?.keepSearchMode) {
+          setLibrarySongSource('browse');
+        }
+        setLibrarySelectedSongId((prev) => (prev && rows.some((r) => r.id === prev) ? prev : null));
+      } catch {
+        if (requestId !== librarySongListRequestIdRef.current) return;
+        setLibraryError('曲一覧の取得に失敗しました。');
         setLibraryRows([]);
         setLibrarySelectedSongId(null);
         setLibrarySongVideos([]);
         setLibrarySelectedVideoId(null);
-        return;
+      } finally {
+        if (requestId === librarySongListRequestIdRef.current) {
+          setLibraryLoading(false);
+        }
       }
-      const rows: LibrarySongRow[] = Array.isArray(data?.items)
-        ? data.items
-            .filter((r: any) => r && typeof r.id === 'string')
-            .map((r: any) => ({
-              id: r.id,
-              title:
-                (typeof r.display_title === 'string' ? r.display_title : '').trim() ||
-                (typeof r.song_title === 'string' ? r.song_title : '').trim() ||
-                '（タイトル不明）',
-              song_title: typeof r.song_title === 'string' ? r.song_title : null,
-              main_artist: typeof r.main_artist === 'string' ? r.main_artist : null,
-              style: typeof r.style === 'string' ? r.style : null,
-              genres: typeof r.genres === 'string' ? r.genres : null,
-              vocal: typeof r.vocal === 'string' ? r.vocal : null,
-              play_count: typeof r.play_count === 'number' ? r.play_count : null,
-              my_play_count: typeof r.my_play_count === 'number' ? r.my_play_count : null,
-              original_release_date:
-                typeof r.original_release_date === 'string' ? r.original_release_date : null,
-              youtube_published_at:
-                typeof r.youtube_published_at === 'string' ? r.youtube_published_at : null,
-              spotify_popularity:
-                typeof r.spotify_popularity === 'number' && Number.isFinite(r.spotify_popularity)
-                  ? r.spotify_popularity
-                  : null,
-              video_id: typeof r.video_id === 'string' ? r.video_id : null,
-            }))
-        : [];
-      setLibraryRows(rows);
-      setLibrarySongSource('browse');
-      setLibrarySelectedSongId((prev) => (prev && rows.some((r) => r.id === prev) ? prev : null));
-    } catch {
-      setLibraryError('曲一覧の取得に失敗しました。');
-      setLibraryRows([]);
-      setLibrarySelectedSongId(null);
-      setLibrarySongVideos([]);
-      setLibrarySelectedVideoId(null);
-    } finally {
-      setLibraryLoading(false);
-    }
-  }, [libraryCatalog]);
+    },
+    [libraryCatalog],
+  );
 
   const loadLibrarySongVideos = useCallback(async (songId: string) => {
     setLibraryVideoLoading(true);
@@ -1599,8 +1618,31 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
     );
   }, [libraryRows, libraryArtistLetter, librarySongSource]);
 
-  /** 検索モード: 表示中の曲行からユニークなアーティスト名＋曲数（曲数多い順・同数は名前順） */
+  /**
+   * 検索モードのアーティスト一覧。
+   * 曲 API 完了を待たず、まず索引（＋日本語名マッチ）から即座に出す。
+   * 曲名ヒットのみのときは、取得済み曲行から従来どおり組み立てる。
+   */
   const searchArtistRows = useMemo(() => {
+    if (librarySongSource !== 'search') return [];
+    const q = libraryQuery.trim().toLowerCase();
+    if (q && libraryArtistsReady) {
+      const jaMatch = new Set(libraryJaMainArtistMatches.map((n) => n.toLowerCase()));
+      let items = libraryArtistItems.filter((a) => {
+        const ma = a.main_artist.toLowerCase();
+        return ma.includes(q) || jaMatch.has(ma);
+      });
+      if (libraryArtistLetter !== null) {
+        items = items.filter((a) =>
+          libraryArtistIndexLetterMatchesSidebarKey(a.indexLetter, libraryArtistLetter),
+        );
+      }
+      if (items.length > 0) {
+        return mergeLibraryArtistIndexItems(items)
+          .map((a) => ({ main_artist: a.main_artist, count: a.count }))
+          .sort(compareLibrarySearchArtistRowsByCountDesc);
+      }
+    }
     const names = dedupeLibraryArtistDisplayNames(
       letterFilteredLibraryRows.flatMap((row) =>
         expandMainArtistNamesForLibraryFilter(row.main_artist ?? ''),
@@ -1614,16 +1656,24 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
         ).length,
       }))
       .sort(compareLibrarySearchArtistRowsByCountDesc);
-  }, [letterFilteredLibraryRows]);
+  }, [
+    librarySongSource,
+    libraryQuery,
+    libraryArtistsReady,
+    libraryArtistItems,
+    libraryJaMainArtistMatches,
+    libraryArtistLetter,
+    letterFilteredLibraryRows,
+  ]);
 
   const searchArtistNameCandidates = useMemo(
     () => searchArtistRows.map((a) => a.main_artist),
     [searchArtistRows],
   );
 
-  /** ブラウズモード: 索引から（字母＋入力欄の部分一致でアーティスト名を絞り込み） */
+  /** 索引・検索ともに日本語名 → 英語 main_artist の補完 */
   useEffect(() => {
-    if (!libraryOpen || librarySongSource === 'search') {
+    if (!libraryOpen) {
       setLibraryJaMainArtistMatches([]);
       return;
     }
@@ -1649,7 +1699,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
     return () => {
       cancelled = true;
     };
-  }, [libraryQuery, libraryOpen, librarySongSource]);
+  }, [libraryQuery, libraryOpen]);
 
   const browseArtistIndexRows = useMemo(() => {
     if (librarySongSource === 'search') return [];
@@ -1726,8 +1776,10 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
 
   const filteredLibraryRows = useMemo(() => {
     if (!librarySelectedArtistName) return letterFilteredLibraryRows;
-    // ブラウズ API は song_credits 経由の参加曲も返すため main_artist で再絞り込みしない
-    if (librarySongSource === 'browse') return letterFilteredLibraryRows;
+    // ブラウズ API および検索時のアーティスト選択は songs-by-artist で取得済みのため再絞り込みしない
+    if (librarySongSource === 'browse' || librarySongSource === 'search') {
+      return letterFilteredLibraryRows;
+    }
     return letterFilteredLibraryRows.filter((r) =>
       songMainArtistIncludesArtist(r.main_artist, librarySelectedArtistName),
     );
@@ -1897,10 +1949,9 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
     ],
   );
 
-  /** モバイル: 検索結果アーティストを C タブ横チップにする */
+  /** モバイル: 検索結果アーティストを C タブ横チップにする（曲ローディング中でも表示） */
   const librarySearchArtistChips =
     librarySongSource === 'search' &&
-    !libraryLoading &&
     !libraryError &&
     searchArtistNameCandidates.length > 0;
 
@@ -2088,12 +2139,6 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
     void loadLibraryArtists();
   }, [libraryOpen, libraryArtistsReady, libraryArtistsLoading, loadLibraryArtists]);
 
-  useEffect(() => {
-    if (!libraryOpen || librarySongSource !== 'search') return;
-    if (!libraryQuery.trim()) return;
-    void loadLibraryRows(libraryQuery);
-  }, [libraryCatalog, libraryOpen, librarySongSource, libraryQuery, loadLibraryRows]);
-
   const switchLibraryToArtist = useCallback(
     (artistName: string) => {
       const name = resolveLibraryMainArtistName(artistName, libraryArtistItems);
@@ -2170,15 +2215,66 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
     [runYoutubeKeywordSearch, openLibraryModalForArtist, openLibraryModal],
   );
 
-  const handleLibrarySearch = useCallback(() => {
+  const handleLibrarySearch = useCallback(async () => {
+    const q = libraryQuery.trim();
+    if (!q) return;
     setLibrarySelectedArtistName(null);
     setLibrarySelectedSongId(null);
     setLibrarySongVideos([]);
     setLibrarySelectedVideoId(null);
     setLibraryVideoError(null);
+    setLibraryRows([]);
+    setLibraryError(null);
+    setLibraryLoading(false);
     setLibrarySongSource('search');
     resetLibrarySongListScroll();
-    void loadLibraryRows(libraryQuery);
+
+    // アーティスト一覧（索引）→ 日本語名マッチ → 曲検索の順
+    await loadLibraryArtists();
+    if (q.length >= 2) {
+      try {
+        const res = await fetch(`/api/library/match-main-artists?q=${encodeURIComponent(q)}`);
+        const data = await res.json().catch(() => null);
+        const names = Array.isArray(data?.main_artists)
+          ? data.main_artists.filter((x: unknown) => typeof x === 'string' && x.trim())
+          : [];
+        setLibraryJaMainArtistMatches(names);
+      } catch {
+        setLibraryJaMainArtistMatches([]);
+      }
+    } else {
+      setLibraryJaMainArtistMatches([]);
+    }
+    void loadLibraryRows(q);
+  }, [libraryQuery, loadLibraryArtists, loadLibraryRows, resetLibrarySongListScroll]);
+
+  /** 検索結果のアーティスト選択 → その人の全曲を即表示（曲キーワード検索完了を待たない） */
+  const selectLibrarySearchArtist = useCallback(
+    (artistName: string) => {
+      const name = artistName.trim();
+      if (!name) return;
+      setLibrarySelectedArtistName(name);
+      setLibrarySelectedSongId(null);
+      setLibrarySongVideos([]);
+      setLibrarySelectedVideoId(null);
+      setLibraryVideoError(null);
+      resetLibrarySongListScroll();
+      void loadLibrarySongsForArtist(name, { keepSearchMode: true });
+      void loadLibraryArtistInfo(name);
+    },
+    [loadLibrarySongsForArtist, loadLibraryArtistInfo, resetLibrarySongListScroll],
+  );
+
+  /** 「全アーティスト」→ キーワード曲検索結果に戻す */
+  const clearLibrarySearchArtistFilter = useCallback(() => {
+    setLibrarySelectedArtistName(null);
+    setLibrarySelectedSongId(null);
+    setLibrarySongVideos([]);
+    setLibrarySelectedVideoId(null);
+    setLibraryVideoError(null);
+    resetLibrarySongListScroll();
+    const q = libraryQuery.trim();
+    if (q) void loadLibraryRows(q);
   }, [libraryQuery, loadLibraryRows, resetLibrarySongListScroll]);
 
   const copyLibraryUrl = useCallback(async () => {
@@ -3155,8 +3251,8 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                     <LibrarySearchArtistChipsScroller
                       selectedArtistName={librarySelectedArtistName}
                       artists={searchArtistRows}
-                      onSelectAll={() => setLibrarySelectedArtistName(null)}
-                      onSelectArtist={(name) => setLibrarySelectedArtistName(name)}
+                      onSelectAll={clearLibrarySearchArtistFilter}
+                      onSelectArtist={selectLibrarySearchArtist}
                     />
                   </div>
                 ) : null}
@@ -3273,38 +3369,42 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                       ) : null}
                     </div>
                   ) : null}
-                  {!libraryLoading &&
+                  {librarySongSource === 'search' &&
                     !libraryError &&
-                    librarySongSource === 'search' &&
-                    searchArtistNameCandidates.length > 0 && (
+                    (searchArtistNameCandidates.length > 0 || libraryArtistsLoading) && (
                       <div className="flex min-h-0 flex-1 flex-col px-3 py-2 lg:px-2.5">
                         <p className="mb-2 shrink-0 text-[11px] text-gray-500">
                           検索結果のアーティストで絞り込み
                           {libraryArtistLetter ? `（${libraryArtistLetter}）` : ''}
                         </p>
-                        <div className="mc-scrollbar-stable flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto">
-                          <button
-                            type="button"
-                            onClick={() => setLibrarySelectedArtistName(null)}
-                            className={libraryListItemBtnClass(librarySelectedArtistName === null, 'text-[11px]')}
-                          >
-                            <span className="min-w-0 truncate">全アーティスト</span>
-                          </button>
-                          {searchArtistRows.map((a) => (
+                        {libraryArtistsLoading && searchArtistNameCandidates.length === 0 ? (
+                          <LibraryArtistListLoading compact />
+                        ) : null}
+                        {searchArtistNameCandidates.length > 0 ? (
+                          <div className="mc-scrollbar-stable flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto">
                             <button
-                              key={a.main_artist}
                               type="button"
-                              onClick={() => setLibrarySelectedArtistName(a.main_artist)}
-                              className={libraryListItemBtnClass(
-                                librarySelectedArtistName === a.main_artist,
-                                'text-[11px]',
-                              )}
+                              onClick={clearLibrarySearchArtistFilter}
+                              className={libraryListItemBtnClass(librarySelectedArtistName === null, 'text-[11px]')}
                             >
-                              <span className="min-w-0 flex-1 truncate">{a.main_artist}</span>
-                              <span className="shrink-0 tabular-nums opacity-90">({a.count})</span>
+                              <span className="min-w-0 truncate">全アーティスト</span>
                             </button>
-                          ))}
-                        </div>
+                            {searchArtistRows.map((a) => (
+                              <button
+                                key={a.main_artist}
+                                type="button"
+                                onClick={() => selectLibrarySearchArtist(a.main_artist)}
+                                className={libraryListItemBtnClass(
+                                  librarySelectedArtistName === a.main_artist,
+                                  'text-[11px]',
+                                )}
+                              >
+                                <span className="min-w-0 flex-1 truncate">{a.main_artist}</span>
+                                <span className="shrink-0 tabular-nums opacity-90">({a.count})</span>
+                              </button>
+                            ))}
+                          </div>
+                        ) : null}
                       </div>
                     )}
                 </div>

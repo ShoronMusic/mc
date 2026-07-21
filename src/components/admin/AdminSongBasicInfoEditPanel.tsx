@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { SONG_STYLE_OPTIONS } from '@/lib/song-styles';
 
 type Props = {
   songId: string;
@@ -11,6 +12,7 @@ type Props = {
   initialSongTitleJa: string | null;
   initialStyle: string | null;
   initialOriginalReleaseDate: string | null;
+  highlightStyle?: boolean;
 };
 
 export function AdminSongBasicInfoEditPanel({
@@ -21,6 +23,7 @@ export function AdminSongBasicInfoEditPanel({
   initialSongTitleJa,
   initialStyle,
   initialOriginalReleaseDate,
+  highlightStyle = false,
 }: Props) {
   const router = useRouter();
   const [displayTitle, setDisplayTitle] = useState(initialDisplayTitle ?? '');
@@ -32,6 +35,14 @@ export function AdminSongBasicInfoEditPanel({
   const [busy, setBusy] = useState(false);
   const [mbBusy, setMbBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+
+  const styleSelectOptions = useMemo(() => {
+    const current = style.trim();
+    if (current && !(SONG_STYLE_OPTIONS as readonly string[]).includes(current)) {
+      return [current, ...SONG_STYLE_OPTIONS];
+    }
+    return [...SONG_STYLE_OPTIONS];
+  }, [style]);
 
   useEffect(() => {
     setDisplayTitle(initialDisplayTitle ?? '');
@@ -173,8 +184,20 @@ export function AdminSongBasicInfoEditPanel({
   }
 
   return (
-    <div className="mt-4 rounded border border-emerald-900/50 bg-emerald-950/15 p-3">
+    <div
+      id="style-edit"
+      className={`mt-4 rounded border p-3 ${
+        highlightStyle
+          ? 'border-violet-600/60 bg-violet-950/20 ring-1 ring-violet-700/40'
+          : 'border-emerald-900/50 bg-emerald-950/15'
+      }`}
+    >
       <h3 className="text-sm font-semibold text-emerald-200">基本情報の修正（songs）</h3>
+      {highlightStyle ? (
+        <p className="mt-1 text-xs text-violet-200">
+          プレイリスト取込から開いています。スタイルを選んで「基本情報を保存」してください。
+        </p>
+      ) : null}
       <p className="mt-2 text-xs text-gray-400">
         display_title / メインアーティスト / 曲タイトル / 日本語読み（song_title_ja） / スタイル /
         original_release_date（原盤）を更新します。
@@ -223,12 +246,19 @@ export function AdminSongBasicInfoEditPanel({
         </label>
         <label className="block text-xs text-gray-400">
           スタイル
-          <input
-            type="text"
+          <select
             value={style}
             onChange={(e) => setStyle(e.target.value)}
             className="mt-1 w-full rounded border border-gray-700 bg-gray-950 px-2 py-1.5 text-sm text-white focus:border-emerald-700 focus:outline-none"
-          />
+          >
+            <option value="">（未設定）</option>
+            {styleSelectOptions.map((s) => (
+              <option key={s} value={s}>
+                {s}
+                {!(SONG_STYLE_OPTIONS as readonly string[]).includes(s) ? '（既存・一覧外）' : ''}
+              </option>
+            ))}
+          </select>
         </label>
         <label className="block text-xs text-gray-400 sm:col-span-2">
           original_release_date（原盤）
