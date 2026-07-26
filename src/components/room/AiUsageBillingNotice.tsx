@@ -14,9 +14,6 @@ import {
   AI_CREDITS_BILLING_SUMMARY_TITLE,
 } from '@/lib/ai-credits-pricing-guide';
 import { formatAiTrialStatusPrimaryLine, formatAiTrialStatusSecondaryLine } from '@/lib/ai-trial-status';
-import { emptyGeminiUsageByCategory } from '@/lib/gemini-usage-categories';
-import { GeminiUsageCategoryBreakdown } from '@/components/mypage/GeminiUsageCategoryBreakdown';
-import { SongSelectionCostGuide } from '@/components/shared/SongSelectionCostGuide';
 import { useAiTrialStatus } from '@/hooks/useAiTrialStatus';
 
 type AiUsageBillingNoticeProps = {
@@ -87,18 +84,11 @@ export function AiUsageBillingNotice({ isGuest = false, className = '' }: AiUsag
               {AI_CREDITS_BILLING_SUMMARY_FOOTNOTE}
             </p>
           </div>
-          <SongSelectionCostGuide variant="room" />
           <ul className="list-disc space-y-1 pl-4 text-xs leading-relaxed text-violet-100/85">
             {AI_USAGE_DISCLOSURE_ROOM_DETAIL_LINES.map((line) => (
               <li key={line.slice(0, 24)}>{line}</li>
             ))}
           </ul>
-          <GeminiUsageCategoryBreakdown
-            byCategory={emptyGeminiUsageByCategory()}
-            title="AI 機能ごとの運営原価目安（請求ではありません）"
-            showTypicalHints
-            className="rounded border border-violet-900/30 bg-violet-950/30 p-2 text-violet-100/90 [&_.text-gray-400]:text-violet-200/85 [&_.text-gray-300]:text-violet-100/90 [&_.text-gray-500]:text-violet-200/75"
-          />
         </div>
       ) : null}
     </div>

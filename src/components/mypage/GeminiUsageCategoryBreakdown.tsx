@@ -18,8 +18,10 @@ type GeminiUsageCategoryBreakdownProps = {
   byCategory: Record<GeminiUsageCategoryId, GeminiUsageTokenSummary>;
   /** タイトル行を出す */
   title?: string;
-  /** 参考の目安説明（データがなくても出せる） */
+  /** 参考の目安説明（データがなくても出せる）。一般向けでは出さない */
   showTypicalHints?: boolean;
+  /** 運営原価（円）を出す。一般向けは false（管理画面などでのみ true） */
+  showCostJpy?: boolean;
   /** 参加履歴1行など、棒グラフ＋内訳のみ */
   compact?: boolean;
   className?: string;
@@ -33,8 +35,9 @@ function formatTokenCount(n: number): string {
 
 export function GeminiUsageCategoryBreakdown({
   byCategory,
-  title = '種別ごとの利用（試算）',
+  title = '種別ごとの利用',
   showTypicalHints = false,
+  showCostJpy = false,
   compact = false,
   className = '',
 }: GeminiUsageCategoryBreakdownProps) {
@@ -84,9 +87,13 @@ export function GeminiUsageCategoryBreakdown({
                   {' · '}
                   {row.calls} 回（{pct}%）
                   {' · '}
-                  入力                   {formatTokenCount(row.promptTokens)}
-                  {' · '}
-                  運営原価 {formatGeminiCostJpyApprox(row.costJpyApprox)}
+                  入力 {formatTokenCount(row.promptTokens)}
+                  {showCostJpy ? (
+                    <>
+                      {' · '}
+                      運営原価 {formatGeminiCostJpyApprox(row.costJpyApprox)}
+                    </>
+                  ) : null}
                 </li>
               );
             })}

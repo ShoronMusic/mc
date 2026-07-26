@@ -43,10 +43,12 @@ export default function GuideFaqPage({ searchParams }: GuideFaqPageProps) {
           Q1. 何が無料で、何が有料ですか？
         </h2>
         <p className="text-gray-400">
-          音楽の同時視聴（YouTube）、部屋での選曲、通常のチャットは
-          <strong className="text-gray-300">無料</strong>
-          です。有料なのは、クラウドAIを使う機能（曲のAI解説、@
-          での質問など）です。登録後のお試し枠があり、枠を使い切ったあとも、AIなしの選曲・チャットは無料のまま使えます。料金の詳細は{' '}
+          参加は
+          <strong className="text-gray-300">ゲスト</strong>、
+          <strong className="text-gray-300">無料登録（初回クレジット付き）</strong>、
+          <strong className="text-gray-300">無料登録（クレジット購入）</strong>
+          の3区分です。同時視聴・選曲・通常チャットはどの区分でも無料です。有料なのはクラウドAI（曲のAI解説、@
+          での質問など）だけで、登録後のお試し枠のあとはクレジット購入で続けられます。区分ごとの一覧は{' '}
           <Link href={guideInternalHref('/guide/ai-pricing', searchParams)} className={linkClass}>
             AI利用料金・クレジット
           </Link>

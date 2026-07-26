@@ -28,7 +28,7 @@ export const GUIDE_SECTIONS = [
     href: '/guide/ai-pricing',
     slug: 'ai-pricing',
     title: 'AI利用料金・クレジット',
-    short: '曲解説・@質問等のクレジット消費・購入',
+    short: 'ゲスト／お試し／購入の3区分一覧・クレジット',
   },
   {
     href: '/guide/faq',

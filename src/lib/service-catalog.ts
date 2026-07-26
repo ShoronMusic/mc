@@ -36,7 +36,7 @@ export type ServiceCatalogSection = {
 export const SERVICE_CATALOG_INTRO = {
   title: SERVICE_CATALOG_TITLE,
   lead:
-    '洋楽AIチャットで使える機能を、料金の区分ごとに一覧にまとめています。使い方のコツは「楽しみ方」、マナー・注意事項は「ご利用上の注意」をご覧ください。',
+    '洋楽AIチャットで使える機能を一覧にまとめています。ゲスト／無料登録（お試し）／クレジット購入の3区分で何が使えるかも確認できます。使い方のコツは「楽しみ方」、マナー・注意事項は「ご利用上の注意」をご覧ください。',
 } as const;
 
 export const SERVICE_CATALOG_SUMMARY = [

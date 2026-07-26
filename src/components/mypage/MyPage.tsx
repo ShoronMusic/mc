@@ -92,7 +92,6 @@ import {
   type ParticipationSummaryRow,
 } from '@/lib/participation-summary';
 import {
-  formatGeminiCostJpyApprox,
   geminiUsageMonthKeyJst,
   type GeminiUsageTokenSummary,
 } from '@/lib/gemini-pricing';
@@ -108,7 +107,6 @@ import {
   AI_CREDITS_BILLING_SUMMARY_TITLE,
 } from '@/lib/ai-credits-pricing-guide';
 import { GeminiUsageCategoryBreakdown } from '@/components/mypage/GeminiUsageCategoryBreakdown';
-import { SongSelectionCostGuide } from '@/components/shared/SongSelectionCostGuide';
 import { AiTrialStatusBadge } from '@/components/shared/AiTrialStatusBadge';
 import { useAiTrialStatus } from '@/hooks/useAiTrialStatus';
 import { ParticipationSongHistoryModal } from '@/components/mypage/ParticipationSongHistoryModal';
@@ -3434,7 +3432,6 @@ export default function MyPage({
                 <p className="mt-2.5 text-[11px] text-gray-500">{AI_CREDITS_BILLING_SUMMARY_FOOTNOTE}</p>
               </div>
             ) : null}
-            {!IS_MC_PRODUCT ? <SongSelectionCostGuide variant="mypage" className="mb-4" /> : null}
             {!IS_MC_PRODUCT && !isGuest ? (
               <div className="mb-4">
                 <p className="mb-2 text-xs font-medium text-gray-300">{AI_TRIAL_STATUS_MYPAGE_HEADING}</p>
@@ -3455,16 +3452,13 @@ export default function MyPage({
             {!IS_MC_PRODUCT && !geminiUsageLoading && geminiUsageSummary?.enabled && (
               <div className="mb-4 rounded border border-violet-800/50 bg-violet-950/20 p-3">
                 <p className="text-xs font-medium text-violet-200">
-                  月次 AI 利用（請求先としてあなたに帰属・円は運営原価の試算）
+                  月次 AI 利用（請求先としてあなたに帰属）
                 </p>
                 {currentMonthGeminiUsage && currentMonthGeminiUsage.calls > 0 ? (
                   <p className="mt-1 text-sm text-gray-100">
                     今月: {currentMonthGeminiUsage.calls} 回 · 入力{' '}
                     {formatTokenCount(currentMonthGeminiUsage.promptTokens)} · 出力{' '}
-                    {formatTokenCount(currentMonthGeminiUsage.outputTokens)} ·{' '}
-                    <span className="text-gray-300">
-                      運営原価 {formatGeminiCostJpyApprox(currentMonthGeminiUsage.costJpyApprox)}
-                    </span>
+                    {formatTokenCount(currentMonthGeminiUsage.outputTokens)}
                   </p>
                 ) : (
                   <p className="mt-1 text-xs text-gray-400">今月の記録はまだありません。</p>
@@ -3474,23 +3468,20 @@ export default function MyPage({
                   <GeminiUsageCategoryBreakdown
                     byCategory={currentMonthPersonalByCategory}
                     title="今月 · あなたの操作"
-                    showTypicalHints
                     className="mt-3 border-t border-violet-900/40 pt-3"
                   />
                 ) : currentMonthGeminiByCategory &&
                   Object.values(currentMonthGeminiByCategory).some((c) => c.calls > 0) ? (
                   <GeminiUsageCategoryBreakdown
                     byCategory={currentMonthGeminiByCategory}
-                    title="今月の種別内訳（運営原価目安の割合）"
-                    showTypicalHints
+                    title="今月の種別内訳"
                     className="mt-3 border-t border-violet-900/40 pt-3"
                   />
                 ) : geminiUsageSummary.byCategory &&
                   Object.values(geminiUsageSummary.byCategory).some((c) => c.calls > 0) ? (
                   <GeminiUsageCategoryBreakdown
                     byCategory={geminiUsageSummary.byCategory}
-                    title="種別内訳（直近120日・運営原価目安の割合）"
-                    showTypicalHints
+                    title="種別内訳（直近120日）"
                     className="mt-3 border-t border-violet-900/40 pt-3"
                   />
                 ) : null}
@@ -3517,8 +3508,7 @@ export default function MyPage({
                       .map((m) => (
                         <li key={m.monthKey}>
                           {m.monthLabel}: {m.calls} 回 · 入力 {formatTokenCount(m.promptTokens)} · 出力{' '}
-                          {formatTokenCount(m.outputTokens)} · 運営原価{' '}
-                          {formatGeminiCostJpyApprox(m.costJpyApprox)}
+                          {formatTokenCount(m.outputTokens)}
                         </li>
                       ))}
                   </ul>
@@ -3588,8 +3578,7 @@ export default function MyPage({
                             <>
                               <p className="mt-1 text-xs text-violet-200">
                                 AI 利用: {slotUsage.calls} 回 · 入力 {formatTokenCount(slotUsage.promptTokens)} · 出力{' '}
-                                {formatTokenCount(slotUsage.outputTokens)} · 運営原価{' '}
-                                {formatGeminiCostJpyApprox(slotUsage.costJpyApprox)}
+                                {formatTokenCount(slotUsage.outputTokens)}
                               </p>
                               {slotPersonalUsage && slotPersonalUsage.calls > 0 && slotRoomCommonUsage &&
                               slotRoomCommonUsage.calls > 0 ? (

@@ -8,6 +8,8 @@ import {
   type ServiceCatalogPricing,
 } from '@/lib/service-catalog';
 import { withPolicyModalQuery } from '@/lib/policy-modal-link';
+import { UserAudienceServiceMatrix } from '@/components/legal/UserAudienceServiceMatrix';
+import { AI_CREDITS_PRICING_PAGE_PATH } from '@/lib/ai-credits-pricing-guide';
 
 type ServiceCatalogProps = {
   policyModal?: boolean;
@@ -64,6 +66,18 @@ export function ServiceCatalog({ policyModal = false }: ServiceCatalogProps) {
           ))}
         </ul>
       </section>
+
+      <UserAudienceServiceMatrix />
+      <p className="text-xs text-gray-500">
+        料金・パック価格の詳細は{' '}
+        <Link
+          href={hrefForModal(AI_CREDITS_PRICING_PAGE_PATH, policyModal)}
+          className="text-amber-400/90 underline-offset-2 hover:underline"
+        >
+          AI利用料金・クレジット
+        </Link>
+        をご覧ください。
+      </p>
 
       {SERVICE_CATALOG_SECTIONS.map((section) => (
         <section key={section.id} className="space-y-3" aria-labelledby={`catalog-${section.id}`}>

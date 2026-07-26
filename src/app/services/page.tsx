@@ -5,7 +5,7 @@ import { ServiceCatalog } from '@/components/services/ServiceCatalog';
 export const metadata: Metadata = {
   title: 'サービス一覧 | 洋楽AIチャット（β版）',
   description:
-    '洋楽AIチャットの機能一覧です。無料の音楽チャット、クレジットが必要な AI、サイト負担の機能を区分して紹介します。',
+    '洋楽AIチャットの機能一覧です。ゲスト／無料登録（お試し）／クレジット購入の3区分と、無料・クレジット・サイト負担の機能を紹介します。',
 };
 
 type ServicesPageProps = {

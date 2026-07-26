@@ -99,7 +99,7 @@ export default function GuideIndexPage({ searchParams }: GuideIndexPageProps) {
       >
         <span className="font-semibold text-emerald-100">サービス一覧</span>
         <span className="mt-1 block text-sm text-gray-400">
-          無料・クレジット・サイト負担など、機能を料金区分ごとに一覧で確認できます。
+          ゲスト／お試し／クレジット購入の3区分と、機能を料金区分ごとに確認できます。
         </span>
       </Link>
       <Link

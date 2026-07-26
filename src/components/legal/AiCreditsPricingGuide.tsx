@@ -10,6 +10,7 @@ import {
 } from '@/lib/ai-credits-pricing-guide';
 import { AI_CREDITS_PREPAID_NO_POST_BILLING_BRIEF } from '@/lib/ai-credits-prepaid-disclosure';
 import { withPolicyModalQuery } from '@/lib/policy-modal-link';
+import { UserAudienceServiceMatrix } from '@/components/legal/UserAudienceServiceMatrix';
 
 type AiCreditsPricingGuideProps = {
   showTitle?: boolean;
@@ -29,6 +30,8 @@ export function AiCreditsPricingGuide({
       {showTitle ? (
         <h2 className="text-lg font-bold text-white">{AI_CREDITS_PRICING_PAGE_TITLE}</h2>
       ) : null}
+
+      <UserAudienceServiceMatrix headingLevel={showTitle ? 'h3' : 'h2'} />
 
       <section className="space-y-2">
         <h3 className="font-semibold text-white">無料で使えること</h3>
@@ -95,13 +98,13 @@ export function AiCreditsPricingGuide({
       </section>
 
       <section className="space-y-2">
-        <h3 className="font-semibold text-white">お試し枠（無料登録）</h3>
+        <h3 className="font-semibold text-white">お試し枠とクレジット購入の関係</h3>
         <div className="overflow-x-auto rounded-lg border border-gray-700">
           <table className="w-full min-w-[360px] border-collapse text-left text-sm">
             <tbody>
               {AI_CREDITS_TRIAL_ROWS.map((row) => (
                 <tr key={row.audience} className="border-b border-gray-800 last:border-0">
-                  <th className="w-32 px-3 py-2.5 font-semibold text-gray-300">{row.audience}</th>
+                  <th className="w-44 px-3 py-2.5 font-semibold text-gray-300 sm:w-56">{row.audience}</th>
                   <td className="px-3 py-2.5">{row.detail}</td>
                 </tr>
               ))}
