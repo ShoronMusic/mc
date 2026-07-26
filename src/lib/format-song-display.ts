@@ -436,6 +436,27 @@ export function shouldSkipAiCommentaryForPromotionalOrProseMetadata(params: {
   return false;
 }
 
+/**
+ * ライブラリ display_title や mylist 分割結果が、曲名ではなく概要文・長文プローズっぽいとき true。
+ * （選曲アナウンスに説明文が載る事故の抑止）
+ */
+export function looksLikeProseOrBloatedDisplayTitle(text: string | null | undefined): boolean {
+  const t = (text ?? '').trim();
+  if (!t) return false;
+  const wordCount = t.split(/\s+/).filter(Boolean).length;
+  if (wordCount >= 26) return true;
+  if (t.length >= 140) return true;
+  if ((t.match(/,/g) ?? []).length >= 6) return true;
+  if (
+    /\b(as a point of|for those who|never watched|reference to this|performed before a live)\b/i.test(
+      t,
+    )
+  ) {
+    return true;
+  }
+  return false;
+}
+
 /** 制作クレジット行を曲名と誤認したメタデータか（曲解説前のガード用） */
 export function looksLikeGarbageArtistSongMetadataForCommentary(params: {
   artist: string | null;
@@ -694,7 +715,96 @@ export function isGarbageArtistSongParse(parsed: { artist: string; song: string 
   ) {
     return true;
   }
+  const artistWords = parsed.artist.split(/\s+/).filter(Boolean).length;
+  const songWords = parsed.song.split(/\s+/).filter(Boolean).length;
+  /** 散文タイトルを「 - 」で割った残骸（選曲アナウンスに長文が載る事故） */
+  if (parsed.artist.length > 80 || artistWords >= 14) return true;
+  if (parsed.song.length > 100 || songWords >= 18) return true;
+  if (
+    /\b(as a point of|for those who|never watched|reference to this|performed before a live)\b/i.test(
+      parsed.artist,
+    ) ||
+    /\b(as a point of|for those who|never watched|reference to this|performed before a live)\b/i.test(
+      parsed.song,
+    )
+  ) {
+    return true;
+  }
   return false;
+}
+
+/**
+ * 長文・解説混じりタイトルから、先頭の曲クレジット句だけを切り出す。
+ * 例: 「Sue Keller plays That's A Plenty by Lew Pollack. As a point of information…」
+ */
+export function extractLeadingTitleCreditClause(title: string): string {
+  const t = title.trim();
+  if (!t) return t;
+  const wordCount = t.split(/\s+/).filter(Boolean).length;
+  if (t.length < 100 && wordCount < 18) return t;
+  const m = t.match(/^(.+?[.!?])(?:\s|$)/);
+  if (m?.[1]) {
+    const clause = m[1].replace(/[.!?]+$/, '').trim();
+    if (clause.length >= 12 && clause.length <= 160) return clause;
+  }
+  return t;
+}
+
+/**
+ * 「Performer plays Song by Composer」／「Performer plays Genre: Song」型
+ * （ラグタイム実演の短タイトル・概要先頭クレジット）。
+ * Composer / Genre は表示に使わず、演奏者 - 曲名だけ返す。
+ */
+export function parsePerformerPlaysSongTitle(title: string): { artist: string; song: string } | null {
+  const clause = extractLeadingTitleCreditClause(title);
+  if (!clause || clause.length < 12) return null;
+
+  const accept = (artistRaw: string, songRaw: string): { artist: string; song: string } | null => {
+    const artist = artistRaw.trim();
+    const song = cleanTitle(songRaw.trim());
+    if (
+      !artist ||
+      !song ||
+      /\b(guitar|piano|bass|drums|here|tonight|along)\b/i.test(song) ||
+      isGarbageArtistSongParse({ artist, song })
+    ) {
+      return null;
+    }
+    return { artist, song };
+  };
+
+  const withBy = clause.match(/^(.{2,70}?)\s+plays\s+(.{2,90}?)\s+by\s+(.{2,70}?)$/i);
+  if (withBy) {
+    const out = accept(withBy[1]!, withBy[2]!);
+    if (out) return out;
+  }
+
+  /** 例: Sue Keller plays Ragtime: That's A Plenty */
+  const playsGenreColon = clause.match(
+    /^(.{2,70}?)\s+plays\s+[A-Za-z][\w/&'’.-]*(?:\s+[A-Za-z][\w/&'’.-]*){0,3}\s*:\s*(.{2,90})$/i,
+  );
+  if (playsGenreColon) {
+    const out = accept(playsGenreColon[1]!, playsGenreColon[2]!);
+    if (out) return out;
+  }
+
+  const coversWithBy = clause.match(/^(.{2,70}?)\s+covers?\s+(.{2,90}?)\s+by\s+(.{2,70}?)$/i);
+  if (coversWithBy) {
+    const out = accept(coversWithBy[1]!, coversWithBy[2]!);
+    if (out) return out;
+  }
+
+  return null;
+}
+
+/** 概要欄の先頭行から plays / covers クレジットを拾う */
+export function parsePerformerPlaysSongFromDescription(
+  description: string | null | undefined,
+): { artist: string; song: string } | null {
+  if (!description?.trim()) return null;
+  const firstLine = description.split(/\r?\n/).map((l) => l.trim()).find(Boolean);
+  if (!firstLine || firstLine.length < 12) return null;
+  return parsePerformerPlaysSongTitle(firstLine);
 }
 
 /**
@@ -715,6 +825,9 @@ export function parseArtistTitle(
   const raw0 = title.trim();
   if (!raw0) return null;
   const raw = raw0.replace(/[\u201c\u201d]/g, '"').replace(/[\u2018\u2019]/g, "'");
+
+  const playsParsed = parsePerformerPlaysSongTitle(raw);
+  if (playsParsed) return playsParsed;
 
   // 引用符: Artist "Song Title" または Artist 'Song Title'
   const doubleQuote = raw.match(/^([^"]+)\s+"([^"]+)"\s*$/);
@@ -1245,6 +1358,9 @@ export function getArtistAndSong(
       const perfInverted = parseSongPerformedByFromDescription(desc);
       if (perfInverted) fromDesc = perfInverted;
     }
+    if (!fromDesc) {
+      fromDesc = parsePerformerPlaysSongFromDescription(desc);
+    }
     if (fromDesc) {
       const artistPart = fromDesc.artist;
       const songPart = cleanTitle(fromDesc.song);
@@ -1257,6 +1373,18 @@ export function getArtistAndSong(
         return swapIfCompoundArtistStuckInSongSlot(interim.artist, interim.artistDisplay, interim.song, desc);
       }
     }
+  }
+
+  const playsFromRaw = parsePerformerPlaysSongTitle(title);
+  if (playsFromRaw) {
+    const artistPart = playsFromRaw.artist;
+    const songPart = cleanTitle(playsFromRaw.song);
+    return swapIfCompoundArtistStuckInSongSlot(
+      getMainArtist(artistPart) || artistPart,
+      getArtistDisplayString(artistPart) || artistPart,
+      refineSongTitleWithDescription(songPart, options?.videoDescription),
+      options?.videoDescription ?? null,
+    );
   }
 
   const cleaned = cleanTitle(title);
@@ -1750,6 +1878,8 @@ export function formatArtistTitle(
       const { artistDisplay, song } = getArtistAndSong(cleaned, null, opts);
       if (artistDisplay && song) return `${artistDisplay} - ${song}`;
     }
+    const playsOnly = parsePerformerPlaysSongTitle(cleaned);
+    if (playsOnly) return `${playsOnly.artist} - ${playsOnly.song}`;
     return cleaned;
   }
 
@@ -1759,6 +1889,8 @@ export function formatArtistTitle(
       const { artistDisplay, song } = getArtistAndSong(cleaned, null, opts);
       if (artistDisplay && song) return `${artistDisplay} - ${song}`;
     }
+    const playsOnly = parsePerformerPlaysSongTitle(cleaned);
+    if (playsOnly) return `${playsOnly.artist} - ${playsOnly.song}`;
     return cleaned;
   }
 

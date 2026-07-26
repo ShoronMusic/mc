@@ -736,7 +736,6 @@ export default function RoomWithSync({
   const playbackQueueFallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const aiCharacterAutoPickInFlightRef = useRef(false);
   const aiCharacterCommentedVideoIdRef = useRef<string | null>(null);
-  const aiCharacterLastReactionAtRef = useRef(0);
   const aiCharacterLastSelfIntroAtRef = useRef(0);
   const aiCharacterLastAutoPickTurnKeyRef = useRef<string>('');
   /** selectionRound の同期揺れで turnKey が変わらないよう、人間→AI ターン遷移のたびにだけ増やす */
@@ -7101,6 +7100,8 @@ export default function RoomWithSync({
     if (!ownerAiCharacterJoinEnabledRef.current) return;
     const vid = (videoId ?? '').trim();
     if (!vid) return;
+    /** プレイリスト／ライブラリ全曲などの連続選曲中は毎曲褒めない */
+    if (music8PlaylistAutoplayRef.current) return;
     if (aiCharacterCommentedVideoIdRef.current === vid) return;
     if (!currentSongPosterClientId || currentSongPosterClientId === AI_CHARACTER_CLIENT_ID) return;
     aiCharacterCommentedVideoIdRef.current = vid;
@@ -8140,46 +8141,6 @@ export default function RoomWithSync({
           .catch(() => addSystemMessage(aiErrorMessage));
       };
 
-      const doCharacterQuickReaction = (sourceText: string) => {
-        const now = Date.now();
-        if (now - aiCharacterLastReactionAtRef.current < 45_000) return;
-        aiCharacterLastReactionAtRef.current = now;
-        const jpS = jpDomesticSilenceVideoIdRef.current;
-        const vCur = videoIdRef.current;
-        if (jpS != null && vCur != null && jpS === vCur) return;
-        const reactionPrompt = `参加者の発言: ${sourceText}\nこの発言に、でしゃばらず短く共感してください。必ず「どこが良いか」の理由を1つ添え、可能ならリズム・グルーヴ・ベース・メロディ・コーラス・展開・音色のうち1つを使って具体的に、1〜2文で返してください。`;
-        const listForCharacterAi = [...messages, { ...newUserMsg, body: reactionPrompt }].map((m) => ({
-          displayName: m.displayName,
-          body: m.body,
-          messageType: m.messageType,
-        }));
-        void fetch('/api/ai/character-chat', {
-          method: 'POST',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            messages: listForCharacterAi,
-            videoId: videoId ?? undefined,
-            roomId: roomId ?? undefined,
-            clientId: myClientId || undefined,
-            isGuest,
-            aiCharacterDisplayName: ownerAiCharacterNameRef.current || AI_CHARACTER_DEFAULT_NAME,
-            songSelectorDisplayName: resolvePublisherNameForClientId(currentSongPosterClientId),
-          }),
-        })
-          .then(async (r) => {
-            const data = (await r.json().catch(() => null)) as { text?: string; skipped?: boolean } | null;
-            if (!r.ok || data?.skipped === true || !data?.text) return;
-            const body = data.text.startsWith('【AIキャラ】') ? data.text : `【AIキャラ】 ${data.text}`;
-            addAiMessage(body, {
-              aiSource: 'character_chat',
-              displayName: ownerAiCharacterNameRef.current,
-              playCharacterTts: true,
-            });
-          })
-          .catch(() => {});
-      };
-
       const doCharacterPasteFromNextRecommendQuery = (searchQuery: string) => {
         if (characterManualSongPickInFlightRef.current) return;
         characterManualSongPickInFlightRef.current = true;
@@ -8730,23 +8691,6 @@ export default function RoomWithSync({
           } else {
             doCharacterChatReply();
           }
-        } else if (
-          ownerAiCharacterJoinEnabledRef.current &&
-          currentSongPosterClientId === AI_CHARACTER_CLIENT_ID &&
-          trimmed.length >= 5 &&
-          trimmed.length <= 90 &&
-          /(カバー|cover|原曲|オリジナル|セルフカバー)/i.test(trimmed)
-        ) {
-          doCharacterQuickReaction(trimmed);
-        } else if (
-          ownerAiCharacterJoinEnabledRef.current &&
-          currentSongPosterClientId !== '' &&
-          currentSongPosterClientId !== AI_CHARACTER_CLIENT_ID &&
-          trimmed.length >= 6 &&
-          trimmed.length <= 70 &&
-          /(すごい|好き|最高|いい|良い|かっこいい|エモ|刺さる|たまらない|やばい)/.test(trimmed)
-        ) {
-          doCharacterQuickReaction(trimmed);
         } else if (
           ownerAiCharacterJoinEnabledRef.current &&
           myClientId === ownerClientIdRef.current &&

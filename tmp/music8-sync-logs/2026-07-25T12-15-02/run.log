@@ -1,0 +1,4 @@
+2026-07-25T12:15:02.5222380+09:00 === 01-diff-plan ===
+2026-07-25T12:15:02.5620436+09:00 npx tsx scripts/diff-music8-sync-plan.ts --songs-dir=E:\m8\public\data\songs --artists-dir=E:\m8\public\data\artists --out-dir=E:\mc\tmp\music8-sync-plan-2026-07-25T12-15-02 --artists-list=E:\m8\public\data\artists.json
+2026-07-25T12:15:38.4644641+09:00 === 03-apply-db ===
+2026-07-25T12:15:38.4762555+09:00 npx tsx scripts/apply-music8-sync-plan.ts --manifest=E:\mc\tmp\music8-sync-plan-2026-07-25T12-15-02\manifest.json --apply --forward-file=tmp\music8-bulk-forward-args.txt

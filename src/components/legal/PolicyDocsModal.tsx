@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 
-export type PolicyDocsTab = 'terms' | 'privacy' | 'guide';
+export type PolicyDocsTab = 'terms' | 'privacy' | 'guide' | 'commercial';
 
 type PolicyDocsModalProps = {
   open: boolean;
@@ -22,6 +22,8 @@ function policyDocsIframeSrc(tab: PolicyDocsTab, returnToSegment?: string | null
       return `/privacy?modal=1${returnQ}`;
     case 'guide':
       return `/guide?modal=1${returnQ}`;
+    case 'commercial':
+      return `/commercial-transactions?modal=1${returnQ}`;
     default:
       return `/terms?modal=1${returnQ}`;
   }
@@ -31,6 +33,7 @@ const TAB_LABELS: Record<PolicyDocsTab, string> = {
   guide: 'ご利用上の注意',
   terms: '利用規約',
   privacy: 'プライバシー',
+  commercial: '特定商取引法に基づく表示',
 };
 
 export function PolicyDocsModal({
@@ -60,7 +63,7 @@ export function PolicyDocsModal({
       >
         <div className="flex shrink-0 items-center justify-between gap-2 border-b border-gray-700 px-3 py-2">
           <div className="flex min-w-0 items-center gap-1 overflow-x-auto [scrollbar-width:thin]">
-            {(['guide', 'terms', 'privacy'] as const).map((tab) => (
+            {(['guide', 'terms', 'privacy', 'commercial'] as const).map((tab) => (
               <button
                 key={tab}
                 type="button"

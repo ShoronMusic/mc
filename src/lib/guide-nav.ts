@@ -31,6 +31,18 @@ export const GUIDE_SECTIONS = [
     short: '曲解説・@質問等のクレジット消費・購入',
   },
   {
+    href: '/guide/faq',
+    slug: 'faq',
+    title: 'よくある質問',
+    short: '無料と有料・YouTube・運営・洋楽テーマなど',
+  },
+  {
+    href: '/guide/about',
+    slug: 'about',
+    title: 'このサービスについて',
+    short: 'なぜ洋楽か・運営の思い・これから',
+  },
+  {
     href: '/guide/first-song',
     slug: 'first-song',
     title: '選曲のしかた',

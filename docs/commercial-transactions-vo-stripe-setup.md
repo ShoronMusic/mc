@@ -1,23 +1,21 @@
 # 特定商取引・バーチャルオフィス・Stripe 運用メモ
 
 > **用途**: 有料化（Phase D 段階2・Stripe）に向けた、**特商法表示・VO・決済アカウント**の方針整理。  
-> **関連**: 商品・価格 `docs/00-prepaid-pricing-summary.md` · 実装 `src/lib/commercial-transactions-operator.ts` · ページ `/commercial-transactions`  
-> **ステータス**: 特商法ページ **骨格あり** · VO **申し込み中（来週契約予定）** · Stripe 本番 **未** · クレジット販売実装 **未（段階1＝手動付与のみ）**
+> **関連**: 商品・価格 `docs/00-prepaid-pricing-summary.md` · 実装 `src/lib/commercial-transactions-operator.ts` · ページ `/commercial-transactions` · 公開時 SNS 批判想定 `docs/sns-launch-criticism-prep.md`  
+> **ステータス**: 特商法ページ **骨格あり** · VO 住所 **取得済み（所在地掲載可）** · 050 **9月以降** · Stripe 本番 **未** · クレジット販売実装 **未（段階1＝手動付与のみ）**
 
-最終更新: **2026-07-18**
+最終更新: **2026-07-25**
 
 ---
 
 ## 0. 工程マスター（いま → クレジット販売開始）
 
-依存関係の正順。**VO 契約前に Stripe 本番販売は始めない**（特商法の所在地・電話が揃ってから）。
+依存関係の正順。**住所は先に特商法へ掲載可**。050 は 9 月以降。Stripe 本番販売は特商法の所在地・電話が揃ってからが無難（電話は請求時開示で運用する場合は別途判断）。
 
 ```
-[いま] VO 申し込み中
+[いま] VO 住所確定 → 特商法「所在地」掲載（電話は非掲載案内）
    ↓
-[来週目安] VO 契約・050 取得
-   ↓
-[直後] 特商法ページに住所・電話を掲載（コード更新）
+[2026年9月目安] 050 取得 → 特商法「電話」掲載
    ↓
 [並行可] 開業届（事業所＝VO）· Stripe アカウント作成（KYC）
    ↓
@@ -78,7 +76,7 @@
 | **運営責任者** | **前橋雄治**（個人のため販売事業者と同一） |
 | **廃止した表記** | 「洋楽AIチャット**事務局**」（法人風で実態と合わないため） |
 | **メール（公開）** | musicai@gol.com |
-| **所在地・電話（公開）** | VO 契約・050 取得まで **非掲載**（請求時は法令に基づき開示） |
+| **所在地・電話（公開）** | 所在地＝VO 住所（掲載可）。電話＝050 取得まで非掲載（請求時は法令に基づき開示） |
 | **Stripe** | VO とは別。**本人・自宅（本人住所）・個人口座・本人携帯** が基本 |
 | **事業所住所の整合** | 開業届・特商法・Stripe の **事業所住所** は VO で揃える |
 
@@ -92,8 +90,8 @@
 |------|-----------|-----------|
 | 販売事業者 | 前橋雄治（個人事業主・屋号：洋楽AIチャット） | 同左 |
 | 運営責任者 | 前橋雄治 | 同左 |
-| 所在地 | 非掲載案内文 | VO 住所 |
-| 電話番号 | 非掲載案内文 | 050 番号 |
+| 所在地 | 非掲載案内文 | VO 住所（住所確定後。電話と独立） |
+| 電話番号 | 非掲載案内文 | 050 番号（**2026年9月以降**見込み） |
 | メール | musicai@gol.com | 同左 |
 
 非掲載案内文（正本）:
@@ -121,23 +119,27 @@
 | `formatCommercialTransactionsSellerDisplay()` | 販売事業者行 |
 | `formatCommercialTransactionsOperatorFooter()` | 規約等フッター |
 
-### 3.1 VO 契約・050 取得後に更新する項目
+### 3.1 VO 住所・050 取得後に更新する項目
+
+所在地と電話は **別フラグ**（住所は先に公開可。050 は 2026年9月以降の見込み）。
 
 `src/lib/commercial-transactions-operator.ts`:
 
 ```typescript
-export const COMMERCIAL_TRANSACTIONS_VIRTUAL_OFFICE_CONTRACTED = true;
+export const COMMERCIAL_TRANSACTIONS_ADDRESS_PUBLISHED = true; // 住所確定後
+export const COMMERCIAL_TRANSACTIONS_PHONE_PUBLISHED = false;  // 050 取得後に true
 
 export const COMMERCIAL_TRANSACTIONS_OPERATOR = {
   // sellerName, tradeName, representativeName, email は現状のまま
-  address: '（VO の住所）',
-  phone: '050-xxxx-xxxx',
+  address: '〒530-0001 大阪府大阪市北区梅田1-1-3 大阪駅前第3ビル 29階 1-1-1号室',
+  phone: '050-xxxx-xxxx', // 取得後
   // ...
 };
 ```
 
 - **自宅住所・090 番号はコードに載せない**（特商法公開・リポジトリ露出を避ける）。
 - 050 は問い合わせ用。本人携帯への転送・留守電を設定する。
+- 電話非掲載中も、請求があれば法令に基づき遅滞なく開示する旨の案内文を表示する。
 
 ---
 
@@ -234,13 +236,13 @@ Stripe は **本人確認（KYC）・入金** のため、特商法の「見せ�
 
 ### 段階 B — VO・050・特商法掲載（進行中）
 
-- [~] VO 事業者を選定・**申し込み中（来週契約予定）**（特商法表記可を確認）
+- [~] VO 事業者を選定・契約（特商法表記可を確認）
 - [ ] 郵便あて名を登録（前橋雄治 または 前橋雄治（洋楽AIチャット））
-- [ ] 050 取得・転送設定
-- [ ] `commercial-transactions-operator.ts` に address・phone を設定
-- [ ] `COMMERCIAL_TRANSACTIONS_VIRTUAL_OFFICE_CONTRACTED = true`
+- [ ] 050 取得・転送設定（**目安: 2026年9月以降**）
+- [x] `commercial-transactions-operator.ts` に address を設定・`ADDRESS_PUBLISHED = true`
+- [ ] `phone` 設定・`PHONE_PUBLISHED = true`（050 取得後）
 - [ ] （方針どおりなら）`COMMERCIAL_TRANSACTIONS_PERSONAL_NAME_PUBLISHED = true`
-- [ ] `/commercial-transactions` の表示確認・デプロイ
+- [ ] `/commercial-transactions` の表示確認・デプロイ（住所公開・電話は非掲載のまま可）
 
 ### 段階 C — 税務・Stripe アカウント（未）
 
@@ -266,8 +268,8 @@ Stripe は **本人確認（KYC）・入金** のため、特商法の「見せ�
 | 項目 | メモ |
 |------|------|
 | VO 事業者 | **申し込み中・来週契約予定**（契約後に本表を更新） |
-| VO 住所 | 契約後に `address` へ反映 |
-| 050 番号 | 取得後に `phone` へ反映 |
+| VO 住所 | **取得済み・掲載 ON**（`ADDRESS_PUBLISHED`） |
+| 050 番号 | **2026年9月以降**取得予定。それまで `PHONE_PUBLISHED = false`（非掲載案内） |
 | 税理士 | 開業届・確定申告のタイミングで確認推奨 |
 | 氏名の特商法公開 | `COMMERCIAL_TRANSACTIONS_PERSONAL_NAME_PUBLISHED`（現状 false＝屋号中心表示） |
 

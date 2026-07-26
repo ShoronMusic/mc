@@ -113,6 +113,15 @@ export function StartPageFooter({ usePolicyModal = false }: StartPageFooterProps
               |
             </span>
             <Link
+              href="/guide/about"
+              className="underline-offset-2 hover:text-gray-300 hover:underline"
+            >
+              このサービスについて
+            </Link>
+            <span aria-hidden className="text-gray-600">
+              |
+            </span>
+            <Link
               href="/guide/ai-pricing"
               className="underline-offset-2 hover:text-gray-300 hover:underline"
             >
@@ -123,12 +132,18 @@ export function StartPageFooter({ usePolicyModal = false }: StartPageFooterProps
         <span aria-hidden className="text-gray-600">
           |
         </span>
-        <Link
-          href="/commercial-transactions"
-          className="underline-offset-2 hover:text-gray-300 hover:underline"
-        >
-          特定商取引法に基づく表示
-        </Link>
+        {usePolicyModal ? (
+          <FooterLinkButton onClick={() => openPolicyModal('commercial')}>
+            特定商取引法に基づく表示
+          </FooterLinkButton>
+        ) : (
+          <Link
+            href="/commercial-transactions"
+            className="underline-offset-2 hover:text-gray-300 hover:underline"
+          >
+            特定商取引法に基づく表示
+          </Link>
+        )}
       </p>
       <div className="mt-3 max-w-xl">
         <SisterSiteAccountNote variant="compact" />

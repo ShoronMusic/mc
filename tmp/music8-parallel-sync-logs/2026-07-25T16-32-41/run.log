@@ -1,0 +1,6 @@
+2026-07-25T16:32:41.8674837+09:00 [parallel] logDir=E:\mc\tmp\music8-parallel-sync-logs\2026-07-25T16-32-41
+2026-07-25T16:32:41.9084219+09:00 [parallel] McRoot=E:\mc M8Root=E:\m8
+2026-07-25T16:32:41.9213309+09:00 [parallel] SkipM8Generate=True SkipGcs=False SkipSupabase=True ArtistFullUpdate=False
+2026-07-25T16:32:41.9327439+09:00 [1/2] skipped (-SkipM8Generate)。既存の public\data を使用
+2026-07-25T16:32:41.9476621+09:00 [2/2] skipped (-SkipSupabase)
+2026-07-25T16:32:41.9563338+09:00 [parallel] done. log=E:\mc\tmp\music8-parallel-sync-logs\2026-07-25T16-32-41\run.log

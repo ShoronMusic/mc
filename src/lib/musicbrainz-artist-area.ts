@@ -6,7 +6,7 @@
  * - 原則 1 秒に 1 リクエストまで（全インスタンス共通の単純スロットル）。
  *
  * 環境変数:
- * - MUSICBRAINZ_USER_AGENT … 未設定なら MusicBrainz を呼ばない（例: musicaichat/0.1.0 ( https://example.com )）
+ * - MUSICBRAINZ_USER_AGENT … 未設定なら MusicBrainz を呼ばない（例: musicaichat/0.1.4 (contact: musicai@gol.com)）
  * - MUSICBRAINZ_LOOKUP=0 … MusicBrainz 参照をオフ（日本語メタデータ判定のみ）
  */
 

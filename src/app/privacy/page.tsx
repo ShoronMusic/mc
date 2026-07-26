@@ -1,7 +1,10 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { withPolicyModalQuery } from '@/lib/policy-modal-link';
-import { formatCommercialTransactionsOperatorFooter } from '@/lib/commercial-transactions-operator';
+import {
+  formatCommercialTransactionsOperatorFooter,
+  getCommercialTransactionsContactEmail,
+} from '@/lib/commercial-transactions-operator';
 
 export const metadata: Metadata = {
   title: 'プライバシーポリシー | 洋楽AIチャット（β版）',
@@ -146,7 +149,7 @@ export default function PrivacyPage({ searchParams }: PrivacyPageProps) {
         <section className="mt-10 rounded-lg border border-gray-800 bg-gray-900/40 p-4">
           <h2 className="text-sm font-semibold text-white">運営者・お問い合わせ</h2>
           <p className="mt-2 text-sm text-gray-300">{formatCommercialTransactionsOperatorFooter()}</p>
-          <p className="text-sm text-gray-300">musicaichat0@gmail.com</p>
+          <p className="text-sm text-gray-300">{getCommercialTransactionsContactEmail()}</p>
         </section>
       </main>
     </div>

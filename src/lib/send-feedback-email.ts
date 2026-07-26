@@ -3,7 +3,11 @@
  * RESEND_API_KEY が未設定の場合は送信せず失敗結果を返す。
  */
 
-const DEFAULT_FEEDBACK_RECIPIENTS = ['reeshoron@gmail.com', 'ymap68@yahoo.co.jp'] as const;
+const DEFAULT_FEEDBACK_RECIPIENTS = [
+  'reeshoron@gmail.com',
+  'ymap68@yahoo.co.jp',
+  'musicai@gol.com',
+] as const;
 
 /** カンマ区切りで複数指定可。未設定時は既定の通知先一覧 */
 function getFeedbackRecipients(): string[] {

@@ -6,8 +6,12 @@ import {
   getArtistAndSong,
   getArtistDisplayString,
   getMainArtist,
+  isGarbageArtistSongParse,
   isYoutubeTopicChannelAuthor,
+  looksLikeProseOrBloatedDisplayTitle,
   parseArtistTitleFromDescription,
+  parsePerformerPlaysSongFromDescription,
+  parsePerformerPlaysSongTitle,
   swapIfCompoundArtistStuckInSongSlot,
 } from '@/lib/format-song-display';
 import { resolveTitleOrderWithMusicBrainz } from '@/lib/musicbrainz-title-order';
@@ -17,6 +21,35 @@ import { resolveOEmbedToMyListStylePack } from '@/lib/my-list-youtube-title-sugg
 /** 開発・検証用: 選曲まわりを oEmbed + マイリスト系の簡易分割だけにする（MusicBrainz / getArtistAndSong は使わない） */
 function isMyListOembedArtistTitleModeEnv(): boolean {
   return process.env.YT_ARTIST_TITLE_MODE === 'mylist_oembed';
+}
+
+function packFromPerformerPlays(
+  title: string,
+  snippet: VideoSnippet | null,
+): { artist: string | null; artistDisplay: string | null; song: string } | null {
+  const plays =
+    parsePerformerPlaysSongTitle(title) ??
+    parsePerformerPlaysSongFromDescription(snippet?.description);
+  if (!plays) return null;
+  const artistPart = plays.artist;
+  return {
+    artist: getMainArtist(artistPart) || artistPart,
+    artistDisplay: getArtistDisplayString(artistPart) || artistPart,
+    song: plays.song,
+  };
+}
+
+function mylistPackLooksUnusable(r: {
+  artist: string | null;
+  artistDisplay: string | null;
+  song: string;
+}): boolean {
+  const a = (r.artistDisplay || r.artist || '').trim();
+  const s = (r.song || '').trim();
+  if (!s) return true;
+  if (looksLikeProseOrBloatedDisplayTitle(s) || looksLikeProseOrBloatedDisplayTitle(a)) return true;
+  if (a && isGarbageArtistSongParse({ artist: a, song: s })) return true;
+  return false;
 }
 
 function enrichArtistSongFromSnippet(
@@ -96,8 +129,15 @@ export function resolveArtistSongForPack(
     );
   }
   if (isMyListOembedArtistTitleModeEnv()) {
+    const playsPack = packFromPerformerPlays(title, snippet);
+    if (playsPack) {
+      return finalizePackArtistSong(playsPack, snippet?.description);
+    }
     const r = resolveOEmbedToMyListStylePack(title, authorName);
-    return finalizePackArtistSong(r, snippet?.description);
+    if (!mylistPackLooksUnusable(r)) {
+      return finalizePackArtistSong(r, snippet?.description);
+    }
+    // 散文タイトルを mylist が誤分割したときは通常経路へフォールバック
   }
   const base = getArtistAndSong(title, authorName, {
     videoDescription: snippet?.description ?? null,
@@ -158,13 +198,25 @@ export async function resolveArtistSongForPackAsync(
   }
 
   if (isMyListOembedArtistTitleModeEnv()) {
+    const playsPack = packFromPerformerPlays(title, snippet);
+    if (playsPack) {
+      return logArtistPackResolution(
+        'mylist_oembed:performer_plays',
+        title,
+        authorName,
+        finalizePackArtistSong(playsPack, snippet?.description),
+      );
+    }
     const r = resolveOEmbedToMyListStylePack(title, authorName);
-    return logArtistPackResolution(
-      'mylist_oembed',
-      title,
-      authorName,
-      finalizePackArtistSong(r, snippet?.description),
-    );
+    if (!mylistPackLooksUnusable(r)) {
+      return logArtistPackResolution(
+        'mylist_oembed',
+        title,
+        authorName,
+        finalizePackArtistSong(r, snippet?.description),
+      );
+    }
+    // 誤分割時は通常経路（MusicBrainz / getArtistAndSong）へ
   }
 
   const desc = snippet?.description ?? null;

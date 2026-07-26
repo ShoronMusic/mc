@@ -1,0 +1,33 @@
+**********************
+PowerShell transcript start
+Start time: 20260725121502
+Username: LAPTOP-N3TR5NE7\ymap6
+RunAs User: LAPTOP-N3TR5NE7\ymap6
+Configuration Name: 
+Machine: LAPTOP-N3TR5NE7 (Microsoft Windows NT 10.0.26200.0)
+Host Application: C:\Program Files\PowerShell\7\pwsh.dll -ExecutionPolicy Bypass -NonInteractive -File C:\Users\ymap6\AppData\Local\Temp\ps-script-edbc2259-01d2-471e-82a0-340d92b8a852.ps1
+Process ID: 15204
+PSVersion: 7.6.3
+PSEdition: Core
+GitCommitId: 7.6.3
+OS: Microsoft Windows 10.0.26200
+Platform: Win32NT
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1, 6.0, 7.0
+PSRemotingProtocolVersion: 2.4
+SerializationVersion: 1.1.0.1
+WSManStackVersion: 3.0
+**********************
+[1/3] diff plan
+[log] step -> E:\mc\tmp\music8-sync-logs\2026-07-25T12-15-02\01-diff-plan.log
+[log] live output -> console + E:\mc\tmp\music8-sync-logs\2026-07-25T12-15-02\transcript.log (not E:\mc\tmp\music8-sync-logs\2026-07-25T12-15-02\01-diff-plan.log until end)
+
+[2/3] skipped (-SkipDryRun)
+[3/3] apply (DB update)
+[log] step -> E:\mc\tmp\music8-sync-logs\2026-07-25T12-15-02\03-apply-db.log
+[log] live output -> console + E:\mc\tmp\music8-sync-logs\2026-07-25T12-15-02\transcript.log (not E:\mc\tmp\music8-sync-logs\2026-07-25T12-15-02\03-apply-db.log until end)
+
+[log] done. combined=E:\mc\tmp\music8-sync-logs\2026-07-25T12-15-02\run.log errors=E:\mc\tmp\music8-sync-logs\2026-07-25T12-15-02\run-errors.log transcript=E:\mc\tmp\music8-sync-logs\2026-07-25T12-15-02\transcript.log
+**********************
+PowerShell transcript end
+End time: 20260725153529
+**********************

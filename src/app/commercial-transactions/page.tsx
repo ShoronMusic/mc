@@ -9,10 +9,12 @@ import {
 } from '@/lib/ai-credits-config';
 import {
   COMMERCIAL_TRANSACTIONS_CONTACT_UNPUBLISHED_NOTICE,
+  COMMERCIAL_TRANSACTIONS_LAST_UPDATED_LABEL,
   COMMERCIAL_TRANSACTIONS_OPERATOR,
   formatCommercialTransactionsSellerDisplay,
   formatCommercialTransactionsRepresentativeDisplay,
-  isCommercialTransactionsContactPublished,
+  isCommercialTransactionsAddressPublished,
+  isCommercialTransactionsPhonePublished,
 } from '@/lib/commercial-transactions-operator';
 import { AI_CREDITS_PREPAID_NO_POST_BILLING_TOKUSHOHO } from '@/lib/ai-credits-prepaid-disclosure';
 import { withPolicyModalQuery } from '@/lib/policy-modal-link';
@@ -42,7 +44,8 @@ export default function CommercialTransactionsPage({ searchParams }: CommercialT
   const isModal =
     (Array.isArray(searchParams?.modal) ? searchParams?.modal[0] : searchParams?.modal) === '1';
   const op = COMMERCIAL_TRANSACTIONS_OPERATOR;
-  const contactPublished = isCommercialTransactionsContactPublished();
+  const addressPublished = isCommercialTransactionsAddressPublished();
+  const phonePublished = isCommercialTransactionsPhonePublished();
 
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100">
@@ -67,7 +70,15 @@ export default function CommercialTransactionsPage({ searchParams }: CommercialT
       <main className="mx-auto max-w-3xl px-4 py-8 text-sm leading-relaxed text-gray-300">
         <h1 className="text-2xl font-bold text-white">特定商取引法に基づく表示</h1>
         <p className="mt-2 text-gray-500">
-          本ページは、洋楽AIチャット（本サービス）において販売する有料の AI 利用クレジット等に関する表示です。
+          本表記は「洋楽AIチャット（本サービス）」に関する特定商取引法に基づく表示です。
+        </p>
+        <p className="mt-2 text-xs text-gray-500">最終更新日: {COMMERCIAL_TRANSACTIONS_LAST_UPDATED_LABEL}</p>
+        <p className="mt-4 rounded-md border border-amber-900/50 bg-amber-950/30 px-3 py-3 text-sm text-amber-100/90">
+          現在、本サービスはβ版として運営しており、
+          <strong className="font-semibold text-amber-50">サイト上での有料クレジットの自動販売（Stripe 等）はまだ開始していません</strong>
+          。下記の販売価格・お支払い方法等は、有料販売を正式に開始する際に適用する予定の条件です。開始時期は未定であり、変更・延期または中止する場合があります。開始する際は、サービス内またはサイト上で事前にご案内します。なお、運営によるクレジットの手動付与等がある場合は、その都度の案内に従います。
+        </p>
+        <p className="mt-4 text-gray-500">
           クレジットで利用できる機能の一覧は{' '}
           <Link
             href={withPolicyModalQuery('/guide/ai-pricing', isModal)}
@@ -89,10 +100,10 @@ export default function CommercialTransactionsPage({ searchParams }: CommercialT
           <InfoRow label="販売事業者">{formatCommercialTransactionsSellerDisplay()}</InfoRow>
           <InfoRow label="運営責任者">{formatCommercialTransactionsRepresentativeDisplay()}</InfoRow>
           <InfoRow label="所在地">
-            {contactPublished ? op.address : COMMERCIAL_TRANSACTIONS_CONTACT_UNPUBLISHED_NOTICE}
+            {addressPublished ? op.address : COMMERCIAL_TRANSACTIONS_CONTACT_UNPUBLISHED_NOTICE}
           </InfoRow>
           <InfoRow label="電話番号">
-            {contactPublished ? (
+            {phonePublished ? (
               <>
                 {op.phone}
                 <span className="mt-1 block text-xs text-gray-500">
@@ -103,7 +114,12 @@ export default function CommercialTransactionsPage({ searchParams }: CommercialT
               COMMERCIAL_TRANSACTIONS_CONTACT_UNPUBLISHED_NOTICE
             )}
           </InfoRow>
-          <InfoRow label="メールアドレス">{op.email}</InfoRow>
+          <InfoRow label="お問い合わせ先">
+            {op.email}
+            <span className="mt-1 block text-xs text-gray-500">
+              まずはメールでのご連絡にご協力をお願いしております。
+            </span>
+          </InfoRow>
           <InfoRow label="販売価格">
             <ul className="list-disc space-y-1 pl-5">
               <li>
@@ -114,27 +130,31 @@ export default function CommercialTransactionsPage({ searchParams }: CommercialT
               </li>
             </ul>
             <p className="mt-2 text-xs text-gray-500">
-              1 クレジットは、AI 付き選曲（曲解説の基本 1 本）または @ による AI 質問 1 回の消費に相当します（サービス仕様により変更される場合があります）。
+              1 クレジットは、AI 付き選曲（曲解説の基本 1 本）または @ による AI 質問 1 回の消費に相当します（サービス仕様により変更される場合があります）。有料販売の正式開始までは、上記価格での購入手続きはできません。
             </p>
           </InfoRow>
           <InfoRow label="商品代金以外の必要料金">
             インターネット接続料金、通信料、クレジットカード会社所定の手数料等は、お客様のご負担となります。
           </InfoRow>
-          <InfoRow label="支払方法">
-            クレジットカード決済（決済代行：Stripe）。Visa、Mastercard、American Express、JCB 等（利用可能なブランドは決済画面に表示されます）。
+          <InfoRow label="お支払い方法">
+            クレジットカード決済（決済代行：Stripe）。Visa、Mastercard、American Express、JCB 等（利用可能なブランドは決済画面に表示されます）。有料販売の正式開始後に利用可能となります。
           </InfoRow>
-          <InfoRow label="支払時期">
+          <InfoRow label="お支払い時期">
             購入手続き完了時に、お客様が選択したクレジットカードへ即時請求されます（前払い）。利用開始後の追加請求はありません。
           </InfoRow>
-          <InfoRow label="課金の方式">
-            {AI_CREDITS_PREPAID_NO_POST_BILLING_TOKUSHOHO}
+          <InfoRow label="課金の方式">{AI_CREDITS_PREPAID_NO_POST_BILLING_TOKUSHOHO}</InfoRow>
+          <InfoRow label="自動更新について">
+            本商品はプリペイド（都度購入）であり、月額・定期の自動更新・自動課金はありません。追加のクレジットが必要な場合は、お客様ご自身で再度ご購入ください。
           </InfoRow>
-          <InfoRow label="商品の引渡時期">
+          <InfoRow label="解約について">
+            プリペイドのデジタル利用権のため、月額契約のような解約手続きはありません。購入済みクレジットは残高がある間ご利用いただけます。サービスアカウントの削除・退会をご希望の場合は、お問い合わせ先までご連絡ください（残高の扱い・返金可否は「返品・返金について」に従います）。
+          </InfoRow>
+          <InfoRow label="サービスの提供時期">
             決済完了後、直ちにご利用中のアカウントへ AI 利用クレジットを反映します。
           </InfoRow>
-          <InfoRow label="返品・交換・キャンセル">
+          <InfoRow label="返品・返金について">
             <p>
-              本商品はデジタルコンテンツ（アカウント内の利用権）であり、決済完了後のお客様都合による返品・返金・キャンセルはお受けできません。
+              本商品はデジタルコンテンツ（アカウント内の利用権）であり、決済完了後のお客様都合による返品・返金・キャンセルはお受けできません。あらかじめご了承ください。
             </p>
             <p className="mt-2">
               ただし、法令に基づき返金等が必要となる場合、または運営の責に帰すべき事由によりクレジットが正常に付与されなかった場合は、この限りではありません。該当するとお考えのときは、上記連絡先までご連絡ください。
@@ -156,7 +176,7 @@ export default function CommercialTransactionsPage({ searchParams }: CommercialT
         </dl>
 
         <p className="mt-8 text-xs text-gray-600">
-          最終更新：掲載日時点。販売価格・決済方式・商品内容は、予告なく変更される場合があります。変更後の購入については、変更後の表示が適用されます。
+          販売価格・決済方式・商品内容は、予告なく変更される場合があります。変更後の購入については、変更後の表示が適用されます。
         </p>
       </main>
     </div>

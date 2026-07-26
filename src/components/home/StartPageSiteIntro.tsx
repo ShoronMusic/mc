@@ -136,8 +136,12 @@ export function StartPageSiteIntro({
         <p className="leading-relaxed text-gray-400">
           仲間と曲を共有しながら交流するのもよし！ひとりで解説や質問を通して理解を深めるのもよし！洋楽をより楽しむためのサービスです。
           {' '}
+          <Link href="/guide/about" className="text-sky-400 underline-offset-2 hover:underline">
+            なぜ洋楽か・運営の思い
+          </Link>
+          ／
           <Link href="/guide/enjoy" className="text-sky-400 underline-offset-2 hover:underline">
-            機能の一覧はこちら
+            機能の一覧
           </Link>
         </p>
         <div className="mt-3">

@@ -6,6 +6,7 @@ import {
   buildAiCommentaryPromptLabels,
   formatArtistTitle,
   looksLikeGarbageArtistSongMetadataForCommentary,
+  looksLikeProseOrBloatedDisplayTitle,
   shouldSkipAiCommentaryForPromotionalOrProseMetadata,
   shouldSkipAiCommentaryForUncertainArtistResolution,
   storedCommentaryLooksLikeProductionCreditHallucination,
@@ -102,14 +103,19 @@ export async function POST(request: Request) {
       adminOverride,
       library: librarySong,
     });
-    const title = displayOverride?.title ?? rawYouTubeTitle;
+    const overrideTitle = displayOverride?.title?.trim() ?? '';
+    const title =
+      overrideTitle && !looksLikeProseOrBloatedDisplayTitle(overrideTitle)
+        ? overrideTitle
+        : rawYouTubeTitle;
     const authorName =
-      displayOverride?.artist_name?.trim()
+      displayOverride?.artist_name?.trim() && !looksLikeProseOrBloatedDisplayTitle(overrideTitle)
         ? displayOverride.artist_name.trim()
         : oembed?.author_name ?? snippet?.channelTitle ?? null;
-    const resolvePackOpts: ResolveArtistSongForPackOptions | undefined = displayOverride
-      ? { trustProvidedTitleOverFamousPv: true }
-      : undefined;
+    const resolvePackOpts: ResolveArtistSongForPackOptions | undefined =
+      displayOverride && overrideTitle && !looksLikeProseOrBloatedDisplayTitle(overrideTitle)
+        ? { trustProvidedTitleOverFamousPv: true }
+        : undefined;
 
     const { artist, artistDisplay, song } = await resolveArtistSongForPackAsync(
       title,
@@ -163,7 +169,9 @@ export async function POST(request: Request) {
       });
     }
 
-    const hasTrustedDisplayTitle = Boolean(displayOverride?.title?.trim());
+    const hasTrustedDisplayTitle = Boolean(
+      overrideTitle && !looksLikeProseOrBloatedDisplayTitle(overrideTitle),
+    );
     if (
       !hasTrustedDisplayTitle &&
       shouldSkipAiCommentaryForPromotionalOrProseMetadata({

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { formatArtistTitle } from '@/lib/format-song-display';
+import { formatArtistTitle, looksLikeProseOrBloatedDisplayTitle } from '@/lib/format-song-display';
 import {
   isJpDomesticOfficialChannelAiException,
   suppressJpDomesticAnnounceTagForArtist,
@@ -115,12 +115,20 @@ export async function handleAnnounceSongPost(
       hint: hintAllowed,
     });
     const libraryAnnounceTitle = librarySong ? buildLibrarySongAnnounceTitle(librarySong) : '';
-    const title = displayOverride?.title ?? rawYouTubeTitle;
+    const overrideTitle = displayOverride?.title?.trim() ?? '';
+    /** 概要文が display_title に残っているときは oEmbed タイトルで再解決する */
+    const title =
+      overrideTitle && !looksLikeProseOrBloatedDisplayTitle(overrideTitle)
+        ? overrideTitle
+        : rawYouTubeTitle;
     const authorName =
-      displayOverride?.artist_name?.trim() ? displayOverride.artist_name.trim() : authorNameOembed;
-    const resolvePackOpts: ResolveArtistSongForPackOptions | undefined = displayOverride
-      ? { trustProvidedTitleOverFamousPv: true }
-      : undefined;
+      displayOverride?.artist_name?.trim() && !looksLikeProseOrBloatedDisplayTitle(overrideTitle)
+        ? displayOverride.artist_name.trim()
+        : authorNameOembed;
+    const resolvePackOpts: ResolveArtistSongForPackOptions | undefined =
+      displayOverride && overrideTitle && !looksLikeProseOrBloatedDisplayTitle(overrideTitle)
+        ? { trustProvidedTitleOverFamousPv: true }
+        : undefined;
     const { artist, artistDisplay, song } = await resolveArtistSongForPackAsync(
       title,
       authorName,
@@ -132,8 +140,12 @@ export async function handleAnnounceSongPost(
       artistDisplay && song
         ? `${artistDisplay} - ${song}`
         : formatArtistTitle(title, authorName, snippet?.description, snippet?.channelTitle ?? null);
-    /** ライブラリ整備済み表記を正とする（管理者上書きが無いとき） */
-    if (!adminOverride && libraryAnnounceTitle) {
+    /** ライブラリ整備済み表記を正とする（管理者上書きが無い・散文でないとき） */
+    if (
+      !adminOverride &&
+      libraryAnnounceTitle &&
+      !looksLikeProseOrBloatedDisplayTitle(libraryAnnounceTitle)
+    ) {
       artistTitleBase = libraryAnnounceTitle;
     }
     const isJapaneseDomestic = await resolveJapaneseDomesticWithMusicBrainz({

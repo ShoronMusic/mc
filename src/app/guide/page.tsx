@@ -4,7 +4,10 @@ import { YouTubeDataApiQuotaCallout } from '@/components/guide/YouTubeDataApiQuo
 import { ServicePricingNoticeBrief } from '@/components/legal/ServicePricingNotice';
 import { GUIDE_SECTIONS } from '@/lib/guide-nav';
 import { withPolicyModalQuery } from '@/lib/policy-modal-link';
-import { formatCommercialTransactionsOperatorFooter } from '@/lib/commercial-transactions-operator';
+import {
+  formatCommercialTransactionsOperatorFooter,
+  getCommercialTransactionsContactEmail,
+} from '@/lib/commercial-transactions-operator';
 
 export const metadata: Metadata = {
   title: 'ご利用上の注意（目次） | 洋楽AIチャット（β版）',
@@ -64,6 +67,24 @@ export default function GuideIndexPage({ searchParams }: GuideIndexPageProps) {
         </div>
       </div>
       <Link
+        href={withPolicyModalQuery('/guide/faq', isModal)}
+        className="block rounded-xl border border-amber-800/50 bg-amber-950/25 p-4 transition hover:border-amber-600/60 hover:bg-amber-950/40"
+      >
+        <span className="font-semibold text-amber-100">よくある質問</span>
+        <span className="mt-1 block text-sm text-gray-400">
+          無料と有料の違い、YouTubeとの関係、運営者、洋楽テーマなど。
+        </span>
+      </Link>
+      <Link
+        href={withPolicyModalQuery('/guide/about', isModal)}
+        className="block rounded-xl border border-sky-800/50 bg-sky-950/25 p-4 transition hover:border-sky-600/60 hover:bg-sky-950/40"
+      >
+        <span className="font-semibold text-sky-100">このサービスについて</span>
+        <span className="mt-1 block text-sm text-gray-400">
+          なぜ洋楽か、運営の思い、邦楽解説・多言語化などのこれから。
+        </span>
+      </Link>
+      <Link
         href={withPolicyModalQuery('/sitemap', isModal)}
         className="block rounded-xl border border-gray-700 bg-gray-900/50 p-4 transition hover:border-gray-600 hover:bg-gray-900"
       >
@@ -109,7 +130,7 @@ export default function GuideIndexPage({ searchParams }: GuideIndexPageProps) {
       <section className="rounded-lg border border-gray-800 bg-gray-900/40 p-4">
         <h2 className="text-sm font-semibold text-white">運営者</h2>
         <p className="mt-2 text-sm text-gray-300">{formatCommercialTransactionsOperatorFooter()}</p>
-        <p className="text-sm text-gray-300">musicaichat0@gmail.com</p>
+        <p className="text-sm text-gray-300">{getCommercialTransactionsContactEmail()}</p>
       </section>
     </article>
   );

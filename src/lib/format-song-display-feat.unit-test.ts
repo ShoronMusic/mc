@@ -443,7 +443,40 @@ assert.equal(
   true,
 );
 
-console.log('format-song-display feat separator unit tests: OK');
+// 長文「Artist plays Song by Composer. …」→ 演奏者 - 曲名（選曲アナウンス用）
+{
+  const longTitle =
+    "Sue Keller plays That's A Plenty by Lew Pollack. As a point of information for those who never watched TV in 1950's or 60's, Sue's little arms - in - the air Jackie Gleason exit moves are a reference to this piece being played whenever he called for, \"a little traveling music please...\" Performed before a live and happy audience at the 5th Annual Sue Keller Ragtime Piano Concert at the Harald Viking Lodge, Tinley Park, IL";
+  const r = getArtistAndSong(longTitle, 'Sue Keller');
+  assert.equal(r.artistDisplay, 'Sue Keller');
+  assert.equal(r.song, "That's A Plenty");
+  assert.equal(formatArtistTitle(longTitle, 'Sue Keller'), "Sue Keller - That's A Plenty");
+  assert.equal(
+    isGarbageArtistSongParse({
+      artist:
+        "Sue Keller plays That's A Plenty by Lew Pollack. As a point of information for those who never watched TV in 1950's or 60's, Sue's little arms",
+      song: 'in - the air Jackie Gleason exit moves are a reference to this piece being played whenever he called for',
+    }),
+    true,
+  );
+}
+
+// 実 YouTube タイトル「Sue Keller plays Ragtime: That's A Plenty」＋概要先頭クレジット
+{
+  const ytTitle = "Sue Keller plays Ragtime: That's A Plenty";
+  const desc =
+    "Sue Keller plays That's A Plenty by Lew Pollack. As a point of information for those who never watched TV in 1950's or 60's.\n\nYamaha pianos furnished courtesy of Ortigara's Musicville";
+  const fromTitle = getArtistAndSong(ytTitle, 'Ragtime Press');
+  assert.equal(fromTitle.artistDisplay, 'Sue Keller');
+  assert.equal(fromTitle.song, "That's A Plenty");
+  const fromDesc = getArtistAndSong(ytTitle, 'Ragtime Press', {
+    videoDescription: desc,
+    youtubeChannelTitle: 'Ragtime Press',
+  });
+  assert.equal(fromDesc.artistDisplay, 'Sue Keller');
+  assert.equal(fromDesc.song, "That's A Plenty");
+  assert.equal(formatArtistTitle(ytTitle, 'Ragtime Press', desc, 'Ragtime Press'), "Sue Keller - That's A Plenty");
+}
 
 // 「Paramore - Paramore: Hard Times」のような二重アーティスト表記を落とす
 {
@@ -451,3 +484,5 @@ console.log('format-song-display feat separator unit tests: OK');
   assert.equal(r.artistDisplay, 'Paramore');
   assert.equal(r.song, 'Hard Times');
 }
+
+console.log('format-song-display feat separator unit tests: OK');
