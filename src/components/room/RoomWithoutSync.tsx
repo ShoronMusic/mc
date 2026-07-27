@@ -35,6 +35,7 @@ import {
   getRoomProgressChatDisplayName,
   getRoomServiceTagline,
   IS_MC_PRODUCT,
+  MA_HEADER_LOGO_SRC,
   roomHeaderActionBtnClass,
   roomPlayerOverlayIconBtnClass,
   roomFrameBlockClass,
@@ -2699,11 +2700,11 @@ export default function RoomWithoutSync({
             <MusicChatTitleLogo variant="header" />
           ) : (
             <Image
-              src={isLg ? '/music_ai_chat_wh.png' : '/music_ai_chat_beta.png'}
+              src={MA_HEADER_LOGO_SRC}
               alt=""
-              width={180}
-              height={36}
-              className="h-10 w-auto max-h-10 shrink-0 object-contain object-left"
+              width={527}
+              height={312}
+              className="h-11 w-auto max-h-11 shrink-0 object-contain object-left sm:h-12 sm:max-h-12"
               priority
             />
           )}

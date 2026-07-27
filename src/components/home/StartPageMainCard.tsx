@@ -7,8 +7,9 @@ import { StartPageSiteIntro } from '@/components/home/StartPageSiteIntro';
 import { TopPageLoginAndLiveRooms } from '@/components/home/TopPageLoginAndLiveRooms';
 import { useTopPageLoggedIn } from '@/components/home/use-top-page-auth';
 import { MusicChatTitleBrand } from '@/components/home/MusicChatTitleLogo';
-import { getProductDisplayName, IS_MC_PRODUCT } from '@/lib/product-branding';
+import { getProductDisplayName, IS_MC_PRODUCT, MA_TITLE_LOGO_SRC } from '@/lib/product-branding';
 import { hasGuestRoomPersistence } from '@/lib/guest-room-persistence';
+import Image from 'next/image';
 import { useState } from 'react';
 
 function StartPageTitle() {
@@ -24,7 +25,14 @@ function StartPageTitle() {
         {IS_MC_PRODUCT ? (
           <MusicChatTitleBrand className="mx-auto lg:mx-0" />
         ) : (
-          getProductDisplayName()
+          <Image
+            src={MA_TITLE_LOGO_SRC}
+            alt={getProductDisplayName()}
+            width={527}
+            height={312}
+            className="h-auto w-[min(100%,280px)] object-contain"
+            priority
+          />
         )}
       </h1>
       <p className="mb-6 text-center text-sm lg:text-left">

@@ -70,8 +70,8 @@ export function generateMetadata(): Metadata {
       statusBarStyle: 'black-translucent',
     },
     icons: {
-      icon: [{ url: '/musicAI_icon.png', type: 'image/png' }],
-      apple: '/musicAI_icon.png',
+      icon: [{ url: '/Music_AI_Chat_logo_fabicon.png', type: 'image/png' }],
+      apple: '/Music_AI_Chat_logo_fabicon.png',
     },
   };
 }

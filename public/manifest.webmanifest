@@ -22,20 +22,14 @@
   },
   "icons": [
     {
-      "src": "/musicAI_icon.png",
-      "sizes": "192x192",
+      "src": "/Music_AI_Chat_logo_fabicon.png",
+      "sizes": "273x295",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/musicAI_icon.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "/musicAI_icon.png",
-      "sizes": "512x512",
+      "src": "/Music_AI_Chat_logo_fabicon.png",
+      "sizes": "273x295",
       "type": "image/png",
       "purpose": "maskable"
     }

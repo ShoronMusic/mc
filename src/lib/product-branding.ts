@@ -98,8 +98,11 @@ export function getMcTopSubtitle(): string {
 /** mc タイトルロゴ（`public/musicchat_icon.png`） */
 export const MUSICCHAT_TITLE_LOGO_SRC = '/musicchat_icon.png';
 
-/** ma タイトルロゴ（mc からの導線用・丸枠なし黒背景） */
-export const MA_TITLE_LOGO_SRC = '/music_ai_chat_icon_wh_150.png';
+/** ma タイトル／ヘッダーロゴ（テスト: Music_AI_Chat_logo_2_wh_5） */
+export const MA_TITLE_LOGO_SRC = '/Music_AI_Chat_logo_2_wh_5.png';
+
+/** ma 部屋ヘッダー用（現状はタイトルと同ファイル） */
+export const MA_HEADER_LOGO_SRC = MA_TITLE_LOGO_SRC;
 
 /** チャット進行メッセージの表示名（選曲アナウンス・順番案内等。曲解説 AI とは別） */
 export function getRoomProgressChatDisplayName(): string {
