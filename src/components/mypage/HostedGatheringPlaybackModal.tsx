@@ -17,6 +17,7 @@ type HostedGatheringPlaybackModalProps = {
   error: string | null;
   musicPreview: MyPageMusicPreviewSelection | null;
   onPlayPreview: (row: MyPageSongHistoryRow) => void;
+  onViewCommentary?: (row: MyPageSongHistoryRow) => void;
   onPickSong: (url: string) => void;
   onAddToMyList: (row: MyPageSongHistoryRow) => void;
   onAddToMyListFromPreview: (payload: {
@@ -26,6 +27,8 @@ type HostedGatheringPlaybackModalProps = {
     artist: string | null;
   }) => void | Promise<unknown>;
   myListAddBusy?: boolean;
+  focusAiCommentary?: boolean;
+  onFocusAiCommentaryHandled?: () => void;
   onClose: () => void;
 };
 
@@ -51,10 +54,13 @@ export function HostedGatheringPlaybackModal({
   error,
   musicPreview,
   onPlayPreview,
+  onViewCommentary,
   onPickSong,
   onAddToMyList,
   onAddToMyListFromPreview,
   myListAddBusy = false,
+  focusAiCommentary = false,
+  onFocusAiCommentaryHandled,
   onClose,
 }: HostedGatheringPlaybackModalProps) {
   return (
@@ -100,6 +106,7 @@ export function HostedGatheringPlaybackModal({
                   groupByDate
                   activePreviewVideoId={musicPreview?.videoId ?? null}
                   onPlayPreview={onPlayPreview}
+                  onViewCommentary={onViewCommentary}
                   onPickSong={onPickSong}
                   onAddToMyList={onAddToMyList}
                   emptyMessage="この会の視聴履歴は保存されていません。"
@@ -112,6 +119,8 @@ export function HostedGatheringPlaybackModal({
                     onPickSong={onPickSong}
                     onAddToMyList={onAddToMyListFromPreview}
                     myListAddBusy={myListAddBusy}
+                    focusAiCommentary={focusAiCommentary}
+                    onFocusAiCommentaryHandled={onFocusAiCommentaryHandled}
                   />
                 </div>
               ) : null}

@@ -5343,7 +5343,9 @@ export default function RoomWithSync({
             const msg =
               data && typeof data.message === 'string'
                 ? data.message
-                : 'AI 曲解説を開始できませんでした。';
+                : data && typeof data.error === 'string' && data.error.trim()
+                  ? data.error
+                  : 'AI 曲解説を開始できませんでした。';
             roomSyncLog('commentary:fetch_failed', {
               roomId,
               videoId: vid,
@@ -5352,7 +5354,8 @@ export default function RoomWithSync({
               message: msg,
             });
             addSystemMessage(msg);
-            return null;
+            /** 既に失敗を出したので旧 commentary フォールバックで二重の失敗文を出さない */
+            return { __commentPackHttpFailed: true as const };
           }
           roomSyncLog('commentary:fetch_ok', { roomId, videoId: vid, packPhase: 'base' });
           return r.json();
@@ -5360,6 +5363,9 @@ export default function RoomWithSync({
         .then((pack) => {
           // 再生不可スキップ等で既に次曲へ進んでいる場合は解説を出さない
           if (videoIdRef.current !== vid) return null;
+          if (pack && typeof pack === 'object' && '__commentPackHttpFailed' in pack) {
+            return null;
+          }
           if (pack && selectionAiMode === 'full' && typeof window !== 'undefined') {
             window.dispatchEvent(new Event(AI_TRIAL_STATUS_UPDATED_EVENT));
           }

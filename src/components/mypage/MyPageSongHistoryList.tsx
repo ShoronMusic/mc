@@ -1,5 +1,6 @@
 'use client';
 
+import { BookOpenIcon } from '@heroicons/react/24/outline';
 import {
   IS_MC_PRODUCT,
   librarySecondaryBtnClass,
@@ -22,6 +23,8 @@ export type MyPageSongHistoryRow = {
   selection_round?: number | null;
   style?: string | null;
   era?: string | null;
+  /** ライブラリに AI 曲解説基本が保存済み */
+  has_ai_commentary?: boolean;
 };
 
 const STYLE_TEXT_COLORS: Record<string, string> = {
@@ -67,6 +70,8 @@ type MyPageSongHistoryListProps = {
   groupByDate?: boolean;
   activePreviewVideoId?: string | null;
   onPlayPreview: (row: MyPageSongHistoryRow) => void;
+  /** プレビューを開き、保存済み AI 曲解説を表示 */
+  onViewCommentary?: (row: MyPageSongHistoryRow) => void;
   onPickSong: (url: string) => void;
   onAddToMyList: (row: MyPageSongHistoryRow) => void;
   emptyMessage?: string;
@@ -77,12 +82,14 @@ function SongHistoryEntry({
   row,
   activePreviewVideoId,
   onPlayPreview,
+  onViewCommentary,
   onPickSong,
   onAddToMyList,
 }: {
   row: MyPageSongHistoryRow;
   activePreviewVideoId?: string | null;
   onPlayPreview: (row: MyPageSongHistoryRow) => void;
+  onViewCommentary?: (row: MyPageSongHistoryRow) => void;
   onPickSong: (url: string) => void;
   onAddToMyList: (row: MyPageSongHistoryRow) => void;
 }) {
@@ -108,10 +115,21 @@ function SongHistoryEntry({
         部屋 {row.room_id || '—'} · {timeStr}
         {roundSuffix}
       </p>
-      <p className={`text-sm ${IS_MC_PRODUCT ? 'text-gray-900' : 'text-gray-200'}`}>
-        {title}
-        {artist}
-      </p>
+      <div className="flex items-start justify-between gap-2">
+        <p className={`min-w-0 text-sm ${IS_MC_PRODUCT ? 'text-gray-900' : 'text-gray-200'}`}>
+          {title}
+          {artist}
+        </p>
+        {row.has_ai_commentary ? (
+          <span
+            className="mt-0.5 flex shrink-0 items-center"
+            title="AI曲解説が保存済み"
+            aria-label="AI曲解説あり"
+          >
+            <BookOpenIcon className="h-4 w-4 text-sky-400/95" aria-hidden />
+          </span>
+        ) : null}
+      </div>
       <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px]">
         {showRoomStyleUi() && row.style?.trim() ? (
           <span
@@ -144,6 +162,16 @@ function SongHistoryEntry({
         >
           再生
         </button>
+        {row.has_ai_commentary && onViewCommentary ? (
+          <button
+            type="button"
+            onClick={() => onViewCommentary(row)}
+            className={librarySecondaryBtnClass('px-2 py-1 text-xs')}
+            title="保存済みの AI 曲解説を表示（クレジット消費なし）"
+          >
+            解説
+          </button>
+        ) : null}
         <a
           href={row.url}
           target="_blank"
@@ -178,6 +206,7 @@ export function MyPageSongHistoryList({
   groupByDate = true,
   activePreviewVideoId,
   onPlayPreview,
+  onViewCommentary,
   onPickSong,
   onAddToMyList,
   emptyMessage = 'この期間の選曲はありません。',
@@ -199,6 +228,7 @@ export function MyPageSongHistoryList({
             row={row}
             activePreviewVideoId={activePreviewVideoId}
             onPlayPreview={onPlayPreview}
+            onViewCommentary={onViewCommentary}
             onPickSong={onPickSong}
             onAddToMyList={onAddToMyList}
           />
@@ -237,6 +267,7 @@ export function MyPageSongHistoryList({
                   row={row}
                   activePreviewVideoId={activePreviewVideoId}
                   onPlayPreview={onPlayPreview}
+                  onViewCommentary={onViewCommentary}
                   onPickSong={onPickSong}
                   onAddToMyList={onAddToMyList}
                 />

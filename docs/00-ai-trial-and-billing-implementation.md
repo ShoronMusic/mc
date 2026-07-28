@@ -472,7 +472,7 @@ SQL 確定後は **`docs/supabase-user-ai-trial-table.md`** を新設（未作�
 - [x] 新規/既存: **メール確認済み**初回 `GET /api/user/ai-trial` で `songs_remaining=10` 付与
 - [x] 選曲パイプライン: イベントに `aiMode` 付与（`RoomWithSync` / `RoomWithoutSync` · `PlaybackMessage`）
 - [x] comment-pack / commentary / song-quiz / next-song-recommend / chat: **サーバー側ガード**
-- [x] 1 曲消費 = `comment-pack` · `packPhase=base` · `aiMode=full` 成功時（1 回のみ）
+- [x] 1 曲消費 = `comment-pack` / `commentary` の**本文成功時**のみ（事前は `consume: false` で残数チェック → 成功後 `commitAiTrialSongSelection`。失敗・skip では減らない）
 - [x] `@` 5 回 cap（`/api/ai/chat` · AI メンション時）
 - [x] 残 2 曲で secondary 案内（`formatAiTrialStatusSecondaryLine` 既存）
 - [ ] **本番 ON**: Supabase SQL 実行 + `AI_TRIAL_ENFORCEMENT_ENABLED=1`（`.env.local` / **Vercel**）— ローカルでは実機確認済み、**デプロイ後 10 曲検証**が次

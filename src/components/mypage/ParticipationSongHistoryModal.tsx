@@ -16,6 +16,7 @@ type ParticipationSongHistoryModalProps = {
   loading?: boolean;
   musicPreview: MyPageMusicPreviewSelection | null;
   onPlayPreview: (row: MyPageSongHistoryRow) => void;
+  onViewCommentary?: (row: MyPageSongHistoryRow) => void;
   onPickSong: (url: string) => void;
   onAddToMyList: (row: MyPageSongHistoryRow) => void;
   onAddToMyListFromPreview: (payload: {
@@ -25,6 +26,8 @@ type ParticipationSongHistoryModalProps = {
     artist: string | null;
   }) => void | Promise<unknown>;
   myListAddBusy?: boolean;
+  focusAiCommentary?: boolean;
+  onFocusAiCommentaryHandled?: () => void;
   onClose: () => void;
 };
 
@@ -34,10 +37,13 @@ export function ParticipationSongHistoryModal({
   loading = false,
   musicPreview,
   onPlayPreview,
+  onViewCommentary,
   onPickSong,
   onAddToMyList,
   onAddToMyListFromPreview,
   myListAddBusy = false,
+  focusAiCommentary = false,
+  onFocusAiCommentaryHandled,
   onClose,
 }: ParticipationSongHistoryModalProps) {
   return (
@@ -81,6 +87,7 @@ export function ParticipationSongHistoryModal({
                   groupByDate
                   activePreviewVideoId={musicPreview?.videoId ?? null}
                   onPlayPreview={onPlayPreview}
+                  onViewCommentary={onViewCommentary}
                   onPickSong={onPickSong}
                   onAddToMyList={onAddToMyList}
                   emptyMessage="この参加期間にあなたが選曲した記録はありません。"
@@ -93,6 +100,8 @@ export function ParticipationSongHistoryModal({
                 onPickSong={onPickSong}
                 onAddToMyList={onAddToMyListFromPreview}
                 myListAddBusy={myListAddBusy}
+                focusAiCommentary={focusAiCommentary}
+                onFocusAiCommentaryHandled={onFocusAiCommentaryHandled}
               />
             </div>
           </div>

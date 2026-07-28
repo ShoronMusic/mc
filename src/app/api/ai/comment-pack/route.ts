@@ -87,7 +87,7 @@ import {
 import { insertAiCommentaryUnavailableEntry } from '@/lib/ai-commentary-unavailable-log';
 import { buildSongQuizApiExtension } from '@/lib/song-quiz-after-commentary';
 import { getChatAiClientIp } from '@/lib/chat-ai-rate-limit';
-import { guardAiTrialSongSelection } from '@/lib/user-ai-trial-server';
+import { guardAiTrialSongSelection, commitAiTrialSongSelection } from '@/lib/user-ai-trial-server';
 import { checkAiCostRateLimit } from '@/lib/ai-cost-rate-limit';
 import { aiCostRateLimitResponse } from '@/lib/ai-cost-rate-limit-response';
 import { isAiUnlimitedUserId } from '@/lib/ai-unlimited-user-ids';
@@ -345,6 +345,10 @@ export async function POST(request: Request) {
       aiModeRaw: body?.aiMode,
       packPhase,
       clientIp: getChatAiClientIp(request),
+      /** 生成・DB返却の成功後に commit（失敗時は枠を減らさない） */
+      consume: false,
+      roomId: roomId || undefined,
+      videoId,
     });
     if (!trialGuard.ok) {
       roomSyncServerLog('comment-pack:denied', {
@@ -368,6 +372,48 @@ export async function POST(request: Request) {
       songsRemaining: trialGuard.songsRemaining,
       creditsRemaining: trialGuard.creditsRemaining,
     });
+
+    const clientIpForBilling = getChatAiClientIp(request);
+    /** 本文付きの成功レスポンスのみ 1 曲消費（frees・skip・エラーは消費しない） */
+    const respondPackSuccess = async (payload: Record<string, unknown>) => {
+      const base =
+        typeof payload.baseComment === 'string' ? payload.baseComment.trim() : '';
+      const shouldBill =
+        packPhase !== 'frees' &&
+        payload.skipAiCommentary !== true &&
+        base.length > 0 &&
+        Boolean(authUser?.id);
+      if (shouldBill) {
+        const charged = await commitAiTrialSongSelection({
+          user: authUser,
+          clientIp: clientIpForBilling,
+          roomId: roomId || undefined,
+          videoId,
+        });
+        if (!charged.ok) {
+          roomSyncServerLog('comment-pack:charge_denied', {
+            roomId,
+            videoId,
+            userId: selectorUserId,
+            packPhase,
+            status: charged.status,
+            error: charged.body.error,
+            message: charged.body.message,
+          });
+          return NextResponse.json(charged.body, { status: charged.status });
+        }
+        roomSyncServerLog('comment-pack:charged', {
+          roomId,
+          videoId,
+          userId: selectorUserId,
+          packPhase,
+          source: charged.source,
+          songsRemaining: charged.songsRemaining,
+          creditsRemaining: charged.creditsRemaining,
+        });
+      }
+      return NextResponse.json(payload);
+    };
 
     const selectorGeminiLogMeta = buildGeminiUsagePersistMeta({
       roomId,
@@ -685,7 +731,7 @@ export async function POST(request: Request) {
                 isGuestTrigger: requestIsGuest || !selectorUserId,
               });
             }
-            return NextResponse.json({
+            return respondPackSuccess({
               songId,
               videoId,
               baseComment: baseOut,
@@ -734,7 +780,7 @@ export async function POST(request: Request) {
             }
             const tidbitIdsFull = cached.tidbitIds ?? [];
             const freeCommentTidbitIds = tidbitIdsFull.length > 1 ? tidbitIdsFull.slice(1) : [];
-            return NextResponse.json({
+            return respondPackSuccess({
               songId,
               videoId,
               baseComment: baseOutLib,
@@ -970,7 +1016,7 @@ ${basePromptTail}`;
             console.error('[api/ai/comment-pack] phase base insertTidbit', e);
           }
         }
-        return NextResponse.json({
+        return respondPackSuccess({
           songId,
           videoId,
           baseComment: filteredEarlyBaseOnly.baseComment,
@@ -1484,7 +1530,7 @@ ${isRemixFocusTopic ? banBlockRemixFocus : isCoverFocusTopic ? banBlockCoverFocu
       }
     }
 
-    return NextResponse.json({
+    return respondPackSuccess({
       songId,
       videoId,
       baseComment: filteredOut.baseComment,

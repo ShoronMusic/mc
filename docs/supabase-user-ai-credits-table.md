@@ -118,6 +118,10 @@ alter table public.user_ai_credit_transactions
 | consume_song | **-1** | AI 付き選曲 |
 | consume_at_question | **-0.5** | @ 質問 |
 
+## ユーザー向け履歴
+
+マイページ「AI 利用・クレジット履歴」は `GET /api/user/ai-usage-ledger` がログイン本人のお試し付与・消費ログとクレジット取引を返す（service_role 読取）。クライアントから取引表を直接 SELECT する必要はない。
+
 ## テストアカウント
 
 | 用途 | user_id |

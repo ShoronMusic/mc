@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   compareLibraryReleaseSort,
   libraryEffectiveReleaseDateForSort,
+  resolveLibraryOriginalReleaseDate,
 } from './library-release-sort-date';
 
 test('libraryEffectiveReleaseDateForSort prefers original', () => {
@@ -12,6 +13,16 @@ test('libraryEffectiveReleaseDateForSort prefers original', () => {
       youtubePublishedAt: '2024-06-01T00:00:00Z',
     }),
     '2019-01-01',
+  );
+});
+
+test('resolveLibraryOriginalReleaseDate prefers Music8 album date over polluted column', () => {
+  assert.equal(
+    resolveLibraryOriginalReleaseDate({
+      originalReleaseDate: '2018-06-21',
+      music8SongData: { kind: 'music8_wp_song', releaseDate_normalized: '1965.07' },
+    }),
+    '1965-07-01',
   );
 });
 

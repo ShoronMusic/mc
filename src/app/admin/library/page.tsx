@@ -2,10 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { BookOpenIcon } from '@heroicons/react/24/outline';
 import { AdminMenuBar } from '@/components/admin/AdminMenuBar';
 import { AdminYoutubePlayerWithVolume } from '@/components/admin/AdminYoutubePlayerWithVolume';
 import type { AdminLibraryArtistItem } from '@/app/api/admin/library/artists/route';
 import type { AdminLibrarySongItem } from '@/app/api/admin/library/songs/route';
+import { libraryEffectiveReleaseDateForSort } from '@/lib/library-release-sort-date';
 
 type SortMode = 'release_new' | 'release_old' | 'spotify_popularity';
 type AdminLibraryArtistInfo = {
@@ -354,33 +356,68 @@ export default function AdminLibraryPage() {
                 <table className="min-w-full border-collapse text-left text-xs text-gray-200">
                   <thead className="border-b border-gray-700 text-gray-500">
                     <tr>
-                      <th className="py-2 pr-3 font-medium">公開年</th>
+                      <th className="py-2 pr-3 font-medium">公開日</th>
                       <th className="py-2 pr-3 font-medium">アーティスト</th>
                       <th className="py-2 pr-3 font-medium">タイトル</th>
                       <th className="py-2 pr-3 font-medium">スタイル</th>
                       <th className="py-2 pr-3 font-medium text-right">再生</th>
+                      <th className="py-2 pr-3 font-medium text-center">解説</th>
                       <th className="py-2 font-medium">YouTube</th>
                       <th className="py-2 pl-2 font-medium">詳細</th>
                     </tr>
                   </thead>
                   <tbody>
                     {songs.map((s) => {
-                      const year =
-                        s.original_release_date && s.original_release_date.length >= 4
-                          ? s.original_release_date.slice(0, 4)
-                          : '—';
+                      const effective = libraryEffectiveReleaseDateForSort({
+                        originalReleaseDate: s.original_release_date,
+                        youtubePublishedAt: s.youtube_published_at,
+                      });
+                      const releaseLabel = effective
+                        ? effective.length >= 10
+                          ? `${effective.slice(0, 4)}.${effective.slice(5, 7)}.${effective.slice(8, 10)}`
+                          : effective.slice(0, 4)
+                        : '—';
                       const title = (s.song_title ?? s.display_title ?? '—').trim();
                       const yt = s.video_id
                         ? `https://www.youtube.com/watch?v=${encodeURIComponent(s.video_id)}`
                         : null;
                       return (
                         <tr key={s.id} className="border-t border-gray-800/90">
-                          <td className="py-2 pr-3 align-top text-gray-400">{year}</td>
+                          <td
+                            className="py-2 pr-3 align-top tabular-nums text-gray-400"
+                            title={
+                              s.original_release_date?.trim()
+                                ? `表示日: ${s.original_release_date}`
+                                : s.youtube_published_at?.trim()
+                                  ? `YouTube公開日（原盤日なし）: ${s.youtube_published_at}`
+                                  : undefined
+                            }
+                          >
+                            {releaseLabel}
+                            {!s.original_release_date?.trim() &&
+                            s.youtube_published_at?.trim() &&
+                            releaseLabel !== '—' ? (
+                              <span className="ml-0.5 text-[10px] text-gray-600">YT</span>
+                            ) : null}
+                          </td>
                           <td className="py-2 pr-3 align-top">{s.main_artist ?? '—'}</td>
                           <td className="py-2 pr-3 align-top">{title}</td>
                           <td className="py-2 pr-3 align-top text-gray-400">{s.style ?? '—'}</td>
                           <td className="py-2 pr-3 align-top text-right tabular-nums text-gray-400">
                             {s.play_count ?? 0}
+                          </td>
+                          <td className="py-2 pr-3 align-top text-center">
+                            {s.has_ai_commentary ? (
+                              <span
+                                className="inline-flex justify-center text-sky-400"
+                                title="この曲に AI曲解説（ai_commentary）が保存済み"
+                                aria-label="AI曲解説あり"
+                              >
+                                <BookOpenIcon className="h-4 w-4" aria-hidden />
+                              </span>
+                            ) : (
+                              <span className="text-gray-600">—</span>
+                            )}
                           </td>
                           <td className="py-2 align-top">
                             {yt ? (

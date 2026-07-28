@@ -206,3 +206,58 @@ export async function getStoredCommentPackByVideoId(
   };
 }
 
+/** 後から閲覧用: 基本があれば返し、自由コメントは揃っていなくてもある分だけ付ける（生成・課金なし） */
+export async function getStoredAiCommentaryForRead(
+  supabase: SupabaseClient | null,
+  videoId: string,
+): Promise<{ baseComment: string; freeComments: string[] } | null> {
+  if (!supabase || !videoId.trim()) return null;
+  const vid = videoId.trim();
+
+  const full = await getStoredCommentPackByVideoId(supabase, vid);
+  if (full) {
+    return {
+      baseComment: full.baseComment,
+      freeComments: [...full.freeComments],
+    };
+  }
+
+  const { data: baseRow, error: baseErr } = await supabase
+    .from('song_tidbits')
+    .select('body')
+    .eq('video_id', vid)
+    .eq('source', 'ai_commentary')
+    .eq('is_active', true)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (baseErr) {
+    if ((baseErr as { code?: string }).code === '42P01') return null;
+    return null;
+  }
+  const baseComment = typeof baseRow?.body === 'string' ? baseRow.body.trim() : '';
+  if (!baseComment) return null;
+
+  const freeComments: string[] = [];
+  for (const src of ['ai_chat_1', 'ai_chat_2', 'ai_chat_3', 'ai_chat_4'] as const) {
+    const { data, error } = await supabase
+      .from('song_tidbits')
+      .select('body')
+      .eq('video_id', vid)
+      .eq('source', src)
+      .eq('is_active', true)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) {
+      if ((error as { code?: string }).code === '42P01') break;
+      break;
+    }
+    const body = typeof data?.body === 'string' ? data.body.trim() : '';
+    if (body) freeComments.push(body);
+  }
+
+  return { baseComment, freeComments };
+}
+

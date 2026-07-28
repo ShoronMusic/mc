@@ -59,6 +59,7 @@ export async function POST(request: Request) {
       isGuest: requestIsGuest,
       aiModeRaw: body?.aiMode,
       clientIp: getChatAiClientIp(request),
+      consume: false,
     });
     if (!trialGuard.ok) {
       return NextResponse.json(trialGuard.body, { status: trialGuard.status });

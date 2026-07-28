@@ -43,7 +43,7 @@ import {
 import { insertAiCommentaryUnavailableEntry } from '@/lib/ai-commentary-unavailable-log';
 import { buildSongQuizApiExtension } from '@/lib/song-quiz-after-commentary';
 import { getChatAiClientIp } from '@/lib/chat-ai-rate-limit';
-import { guardAiTrialSongSelection } from '@/lib/user-ai-trial-server';
+import { guardAiTrialSongSelection, commitAiTrialSongSelection } from '@/lib/user-ai-trial-server';
 import { checkAiCostRateLimit } from '@/lib/ai-cost-rate-limit';
 import { aiCostRateLimitResponse } from '@/lib/ai-cost-rate-limit-response';
 import { isAiUnlimitedUserId } from '@/lib/ai-unlimited-user-ids';
@@ -85,10 +85,32 @@ export async function POST(request: Request) {
       isGuest: requestIsGuest,
       aiModeRaw: body?.aiMode,
       clientIp: getChatAiClientIp(request),
+      consume: false,
+      roomId: roomId || undefined,
+      videoId,
     });
     if (!trialGuard.ok) {
       return NextResponse.json(trialGuard.body, { status: trialGuard.status });
     }
+
+    const clientIpForBilling = getChatAiClientIp(request);
+    const respondCommentarySuccess = async (payload: Record<string, unknown>) => {
+      const text = typeof payload.text === 'string' ? payload.text.trim() : '';
+      const shouldBill =
+        payload.skipAiCommentary !== true && text.length > 0 && Boolean(authUser?.id);
+      if (shouldBill) {
+        const charged = await commitAiTrialSongSelection({
+          user: authUser,
+          clientIp: clientIpForBilling,
+          roomId: roomId || undefined,
+          videoId,
+        });
+        if (!charged.ok) {
+          return NextResponse.json(charged.body, { status: charged.status });
+        }
+      }
+      return NextResponse.json(payload);
+    };
 
     const reader = createAdminClient() ?? supabase;
     const [oembed, snippet] = await Promise.all([fetchOEmbed(videoId), getVideoSnippet(videoId)]);
@@ -266,7 +288,7 @@ export async function POST(request: Request) {
         if (
           !shouldRegenerateLibraryWhenMusicaichatSong(musicaichatSong, skipMusic8FactInject)
         ) {
-          return NextResponse.json({
+          return respondCommentarySuccess({
             text: bodyForReturn,
             source: 'library',
             songId: typeof data?.song_id === 'string' ? data.song_id : null,
@@ -385,7 +407,7 @@ export async function POST(request: Request) {
       }
     }
 
-    return NextResponse.json({
+    return respondCommentarySuccess({
       text,
       source: 'new',
       songId,

@@ -68,6 +68,7 @@ import {
   type MyPageMusicPreviewSelection,
 } from '@/components/mypage/MyPageMusicPreviewPanel';
 import { PersonalAiSettingsPanel } from '@/components/mypage/PersonalAiSettingsPanel';
+import { MyPageAiUsageLedger } from '@/components/mypage/MyPageAiUsageLedger';
 import { OwnerRoomAiSettingsPanel } from '@/components/mypage/OwnerRoomAiSettingsPanel';
 import { RoomInviteFriendsSection } from '@/components/mypage/RoomInviteFriendsSection';
 import { RoomJoinLockSection } from '@/components/mypage/RoomJoinLockSection';
@@ -876,6 +877,7 @@ export default function MyPage({
   const [songHistoryPage, setSongHistoryPage] = useState(1);
   const [historyTab, setHistoryTab] = useState<'songs' | 'favorites' | 'mylist'>('songs');
   const [musicPreview, setMusicPreview] = useState<MyPageMusicPreviewSelection | null>(null);
+  const [focusAiCommentary, setFocusAiCommentary] = useState(false);
   const [favorites, setFavorites] = useState<FavoriteRow[]>([]);
   const [favoritesLoading, setFavoritesLoading] = useState(false);
   const [favoritesPage, setFavoritesPage] = useState(1);
@@ -1111,11 +1113,35 @@ export default function MyPage({
           if (!roomVideoStyleMap.has(key)) roomVideoStyleMap.set(key, style);
         }
 
+        const commentaryPresent = new Set<string>();
+        const PRESENCE_CHUNK = 80;
+        for (let i = 0; i < videoIds.length; i += PRESENCE_CHUNK) {
+          const chunk = videoIds.slice(i, i + PRESENCE_CHUNK);
+          try {
+            const presenceRes = await fetch(
+              `/api/library/ai-commentary?presence=1&videoIds=${chunk
+                .map((id) => encodeURIComponent(id))
+                .join(',')}`,
+              { credentials: 'include' },
+            );
+            if (!presenceRes.ok) continue;
+            const presenceData = (await presenceRes.json().catch(() => null)) as {
+              presentVideoIds?: string[];
+            } | null;
+            for (const vid of presenceData?.presentVideoIds ?? []) {
+              if (typeof vid === 'string' && vid.trim()) commentaryPresent.add(vid.trim());
+            }
+          } catch {
+            /* 解説有無は任意表示のため失敗は無視 */
+          }
+        }
+
         setSongHistory(
           baseRows.map((row) => ({
             ...row,
             style: roomVideoStyleMap.get(`${row.room_id}::${row.video_id}`) ?? styleMap.get(row.video_id) ?? null,
             era: eraMap.get(row.video_id) ?? null,
+            has_ai_commentary: commentaryPresent.has(row.video_id),
           })),
         );
       })
@@ -1618,6 +1644,7 @@ export default function MyPage({
 
   const openSongHistoryPreview = useCallback(
     (row: MyPageSongHistoryRow) => {
+      setFocusAiCommentary(false);
       openMusicPreview({
         videoId: row.video_id,
         url: row.url,
@@ -1626,6 +1653,21 @@ export default function MyPage({
         style: row.style ?? null,
         era: row.era ?? null,
       });
+    },
+    [openMusicPreview],
+  );
+
+  const openSongHistoryCommentary = useCallback(
+    (row: MyPageSongHistoryRow) => {
+      openMusicPreview({
+        videoId: row.video_id,
+        url: row.url,
+        title: row.title,
+        artist: row.artist,
+        style: row.style ?? null,
+        era: row.era ?? null,
+      });
+      setFocusAiCommentary(true);
     },
     [openMusicPreview],
   );
@@ -1703,12 +1745,14 @@ export default function MyPage({
     if (historyTab === 'songs') setSongHistoryPage(1);
     if (historyTab === 'favorites') setFavoritesPage(1);
     setMusicPreview(null);
+    setFocusAiCommentary(false);
   }, [historyTab]);
 
   useEffect(() => {
     if (mainTab === 'participation') setParticipationPage(1);
     if (mainTab !== 'participation') setParticipationSongModalSlot(null);
     setMusicPreview(null);
+    setFocusAiCommentary(false);
   }, [mainTab, myListTab]);
 
   const removeFavorite = async (videoId: string) => {
@@ -2508,6 +2552,8 @@ export default function MyPage({
           />
         ) : null}
 
+        {!isGuest ? <MyPageAiUsageLedger enabled /> : null}
+
         {/* 選曲に参加する */}
         {onParticipatesInSelectionChange && (
           <div className={mypagePanelClass()}>
@@ -2737,6 +2783,7 @@ export default function MyPage({
                 groupByDate
                 activePreviewVideoId={musicPreview?.videoId ?? null}
                 onPlayPreview={openSongHistoryPreview}
+                onViewCommentary={openSongHistoryCommentary}
                 onPickSong={pickSongFromMyList}
                 onAddToMyList={addSongHistoryToMyList}
                 emptyMessage="まだ履歴がありません。部屋でYouTubeのURLを貼ると保存されます。"
@@ -2790,6 +2837,8 @@ export default function MyPage({
                     void addToMyListFromPreview(payload, 'song_history')
                   }
                   myListAddBusy={myListAddBusy}
+                  focusAiCommentary={focusAiCommentary}
+                  onFocusAiCommentaryHandled={() => setFocusAiCommentary(false)}
                 />
               </div>
             </div>
@@ -3521,11 +3570,17 @@ export default function MyPage({
                 enabled
                 musicPreview={musicPreview}
                 onPlayPreview={openSongHistoryPreview}
+                onViewCommentary={openSongHistoryCommentary}
                 onPickSong={pickSongFromMyList}
                 onAddToMyList={addSongHistoryToMyList}
                 onAddToMyListFromPreview={(payload) => void addToMyListFromPreview(payload, 'song_history')}
                 myListAddBusy={myListAddBusy}
-                onClearPreview={() => setMusicPreview(null)}
+                focusAiCommentary={focusAiCommentary}
+                onFocusAiCommentaryHandled={() => setFocusAiCommentary(false)}
+                onClearPreview={() => {
+                  setMusicPreview(null);
+                  setFocusAiCommentary(false);
+                }}
               />
             ) : null}
             {participationLoading ? (
@@ -3567,6 +3622,7 @@ export default function MyPage({
                           type="button"
                           onClick={() => {
                             setMusicPreview(null);
+                            setFocusAiCommentary(false);
                             setParticipationSongModalSlot(row);
                           }}
                           className={IS_MC_PRODUCT ? mypageSecondaryBtnClass(true) : 'mt-2 rounded border border-sky-700/60 bg-sky-900/30 px-2.5 py-1 text-xs font-medium text-sky-200 hover:bg-sky-900/50'}
@@ -3679,13 +3735,17 @@ export default function MyPage({
           loading={songHistoryLoading}
           musicPreview={musicPreview}
           onPlayPreview={openSongHistoryPreview}
+          onViewCommentary={openSongHistoryCommentary}
           onPickSong={pickSongFromMyList}
           onAddToMyList={addSongHistoryToMyList}
           onAddToMyListFromPreview={(payload) => void addToMyListFromPreview(payload, 'song_history')}
           myListAddBusy={myListAddBusy}
+          focusAiCommentary={focusAiCommentary}
+          onFocusAiCommentaryHandled={() => setFocusAiCommentary(false)}
           onClose={() => {
             setParticipationSongModalSlot(null);
             setMusicPreview(null);
+            setFocusAiCommentary(false);
           }}
         />
       ) : null}

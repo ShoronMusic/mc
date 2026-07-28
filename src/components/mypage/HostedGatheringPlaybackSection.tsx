@@ -16,6 +16,7 @@ type HostedGatheringPlaybackSectionProps = {
   enabled: boolean;
   musicPreview: MyPageMusicPreviewSelection | null;
   onPlayPreview: (row: MyPageSongHistoryRow) => void;
+  onViewCommentary?: (row: MyPageSongHistoryRow) => void;
   onPickSong: (url: string) => void;
   onAddToMyList: (row: MyPageSongHistoryRow) => void;
   onAddToMyListFromPreview: (payload: {
@@ -25,6 +26,8 @@ type HostedGatheringPlaybackSectionProps = {
     artist: string | null;
   }) => void | Promise<unknown>;
   myListAddBusy?: boolean;
+  focusAiCommentary?: boolean;
+  onFocusAiCommentaryHandled?: () => void;
   onClearPreview: () => void;
 };
 
@@ -60,10 +63,13 @@ export function HostedGatheringPlaybackSection({
   enabled,
   musicPreview,
   onPlayPreview,
+  onViewCommentary,
   onPickSong,
   onAddToMyList,
   onAddToMyListFromPreview,
   myListAddBusy = false,
+  focusAiCommentary = false,
+  onFocusAiCommentaryHandled,
   onClearPreview,
 }: HostedGatheringPlaybackSectionProps) {
   const [items, setItems] = useState<HostedGatheringPlaybackSummary[]>([]);
@@ -124,7 +130,37 @@ export function HostedGatheringPlaybackSection({
           if (!r.ok) throw new Error(data.error ?? '視聴履歴の取得に失敗しました');
           return (data.items ?? []).map((row) => mapSnapshotRow(row, gathering.roomId));
         })
-        .then((rows) => setDetailSongs(rows))
+        .then(async (rows) => {
+          const videoIds = Array.from(new Set(rows.map((r) => r.video_id).filter(Boolean)));
+          const present = new Set<string>();
+          const CHUNK = 80;
+          for (let i = 0; i < videoIds.length; i += CHUNK) {
+            const chunk = videoIds.slice(i, i + CHUNK);
+            try {
+              const presenceRes = await fetch(
+                `/api/library/ai-commentary?presence=1&videoIds=${chunk
+                  .map((id) => encodeURIComponent(id))
+                  .join(',')}`,
+                { credentials: 'include' },
+              );
+              if (!presenceRes.ok) continue;
+              const presenceData = (await presenceRes.json().catch(() => null)) as {
+                presentVideoIds?: string[];
+              } | null;
+              for (const vid of presenceData?.presentVideoIds ?? []) {
+                if (typeof vid === 'string' && vid.trim()) present.add(vid.trim());
+              }
+            } catch {
+              /* optional */
+            }
+          }
+          setDetailSongs(
+            rows.map((row) => ({
+              ...row,
+              has_ai_commentary: present.has(row.video_id),
+            })),
+          );
+        })
         .catch((e: unknown) => {
           setDetailSongs([]);
           setDetailError(e instanceof Error ? e.message : '視聴履歴の取得に失敗しました');
@@ -185,10 +221,13 @@ export function HostedGatheringPlaybackSection({
           error={detailError}
           musicPreview={musicPreview}
           onPlayPreview={onPlayPreview}
+          onViewCommentary={onViewCommentary}
           onPickSong={onPickSong}
           onAddToMyList={onAddToMyList}
           onAddToMyListFromPreview={onAddToMyListFromPreview}
           myListAddBusy={myListAddBusy}
+          focusAiCommentary={focusAiCommentary}
+          onFocusAiCommentaryHandled={onFocusAiCommentaryHandled}
           onClose={() => {
             setActiveGathering(null);
             onClearPreview();

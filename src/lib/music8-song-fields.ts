@@ -244,6 +244,19 @@ export function resolveOriginalReleaseDateFromPersistedSnapshot(data: unknown): 
 }
 
 /**
+ * ライブラリ一覧用のアルバム原盤日。
+ * WP 投稿日（`wp_published_date`）は使わず、`releaseDate_normalized` を優先する。
+ * （`songs.original_release_date` に WP/YT 日が混入しているときの表示矯正）
+ */
+export function resolveAlbumReleaseDateFromPersistedSnapshot(data: unknown): string | null {
+  const o = asObj(data);
+  if (!o) return null;
+  const releaseDate = asStr(o.releaseDate_normalized ?? '').trim();
+  if (releaseDate) return music8ReleaseYearMonthToPostgresDate(releaseDate);
+  return null;
+}
+
+/**
  * facts_for_ai の定型文（「Music8 に掲載…」「文脈で分類されています」等）。
  * ソングデータ UI と AI 注入の両方で除外する。
  */

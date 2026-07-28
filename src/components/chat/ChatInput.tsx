@@ -42,6 +42,7 @@ import type { SystemMessageOptions } from '@/types/chat';
 import { isAiQuestionGuardDisabledClient } from '@/lib/chat-system-copy';
 import {
   ArrowPathIcon,
+  BookOpenIcon,
   DocumentTextIcon,
   EnvelopeIcon,
   FolderIcon,
@@ -141,6 +142,7 @@ type LibrarySongRow = {
   youtube_published_at: string | null;
   spotify_popularity: number | null;
   video_id: string | null;
+  has_ai_commentary: boolean;
 };
 
 type LibrarySongVideoRow = {
@@ -1343,6 +1345,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                     ? r.spotify_popularity
                     : null,
                 video_id: typeof r.video_id === 'string' ? r.video_id : null,
+                has_ai_commentary: r.has_ai_commentary === true,
               }))
           : [];
         setLibraryRows(rows);
@@ -1469,6 +1472,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                     ? r.spotify_popularity
                     : null,
                 video_id: typeof r.video_id === 'string' ? r.video_id : null,
+                has_ai_commentary: r.has_ai_commentary === true,
               }))
           : [];
         setLibraryRows(rows);
@@ -3591,18 +3595,30 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                               <p className={librarySongRowTitleClass()}>
                                 {librarySongListPrimaryTitle(row)}
                               </p>
-                              {rowIsFavorited ? (
-                                <span
-                                  className="mt-0.5 shrink-0"
-                                  title="お気に入り登録済み"
-                                  aria-label="お気に入り登録済み"
-                                >
-                                  <HeartIconSolid
-                                    className={`h-4 w-4 ${favoriteHeartActiveTextClass}`}
-                                    aria-hidden
-                                  />
-                                </span>
-                              ) : null}
+                              <span className="mt-0.5 flex shrink-0 items-center gap-1">
+                                {row.has_ai_commentary ? (
+                                  <span
+                                    title="AI曲解説が保存済み"
+                                    aria-label="AI曲解説あり"
+                                  >
+                                    <BookOpenIcon
+                                      className="h-4 w-4 text-sky-400/95"
+                                      aria-hidden
+                                    />
+                                  </span>
+                                ) : null}
+                                {rowIsFavorited ? (
+                                  <span
+                                    title="お気に入り登録済み"
+                                    aria-label="お気に入り登録済み"
+                                  >
+                                    <HeartIconSolid
+                                      className={`h-4 w-4 ${favoriteHeartActiveTextClass}`}
+                                      aria-hidden
+                                    />
+                                  </span>
+                                ) : null}
+                              </span>
                             </div>
                             <p className={librarySongRowMetaClass()}>
                               {releaseDot ? (

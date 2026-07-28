@@ -16,6 +16,9 @@ import {
   parseLibraryCatalogFilter,
 } from '@/lib/song-catalog-scope';
 import { ensureWesternTreatedJpArtistCache } from '@/lib/western-treated-jp-artists';
+import { fetchSongIdsWithAiCommentary } from '@/lib/library-ai-commentary-presence';
+import { rankLibraryVideoVariant } from '@/lib/library-video-variant-rank';
+import { resolveLibraryOriginalReleaseDate } from '@/lib/library-release-sort-date';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,6 +36,7 @@ type LibrarySongItem = {
   youtube_published_at: string | null;
   spotify_popularity: number | null;
   video_id: string | null;
+  has_ai_commentary: boolean;
 };
 
 type SongRow = {
@@ -48,13 +52,15 @@ type SongRow = {
   spotify_popularity: number | null;
   catalog_scope?: string | null;
   music8_artist_slug?: string | null;
+  primary_artist_name_ja?: string | null;
+  music8_song_data?: unknown;
 };
 
 const SONG_SELECT =
-  'id, display_title, song_title, main_artist, style, genres, vocal, play_count, original_release_date, spotify_popularity, primary_artist_name_ja, catalog_scope, music8_artist_slug';
+  'id, display_title, song_title, main_artist, style, genres, vocal, play_count, original_release_date, spotify_popularity, primary_artist_name_ja, catalog_scope, music8_artist_slug, music8_song_data';
 
 const SONG_SELECT_FALLBACK =
-  'id, display_title, song_title, main_artist, style, genres, vocal, play_count, original_release_date, spotify_popularity, primary_artist_name_ja';
+  'id, display_title, song_title, main_artist, style, genres, vocal, play_count, original_release_date, spotify_popularity, primary_artist_name_ja, music8_song_data';
 
 function clampLimit(raw: string | null): number {
   const n = Number.parseInt(raw ?? '', 10);
@@ -220,6 +226,7 @@ export async function GET(request: Request) {
   const videoBySong = new Map<string, string>();
   const ytPublishedBySong = new Map<string, string | null>();
   const songIdByVideo = new Map<string, string>();
+  const videoIdsBySongId = new Map<string, string[]>();
 
   if (ids.length > 0) {
     const { data: videoRows, error: videoErr } = await admin
@@ -230,15 +237,6 @@ export async function GET(request: Request) {
     if (videoErr && videoErr.code !== '42P01') {
       console.error('[api/library/search] song_videos', videoErr);
     } else if (Array.isArray(videoRows)) {
-      const rank = (variant: string | null | undefined): number => {
-        const v = (variant ?? '').trim().toLowerCase();
-        if (v === 'official') return 0;
-        if (v === 'topic') return 1;
-        if (v === 'lyric') return 2;
-        if (v === 'live') return 3;
-        if (v) return 4;
-        return 5;
-      };
       const rankedBySong = new Map<
         string,
         { videoId: string; rank: number; youtubePublishedAt: string | null }
@@ -251,11 +249,17 @@ export async function GET(request: Request) {
       }[]) {
         if (!row.song_id || !row.video_id) continue;
         if (!songIdByVideo.has(row.video_id)) songIdByVideo.set(row.video_id, row.song_id);
-        const nextRank = rank(row.variant);
+        const list = videoIdsBySongId.get(row.song_id) ?? [];
+        list.push(row.video_id);
+        videoIdsBySongId.set(row.song_id, list);
+        const nextRank = rankLibraryVideoVariant(row.variant);
         const yt =
           typeof row.youtube_published_at === 'string' && row.youtube_published_at.trim()
             ? row.youtube_published_at.trim()
             : null;
+        if (yt && !ytPublishedBySong.has(row.song_id)) {
+          ytPublishedBySong.set(row.song_id, yt);
+        }
         const cur = rankedBySong.get(row.song_id);
         if (!cur || nextRank < cur.rank) {
           rankedBySong.set(row.song_id, {
@@ -267,7 +271,9 @@ export async function GET(request: Request) {
       }
       for (const [songId, picked] of rankedBySong) {
         videoBySong.set(songId, picked.videoId);
-        ytPublishedBySong.set(songId, picked.youtubePublishedAt);
+        if (picked.youtubePublishedAt) {
+          ytPublishedBySong.set(songId, picked.youtubePublishedAt);
+        }
       }
     }
   }
@@ -320,28 +326,43 @@ export async function GET(request: Request) {
     console.error('[api/library/search] my_play_count exception', e);
   }
 
-  const items: LibrarySongItem[] = songs.map((s) => ({
-    id: s.id,
-    title: (s.display_title ?? s.song_title ?? '').trim() || '（タイトル不明）',
-    song_title: s.song_title,
-    main_artist: s.main_artist,
-    style: s.style,
-    genres: Array.isArray(s.genres)
-      ? s.genres.join(', ')
-      : typeof s.genres === 'string'
-        ? s.genres
-        : null,
-    vocal: s.vocal,
-    play_count: s.play_count,
-    my_play_count: myPlayBySong.get(s.id) ?? null,
-    original_release_date: s.original_release_date,
-    youtube_published_at: ytPublishedBySong.get(s.id) ?? null,
-    spotify_popularity:
-      typeof s.spotify_popularity === 'number' && Number.isFinite(s.spotify_popularity)
-        ? s.spotify_popularity
-        : null,
-    video_id: videoBySong.get(s.id) ?? null,
-  }));
+  let commentarySongIds = new Set<string>();
+  try {
+    commentarySongIds = await fetchSongIdsWithAiCommentary(admin, ids, videoIdsBySongId);
+  } catch (e) {
+    console.error('[api/library/search] ai_commentary presence', e);
+  }
+
+  const items: LibrarySongItem[] = songs.map((s) => {
+    const videoId = videoBySong.get(s.id) ?? null;
+    const preferredOriginal = resolveLibraryOriginalReleaseDate({
+      originalReleaseDate: s.original_release_date,
+      music8SongData: s.music8_song_data,
+    });
+    return {
+      id: s.id,
+      title: (s.display_title ?? s.song_title ?? '').trim() || '（タイトル不明）',
+      song_title: s.song_title,
+      main_artist: s.main_artist,
+      style: s.style,
+      genres: Array.isArray(s.genres)
+        ? s.genres.join(', ')
+        : typeof s.genres === 'string'
+          ? s.genres
+          : null,
+      vocal: s.vocal,
+      play_count: s.play_count,
+      my_play_count: myPlayBySong.get(s.id) ?? null,
+      original_release_date: preferredOriginal,
+      youtube_published_at: ytPublishedBySong.get(s.id) ?? null,
+      spotify_popularity:
+        typeof s.spotify_popularity === 'number' && Number.isFinite(s.spotify_popularity)
+          ? s.spotify_popularity
+          : null,
+      video_id: videoId,
+      has_ai_commentary: commentarySongIds.has(s.id),
+    };
+  });
 
   return NextResponse.json({
     items,

@@ -319,7 +319,8 @@ function trialDenied(
 /**
  * 選曲付随 AI。
  * - packPhase=frees: 直前の base 消費済み前提で枠残のみ検証（消費しない）
- * - packPhase=base / 省略（一括生成）: 1 曲分を消費
+ * - packPhase=base / 省略（一括生成）: 既定では 1 曲分を消費（後方互換）
+ * - consume: false で残数チェックのみ（成功後に commitAiTrialSongSelection すること）
  * - user_ai_trial テーブル欠落時は fail-closed（枠なし生成を防ぐ）
  */
 export async function guardAiTrialSongSelection(params: {
@@ -328,6 +329,13 @@ export async function guardAiTrialSongSelection(params: {
   aiModeRaw: unknown;
   packPhase?: 'base' | 'frees' | null;
   clientIp?: string;
+  /**
+   * false: 消費しない（残数・資格のみ）。
+   * 省略時: packPhase=frees なら false、それ以外は true（従来どおり即時消費）。
+   */
+  consume?: boolean;
+  roomId?: string;
+  videoId?: string;
 }): Promise<AiTrialGuardAllow | AiTrialGuardDeny> {
   if (params.user?.id && isAiUnlimitedUserId(params.user.id)) {
     return { ok: true };
@@ -361,8 +369,8 @@ export async function guardAiTrialSongSelection(params: {
     return trialDenied('trial_unavailable', 'AI お試しの確認に失敗しました。', 503);
   }
 
-  /** frees 以外（base / 一括 null）は消費する */
-  const shouldConsumeSong = params.packPhase !== 'frees';
+  const shouldConsumeSong =
+    params.consume === false ? false : params.consume === true ? true : params.packPhase !== 'frees';
   /** credits 側も同一判定に揃える */
   const consumePhase: 'base' | 'frees' | null = shouldConsumeSong ? 'base' : 'frees';
 
@@ -388,6 +396,8 @@ export async function guardAiTrialSongSelection(params: {
         user: params.user,
         clientIp: params.clientIp,
         packPhase: consumePhase,
+        roomId: params.roomId,
+        videoId: params.videoId,
       });
     }
     return consumeAiTrialSong(admin, params.user.id, params.clientIp);
@@ -398,16 +408,83 @@ export async function guardAiTrialSongSelection(params: {
       user: params.user,
       clientIp: params.clientIp,
       packPhase: consumePhase,
+      roomId: params.roomId,
+      videoId: params.videoId,
     });
   }
 
   return { ok: true, songsRemaining: row.songs_remaining, source: 'trial' };
 }
 
+/**
+ * comment-pack / commentary が本文返却に成功したあとに呼ぶ 1 曲分の確定消費。
+ * 無制限ユーザー・enforcement OFF では no-op。
+ */
+export async function commitAiTrialSongSelection(params: {
+  user: User | null | undefined;
+  clientIp?: string;
+  roomId?: string;
+  videoId?: string;
+}): Promise<AiTrialGuardAllow | AiTrialGuardDeny> {
+  if (params.user?.id && isAiUnlimitedUserId(params.user.id)) {
+    return { ok: true };
+  }
+  if (!isAiTrialEnforcementEnabled()) {
+    return { ok: true };
+  }
+  if (!params.user?.id) {
+    return trialDenied(
+      'ai_trial_login_required',
+      'AI 付き選曲は登録ユーザーのお試し枠が必要です。アカウント登録後、メール確認が完了するとお試しいただけます。',
+    );
+  }
+  if (requiresEmailConfirmation(params.user)) {
+    return trialDenied(
+      'email_unconfirmed',
+      `メールアドレスの確認が完了すると、AI お試し ${AI_TRIAL_SONGS_GRANTED} 曲が使えます。今は選曲のみ（AI なし）でご参加ください。`,
+    );
+  }
+
+  const admin = createAdminClient();
+  if (!admin) {
+    return trialDenied('trial_unavailable', 'AI お試しの確認に失敗しました。', 503);
+  }
+
+  const { row, missingTable, error } = await fetchUserAiTrialRow(admin, params.user.id);
+  if (missingTable) {
+    return trialDenied(
+      'trial_unavailable',
+      'AI お試し枠の確認ができません。しばらくしてから再度お試しください。',
+      503,
+    );
+  }
+  if (error) {
+    return trialDenied('trial_load_failed', 'AI お試し残数の取得に失敗しました。', 500);
+  }
+  if (!row) {
+    return trialDenied('trial_not_granted', 'AI お試し枠が付与されていません。', 403);
+  }
+
+  if (row.songs_remaining <= 0) {
+    return consumeSongFromCreditsOrDeny({
+      user: params.user,
+      clientIp: params.clientIp,
+      packPhase: 'base',
+      roomId: params.roomId,
+      videoId: params.videoId,
+    });
+  }
+  return consumeAiTrialSong(admin, params.user.id, params.clientIp, {
+    roomId: params.roomId,
+    videoId: params.videoId,
+  });
+}
+
 async function consumeAiTrialSong(
   admin: SupabaseClient,
   userId: string,
   clientIp?: string,
+  meta?: { roomId?: string; videoId?: string },
 ): Promise<AiTrialGuardAllow | AiTrialGuardDeny> {
   const { row, error, missingTable } = await fetchUserAiTrialRow(admin, userId);
   if (missingTable) {
@@ -461,6 +538,8 @@ async function consumeAiTrialSong(
     userId,
     kind: 'song_full',
     clientIp,
+    roomId: meta?.roomId,
+    videoId: meta?.videoId,
   });
 
   return {

@@ -1,13 +1,29 @@
 /**
  * ライブラリ新旧ソート用の日付。
- * 原盤公開日（songs.original_release_date）を優先し、無ければ YouTube 公開日。
- * YT 日を原盤日列に書き込まない前提の表示・ソート補助。
+ * 原盤公開日を優先し、無ければ YouTube 公開日。
+ * Music8 スナップショットにアルバム日があれば DB 列（WP/YT 混入）より優先する。
  */
+
+import { resolveAlbumReleaseDateFromPersistedSnapshot } from '@/lib/music8-song-fields';
 
 export type LibraryReleaseSortDates = {
   originalReleaseDate?: string | null;
   youtubePublishedAt?: string | null;
 };
+
+/**
+ * 一覧表示・ソート用の原盤日。
+ * Music8 の `releaseDate_normalized` があればそれを優先し、なければ DB 列。
+ */
+export function resolveLibraryOriginalReleaseDate(opts: {
+  originalReleaseDate?: string | null;
+  music8SongData?: unknown;
+}): string | null {
+  const fromM8 = resolveAlbumReleaseDateFromPersistedSnapshot(opts.music8SongData);
+  if (fromM8) return fromM8;
+  const col = (opts.originalReleaseDate ?? '').trim();
+  return col || null;
+}
 
 /** YYYY-MM-DD（またはそれより長い ISO の先頭10桁）を返す。どちらも無ければ null。 */
 export function libraryEffectiveReleaseDateForSort(

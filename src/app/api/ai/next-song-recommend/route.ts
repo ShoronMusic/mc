@@ -75,6 +75,7 @@ export async function POST(request: Request): Promise<NextResponse<OkDisabled | 
       isGuest: requestIsGuest,
       aiModeRaw: body?.aiMode,
       clientIp: getChatAiClientIp(request),
+      consume: false,
     });
     if (!trialGuard.ok) {
       return NextResponse.json({ enabled: false, reason: trialGuard.body.error }, { status: 200 });
