@@ -8,7 +8,9 @@ import {
 } from '@/lib/user-ai-usage-ledger';
 
 assert.equal(labelForAiUsageLedgerKind('trial_grant'), '初期お試し付与');
-assert.equal(labelForAiUsageLedgerKind('consume_song'), 'クレジット・AI付き選曲');
+assert.equal(labelForAiUsageLedgerKind('consume_song'), 'クレジット消費 AI付き選曲');
+assert.equal(labelForAiUsageLedgerKind('consume_at_question'), 'クレジット消費 @質問');
+assert.equal(labelForAiUsageLedgerKind('trial_song'), 'お試し消費 AI付き選曲');
 assert.equal(deltaLabelForTrialGrant(20, 5), '+20曲 · +5回@');
 assert.equal(deltaLabelForCreditTx('consume_song', -1), '−1クレジット');
 assert.equal(deltaLabelForCreditTx('consume_at_question', -0.5), '−0.5クレジット');

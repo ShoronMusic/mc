@@ -31,17 +31,17 @@ export function labelForAiUsageLedgerKind(kind: UserAiUsageLedgerKind): string {
     case 'trial_grant':
       return '初期お試し付与';
     case 'trial_song':
-      return 'お試し・AI付き選曲';
+      return 'お試し消費 AI付き選曲';
     case 'trial_at':
-      return 'お試し・@質問';
+      return 'お試し消費 @質問';
     case 'grant_admin':
       return 'クレジット付与（管理）';
     case 'grant_purchase':
       return 'クレジット購入';
     case 'consume_song':
-      return 'クレジット・AI付き選曲';
+      return 'クレジット消費 AI付き選曲';
     case 'consume_at_question':
-      return 'クレジット・@質問';
+      return 'クレジット消費 @質問';
     default:
       return kind;
   }
