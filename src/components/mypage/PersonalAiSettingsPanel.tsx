@@ -1,5 +1,6 @@
 'use client';
 
+import type { ReactNode } from 'react';
 import type { CommentPackSlotSelection } from '@/lib/comment-pack-slots';
 import { formatCommentPackSlotsSummary } from '@/lib/comment-pack-slots';
 import type { RoomAiOwnerPolicy } from '@/lib/user-room-ai-features';
@@ -24,6 +25,8 @@ export type PersonalAiSettingsPanelProps = {
   ownerAiCharacterJoinEnabled: boolean;
   commentPackSlots?: CommentPackSlotSelection;
   onCommentPackSlotsChange?: (slots: CommentPackSlotSelection) => void;
+  /** 選曲時設定と @ 質問向け設定の間に表示する内容 */
+  betweenSections?: ReactNode;
   /** compact: AI設定モーダル向けに余白を少し詰める */
   variant?: 'mypage' | 'modal';
 };
@@ -37,6 +40,7 @@ export function PersonalAiSettingsPanel({
   ownerAiCharacterJoinEnabled,
   commentPackSlots,
   onCommentPackSlotsChange,
+  betweenSections,
   variant = 'mypage',
 }: PersonalAiSettingsPanelProps) {
   const settings = usePersonalAiSettings(isGuest, roomAiOwnerPolicy);
@@ -213,6 +217,8 @@ export function PersonalAiSettingsPanel({
           </div>
         ) : null}
       </div>
+
+      {betweenSections}
 
       <div className="rounded border border-violet-700/35 bg-violet-950/15 p-3">
         <label className="block text-xs text-gray-500">@ 質問向け（自分の AI）</label>

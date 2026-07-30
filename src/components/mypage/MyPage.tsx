@@ -735,6 +735,11 @@ const USER_STATUS_OPTIONS = [
   { value: '仕事中', label: '仕事中' },
   { value: '眠い', label: '眠い' },
 ];
+const USER_STATUS_CUSTOM_MAX_LENGTH = 6;
+
+function isPresetUserStatus(status: string): boolean {
+  return USER_STATUS_OPTIONS.some((option) => option.value === status);
+}
 
 export default function MyPage({
   onClose,
@@ -868,6 +873,9 @@ export default function MyPage({
   const [editEmail, setEditEmail] = useState(false);
   const [displayNameValue, setDisplayNameValue] = useState('');
   const [emailValue, setEmailValue] = useState('');
+  const [customUserStatus, setCustomUserStatus] = useState(() =>
+    isPresetUserStatus(userStatus) ? '' : userStatus.slice(0, USER_STATUS_CUSTOM_MAX_LENGTH),
+  );
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -2149,7 +2157,7 @@ export default function MyPage({
           <div className={mypagePanelClass()}>
             <label className="block text-xs text-gray-500">参加者の入室・退室の効果音</label>
             <p className="mt-1 text-sm text-gray-400">
-              オンにすると、誰かが入室したときと退室したときにそれぞれ通知音が鳴ります。オフにするとこのブラウザだけ無音です。入室・退出のチャット表示は常に出ます。設定はこの端末に保存され、入退室を繰り返しても維持されます。
+              入退室時に通知音を鳴らします（この端末のみ）。チャット表示は常に出ます。
             </p>
             <JoinEntryChimeToggle enabled={joinChimeDisplay} onChange={handleJoinChimeChange} />
           </div>
@@ -2320,10 +2328,6 @@ export default function MyPage({
         <MyPageThreeColumnBody
           col1={
             <>
-        {onInviteFriendsClick && effectiveRoomId ? (
-          <RoomInviteFriendsSection onInviteClick={onInviteFriendsClick} />
-        ) : null}
-
         {/* 表示名 */}
         <div className={mypagePanelClass()}>
           <label className="block text-xs text-gray-500">表示名</label>
@@ -2421,13 +2425,216 @@ export default function MyPage({
           )}
         </div>
 
+        {/* 発言のテキストカラー（クリックでモーダル） */}
+        <div className={mypagePanelClass()}>
+          <h3 className="mb-2 text-sm font-medium text-gray-300">発言のテキストカラー</h3>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-400">現在:</span>
+            <ChatTextColorCurrentBadge color={currentUserTextColor} />
+            <button
+              type="button"
+              onClick={() => setTextColorModalOpen(true)}
+              className={mypageSecondaryBtnClass(true)}
+            >
+              変更
+            </button>
+          </div>
+          {textColorModalOpen && (
+            <div
+              className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4"
+              role="dialog"
+              aria-modal="true"
+              aria-label="テキスト色を選択"
+            >
+              <div className="rounded-lg border border-gray-700 bg-gray-900 p-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
+                <p className="mb-3 text-xs text-gray-500">
+                  {IS_MC_PRODUCT
+                    ? 'チャット（白背景）での自分の発言・選曲アナウンスの色を選べます。選択した色は保存され、次回以降も適用されます。'
+                    : 'チャットでの自分の発言の色を選べます。選択した色は保存され、次回以降も適用されます。'}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {chatTextColorPalette().map((hex) => (
+                    <ChatTextColorSwatchButton
+                      key={hex}
+                      hex={hex}
+                      selected={currentUserTextColor === hex}
+                      onSelect={() => {
+                        onUserTextColorChange?.(hex);
+                        setTextColorModalOpen(false);
+                      }}
+                    />
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setTextColorModalOpen(false)}
+                  className="mt-3 w-full rounded border border-gray-600 bg-gray-700 py-2 text-sm text-gray-300 hover:bg-gray-600"
+                >
+                  閉じる
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* 選曲に参加する */}
+        {onParticipatesInSelectionChange && (
+          <div className={mypagePanelClass()}>
+            <label className="block text-xs text-gray-500">選曲に参加する</label>
+            <p className="mt-1 text-sm text-gray-400">オフにすると視聴専用になります（順番はスキップされます）。</p>
+            <div className="mt-2 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => onParticipatesInSelectionChange(true)}
+                className={mypageTabBtnClass(participatesInSelection)}
+              >
+                参加する
+              </button>
+              <button
+                type="button"
+                onClick={() => onParticipatesInSelectionChange(false)}
+                className={mypageTabBtnClass(!participatesInSelection)}
+              >
+                視聴専用
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* 自分のステータス（参加者名横に表示） */}
+        {onUserStatusChange && (
+          <div className={mypagePanelClass()}>
+            <h3 className={mypageSectionTitleClass()}>自分のステータス</h3>
+            <p className={`mb-2 text-xs ${mypageBodyTextClass()}`}>選択したステータスは参加者欄の自分の名前の横に表示されます。</p>
+            <div className="flex flex-wrap gap-1.5">
+              {USER_STATUS_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value || 'none'}
+                  type="button"
+                  onClick={() => {
+                    setCustomUserStatus('');
+                    onUserStatusChange(opt.value);
+                  }}
+                  className={mypageTabBtnClass(userStatus === opt.value)}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            <form
+              className="mt-2 flex items-center gap-2"
+              onSubmit={(event) => {
+                event.preventDefault();
+                const next = customUserStatus.trim();
+                if (next) onUserStatusChange(next);
+              }}
+            >
+              <input
+                type="text"
+                value={customUserStatus}
+                maxLength={USER_STATUS_CUSTOM_MAX_LENGTH}
+                onChange={(event) => setCustomUserStatus(event.target.value)}
+                className={mypageInputClass('min-w-0 flex-1')}
+                placeholder={`自由入力（${USER_STATUS_CUSTOM_MAX_LENGTH}文字まで）`}
+                aria-label="自由入力のステータス"
+              />
+              <button
+                type="submit"
+                disabled={!customUserStatus.trim() || customUserStatus.trim() === userStatus}
+                className={`${mypageSecondaryBtnClass()} disabled:cursor-not-allowed disabled:opacity-40`}
+              >
+                反映
+              </button>
+            </form>
+          </div>
+        )}
+
+        <div className={mypagePanelClass()}>
+          <label className="block text-xs text-gray-500">参加者の入室・退室の効果音</label>
+          <p className="mt-1 text-sm text-gray-400">
+            入退室時に通知音を鳴らします（この端末のみ）。チャット表示は常に出ます。
+          </p>
+          <JoinEntryChimeToggle enabled={joinChimeDisplay} onChange={handleJoinChimeChange} />
+        </div>
+
+        {onInviteFriendsClick && effectiveRoomId ? (
+          <RoomInviteFriendsSection onInviteClick={onInviteFriendsClick} />
+        ) : null}
+
+        <div className={mypagePanelClass()}>
+          <h3 className={mypageSectionTitleClass()}>アカウント削除</h3>
+          <p className={`mb-2 text-xs ${mypageBodyTextClass()}`}>
+            アカウントを削除すると、登録情報はデータベースから完全に削除され、元に戻せません。
+          </p>
+          {!deleteConfirmOpen ? (
+            <button
+              type="button"
+              onClick={() => setDeleteConfirmOpen(true)}
+              className={mypageSecondaryBtnClass()}
+            >
+              アカウントを削除する
+            </button>
+          ) : (
+            <div className="space-y-2">
+              <p className={`text-sm ${mypageBodyTextClass()}`}>
+                本当にアカウントを削除しますか？ この操作は取り消せません。
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={handleDeleteAccount}
+                  disabled={deleteInProgress}
+                  className={mypageDangerBtnClass()}
+                >
+                  {deleteInProgress ? '削除中…' : '削除する'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDeleteConfirmOpen(false)}
+                  disabled={deleteInProgress}
+                  className={mypageSecondaryBtnClass()}
+                >
+                  キャンセル
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+            </>
+          }
+          col2={
+            <>
+        {!IS_MC_PRODUCT ? (
+          <PersonalAiSettingsPanel
+            isGuest={isGuest}
+            isChatOwner={isChatOwner}
+            showOwnerTabLink={showOwnerTab}
+            onOpenOwnerTab={() => setMainTab('owner')}
+            roomAiOwnerPolicy={roomAiOwnerPolicy}
+            ownerAiCharacterJoinEnabled={ownerAiCharacterJoinEnabled}
+            commentPackSlots={commentPackSlots}
+            onCommentPackSlotsChange={onCommentPackSlotsChange}
+            betweenSections={!isGuest ? <MyPageAiUsageLedger enabled /> : null}
+          />
+        ) : null}
+            </>
+          }
+          col3={
+            <>
+        {IS_MC_PRODUCT ? (
+          <>
+            <MypageFontSizeSection value={mypageFontSize} onChange={handleMypageFontSizeChange} />
+            <McUiAccentThemeSection value={mcUiAccentTheme} onChange={handleMcUiAccentThemeChange} />
+          </>
+        ) : null}
+
         {/* 他ユーザー向けプロフィール（公開はオプトイン） */}
         {!isGuest ? (
           <div className={mypagePanelClass()}>
             <label className="block text-xs text-gray-500">他ユーザー向けプロフィール（任意）</label>
             <p className="mt-1 text-xs text-gray-400">
-              一言・好きなアーティスト・補足を登録できます。「他の参加者に公開」をオンにすると、ログイン済みのユーザーが
-              Supabase 経由で閲覧できる行になります（部屋の参加者欄への表示は今後の実装で接続できます）。
+              一言・好きなアーティスト・補足を登録できます。公開をオンにすると他のログインユーザーが閲覧できます。
             </p>
             {publicProfileLoading ? (
               <p className="mt-2 text-sm text-gray-500">読み込み中…</p>
@@ -2535,178 +2742,6 @@ export default function MyPage({
             ) : null}
           </div>
         ) : null}
-            </>
-          }
-          col2={
-            <>
-        {!IS_MC_PRODUCT ? (
-          <PersonalAiSettingsPanel
-            isGuest={isGuest}
-            isChatOwner={isChatOwner}
-            showOwnerTabLink={showOwnerTab}
-            onOpenOwnerTab={() => setMainTab('owner')}
-            roomAiOwnerPolicy={roomAiOwnerPolicy}
-            ownerAiCharacterJoinEnabled={ownerAiCharacterJoinEnabled}
-            commentPackSlots={commentPackSlots}
-            onCommentPackSlotsChange={onCommentPackSlotsChange}
-          />
-        ) : null}
-
-        {!isGuest ? <MyPageAiUsageLedger enabled /> : null}
-
-        {/* 選曲に参加する */}
-        {onParticipatesInSelectionChange && (
-          <div className={mypagePanelClass()}>
-            <label className="block text-xs text-gray-500">選曲に参加する</label>
-            <p className="mt-1 text-sm text-gray-400">オフにすると視聴専用になります（順番はスキップされます）。</p>
-            <div className="mt-2 flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => onParticipatesInSelectionChange(true)}
-                className={mypageTabBtnClass(participatesInSelection)}
-              >
-                参加する
-              </button>
-              <button
-                type="button"
-                onClick={() => onParticipatesInSelectionChange(false)}
-                className={mypageTabBtnClass(!participatesInSelection)}
-              >
-                視聴専用
-              </button>
-            </div>
-          </div>
-        )}
-            </>
-          }
-          col3={
-            <>
-        {IS_MC_PRODUCT ? (
-          <>
-            <MypageFontSizeSection value={mypageFontSize} onChange={handleMypageFontSizeChange} />
-            <McUiAccentThemeSection value={mcUiAccentTheme} onChange={handleMcUiAccentThemeChange} />
-          </>
-        ) : null}
-
-        <div className={mypagePanelClass()}>
-          <label className="block text-xs text-gray-500">参加者の入室・退室の効果音</label>
-          <p className="mt-1 text-sm text-gray-400">
-            オンにすると、誰かが入室したときと退室したときにそれぞれ通知音が鳴ります。オフにするとこのブラウザだけ無音です。入室・退出のチャット表示は常に出ます。設定はこの端末に保存され、入退室を繰り返しても維持されます。
-          </p>
-          <JoinEntryChimeToggle enabled={joinChimeDisplay} onChange={handleJoinChimeChange} />
-        </div>
-
-        {/* 自分のステータス（参加者名横に表示） */}
-        {onUserStatusChange && (
-          <div className={mypagePanelClass()}>
-            <h3 className={mypageSectionTitleClass()}>自分のステータス</h3>
-            <p className={`mb-2 text-xs ${mypageBodyTextClass()}`}>選択したステータスは参加者欄の自分の名前の横に表示されます。</p>
-            <div className="flex flex-wrap gap-1.5">
-              {USER_STATUS_OPTIONS.map((opt) => (
-                <button
-                  key={opt.value || 'none'}
-                  type="button"
-                  onClick={() => onUserStatusChange(opt.value)}
-                  className={mypageTabBtnClass(userStatus === opt.value)}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* 発言のテキストカラー（クリックでモーダル） */}
-        <div className={mypagePanelClass()}>
-          <h3 className="mb-2 text-sm font-medium text-gray-300">発言のテキストカラー</h3>
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-400">現在:</span>
-            <ChatTextColorCurrentBadge color={currentUserTextColor} />
-            <button
-              type="button"
-              onClick={() => setTextColorModalOpen(true)}
-              className={mypageSecondaryBtnClass(true)}
-            >
-              変更
-            </button>
-          </div>
-          {textColorModalOpen && (
-            <div
-              className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4"
-              role="dialog"
-              aria-modal="true"
-              aria-label="テキスト色を選択"
-            >
-              <div className="rounded-lg border border-gray-700 bg-gray-900 p-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
-                <p className="mb-3 text-xs text-gray-500">
-                  {IS_MC_PRODUCT
-                    ? 'チャット（白背景）での自分の発言・選曲アナウンスの色を選べます。選択した色は保存され、次回以降も適用されます。'
-                    : 'チャットでの自分の発言の色を選べます。選択した色は保存され、次回以降も適用されます。'}
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {chatTextColorPalette().map((hex) => (
-                    <ChatTextColorSwatchButton
-                      key={hex}
-                      hex={hex}
-                      selected={currentUserTextColor === hex}
-                      onSelect={() => {
-                        onUserTextColorChange?.(hex);
-                        setTextColorModalOpen(false);
-                      }}
-                    />
-                  ))}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setTextColorModalOpen(false)}
-                  className="mt-3 w-full rounded border border-gray-600 bg-gray-700 py-2 text-sm text-gray-300 hover:bg-gray-600"
-                >
-                  閉じる
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className={mypagePanelClass()}>
-          <h3 className={mypageSectionTitleClass()}>アカウント削除</h3>
-          <p className={`mb-2 text-xs ${mypageBodyTextClass()}`}>
-            アカウントを削除すると、登録情報はデータベースから完全に削除され、元に戻せません。
-          </p>
-          {!deleteConfirmOpen ? (
-            <button
-              type="button"
-              onClick={() => setDeleteConfirmOpen(true)}
-              className={mypageSecondaryBtnClass()}
-            >
-              アカウントを削除する
-            </button>
-          ) : (
-            <div className="space-y-2">
-              <p className={`text-sm ${mypageBodyTextClass()}`}>
-                本当にアカウントを削除しますか？ この操作は取り消せません。
-              </p>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={handleDeleteAccount}
-                  disabled={deleteInProgress}
-                  className={mypageDangerBtnClass()}
-                >
-                  {deleteInProgress ? '削除中…' : '削除する'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDeleteConfirmOpen(false)}
-                  disabled={deleteInProgress}
-                  className={mypageSecondaryBtnClass()}
-                >
-                  キャンセル
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
             </>
           }
         />

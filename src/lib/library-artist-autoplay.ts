@@ -19,6 +19,14 @@ export type LibraryArtistAutoplaySongInput = {
   artist?: string | null;
 };
 
+export type LibraryArtistAutoplayRequest = {
+  artistName: string;
+  songs: LibraryArtistAutoplaySongInput[];
+  orderLabel?: string;
+  /** null / 未指定は一覧の先頭から開始 */
+  startVideoId?: string | null;
+};
+
 export type LibrarySongListSortKey =
   | 'release_new'
   | 'release_old'
@@ -45,6 +53,7 @@ export function librarySongListSortOrderLabel(sort: LibrarySongListSortKey): str
 export function prepareLibraryArtistAutoplaySongs(
   rows: LibraryArtistAutoplaySongInput[],
   maxSongs: number | null = LIBRARY_ARTIST_AUTOPLAY_DEFAULT_MAX,
+  startVideoId?: string | null,
 ): { songs: Music8PlaylistAutoplaySong[]; totalFetched: number; truncated: boolean } {
   const seen = new Set<string>();
   const all: Music8PlaylistAutoplaySong[] = [];
@@ -56,14 +65,23 @@ export function prepareLibraryArtistAutoplaySongs(
     const artist = typeof row.artist === 'string' ? row.artist.trim() : '';
     all.push({ videoId, title, artist });
   }
-  const totalFetched = all.length;
+  const requestedStartVideoId =
+    typeof startVideoId === 'string' ? startVideoId.trim() : '';
+  const startIndex = requestedStartVideoId
+    ? all.findIndex((song) => song.videoId === requestedStartVideoId)
+    : 0;
+  if (startIndex < 0) {
+    return { songs: [], totalFetched: 0, truncated: false };
+  }
+  const fromStart = startIndex > 0 ? all.slice(startIndex) : all;
+  const totalFetched = fromStart.length;
   if (maxSongs == null) {
-    return { songs: all, totalFetched, truncated: false };
+    return { songs: fromStart, totalFetched, truncated: false };
   }
   const capped = Math.max(1, Math.floor(maxSongs));
   const truncated = totalFetched > capped;
   return {
-    songs: truncated ? all.slice(0, capped) : all,
+    songs: truncated ? fromStart.slice(0, capped) : fromStart,
     totalFetched,
     truncated,
   };
@@ -79,10 +97,7 @@ export function libraryArtistAutoplaySlug(artistName: string): string {
   return base ? `library-${base}` : 'library-artist';
 }
 
-export function buildLibraryArtistAutoplayLaunch(params: {
-  artistName: string;
-  songs: LibraryArtistAutoplaySongInput[];
-  orderLabel?: string;
+export function buildLibraryArtistAutoplayLaunch(params: LibraryArtistAutoplayRequest & {
   /** `null` = STYLE_ADMIN 向け上限なし */
   maxSongs?: number | null;
 }): {
@@ -99,6 +114,7 @@ export function buildLibraryArtistAutoplayLaunch(params: {
   const { songs, totalFetched, truncated } = prepareLibraryArtistAutoplaySongs(
     params.songs,
     maxSongs,
+    params.startVideoId,
   );
   if (songs.length === 0) return null;
 

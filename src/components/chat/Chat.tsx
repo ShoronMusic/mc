@@ -15,6 +15,7 @@ import {
   ChatBubbleLeftRightIcon,
   DocumentTextIcon,
   AtSymbolIcon,
+  ArrowDownIcon,
   ArrowTopRightOnSquareIcon,
   ChevronDownIcon,
   MusicalNoteIcon,
@@ -937,22 +938,23 @@ export default function Chat({
   const [songQuizPickedIndex, setSongQuizPickedIndex] = useState<Record<string, number>>({});
   const deferredNextSongRecommendMessages = messages.filter(isDeferredNextSongRecommendMessage);
   const visibleMessages = messages.filter((m) => !isDeferredNextSongRecommendMessage(m));
-
-  useEffect(() => {
+  const scrollToLatest = useCallback(() => {
     const bottom = bottomRef.current;
     if (!bottom) return;
-    const run = () =>
-      scrollChatToLatestBestPoint({
-        bottomEl: bottom,
-        scrollPane: scrollPaneRef.current,
-      });
-    run();
+    scrollChatToLatestBestPoint({
+      bottomEl: bottom,
+      scrollPane: scrollPaneRef.current,
+    });
+  }, []);
+
+  useEffect(() => {
+    scrollToLatest();
     // レイアウト確定後にもう一度（曲解説カードの高さ計測ずれ対策）
     const raf = requestAnimationFrame(() => {
-      requestAnimationFrame(run);
+      requestAnimationFrame(scrollToLatest);
     });
     return () => cancelAnimationFrame(raf);
-  }, [messages.length]);
+  }, [messages.length, scrollToLatest]);
 
   useEffect(() => {
     if (!themePlaylistActiveMission && themeMissionModalOpen) {
@@ -1401,7 +1403,7 @@ export default function Chat({
     <div className={roomFrameBlockClass('flex min-h-0 flex-1 flex-col')}>
       <div
         className={roomFrameInnerHeaderClass(
-          'flex shrink-0 flex-nowrap items-center gap-x-2 gap-y-0 max-lg:py-1.5 lg:flex-wrap lg:items-center lg:gap-x-3 lg:gap-y-1.5',
+          'flex shrink-0 flex-wrap items-center gap-x-2 gap-y-0 max-lg:py-1.5 lg:gap-x-3 lg:gap-y-1.5',
         )}
       >
         {onChatLogClick ? (
@@ -1421,9 +1423,20 @@ export default function Chat({
         >
           チャット
         </span>
+        <button
+          type="button"
+          onClick={scrollToLatest}
+          disabled={visibleMessages.length === 0}
+          className="inline-flex shrink-0 items-center gap-0.5 rounded border border-cyan-700/70 bg-cyan-950/40 px-1.5 py-1 text-[10px] font-medium leading-none text-cyan-200 hover:bg-cyan-900/50 disabled:cursor-not-allowed disabled:opacity-40"
+          aria-label="最新の発言までスクロール"
+          title="最新の発言へ移動"
+        >
+          <ArrowDownIcon className="h-3 w-3" aria-hidden />
+          最新へ
+        </button>
         {!IS_MC_PRODUCT ? (
         <div
-          className="inline-flex min-w-0 flex-1 flex-nowrap items-center gap-x-1.5 overflow-x-auto lg:flex-wrap lg:gap-x-2 lg:gap-y-1 lg:overflow-visible"
+          className="order-3 inline-flex min-w-0 basis-full flex-wrap items-center gap-x-1.5 gap-y-1 overflow-visible pt-1 lg:order-none lg:basis-auto lg:flex-1 lg:gap-x-2 lg:pt-0"
           role="status"
           aria-label={`部屋のAI機能: 曲解説${headerCommentaryActive ? 'オン' : 'オフ'}${
             headerCommentaryActive && !personalAiCommentaryEnabled && !viewerIsGuest
@@ -1536,7 +1549,7 @@ export default function Chat({
             ) : null}
           </div>
         ) : (
-          <div ref={chatHeaderMoreRef} className="relative shrink-0">
+          <div ref={chatHeaderMoreRef} className="relative ml-auto shrink-0">
             <button
               type="button"
               onClick={() => setChatHeaderMoreOpen((o) => !o)}

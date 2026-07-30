@@ -1,12 +1,48 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { requireStyleAdminApi } from '@/lib/admin-access';
-import { softDeleteNextSongRecommendById } from '@/lib/next-song-recommend-store';
+import {
+  normalizeNextSongPickMatchKey,
+  softDeleteNextSongRecommendById,
+} from '@/lib/next-song-recommend-store';
+import {
+  resolveNextSongPickCatalogHit,
+  type NextSongPickCatalogHit,
+} from '@/lib/next-song-recommend-catalog-resolve';
 
 export const dynamic = 'force-dynamic';
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+async function resolveCatalogForRows(
+  admin: NonNullable<ReturnType<typeof createAdminClient>>,
+  rows: Array<{ recommended_artist: string; recommended_title: string }>,
+): Promise<Map<string, NextSongPickCatalogHit>> {
+  const unique = new Map<string, { artist: string; title: string }>();
+  for (const row of rows) {
+    const artist = row.recommended_artist?.trim() ?? '';
+    const title = row.recommended_title?.trim() ?? '';
+    if (!artist || !title) continue;
+    const key = normalizeNextSongPickMatchKey(artist, title);
+    if (!unique.has(key)) unique.set(key, { artist, title });
+  }
+
+  const resolved = new Map<string, NextSongPickCatalogHit>();
+  const entries = [...unique.entries()];
+  const concurrency = 6;
+  for (let i = 0; i < entries.length; i += concurrency) {
+    await Promise.all(
+      entries.slice(i, i + concurrency).map(async ([key, pick]) => {
+        resolved.set(
+          key,
+          await resolveNextSongPickCatalogHit(admin, pick.artist, pick.title),
+        );
+      }),
+    );
+  }
+  return resolved;
+}
 
 export async function GET(request: Request) {
   const gate = await requireStyleAdminApi();
@@ -21,6 +57,7 @@ export async function GET(request: Request) {
     .select(
       'id, seed_song_id, seed_video_id, seed_label, recommended_artist, recommended_title, reason, youtube_search_query, order_index, is_active, created_at',
     )
+    .eq('is_active', true)
     .order('created_at', { ascending: false })
     .limit(limit);
   if (error) {
@@ -33,6 +70,10 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
   const recRows = Array.isArray(rows) ? rows : [];
+  const catalogByPick = await resolveCatalogForRows(
+    admin,
+    recRows as Array<{ recommended_artist: string; recommended_title: string }>,
+  );
   const recIds = recRows.map((r: any) => r.id).filter(Boolean);
   const feedbackByRecId = new Map<string, { good: number; bad: number; commentCount: number }>();
   if (recIds.length > 0) {
@@ -55,6 +96,13 @@ export async function GET(request: Request) {
     rows: recRows.map((r: any) => ({
       ...r,
       feedback: feedbackByRecId.get(r.id) ?? { good: 0, bad: 0, commentCount: 0 },
+      catalog:
+        catalogByPick.get(
+          normalizeNextSongPickMatchKey(
+            typeof r.recommended_artist === 'string' ? r.recommended_artist : '',
+            typeof r.recommended_title === 'string' ? r.recommended_title : '',
+          ),
+        ) ?? null,
     })),
   });
 }

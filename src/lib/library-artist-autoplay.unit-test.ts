@@ -10,6 +10,8 @@ import {
 
 function run() {
   assert.equal(librarySongListSortOrderLabel('release_new'), '公開日が新しい順');
+  assert.equal(librarySongListSortOrderLabel('release_old'), '公開日が古い順');
+  assert.equal(librarySongListSortOrderLabel('popularity'), '人気順');
   assert.equal(librarySongListSortOrderLabel('title_asc'), '曲名A-Z順');
 
   const prepared = prepareLibraryArtistAutoplaySongs(
@@ -39,6 +41,46 @@ function run() {
   assert.equal(unlimited.songs.length, 3);
   assert.equal(unlimited.truncated, false);
 
+  const resumed = prepareLibraryArtistAutoplaySongs(
+    [
+      { videoId: 'aaaaaaaaaaa', title: 'One', artist: 'A' },
+      { videoId: '', title: 'Skip', artist: 'A' },
+      { videoId: 'bbbbbbbbbbb', title: 'Two', artist: 'A' },
+      { videoId: 'bbbbbbbbbbb', title: 'Duplicate', artist: 'A' },
+      { videoId: 'ccccccccccc', title: 'Three', artist: 'A' },
+      { videoId: 'ddddddddddd', title: 'Four', artist: 'A' },
+    ],
+    2,
+    'bbbbbbbbbbb',
+  );
+  assert.deepEqual(
+    resumed.songs.map((song) => song.videoId),
+    ['bbbbbbbbbbb', 'ccccccccccc'],
+  );
+  assert.equal(resumed.totalFetched, 3);
+  assert.equal(resumed.truncated, true);
+
+  const resumedUnlimited = prepareLibraryArtistAutoplaySongs(
+    [
+      { videoId: 'aaaaaaaaaaa', title: 'One', artist: 'A' },
+      { videoId: 'bbbbbbbbbbb', title: 'Two', artist: 'A' },
+      { videoId: 'ccccccccccc', title: 'Three', artist: 'A' },
+    ],
+    null,
+    'ccccccccccc',
+  );
+  assert.deepEqual(
+    resumedUnlimited.songs.map((song) => song.videoId),
+    ['ccccccccccc'],
+  );
+
+  const unknownStart = prepareLibraryArtistAutoplaySongs(
+    [{ videoId: 'aaaaaaaaaaa', title: 'One', artist: 'A' }],
+    40,
+    'xxxxxxxxxxx',
+  );
+  assert.equal(unknownStart.songs.length, 0);
+
   const launch = buildLibraryArtistAutoplayLaunch({
     artistName: 'Howard Jones',
     orderLabel: '公開日が新しい順',
@@ -52,6 +94,27 @@ function run() {
   assert.equal(launch!.state.sourceLabel, 'ライブラリ');
   assert.equal(launch!.state.songs.length, 2);
   assert.match(launch!.startMessage, /ライブラリ「Howard Jones」2曲を連続再生/);
+
+  const resumedLaunch = buildLibraryArtistAutoplayLaunch({
+    artistName: 'Howard Jones',
+    songs: [
+      { videoId: 'aaaaaaaaaaa', title: 'What Is Love?', artist: 'Howard Jones' },
+      { videoId: 'bbbbbbbbbbb', title: 'New Song', artist: 'Howard Jones' },
+    ],
+    startVideoId: 'bbbbbbbbbbb',
+  });
+  assert.ok(resumedLaunch);
+  assert.equal(resumedLaunch!.state.songs.length, 1);
+  assert.equal(resumedLaunch!.state.songs[0]!.videoId, 'bbbbbbbbbbb');
+
+  assert.equal(
+    buildLibraryArtistAutoplayLaunch({
+      artistName: 'Howard Jones',
+      songs: [{ videoId: 'aaaaaaaaaaa', title: 'One', artist: 'Howard Jones' }],
+      startVideoId: 'xxxxxxxxxxx',
+    }),
+    null,
+  );
 
   assert.equal(
     buildLibraryArtistAutoplayLaunch({

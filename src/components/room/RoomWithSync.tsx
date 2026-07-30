@@ -51,6 +51,7 @@ import {
   roomHeaderActionBtnClass,
   roomHeaderMenuItemClass,
   roomPlayerOverlayIconBtnClass,
+  roomPlayerOverlayTextBtnClass,
   roomFrameBlockClass,
   roomViewportHeaderClass,
 } from '@/lib/product-branding';
@@ -133,7 +134,10 @@ import {
   isYoutubePlayerErrorWorthPlaylistSkip,
   type Music8PlaylistAutoplayState,
 } from '@/lib/music8-playlist-autoplay';
-import { buildLibraryArtistAutoplayLaunch } from '@/lib/library-artist-autoplay';
+import {
+  buildLibraryArtistAutoplayLaunch,
+  type LibraryArtistAutoplayRequest,
+} from '@/lib/library-artist-autoplay';
 import { isYoutubeKeywordSearchEnabled } from '@/lib/youtube-keyword-search-ui';
 import { extractCharacterSongPickResolvedYoutube } from '@/lib/character-song-pick-youtube';
 import { CHARACTER_SONG_PICK_AUTO_USER_PROMPT } from '@/lib/ai-character-song-pick-cues';
@@ -251,12 +255,10 @@ import { createClient } from '@/lib/supabase/client';
 import {
   ArrowLeftStartOnRectangleIcon,
   ChevronDownIcon,
-  ClockIcon,
   DocumentTextIcon,
   EnvelopeIcon,
   HeartIcon,
   LockClosedIcon,
-  UserCircleIcon,
 } from '@heroicons/react/24/outline';
 import {
   favoriteHeartActiveRingClass,
@@ -7535,11 +7537,7 @@ export default function RoomWithSync({
   );
 
   const handleLibraryArtistAutoplay = useCallback(
-    (params: {
-      artistName: string;
-      songs: Array<{ videoId: string; title: string; artist: string }>;
-      orderLabel?: string;
-    }) => {
+    (params: LibraryArtistAutoplayRequest) => {
       if (isGuest) {
         addSystemMessage('ライブラリの全曲選曲はログインユーザーのみ利用できます。');
         return;
@@ -7567,6 +7565,7 @@ export default function RoomWithSync({
         artistName: params.artistName,
         songs: params.songs,
         orderLabel: params.orderLabel,
+        startVideoId: params.startVideoId,
         // STYLE_ADMIN（表記ツール権限あり）は AI 解説保存用に上限なし
         maxSongs: chatStyleAdminTools ? null : undefined,
       });
@@ -9705,7 +9704,7 @@ export default function RoomWithSync({
                 </span>
               </span>
             </div>
-            <div className="absolute right-2 top-2 z-20 flex items-center gap-1 sm:hidden">
+            <div className="absolute right-2 top-14 z-20 flex flex-col items-end gap-0.5 sm:hidden">
               <button
                 type="button"
                 onClick={() => {
@@ -9716,7 +9715,7 @@ export default function RoomWithSync({
                   });
                 }}
                 disabled={!videoId || isGuest}
-                className={roomPlayerOverlayIconBtnClass(
+                className={roomPlayerOverlayTextBtnClass(
                   `disabled:opacity-50 ${mobileCurrentIsFavorited ? favoriteHeartActiveRingClass : ''}`,
                 )}
                 aria-label={
@@ -9742,20 +9741,22 @@ export default function RoomWithSync({
               <button
                 type="button"
                 onClick={() => openMyPage('user')}
-                className={roomPlayerOverlayIconBtnClass()}
+                className={roomPlayerOverlayTextBtnClass()}
                 aria-label="マイページを開く"
                 title="マイページ"
               >
-                <UserCircleIcon className="h-5 w-5" aria-hidden />
+                <span>マイ</span>
+                <span>ページ</span>
               </button>
               <button
                 type="button"
                 onClick={() => setPlaybackHistoryModalOpen(true)}
-                className={roomPlayerOverlayIconBtnClass()}
+                className={roomPlayerOverlayTextBtnClass()}
                 aria-label="視聴履歴を表示"
                 title="視聴履歴"
               >
-                <ClockIcon className="h-5 w-5" aria-hidden />
+                <span>視聴</span>
+                <span>履歴</span>
               </button>
             </div>
             <div className="absolute right-2 bottom-2 z-20 hidden sm:flex">

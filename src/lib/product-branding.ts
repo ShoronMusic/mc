@@ -142,6 +142,17 @@ export function roomPlayerOverlayIconBtnClass(extra?: string): string {
   return extra ? `${base} ${extra}` : base;
 }
 
+const MA_PLAYER_OVERLAY_TEXT_BTN =
+  'flex h-10 w-10 flex-col items-center justify-center rounded-lg border border-gray-600 bg-gray-900/90 p-0 text-[9px] font-medium leading-[1.1] text-gray-200 backdrop-blur-sm hover:bg-gray-800';
+
+const MC_PLAYER_OVERLAY_TEXT_BTN = `${MC_ICON_BTN} flex h-10 w-10 flex-col items-center justify-center rounded-lg border p-0 text-[9px] font-medium leading-[1.1] backdrop-blur-sm`;
+
+/** プレイヤー上オーバーレイ（テキストラベル） */
+export function roomPlayerOverlayTextBtnClass(extra?: string): string {
+  const base = IS_MC_PRODUCT ? MC_PLAYER_OVERLAY_TEXT_BTN : MA_PLAYER_OVERLAY_TEXT_BTN;
+  return extra ? `${base} ${extra}` : base;
+}
+
 /** チャットヘッダー（7×7） */
 export function chatHeaderIconBtnClass(extra?: string): string {
   const base = IS_MC_PRODUCT ? MC_CHAT_HEADER_ICON_BTN : MA_CHAT_HEADER_ICON_BTN;

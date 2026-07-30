@@ -49,7 +49,7 @@ async function lookupMcDbSongVideo(
   title: string,
 ): Promise<{
   songId: string;
-  videoId: string;
+  videoId: string | null;
   mainArtist: string;
   songTitle: string;
   displayTitle: string | null;
@@ -131,28 +131,33 @@ async function lookupMcDbSongVideo(
     .order('created_at', { ascending: true })
     .limit(1);
 
-  if (vErr?.code === '42P01') return null;
   if (vErr) {
-    console.warn('[next-song-recommend-catalog] song_videos', vErr.message);
-    return null;
+    if (vErr.code !== '42P01') {
+      console.warn('[next-song-recommend-catalog] song_videos', vErr.message);
+    }
   }
 
   const videoId = (videos?.[0] as { video_id?: string } | undefined)?.video_id?.trim() ?? '';
-  if (!/^[a-zA-Z0-9_-]{11}$/.test(videoId)) return null;
   return {
     songId,
-    videoId,
+    videoId: /^[a-zA-Z0-9_-]{11}$/.test(videoId) ? videoId : null,
     mainArtist: matchedRow.main_artist,
     songTitle: matchedRow.song_title,
     displayTitle: matchedRow.display_title,
   };
 }
 
-async function lookupMusic8Video(artist: string, title: string): Promise<string | null> {
+async function lookupMusic8Song(
+  artist: string,
+  title: string,
+): Promise<{ found: boolean; videoId: string | null }> {
   const json = await fetchMusic8SongData(artist, title, {
     fetchJson: fetchJsonWithOptionalGcsAuth,
   });
-  return extractYoutubeVideoIdFromMusic8Json(json);
+  return {
+    found: Boolean(json),
+    videoId: extractYoutubeVideoIdFromMusic8Json(json),
+  };
 }
 
 export async function resolveNextSongPickCatalogHit(
@@ -176,7 +181,10 @@ export async function resolveNextSongPickCatalogHit(
   if (!artistTrim || !titleTrim) return empty;
 
   let mc: Awaited<ReturnType<typeof lookupMcDbSongVideo>> = null;
-  let m8VideoId: string | null = null;
+  let music8: Awaited<ReturnType<typeof lookupMusic8Song>> = {
+    found: false,
+    videoId: null,
+  };
 
   if (supabase) {
     try {
@@ -187,16 +195,16 @@ export async function resolveNextSongPickCatalogHit(
   }
 
   try {
-    m8VideoId = await lookupMusic8Video(artistTrim, titleTrim);
+    music8 = await lookupMusic8Song(artistTrim, titleTrim);
   } catch (e) {
     console.warn('[next-song-recommend-catalog] music8 lookup', e);
   }
 
-  const videoId = mc?.videoId ?? m8VideoId ?? null;
+  const videoId = mc?.videoId ?? music8.videoId ?? null;
   if (!videoId) {
     return {
       inMcDb: Boolean(mc),
-      inMusic8: Boolean(m8VideoId),
+      inMusic8: music8.found,
       songId: mc?.songId ?? null,
       videoId: null,
       watchUrl: null,
@@ -208,7 +216,7 @@ export async function resolveNextSongPickCatalogHit(
 
   return {
     inMcDb: Boolean(mc),
-    inMusic8: Boolean(m8VideoId),
+    inMusic8: music8.found,
     songId: mc?.songId ?? null,
     videoId,
     watchUrl: buildWatchUrl(videoId),

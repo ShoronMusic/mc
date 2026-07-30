@@ -36,6 +36,7 @@ import {
 } from '@/lib/library-release-sort-date';
 import {
   librarySongListSortOrderLabel,
+  type LibraryArtistAutoplayRequest,
   type LibrarySongListSortKey,
 } from '@/lib/library-artist-autoplay';
 import type { SystemMessageOptions } from '@/types/chat';
@@ -63,6 +64,7 @@ import { LibraryArtistDetailDbBody } from '@/components/chat/LibraryArtistDetail
 import { isLibraryArtistInfoSparse } from '@/lib/library-artist-info-display';
 import { buildLibraryArtistExternalLinks, formatLibraryArtistDetailTitleLines } from '@/lib/library-artist-public-display';
 import { LibraryMusic8SongComment } from '@/components/chat/LibraryMusic8SongComment';
+import { LibraryArtistAutoplayConfirmModal } from '@/components/chat/LibraryArtistAutoplayConfirmModal';
 import {
   LibrarySongArtistsDetail,
   useLibrarySongArtists,
@@ -826,11 +828,7 @@ interface ChatInputProps {
   /** YouTube プレイリスト公開 URL（連続再生） */
   onYoutubePlaylistUrl?: (url: string) => void | Promise<void>;
   /** ライブラリで選択中アーティストの曲一覧を連続再生 */
-  onLibraryArtistAutoplay?: (params: {
-    artistName: string;
-    songs: Array<{ videoId: string; title: string; artist: string }>;
-    orderLabel?: string;
-  }) => void | Promise<void>;
+  onLibraryArtistAutoplay?: (params: LibraryArtistAutoplayRequest) => void | Promise<void>;
   /** ゲスト時は検索APIの制限を低めにするために送る */
   isGuest?: boolean;
   /** AI お試し残数（二段選曲ボタン用） */
@@ -920,6 +918,10 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
   const [songHowtoOpen, setSongHowtoOpen] = useState(false);
   const [themePlaylistConfirmOpen, setThemePlaylistConfirmOpen] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
+  const [libraryArtistAutoplayConfirmOpen, setLibraryArtistAutoplayConfirmOpen] =
+    useState(false);
+  const [libraryArtistAutoplayStartVideoId, setLibraryArtistAutoplayStartVideoId] =
+    useState<string | null>(null);
   const [libraryCatalog, setLibraryCatalogState] = useState<LibraryCatalogFilter>(() =>
     resolveLibraryCatalogPreference(),
   );
@@ -2074,6 +2076,8 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
     if (librarySongListScrollRef.current) {
       librarySongListScrollTopRef.current = librarySongListScrollRef.current.scrollTop;
     }
+    setLibraryArtistAutoplayConfirmOpen(false);
+    setLibraryArtistAutoplayStartVideoId(null);
     setLibraryOpen(false);
   }, []);
 
@@ -2090,16 +2094,35 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
 
   const libraryArtistAutoplaySongs = useMemo(() => {
     const artistFallback = (librarySelectedArtistName ?? '').trim();
-    const songs: Array<{ videoId: string; title: string; artist: string }> = [];
+    const songs: Array<{
+      videoId: string;
+      title: string;
+      artist: string;
+      displayMeta: string;
+    }> = [];
     const seen = new Set<string>();
     for (const row of librarySongRowsSortedForList) {
       const videoId = row.video_id?.trim() ?? '';
       if (!videoId || seen.has(videoId)) continue;
       seen.add(videoId);
+      const releaseDot = formatLibraryReleaseDot(
+        libraryEffectiveReleaseDateForSort({
+          originalReleaseDate: row.original_release_date,
+          youtubePublishedAt: row.youtube_published_at,
+        }),
+      );
+      const artistAndStyle = showRoomStyleUi()
+        ? `${row.main_artist ?? '—'} / ${row.style ?? '—'}`
+        : (row.main_artist ?? '—');
+      const playBits = [
+        `全選曲 ${row.play_count ?? 0}`,
+        row.my_play_count != null ? `自分 ${row.my_play_count}` : '',
+      ].filter(Boolean);
       songs.push({
         videoId,
         title: librarySongListPrimaryTitle(row),
         artist: (row.main_artist ?? '').trim() || artistFallback,
+        displayMeta: [releaseDot, artistAndStyle, ...playBits].filter(Boolean).join(' · '),
       });
     }
     return songs;
@@ -2114,6 +2137,17 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
     libraryArtistAutoplaySongs.length > 0 &&
     !libraryLoading;
 
+  const openLibraryArtistAutoplayConfirm = useCallback(() => {
+    if (!canSubmitLibraryArtistAutoplay) return;
+    setLibraryArtistAutoplayStartVideoId(null);
+    setLibraryArtistAutoplayConfirmOpen(true);
+  }, [canSubmitLibraryArtistAutoplay]);
+
+  const cancelLibraryArtistAutoplayConfirm = useCallback(() => {
+    setLibraryArtistAutoplayConfirmOpen(false);
+    setLibraryArtistAutoplayStartVideoId(null);
+  }, []);
+
   const submitLibraryArtistAutoplay = useCallback(() => {
     if (!canSubmitLibraryArtistAutoplay || !onLibraryArtistAutoplay) return;
     const artistName = librarySelectedArtistName?.trim();
@@ -2122,12 +2156,15 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
       artistName,
       songs: libraryArtistAutoplaySongs,
       orderLabel: librarySongListSortOrderLabel(librarySongListSort as LibrarySongListSortKey),
+      startVideoId: libraryArtistAutoplayStartVideoId,
     });
     setValue('');
     if (librarySongListScrollRef.current) {
       librarySongListScrollTopRef.current = librarySongListScrollRef.current.scrollTop;
     }
     clearLibrarySongSelection();
+    setLibraryArtistAutoplayConfirmOpen(false);
+    setLibraryArtistAutoplayStartVideoId(null);
     setLibraryOpen(false);
   }, [
     canSubmitLibraryArtistAutoplay,
@@ -2135,6 +2172,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
     librarySelectedArtistName,
     libraryArtistAutoplaySongs,
     librarySongListSort,
+    libraryArtistAutoplayStartVideoId,
     clearLibrarySongSelection,
   ]);
 
@@ -2991,6 +3029,18 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
             className={libraryModalShellClass(isMobileLandscape ? 'h-[92vh]' : 'h-[88vh]')}
             onClick={(e) => e.stopPropagation()}
           >
+            {libraryArtistAutoplayConfirmOpen && librarySelectedArtistName ? (
+              <LibraryArtistAutoplayConfirmModal
+                artistName={librarySelectedArtistName}
+                songs={libraryArtistAutoplaySongs}
+                sort={librarySongListSort}
+                startVideoId={libraryArtistAutoplayStartVideoId}
+                onSortChange={setLibrarySongListSort}
+                onStartVideoIdChange={setLibraryArtistAutoplayStartVideoId}
+                onCancel={cancelLibraryArtistAutoplayConfirm}
+                onConfirm={submitLibraryArtistAutoplay}
+              />
+            ) : null}
             <div
               className={`border-b ${libraryPanelDividerClass()} ${
                 isMobileLandscape
@@ -3642,7 +3692,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                     <button
                       type="button"
                       disabled={!canSubmitLibraryArtistAutoplay}
-                      onClick={submitLibraryArtistAutoplay}
+                      onClick={openLibraryArtistAutoplayConfirm}
                       className={librarySelectSongBtnClass('w-full')}
                       title={
                         isGuest
