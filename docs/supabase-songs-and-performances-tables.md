@@ -164,6 +164,32 @@ create index if not exists idx_song_videos_song_id
 - **1〜2 文字**のキーワードは trigram が効かない（3 文字未満）ため、短い語は従来どおり遅い可能性がある。
 - 取り消す場合は `drop index if exists public.idx_songs_main_artist_trgm;` のように個別に削除する。
 
+### アーティスト索引スナップショット（`library_artist_index_snapshots`・2026-07）
+
+部屋ライブラリの A–Z 索引（`GET /api/library/artists`）は、従来キャッシュ切れのたびに `songs`＋`song_credits` を全件走査していた。  
+集計結果を catalog ごとに保存し、**cold start／インスタンス間でも全件走査を避ける**（[`library-keyword-search-perf-plan.md`](./library-keyword-search-perf-plan.md) Phase 3.1）。
+
+**SQL Editor で実行**:
+
+```sql
+create table if not exists public.library_artist_index_snapshots (
+  catalog text primary key
+    check (catalog in ('western', 'domestic', 'all')),
+  items jsonb not null default '[]'::jsonb,
+  letters jsonb not null default '[]'::jsonb,
+  item_count integer not null default 0,
+  built_at timestamptz not null default now()
+);
+
+alter table public.library_artist_index_snapshots enable row level security;
+-- ポリシーなし: anon / authenticated は読めず、service role のみアクセス
+```
+
+- アプリはテーブルが無い（`42P01`）ときは従来どおりメモリ構築にフォールバックする。
+- スナップショット TTL は約 **6 時間**。期限切れ時は **stale を即返し、裏で再構築**する。
+- 管理画面で洋楽扱い／邦楽リスト等を変えたときはメモリ＋スナップショットを破棄する（既存の `clearLibraryArtistIndexCache`）。
+- 手動再構築: `npx tsx scripts/rebuild-library-artist-index.ts`（任意 `--catalog=western`）。
+
 ### 曲クレジット（共演・複数アーティスト・2026-05）
 
 `spotify_artists` / Music8 `main_artists` / `main_artist` から **1曲に複数 `artists` を紐づけ**る。  

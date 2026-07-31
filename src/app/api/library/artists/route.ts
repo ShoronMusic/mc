@@ -16,7 +16,7 @@ export type { LibraryArtistIndexItem };
 
 /**
  * GET: 曲マスタを `main_artist` で集計（`?catalog=western|domestic|all`）。
- * 集計結果はサーバー内で最大15分キャッシュ（索引クリックの体感改善）。
+ * メモリ（15分）→ DB スナップショット（約6時間・stale-while-revalidate）→ 全件走査の順。
  */
 export async function GET(request: Request) {
   const admin = createAdminClient();
