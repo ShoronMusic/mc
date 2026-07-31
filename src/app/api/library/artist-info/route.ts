@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { artistNameToMusic8Slug, type Music8ArtistJson } from '@/lib/music8-artist-display';
 import { fetchMusic8ArtistJsonByName } from '@/lib/music8-artist-json-by-name-server';
+import { isLibraryArtistInfoSparse } from '@/lib/library-artist-info-display';
 
 export const dynamic = 'force-dynamic';
 
@@ -96,11 +97,16 @@ export async function GET(request: Request) {
     null;
 
   let music8: Music8ArtistJson | null = null;
-  try {
-    music8 = await fetchMusic8ArtistJsonByName(artist);
-  } catch (e) {
-    console.warn('[api/library/artist-info] music8 fetch skipped', e);
+  // DB に画像・プロフィール・基本メタが揃っていれば、表示に使わない Music8 GCS を待たない。
+  if (isLibraryArtistInfoSparse(picked)) {
+    try {
+      music8 = await fetchMusic8ArtistJsonByName(artist);
+    } catch (e) {
+      console.warn('[api/library/artist-info] music8 fetch skipped', e);
+    }
   }
 
-  return NextResponse.json({ artist: picked, music8 });
+  const res = NextResponse.json({ artist: picked, music8 });
+  res.headers.set('Cache-Control', 'private, max-age=60, stale-while-revalidate=300');
+  return res;
 }

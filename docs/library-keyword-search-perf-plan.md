@@ -3,7 +3,7 @@
 **目的**: 部屋ライブラリ（アーティスト／曲名キーワード検索）の体感遅延を削減する。  
 **対象 UI**: チャット入力のライブラリモーダル（`ChatInput`）  
 **開始**: 2026-07-30  
-**状態**: Phase 1 完了。Phase 2 は**コード側（クエリ一括化）完了・DB 索引の SQL は用意済みで未適用**。
+**状態**: Phase 1・Phase 2.1/2.5・Phase 3.4 完了。DB 索引適用後の速度改善を確認済み。
 
 関連: [`library-feature-spec-ja.md`](./library-feature-spec-ja.md)（機能仕様）／[`supabase-songs-and-performances-tables.md`](./supabase-songs-and-performances-tables.md)（索引定義）
 
@@ -64,7 +64,7 @@
 
 | # | 施策 | 期待効果 | 状態 |
 |---|------|----------|------|
-| 2.1 | `%ILIKE%` 対象列へ **`pg_trgm` GIN**（`songs` の title／artist 系、`artists.name`／`name_ja` 等） | DB 側の本質的な高速化 | **SQL 用意済み・DB 未適用** |
+| 2.1 | `%ILIKE%` 対象列へ **`pg_trgm` GIN**（`songs` の title／artist 系、`artists.name`／`name_ja` 等） | DB 側の本質的な高速化 | **適用済み・速度改善確認** |
 | 2.2 | **catalog 条件を DB クエリへ押し込み**（取得後フィルタ依存を減らす） | 転送量削減・上限後漏れの緩和 | 保留（下記「見送り理由」） |
 | 2.3 | バリエーション検索の **RPC／1 クエリ化**（暫定の `Promise.all` より効率的） | ラウンドトリップ削減 | 未着手 |
 | 2.4 | 再生回数を **履歴行の全転送ではなく DB 集約**（＋複合索引） | 付加情報の遅延削減 | 索引のみ 2.1 の SQL に同梱。RPC 化は未着手 |
@@ -82,7 +82,7 @@
 | 3.1 | アーティスト索引を **集計テーブル／マテビュー**＋更新経路 | キャッシュミス時の全件走査を廃止 | 未着手 |
 | 3.2 | 索引キャッシュの **インスタンス間共有**＋ in-flight 一本化 | サーバーレスでの再構築競合を抑制 | 未着手 |
 | 3.3 | 索引レスポンスに日本語名・正規化キーを含め、**入力中照合 API を廃止可能に** | クライアント完結の候補出し | 未着手 |
-| 3.4 | `artist-info` の Music8 を **DB 不足時のみ**、詳細 API の **二重呼び出し解消** | 選択後の待ち削減 | 未着手 |
+| 3.4 | `artist-info` の Music8 を **DB 不足時のみ**、詳細 API の **二重呼び出し解消** | 選択後の待ち削減 | **完了**（2026-07-31） |
 | 3.5 | 検索初回レスポンスから `my_play_count`／AI 解説有無などを **遅延取得** | 初回表示優先 | 未着手 |
 
 ### Phase 4 — 運用・検証
@@ -113,6 +113,14 @@
 | `docs/supabase-songs-and-performances-tables.md` | `pg_trgm` GIN 索引ほかの SQL（2.1・**実行は運用者**） |
 | `src/lib/library-search-query.ts` | `fetchCreditSongsForLibraryArtistNamesBatch`、`fetchSongsForLibraryArtistSelection` に一括結果の受け口 |
 | `src/app/api/library/search/route.ts` | 候補アーティストのクレジット経路を事前一括取得 |
+
+### Phase 3.4（2026-07-31）
+
+| ファイル | 内容 |
+|----------|------|
+| `src/app/api/library/artist-info/route.ts` | DB 情報が十分なら Music8 GCS を取得しない。短期 Cache-Control |
+| `src/lib/music8-artist-json-by-name-server.ts` | 成功 1 時間／不在 5 分キャッシュ、同時取得 Promise の共有 |
+| `src/components/chat/ChatInput.tsx` | 詳細 API の明示呼び出し 3 箇所を廃止し effect へ一本化。古い応答の反映防止 |
 
 同時実行数（現行）:
 
@@ -188,5 +196,6 @@ Supabase へ一度に投げすぎないよう上限を定数化している（�
 |------|------|
 | 2026-07-30 | 経路調査。遅延要因を整理。 |
 | 2026-07-30 | Phase 1 実装（デバウンス・重複廃止・並行化・Cache-Control）。ローカル計測で `テイラー` warm 約 7.2s → 約 2.1s。本書作成。 |
-| 2026-07-31 | ボトルネックを再測（`love` は候補アーティスト 36 件 → 全走査の反復が支配的）。Phase 2.1 の SQL を `supabase-songs-and-performances-tables.md` に用意（**DB 未適用**）。Phase 2.5 クレジット経路の一括化を実装（結果 id 列が完全一致）。2.2 は洋楽扱い判定のため保留と判断。 |
+| 2026-07-31 | ボトルネックを再測（`love` は候補アーティスト 36 件 → 全走査の反復が支配的）。Phase 2.1 の SQL を `supabase-songs-and-performances-tables.md` に用意。Phase 2.5 クレジット経路の一括化を実装（結果 id 列が完全一致）。2.2 は洋楽扱い判定のため保留と判断。 |
 | 2026-07-31 | 「マイケル」検索で C 列に曲名 `Billie Jean` / `Faith` が出る不具合を修正。原因は `artists.name` に曲名・`name_ja` に本人名が付いた行。照合結果を `song_credits` 先の支配的 `main_artist` へ正規化（`pickCanonicalLibraryMainArtistName`）。 |
+| 2026-07-31 | Phase 2.1 の索引適用後、利用者が検索速度改善を確認。Phase 3.4 を実装。詳細 API 呼び出しを一本化し、DB 情報が十分なアーティストでは Music8 GCS 待ちを廃止。 |

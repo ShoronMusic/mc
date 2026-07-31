@@ -1009,6 +1009,8 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
   const librarySongListScrollRef = useRef<HTMLDivElement | null>(null);
   /** 曲一覧の並行リクエストを無効化（キーワード検索 vs アーティスト全曲） */
   const librarySongListRequestIdRef = useRef(0);
+  /** アーティストを素早く切り替えたとき、古い詳細応答を反映しない */
+  const libraryArtistInfoRequestIdRef = useRef(0);
   /** 日本語名マッチの実行中／取得済み Promise（入力中と検索実行で同じ語を二重取得しない） */
   const libraryJaMatchCacheRef = useRef(new Map<string, Promise<string[]>>());
   /** 日本語名マッチの反映順を保証（古い応答で新しい結果を上書きしない） */
@@ -1543,6 +1545,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
 
   const loadLibraryArtistInfo = useCallback(async (artistName: string | null) => {
     const name = (artistName ?? '').trim();
+    const requestId = ++libraryArtistInfoRequestIdRef.current;
     if (!name) {
       setLibraryArtistInfo(null);
       setLibraryDetailMusic8Artist(null);
@@ -1556,6 +1559,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
       const params = new URLSearchParams({ artist: name });
       const res = await fetch(`/api/library/artist-info?${params.toString()}`);
       const data = await res.json().catch(() => null);
+      if (requestId !== libraryArtistInfoRequestIdRef.current) return;
       if (!res.ok) {
         setLibraryArtistInfo(null);
         setLibraryDetailMusic8Artist(null);
@@ -1600,11 +1604,14 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
         music8 && isLibraryArtistInfoSparse(dbInfo) ? music8 : null,
       );
     } catch {
+      if (requestId !== libraryArtistInfoRequestIdRef.current) return;
       setLibraryArtistInfo(null);
       setLibraryDetailMusic8Artist(null);
       setLibraryArtistInfoError('アーティスト情報の取得に失敗しました。');
     } finally {
-      setLibraryArtistInfoLoading(false);
+      if (requestId === libraryArtistInfoRequestIdRef.current) {
+        setLibraryArtistInfoLoading(false);
+      }
     }
   }, []);
 
@@ -2238,12 +2245,10 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
       setLibraryArtistLetter(libraryModalArtistIndexKey(name));
       resetLibrarySongListScroll();
       void loadLibrarySongsForArtist(name);
-      void loadLibraryArtistInfo(name);
     },
     [
       libraryArtistItems,
       loadLibrarySongsForArtist,
-      loadLibraryArtistInfo,
       resetLibrarySongListScroll,
       clearLibraryJaMainArtistMatches,
     ],
@@ -2269,7 +2274,6 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
       setLibrarySongSource('browse');
       setLibraryOpen(true);
       resetLibrarySongListScroll();
-      void loadLibraryArtistInfo(name);
       await loadLibraryArtists();
       if (roomInteractionLocked) return;
       void loadLibrarySongsForArtist(name);
@@ -2278,7 +2282,6 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
       roomInteractionLocked,
       loadLibraryArtists,
       loadLibrarySongsForArtist,
-      loadLibraryArtistInfo,
       resetLibrarySongListScroll,
       clearLibraryJaMainArtistMatches,
     ],
@@ -2353,9 +2356,8 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
       setLibraryVideoError(null);
       resetLibrarySongListScroll();
       void loadLibrarySongsForArtist(name, { keepSearchMode: true });
-      void loadLibraryArtistInfo(name);
     },
-    [loadLibrarySongsForArtist, loadLibraryArtistInfo, resetLibrarySongListScroll],
+    [loadLibrarySongsForArtist, resetLibrarySongListScroll],
   );
 
   /** 「全アーティスト」→ キーワード曲検索結果に戻す */
