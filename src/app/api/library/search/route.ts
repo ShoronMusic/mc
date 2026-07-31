@@ -9,6 +9,10 @@ import {
   dedupeLibraryArtistDisplayNames,
   resolveLibrarySearchPriorityArtistNames,
   songMainArtistIncludesArtist,
+  fetchCreditSongsForLibraryArtistNamesBatch,
+  mapWithLimitedConcurrency,
+  LIBRARY_SEARCH_ARTIST_CONCURRENCY,
+  LIBRARY_SEARCH_QUERY_CONCURRENCY,
 } from '@/lib/library-search-query';
 import {
   defaultLibraryCatalogFilter,
@@ -74,47 +78,74 @@ async function fetchSongsByTextVariants(
   perVariantLimit: number,
   catalog: ReturnType<typeof parseLibraryCatalogFilter>,
 ): Promise<SongRow[]> {
+  const perVariantRows = await mapWithLimitedConcurrency(
+    variants,
+    LIBRARY_SEARCH_QUERY_CONCURRENCY,
+    async (v): Promise<SongRow[]> => {
+      const escaped = escapeLikeForIlike(v);
+      const orFilter = [
+        `main_artist.ilike.%${escaped}%`,
+        `song_title.ilike.%${escaped}%`,
+        `display_title.ilike.%${escaped}%`,
+        `primary_artist_name_ja.ilike.%${escaped}%`,
+        `song_title_ja.ilike.%${escaped}%`,
+      ].join(',');
+      const { data, error } = await admin.from('songs').select(SONG_SELECT).or(orFilter).limit(perVariantLimit);
+      if (error?.code === '42703') {
+        const fallback = await admin
+          .from('songs')
+          .select(SONG_SELECT_FALLBACK)
+          .or(
+            [
+              `main_artist.ilike.%${escaped}%`,
+              `song_title.ilike.%${escaped}%`,
+              `display_title.ilike.%${escaped}%`,
+            ].join(','),
+          )
+          .limit(perVariantLimit);
+        if (fallback.error) {
+          console.warn('[api/library/search] songs variant fallback', v, fallback.error.message);
+          return [];
+        }
+        return (fallback.data ?? []) as SongRow[];
+      }
+      if (error) {
+        console.warn('[api/library/search] songs variant', v, error.message);
+        return [];
+      }
+      return (data ?? []) as SongRow[];
+    },
+  );
+
   const byId = new Map<string, SongRow>();
-  for (const v of variants) {
-    const escaped = escapeLikeForIlike(v);
-    const orFilter = [
-      `main_artist.ilike.%${escaped}%`,
-      `song_title.ilike.%${escaped}%`,
-      `display_title.ilike.%${escaped}%`,
-      `primary_artist_name_ja.ilike.%${escaped}%`,
-      `song_title_ja.ilike.%${escaped}%`,
-    ].join(',');
-    let { data, error } = await admin.from('songs').select(SONG_SELECT).or(orFilter).limit(perVariantLimit);
-    if (error?.code === '42703') {
-      const fallback = await admin
-        .from('songs')
-        .select(SONG_SELECT_FALLBACK)
-        .or(
-          [
-            `main_artist.ilike.%${escaped}%`,
-            `song_title.ilike.%${escaped}%`,
-            `display_title.ilike.%${escaped}%`,
-          ].join(','),
-        )
-        .limit(perVariantLimit);
-      if (fallback.error) {
-        console.warn('[api/library/search] songs variant fallback', v, fallback.error.message);
-        continue;
-      }
-      for (const row of filterSongRowsByLibraryCatalog((fallback.data ?? []) as SongRow[], catalog)) {
-        byId.set(row.id, row);
-      }
-      continue;
-    }
-    if (error) {
-      console.warn('[api/library/search] songs variant', v, error.message);
-      continue;
-    }
-    for (const row of filterSongRowsByLibraryCatalog((data ?? []) as SongRow[], catalog)) {
+  for (const rows of perVariantRows) {
+    for (const row of filterSongRowsByLibraryCatalog(rows, catalog)) {
       byId.set(row.id, row);
     }
   }
   return [...byId.values()];
+}
+
+/**
+ * `song_credits` 経由の曲をアーティスト名まとめて先に引く。
+ * 失敗しても致命ではないので、その場合は空 Map（＝各アーティストが従来の単体経路を使う）。
+ */
+async function prefetchCreditSongsByArtist(
+  admin: NonNullable<ReturnType<typeof createAdminClient>>,
+  mainArtists: string[],
+  limit: number,
+): Promise<Map<string, SongRow[]>> {
+  // 一括化を切り戻すための保険（`LIBRARY_SEARCH_CREDIT_BATCH=0` で従来の 1 名ずつに戻る）
+  if (process.env.LIBRARY_SEARCH_CREDIT_BATCH === '0') return new Map();
+  for (const select of [SONG_SELECT, SONG_SELECT_FALLBACK]) {
+    try {
+      return await fetchCreditSongsForLibraryArtistNamesBatch<SongRow>(admin, mainArtists, select, limit);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.warn('[api/library/search] credit songs batch', select === SONG_SELECT ? 'primary' : 'fallback', msg);
+    }
+  }
+  return new Map();
 }
 
 async function fetchSongsByMainArtists(
@@ -123,29 +154,47 @@ async function fetchSongsByMainArtists(
   limit: number,
   catalog: ReturnType<typeof parseLibraryCatalogFilter>,
 ): Promise<SongRow[]> {
-  const byId = new Map<string, SongRow>();
-  for (const name of mainArtists) {
-    try {
-      const rows = await fetchSongsForLibraryArtistSelection<SongRow>(admin, name, SONG_SELECT, limit);
-      for (const row of filterSongRowsByLibraryCatalog(rows, catalog)) {
-        byId.set(row.id, row);
-      }
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      console.warn('[api/library/search] songs by artist', name, msg);
+  const creditSongsByArtist = await prefetchCreditSongsByArtist(admin, mainArtists, limit);
+
+  // 1 アーティストあたり複数クエリが走るため、アーティスト側の同時実行数は控えめにする。
+  const perArtistRows = await mapWithLimitedConcurrency(
+    mainArtists,
+    LIBRARY_SEARCH_ARTIST_CONCURRENCY,
+    async (name): Promise<SongRow[]> => {
+      const creditSongs = creditSongsByArtist.get(name.trim()) ?? null;
       try {
-        const rows = await fetchSongsForLibraryArtistSelection<SongRow>(
+        return await fetchSongsForLibraryArtistSelection<SongRow>(
           admin,
           name,
-          SONG_SELECT_FALLBACK,
+          SONG_SELECT,
           limit,
+          'search_broad',
+          creditSongs,
         );
-        for (const row of filterSongRowsByLibraryCatalog(rows, catalog)) {
-          byId.set(row.id, row);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.warn('[api/library/search] songs by artist', name, msg);
+        try {
+          return await fetchSongsForLibraryArtistSelection<SongRow>(
+            admin,
+            name,
+            SONG_SELECT_FALLBACK,
+            limit,
+            'search_broad',
+            creditSongs,
+          );
+        } catch (retryErr) {
+          console.warn('[api/library/search] songs by artist fallback', name, retryErr);
+          return [];
         }
-      } catch (retryErr) {
-        console.warn('[api/library/search] songs by artist fallback', name, retryErr);
       }
+    },
+  );
+
+  const byId = new Map<string, SongRow>();
+  for (const rows of perArtistRows) {
+    for (const row of filterSongRowsByLibraryCatalog(rows, catalog)) {
+      byId.set(row.id, row);
     }
   }
   return [...byId.values()];
@@ -194,13 +243,16 @@ export async function GET(request: Request) {
 
   if (q) {
     const variants = expandLibrarySearchQueryVariants(q);
-    const mainArtistsFromTable = await resolveMainArtistsForLibrarySearch(admin, q);
+    const perVariant = Math.min(limit, 80);
+    // 曲のテキスト検索は artists 側の解決結果に依存しないので並行に走らせる。
+    const [mainArtistsFromTable, fromText] = await Promise.all([
+      resolveMainArtistsForLibrarySearch(admin, q),
+      fetchSongsByTextVariants(admin, variants, perVariant, catalog),
+    ]);
     const priorityArtists = dedupeLibraryArtistDisplayNames([
       ...mainArtistsFromTable,
       ...resolveLibrarySearchPriorityArtistNames(q),
     ]);
-    const perVariant = Math.min(limit, 80);
-    const fromText = await fetchSongsByTextVariants(admin, variants, perVariant, catalog);
     const fromArtists =
       priorityArtists.length > 0
         ? await fetchSongsByMainArtists(admin, priorityArtists, perVariant, catalog)

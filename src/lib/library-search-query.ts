@@ -231,6 +231,36 @@ export function expandMainArtistNamesForLibraryFilter(mainArtist: string): strin
 
 type SongRowWithMainArtist = { id: string; main_artist: string | null };
 
+/**
+ * 入力順の結果を保ったまま、同時実行数を絞って並行処理する。
+ * Supabase へ一度に投げすぎないよう、検索系の直列ループはこれで置き換える。
+ */
+export async function mapWithLimitedConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  fn: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const limit = Math.max(1, Math.min(concurrency, items.length));
+  if (items.length === 0) return [];
+  const results = new Array<R>(items.length);
+  let next = 0;
+  await Promise.all(
+    Array.from({ length: limit }, async () => {
+      for (;;) {
+        const index = next++;
+        if (index >= items.length) return;
+        results[index] = await fn(items[index], index);
+      }
+    }),
+  );
+  return results;
+}
+
+/** 検索 1 回で Supabase へ同時に投げるクエリ数の上限 */
+export const LIBRARY_SEARCH_QUERY_CONCURRENCY = 4;
+/** アーティスト 1 件あたり複数クエリが走るので、アーティスト単位はさらに絞る */
+export const LIBRARY_SEARCH_ARTIST_CONCURRENCY = 3;
+
 /** indexed_pick: 索引からの確定名（広い %…% を避ける）。search_broad: キーワード検索用 */
 export type FetchSongsForLibraryArtistMode = 'indexed_pick' | 'search_broad';
 
@@ -261,6 +291,135 @@ export async function resolveArtistIdsForLibrarySelection(
     }
   }
   return ids;
+}
+
+/** 1 アーティストあたりに引き当てる `artists.id` の上限（単体版 `.limit(24)` と揃える） */
+const ARTIST_ID_LIMIT_PER_NAME = 24;
+/** 一括クエリ 1 本に載せる `in(...)` の要素数 */
+const BATCH_IN_CHUNK_ARTIST_IDS = 100;
+const BATCH_IN_CHUNK_SONG_IDS = 400;
+
+function chunkArray<T>(items: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}
+
+/** `resolveArtistIdsForLibrarySelection` と同じ突き合わせ規則 */
+function artistRowMatchesRequestedName(rowName: string, requested: string): boolean {
+  const n = rowName.trim();
+  if (!n) return false;
+  return (
+    n.localeCompare(requested, undefined, { sensitivity: 'base' }) === 0 ||
+    artistNamesMatchIgnoringLeadingArticle(n, requested)
+  );
+}
+
+/**
+ * 複数アーティスト名の `song_credits` 経由の曲を **まとめて**取得する。
+ * アーティストごとに `artists` → `song_credits` → `songs` を逐次で叩くと
+ * 候補が多い検索語（例: 「love」で 30 件以上）で往復回数が支配的になるため、
+ * 検索 API はこちらを使って 1 名あたりの結果に振り分ける。
+ *
+ * 取得できなかった名前は戻り値のキーに含めない（呼び出し側が従来の単体経路にフォールバックできる）。
+ */
+export async function fetchCreditSongsForLibraryArtistNamesBatch<T extends SongRowWithMainArtist>(
+  admin: SupabaseClient,
+  names: string[],
+  select: string,
+  limitPerArtist: number,
+): Promise<Map<string, T[]>> {
+  const requested = names.map((n) => n.trim()).filter((n) => n.length > 0);
+  const byName = new Map<string, T[]>();
+  if (requested.length === 0) return byName;
+
+  // 表記ゆれ（The … あり／なし）も同じクエリに載せて 1 往復で引く。
+  const lookupNames = [
+    ...new Set(requested.flatMap((n) => libraryArtistNameLookupVariants(n))),
+  ];
+
+  const artistRows: { id?: string; name?: string }[] = [];
+  for (const chunk of chunkArray(lookupNames, BATCH_IN_CHUNK_ARTIST_IDS)) {
+    const { data, error } = await admin
+      .from('artists')
+      .select('id, name')
+      .in('name', chunk)
+      .limit(chunk.length * ARTIST_ID_LIMIT_PER_NAME);
+    if (error) {
+      if (error.code === '42P01') return byName;
+      throw new Error(error.message);
+    }
+    artistRows.push(...((data ?? []) as { id?: string; name?: string }[]));
+  }
+
+  const artistIdsByName = new Map<string, string[]>();
+  for (const name of requested) {
+    const ids: string[] = [];
+    for (const row of artistRows) {
+      if (!row.id || typeof row.name !== 'string') continue;
+      if (!artistRowMatchesRequestedName(row.name, name)) continue;
+      if (!ids.includes(row.id)) ids.push(row.id);
+      if (ids.length >= ARTIST_ID_LIMIT_PER_NAME) break;
+    }
+    // 大文字小文字が違うだけの行は `in(...)` では拾えない。空の名前は呼び出し側の単体経路に任せる。
+    if (ids.length > 0) artistIdsByName.set(name, ids);
+  }
+  if (artistIdsByName.size === 0) return byName;
+
+  const allArtistIds = [...new Set([...artistIdsByName.values()].flat())];
+  const songIdsByArtistId = new Map<string, string[]>();
+  for (const chunk of chunkArray(allArtistIds, BATCH_IN_CHUNK_ARTIST_IDS)) {
+    const { data, error } = await admin
+      .from('song_credits')
+      .select('song_id, artist_id')
+      .in('artist_id', chunk)
+      .limit(Math.min(chunk.length * limitPerArtist * 4, 8000));
+    if (error) {
+      if (error.code === '42P01') return byName;
+      throw new Error(error.message);
+    }
+    for (const row of (data ?? []) as { song_id?: string; artist_id?: string }[]) {
+      if (!row.song_id || !row.artist_id) continue;
+      const list = songIdsByArtistId.get(row.artist_id) ?? [];
+      list.push(row.song_id);
+      songIdsByArtistId.set(row.artist_id, list);
+    }
+  }
+
+  const songIdsByName = new Map<string, string[]>();
+  const neededSongIds = new Set<string>();
+  for (const [name, ids] of artistIdsByName) {
+    const songIds = [
+      ...new Set(ids.flatMap((id) => songIdsByArtistId.get(id) ?? [])),
+    ].slice(0, limitPerArtist);
+    songIdsByName.set(name, songIds);
+    for (const id of songIds) neededSongIds.add(id);
+  }
+
+  const songById = new Map<string, T>();
+  const songIdChunks = chunkArray([...neededSongIds], BATCH_IN_CHUNK_SONG_IDS);
+  const chunkResults = await mapWithLimitedConcurrency(
+    songIdChunks,
+    LIBRARY_SEARCH_QUERY_CONCURRENCY,
+    async (chunk) => {
+      const { data, error } = await admin.from('songs').select(select).in('id', chunk).limit(chunk.length);
+      if (error) throw new Error(error.message);
+      return (data ?? []) as unknown as T[];
+    },
+  );
+  for (const rows of chunkResults) {
+    for (const row of rows) {
+      if (row?.id) songById.set(row.id, row);
+    }
+  }
+
+  for (const [name, songIds] of songIdsByName) {
+    byName.set(
+      name,
+      songIds.map((id) => songById.get(id)).filter((row): row is T => Boolean(row)),
+    );
+  }
+  return byName;
 }
 
 /** `song_credits` 経由でアーティストに紐づく曲（feat. 等のサブクレジット含む） */
@@ -305,6 +464,11 @@ export async function fetchSongsForLibraryArtistSelection<T extends SongRowWithM
   select: string,
   limit: number,
   mode: FetchSongsForLibraryArtistMode = 'search_broad',
+  /**
+   * `fetchCreditSongsForLibraryArtistNamesBatch` で先に一括取得した `song_credits` 経由の曲。
+   * 渡されたときは `artists` → `song_credits` → `songs` の 3 クエリを省く。
+   */
+  creditSongsOverride?: T[] | null,
 ): Promise<T[]> {
   const sel = artist.trim();
   if (!sel) return [];
@@ -325,44 +489,39 @@ export async function fetchSongsForLibraryArtistSelection<T extends SongRowWithM
     }
   };
 
-  // Postgres の eq は大文字小文字を区別する。登録時の Title Case 化（Mrs. GREEN → Mrs. Green）と
-  // artists.name の表記ゆれで一覧が空になるのを防ぐため、完全一致は ILIKE にする。
-  for (const variant of libraryArtistNameLookupVariants(sel)) {
-    const { data: exact, error: exactErr } = await admin
-      .from('songs')
-      .select(select)
-      .ilike('main_artist', escapeLikeForIlike(variant))
-      .limit(limit);
-    if (exactErr) throw new Error(exactErr.message);
-    addFromMainArtist(exact);
-  }
-
   const escaped = escapeLikeForIlike(sel);
 
-  if (mode === 'indexed_pick') {
-    const perPattern = Math.min(limit, 150);
-    const collabPatterns = [`${escaped},%`, `%, ${escaped}`, `%, ${escaped},%`];
-    for (const pat of collabPatterns) {
-      const { data, error } = await admin
-        .from('songs')
-        .select(select)
-        .ilike('main_artist', pat)
-        .limit(perPattern);
-      if (error) throw new Error(error.message);
-      addFromMainArtist(data);
-    }
-  } else {
-    const { data: fuzzy, error: fuzzyErr } = await admin
-      .from('songs')
-      .select(select)
-      .ilike('main_artist', `%${escaped}%`)
-      .limit(Math.min(limit * 4, 400));
-    if (fuzzyErr) throw new Error(fuzzyErr.message);
-    addFromMainArtist(fuzzy);
-  }
+  const searchMainArtistByPattern = async (pattern: string, rowLimit: number) => {
+    const { data, error } = await admin.from('songs').select(select).ilike('main_artist', pattern).limit(rowLimit);
+    if (error) throw new Error(error.message);
+    return data;
+  };
 
-  const artistIds = await resolveArtistIdsForLibrarySelection(admin, sel);
-  const creditSongs = await fetchSongsLinkedViaSongCredits<T>(admin, artistIds, select, limit);
+  // Postgres の eq は大文字小文字を区別する。登録時の Title Case 化（Mrs. GREEN → Mrs. Green）と
+  // artists.name の表記ゆれで一覧が空になるのを防ぐため、完全一致は ILIKE にする。
+  const exactPatterns = libraryArtistNameLookupVariants(sel).map((variant) => escapeLikeForIlike(variant));
+  const broadPatterns: { pattern: string; rowLimit: number }[] =
+    mode === 'indexed_pick'
+      ? [`${escaped},%`, `%, ${escaped}`, `%, ${escaped},%`].map((pattern) => ({
+          pattern,
+          rowLimit: Math.min(limit, 150),
+        }))
+      : [{ pattern: `%${escaped}%`, rowLimit: Math.min(limit * 4, 400) }];
+
+  // 互いに依存しないので並行実行し、取り込み順だけ従来どおりに保つ。
+  const [exactResults, broadResults, creditSongs] = await Promise.all([
+    Promise.all(exactPatterns.map((pattern) => searchMainArtistByPattern(pattern, limit))),
+    Promise.all(broadPatterns.map((p) => searchMainArtistByPattern(p.pattern, p.rowLimit))),
+    creditSongsOverride
+      ? Promise.resolve(creditSongsOverride)
+      : (async () => {
+          const artistIds = await resolveArtistIdsForLibrarySelection(admin, sel);
+          return fetchSongsLinkedViaSongCredits<T>(admin, artistIds, select, limit);
+        })(),
+  ]);
+
+  for (const rows of exactResults) addFromMainArtist(rows);
+  for (const rows of broadResults) addFromMainArtist(rows);
   addAny(creditSongs);
 
   return [...byId.values()];
@@ -376,27 +535,110 @@ export async function resolveMainArtistsForLibrarySearch(
   const variants = expandLibrarySearchQueryVariants(rawQuery);
   if (variants.length === 0) return [];
 
-  const names = new Set<string>();
-  for (const v of variants) {
-    const escaped = escapeLikeForIlike(v);
-    const { data, error } = await admin
-      .from('artists')
-      .select('name, name_ja')
-      .or(`name_ja.ilike.%${escaped}%,name.ilike.%${escaped}%`)
-      .limit(40);
-    if (error?.code === '42703') {
-      const { data: fallback } = await admin.from('artists').select('name').ilike('name', `%${escaped}%`).limit(40);
-      for (const row of (fallback ?? []) as { name?: string }[]) {
-        const n = row.name?.trim();
-        if (n) names.add(n);
+  const perVariant = await mapWithLimitedConcurrency(
+    variants,
+    LIBRARY_SEARCH_QUERY_CONCURRENCY,
+    async (v): Promise<{ name?: string }[]> => {
+      const escaped = escapeLikeForIlike(v);
+      const { data, error } = await admin
+        .from('artists')
+        .select('name, name_ja')
+        .or(`name_ja.ilike.%${escaped}%,name.ilike.%${escaped}%`)
+        .limit(40);
+      if (error?.code === '42703') {
+        const { data: fallback } = await admin.from('artists').select('name').ilike('name', `%${escaped}%`).limit(40);
+        return (fallback ?? []) as { name?: string }[];
       }
-      continue;
-    }
-    if (error) continue;
-    for (const row of (data ?? []) as { name?: string }[]) {
+      if (error) return [];
+      return (data ?? []) as { name?: string }[];
+    },
+  );
+
+  const names = new Set<string>();
+  for (const rows of perVariant) {
+    for (const row of rows) {
       const n = row.name?.trim();
       if (n) names.add(n);
     }
   }
-  return dedupeLibraryArtistDisplayNames([...names]);
+
+  // 曲名が artists.name に入り name_ja だけ正しいケース（Billie Jean←マイケル・ジャクソン 等）を、
+  // 紐づく曲の支配的な main_artist へ寄せる。
+  const rawNames = [...names];
+  const canonical = await canonicalizeLibrarySearchArtistNames(admin, rawNames);
+  return dedupeLibraryArtistDisplayNames(canonical);
+}
+
+/**
+ * `song_credits` 経由の曲の `main_artist` 分布から、表示用の英語名を決める。
+ * 要求名と一致する曲より「別の主アーティスト」が明らかに多いときだけ差し替える。
+ */
+export function pickCanonicalLibraryMainArtistName(
+  requestedName: string,
+  mainArtistCounts: Map<string, number>,
+): string {
+  const requested = requestedName.trim();
+  if (!requested || mainArtistCounts.size === 0) return requested;
+
+  let selfCount = 0;
+  let bestName = '';
+  let bestCount = 0;
+  for (const [name, count] of mainArtistCounts) {
+    const label = primaryArtistForLibraryIndex(name);
+    if (!label || label === '(表示なし)') continue;
+    if (
+      songMainArtistIncludesArtist(label, requested) ||
+      artistNamesMatchIgnoringLeadingArticle(label, requested)
+    ) {
+      selfCount += count;
+    }
+    if (count > bestCount) {
+      bestCount = count;
+      bestName = label;
+    }
+  }
+
+  if (!bestName) return requested;
+  if (
+    songMainArtistIncludesArtist(bestName, requested) ||
+    artistNamesMatchIgnoringLeadingArticle(bestName, requested)
+  ) {
+    return preferLibraryArtistDisplayName(requested, bestName);
+  }
+  // 例: artists.name=Billie Jean だが credits 先の曲はほぼ Michael Jackson
+  if (bestCount >= 2 && bestCount > selfCount) return bestName;
+  return requested;
+}
+
+/** 複数アーティスト名を、紐づく曲の支配的 `main_artist` に正規化（失敗時は入力名のまま） */
+export async function canonicalizeLibrarySearchArtistNames(
+  admin: SupabaseClient,
+  names: string[],
+): Promise<string[]> {
+  const requested = names.map((n) => n.trim()).filter((n) => n.length > 0);
+  if (requested.length === 0) return [];
+
+  let creditSongsByName: Map<string, { id: string; main_artist: string | null }[]>;
+  try {
+    creditSongsByName = await fetchCreditSongsForLibraryArtistNamesBatch(
+      admin,
+      requested,
+      'id, main_artist',
+      80,
+    );
+  } catch (e) {
+    console.warn('[canonicalizeLibrarySearchArtistNames]', e);
+    return requested;
+  }
+
+  return requested.map((name) => {
+    const rows = creditSongsByName.get(name) ?? [];
+    const counts = new Map<string, number>();
+    for (const row of rows) {
+      const label = primaryArtistForLibraryIndex(row.main_artist ?? '');
+      if (!label || label === '(表示なし)') continue;
+      counts.set(label, (counts.get(label) ?? 0) + 1);
+    }
+    return pickCanonicalLibraryMainArtistName(name, counts);
+  });
 }

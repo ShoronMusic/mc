@@ -22,5 +22,7 @@ export async function GET(request: Request) {
   const variants = expandLibrarySearchQueryVariants(q);
   const main_artists = await resolveMainArtistsForLibrarySearch(admin, q);
 
-  return NextResponse.json({ main_artists, variants });
+  const res = NextResponse.json({ main_artists, variants });
+  res.headers.set('Cache-Control', 'private, max-age=60, stale-while-revalidate=300');
+  return res;
 }

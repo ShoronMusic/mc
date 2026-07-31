@@ -8,6 +8,7 @@ import {
   dedupeLibraryArtistDisplayNames,
   compareLibrarySearchArtistRowsByCountDesc,
   mergeLibraryArtistIndexItems,
+  pickCanonicalLibraryMainArtistName,
 } from '@/lib/library-search-query';
 
 function run() {
@@ -80,6 +81,40 @@ function run() {
   assert.ok(vSmithsJa.includes('The Smiths'));
   const vBeatles = expandLibrarySearchQueryVariants('ビートルズ');
   assert.ok(vBeatles.includes('The Beatles'));
+
+  // artists.name に曲名が入っているケース: credits 先の支配的 main_artist へ寄せる
+  assert.equal(
+    pickCanonicalLibraryMainArtistName(
+      'Billie Jean',
+      new Map([
+        ['Michael Jackson', 48],
+        ['Billie Jean', 1],
+      ]),
+    ),
+    'Michael Jackson',
+  );
+  assert.equal(
+    pickCanonicalLibraryMainArtistName(
+      'Faith',
+      new Map([['George Michael', 27]]),
+    ),
+    'George Michael',
+  );
+  // 本人の曲が十分あるときは差し替えない
+  assert.equal(
+    pickCanonicalLibraryMainArtistName(
+      'Michael Monroe',
+      new Map([
+        ['Michael Monroe', 14],
+        ['Hanoi Rocks', 2],
+      ]),
+    ),
+    'Michael Monroe',
+  );
+  assert.equal(
+    pickCanonicalLibraryMainArtistName('Unknown Solo', new Map()),
+    'Unknown Solo',
+  );
 
   console.log('library-search-query.unit-test: ok');
 }

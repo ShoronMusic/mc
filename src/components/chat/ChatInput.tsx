@@ -183,6 +183,11 @@ type LibraryArtistIndexRow = {
 const LIBRARY_MODAL_INDEX_HASH = '#';
 const LIBRARY_MODAL_INDEX_OTHER = 'その他';
 
+/** 入力 1 文字ごとに日本語名マッチ API を叩かないための待ち時間 */
+const LIBRARY_JA_MATCH_DEBOUNCE_MS = 300;
+/** 日本語名マッチの結果キャッシュ上限（超えたら破棄して作り直す） */
+const LIBRARY_JA_MATCH_CACHE_MAX = 60;
+
 function LibraryArtistListLoading({ compact = false }: { compact?: boolean }) {
   return (
     <div
@@ -1004,6 +1009,10 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
   const librarySongListScrollRef = useRef<HTMLDivElement | null>(null);
   /** 曲一覧の並行リクエストを無効化（キーワード検索 vs アーティスト全曲） */
   const librarySongListRequestIdRef = useRef(0);
+  /** 日本語名マッチの実行中／取得済み Promise（入力中と検索実行で同じ語を二重取得しない） */
+  const libraryJaMatchCacheRef = useRef(new Map<string, Promise<string[]>>());
+  /** 日本語名マッチの反映順を保証（古い応答で新しい結果を上書きしない） */
+  const libraryJaMatchApplyIdRef = useRef(0);
   /** モーダルを閉じる前の曲一覧スクロール位置（閉じて開き直しても維持） */
   const librarySongListScrollTopRef = useRef(0);
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -1677,35 +1686,65 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
     [searchArtistRows],
   );
 
-  /** 索引・検索ともに日本語名 → 英語 main_artist の補完 */
+  /** 同じ検索語の日本語名マッチは 1 回だけ取得し、入力中と検索実行で共有する */
+  const fetchLibraryJaMainArtistMatches = useCallback(async (rawQuery: string): Promise<string[]> => {
+    const q = rawQuery.trim();
+    if (q.length < 2) return [];
+    const cache = libraryJaMatchCacheRef.current;
+    const cached = cache.get(q);
+    if (cached) return cached;
+    const pending = (async () => {
+      try {
+        const res = await fetch(`/api/library/match-main-artists?q=${encodeURIComponent(q)}`);
+        const data = await res.json().catch(() => null);
+        if (!res.ok) throw new Error('match-main-artists failed');
+        return Array.isArray(data?.main_artists)
+          ? (data.main_artists as unknown[]).filter(
+              (x): x is string => typeof x === 'string' && x.trim() !== '',
+            )
+          : [];
+      } catch {
+        cache.delete(q);
+        return [];
+      }
+    })();
+    if (cache.size >= LIBRARY_JA_MATCH_CACHE_MAX) cache.clear();
+    cache.set(q, pending);
+    return pending;
+  }, []);
+
+  const applyLibraryJaMainArtistMatches = useCallback(
+    async (rawQuery: string) => {
+      const applyId = ++libraryJaMatchApplyIdRef.current;
+      const names = await fetchLibraryJaMainArtistMatches(rawQuery);
+      if (applyId !== libraryJaMatchApplyIdRef.current) return;
+      setLibraryJaMainArtistMatches(names);
+    },
+    [fetchLibraryJaMainArtistMatches],
+  );
+
+  const clearLibraryJaMainArtistMatches = useCallback(() => {
+    libraryJaMatchApplyIdRef.current += 1;
+    setLibraryJaMainArtistMatches([]);
+  }, []);
+
+  /** 索引・検索ともに日本語名 → 英語 main_artist の補完（入力中はデバウンス） */
   useEffect(() => {
     if (!libraryOpen) {
-      setLibraryJaMainArtistMatches([]);
+      clearLibraryJaMainArtistMatches();
+      libraryJaMatchCacheRef.current.clear();
       return;
     }
     const q = libraryQuery.trim();
     if (q.length < 2) {
-      setLibraryJaMainArtistMatches([]);
+      clearLibraryJaMainArtistMatches();
       return;
     }
-    let cancelled = false;
-    void (async () => {
-      try {
-        const res = await fetch(`/api/library/match-main-artists?q=${encodeURIComponent(q)}`);
-        const data = await res.json().catch(() => null);
-        if (cancelled) return;
-        const names = Array.isArray(data?.main_artists)
-          ? data.main_artists.filter((x: unknown) => typeof x === 'string' && x.trim())
-          : [];
-        setLibraryJaMainArtistMatches(names);
-      } catch {
-        if (!cancelled) setLibraryJaMainArtistMatches([]);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [libraryQuery, libraryOpen]);
+    const timer = setTimeout(() => {
+      void applyLibraryJaMainArtistMatches(q);
+    }, LIBRARY_JA_MATCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [libraryQuery, libraryOpen, applyLibraryJaMainArtistMatches, clearLibraryJaMainArtistMatches]);
 
   const browseArtistIndexRows = useMemo(() => {
     if (librarySongSource === 'search') return [];
@@ -2042,10 +2081,10 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
     setLibraryRows([]);
     setLibrarySongSource('idle');
     setLibrarySongListSort('release_new');
-    setLibraryJaMainArtistMatches([]);
+    clearLibraryJaMainArtistMatches();
     setLibraryDetailMusic8Artist(null);
     resetLibrarySongListScroll();
-  }, [resetLibrarySongListScroll]);
+  }, [resetLibrarySongListScroll, clearLibraryJaMainArtistMatches]);
 
   const clearLibrarySongSelection = useCallback(() => {
     setLibrarySelectedSongId(null);
@@ -2186,7 +2225,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
       const name = resolveLibraryMainArtistName(artistName, libraryArtistItems);
       if (!name) return;
       setLibraryQuery('');
-      setLibraryJaMainArtistMatches([]);
+      clearLibraryJaMainArtistMatches();
       setLibraryCopyState('idle');
       setLibrarySelectedArtistName(name);
       setLibrarySelectedSongId(null);
@@ -2201,7 +2240,13 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
       void loadLibrarySongsForArtist(name);
       void loadLibraryArtistInfo(name);
     },
-    [libraryArtistItems, loadLibrarySongsForArtist, loadLibraryArtistInfo, resetLibrarySongListScroll],
+    [
+      libraryArtistItems,
+      loadLibrarySongsForArtist,
+      loadLibraryArtistInfo,
+      resetLibrarySongListScroll,
+      clearLibraryJaMainArtistMatches,
+    ],
   );
 
   const openLibraryModalForArtist = useCallback(
@@ -2219,7 +2264,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
       setLibrarySelectedVideoId(null);
       setLibraryVideoError(null);
       setLibraryQuery('');
-      setLibraryJaMainArtistMatches([]);
+      clearLibraryJaMainArtistMatches();
       setLibraryDetailMusic8Artist(options?.music8Artist ?? null);
       setLibrarySongSource('browse');
       setLibraryOpen(true);
@@ -2229,7 +2274,14 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
       if (roomInteractionLocked) return;
       void loadLibrarySongsForArtist(name);
     },
-    [roomInteractionLocked, loadLibraryArtists, loadLibrarySongsForArtist, loadLibraryArtistInfo, resetLibrarySongListScroll],
+    [
+      roomInteractionLocked,
+      loadLibraryArtists,
+      loadLibrarySongsForArtist,
+      loadLibraryArtistInfo,
+      resetLibrarySongListScroll,
+      clearLibraryJaMainArtistMatches,
+    ],
   );
 
   useImperativeHandle(
@@ -2257,7 +2309,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
     [runYoutubeKeywordSearch, openLibraryModalForArtist, openLibraryModal],
   );
 
-  const handleLibrarySearch = useCallback(async () => {
+  const handleLibrarySearch = useCallback(() => {
     const q = libraryQuery.trim();
     if (!q) return;
     setLibrarySelectedArtistName(null);
@@ -2271,24 +2323,23 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
     setLibrarySongSource('search');
     resetLibrarySongListScroll();
 
-    // アーティスト一覧（索引）→ 日本語名マッチ → 曲検索の順
-    await loadLibraryArtists();
+    // アーティスト一覧（索引）・日本語名マッチ・曲検索は互いに依存しないため並行に走らせる。
+    // 日本語名マッチは入力中の取得結果を共有するので、同じ語なら追加リクエストは発生しない。
+    void loadLibraryArtists();
     if (q.length >= 2) {
-      try {
-        const res = await fetch(`/api/library/match-main-artists?q=${encodeURIComponent(q)}`);
-        const data = await res.json().catch(() => null);
-        const names = Array.isArray(data?.main_artists)
-          ? data.main_artists.filter((x: unknown) => typeof x === 'string' && x.trim())
-          : [];
-        setLibraryJaMainArtistMatches(names);
-      } catch {
-        setLibraryJaMainArtistMatches([]);
-      }
+      void applyLibraryJaMainArtistMatches(q);
     } else {
-      setLibraryJaMainArtistMatches([]);
+      clearLibraryJaMainArtistMatches();
     }
     void loadLibraryRows(q);
-  }, [libraryQuery, loadLibraryArtists, loadLibraryRows, resetLibrarySongListScroll]);
+  }, [
+    libraryQuery,
+    loadLibraryArtists,
+    loadLibraryRows,
+    resetLibrarySongListScroll,
+    applyLibraryJaMainArtistMatches,
+    clearLibraryJaMainArtistMatches,
+  ]);
 
   /** 検索結果のアーティスト選択 → その人の全曲を即表示（曲キーワード検索完了を待たない） */
   const selectLibrarySearchArtist = useCallback(

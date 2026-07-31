@@ -123,6 +123,47 @@ create index if not exists idx_songs_catalog_scope on public.songs (catalog_scop
 既存行の推定バックフィル: `npx tsx scripts/backfill-song-catalog-scope.ts --apply`  
 （`artists.origin_country=JP`・`admin-library-jp-exclude` 相当・英字主体メタを参照）
 
+### キーワード検索の索引（`pg_trgm`・2026-07）
+
+部屋ライブラリのキーワード検索は `%キーワード%` の **中間一致 ILIKE** を多用する。  
+B-tree（`lower(display_title)`・`lower(name)` 等）は前方一致にしか効かないため、**`pg_trgm` の GIN 索引**を追加する。  
+詳細・進捗は [`library-keyword-search-perf-plan.md`](./library-keyword-search-perf-plan.md)（Phase 2.1）。
+
+**SQL Editor で実行**（再実行しても安全。`concurrently` は付けていないので、書き込みが少ない時間帯に実行する）:
+
+```sql
+create extension if not exists pg_trgm;
+
+-- 曲: キーワード検索が ILIKE する列
+create index if not exists idx_songs_main_artist_trgm
+  on public.songs using gin (main_artist gin_trgm_ops);
+create index if not exists idx_songs_song_title_trgm
+  on public.songs using gin (song_title gin_trgm_ops);
+create index if not exists idx_songs_display_title_trgm
+  on public.songs using gin (display_title gin_trgm_ops);
+create index if not exists idx_songs_primary_artist_name_ja_trgm
+  on public.songs using gin (primary_artist_name_ja gin_trgm_ops);
+create index if not exists idx_songs_song_title_ja_trgm
+  on public.songs using gin (song_title_ja gin_trgm_ops);
+
+-- アーティスト: 日本語名→英語 main_artist の照合（/api/library/match-main-artists）
+create index if not exists idx_artists_name_trgm
+  on public.artists using gin (name gin_trgm_ops);
+create index if not exists idx_artists_name_ja_trgm
+  on public.artists using gin (name_ja gin_trgm_ops);
+
+-- 付随: 検索結果の「自分の再生回数」と代表動画の引き当て
+create index if not exists idx_room_playback_history_user_video
+  on public.room_playback_history (user_id, video_id);
+create index if not exists idx_song_videos_song_id
+  on public.song_videos (song_id);
+```
+
+- `primary_artist_name_ja` / `song_title_ja` が無い DB では、その 2 本だけ **エラーになるのでスキップしてよい**（アプリ側は 42703 をフォールバックで扱う）。
+- 効果確認は `explain analyze` で `Bitmap Index Scan on idx_songs_main_artist_trgm` 等になるかを見る。
+- **1〜2 文字**のキーワードは trigram が効かない（3 文字未満）ため、短い語は従来どおり遅い可能性がある。
+- 取り消す場合は `drop index if exists public.idx_songs_main_artist_trgm;` のように個別に削除する。
+
 ### 曲クレジット（共演・複数アーティスト・2026-05）
 
 `spotify_artists` / Music8 `main_artists` / `main_artist` から **1曲に複数 `artists` を紐づけ**る。  

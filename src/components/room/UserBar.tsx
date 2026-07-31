@@ -246,9 +246,9 @@ function ParticipantProfileIconButton({
       aria-label={`${participant.displayName}さんのプロフィール`}
     >
       {hasVisibleProfile ? (
-        <IdentificationIcon className="h-3.5 w-3.5" aria-hidden />
+        <IdentificationIcon className="h-5 w-5" aria-hidden />
       ) : (
-        <UserCircleIcon className="h-3.5 w-3.5" aria-hidden />
+        <UserCircleIcon className="h-5 w-5" aria-hidden />
       )}
     </button>
   );

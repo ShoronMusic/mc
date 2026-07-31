@@ -186,12 +186,12 @@ export function roomHeaderMenuItemClass(): string {
 export function participantProfileIconBtnClass(hasVisibleProfile: boolean): string {
   if (IS_MC_PRODUCT) {
     return hasVisibleProfile
-      ? `${MC_ICON_BTN} mc-icon-btn-profile-visible inline-flex shrink-0 items-center justify-center rounded border p-0.5`
-      : `${MC_ICON_BTN} inline-flex shrink-0 items-center justify-center rounded border p-0.5`;
+      ? `${MC_ICON_BTN} mc-icon-btn-profile-visible inline-flex h-7 w-7 shrink-0 items-center justify-center rounded border p-0`
+      : `${MC_ICON_BTN} inline-flex h-7 w-7 shrink-0 items-center justify-center rounded border p-0`;
   }
   return hasVisibleProfile
-    ? 'inline-flex shrink-0 items-center justify-center rounded border border-emerald-800/60 bg-emerald-950/35 p-0.5 text-emerald-200/90 hover:bg-emerald-900/45'
-    : 'inline-flex shrink-0 items-center justify-center rounded border border-gray-600/70 bg-gray-800/50 p-0.5 text-gray-400 hover:bg-gray-700/60 hover:text-gray-300';
+    ? 'inline-flex h-7 w-7 shrink-0 items-center justify-center rounded border border-emerald-800/60 bg-emerald-950/35 p-0 text-emerald-200/90 hover:bg-emerald-900/45'
+    : 'inline-flex h-7 w-7 shrink-0 items-center justify-center rounded border border-gray-600/70 bg-gray-800/50 p-0 text-gray-400 hover:bg-gray-700/60 hover:text-gray-300';
 }
 
 /** お気に入りハート（未点灯）のアイコン色 */
