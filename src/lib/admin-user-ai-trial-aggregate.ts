@@ -22,6 +22,13 @@ function isMissingUserAiTrialConsumptionLogTable(message: string): boolean {
   );
 }
 
+function isMissingUserAiTrialAbuseEventTable(message: string): boolean {
+  return (
+    /relation|does not exist|schema cache/i.test(message) &&
+    /user_ai_trial_abuse_event/i.test(message)
+  );
+}
+
 export type AdminTrialStatusFilter = 'all' | 'active' | 'exhausted' | 'at_remaining' | 'partial';
 
 export type AdminTrialRowPhase = 'active' | 'exhausted' | 'songs_only' | 'at_only';
@@ -53,6 +60,8 @@ export type AdminUserAiTrialOverview = {
   creditsEnabled: boolean;
   creditsTableMissing: boolean;
   consumptionLogEnabled: boolean;
+  abuseEventEnabled: boolean;
+  abuseEventsLast24h: number;
   totalUsers: number;
   activeUsers: number;
   exhaustedUsers: number;
@@ -62,6 +71,15 @@ export type AdminUserAiTrialOverview = {
   updatedLast7d: number;
   /** STYLE_ADMIN / 開発者無制限（一覧・集計から除外した人数） */
   excludedAdminUsers: number;
+};
+
+export type AdminAiTrialAbuseEventRow = {
+  id: string;
+  kind: 'ip_soft_cap' | 'email_min_age' | string;
+  userId: string;
+  clientIp: string | null;
+  detail: Record<string, unknown>;
+  createdAt: string;
 };
 
 export type AdminAiTrialConsumptionLogRow = {
@@ -209,6 +227,8 @@ export async function fetchAdminUserAiTrialOverview(
     creditsEnabled: isAiCreditsEnabled(),
     creditsTableMissing: false,
     consumptionLogEnabled: false,
+    abuseEventEnabled: false,
+    abuseEventsLast24h: 0,
     totalUsers: 0,
     activeUsers: 0,
     exhaustedUsers: 0,
@@ -233,6 +253,16 @@ export async function fetchAdminUserAiTrialOverview(
   const logProbe = await admin.from('user_ai_trial_consumption_log').select('id').limit(1);
   const consumptionLogEnabled =
     !logProbe.error || !isMissingUserAiTrialConsumptionLogTable(logProbe.error.message);
+
+  const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const abuseProbe = await admin
+    .from('user_ai_trial_abuse_event')
+    .select('id', { count: 'exact', head: true })
+    .gte('created_at', since24h);
+  const abuseEventEnabled =
+    !abuseProbe.error || !isMissingUserAiTrialAbuseEventTable(abuseProbe.error.message);
+  const abuseEventsLast24h =
+    abuseEventEnabled && !abuseProbe.error ? Number(abuseProbe.count) || 0 : 0;
 
   const creditsProbe = await admin.from('user_ai_credits').select('user_id').limit(1);
   const creditsTableMissing =
@@ -265,7 +295,47 @@ export async function fetchAdminUserAiTrialOverview(
     }
   }
 
-  return { ...base, consumptionLogEnabled, creditsTableMissing };
+  return {
+    ...base,
+    consumptionLogEnabled,
+    creditsTableMissing,
+    abuseEventEnabled,
+    abuseEventsLast24h,
+  };
+}
+
+/** 直近の付与拒否イベント（管理通知）。テーブル未作成時は空配列 */
+export async function listAdminAiTrialAbuseEvents(
+  admin: SupabaseClient,
+  options?: { limit?: number },
+): Promise<{ rows: AdminAiTrialAbuseEventRow[]; missingTable: boolean; error: string | null }> {
+  const limit = Math.min(100, Math.max(1, options?.limit ?? 30));
+  const { data, error } = await admin
+    .from('user_ai_trial_abuse_event')
+    .select('id, kind, user_id, client_ip, detail, created_at')
+    .order('created_at', { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    if (isMissingUserAiTrialAbuseEventTable(error.message)) {
+      return { rows: [], missingTable: true, error: null };
+    }
+    return { rows: [], missingTable: false, error: error.message };
+  }
+
+  const rows: AdminAiTrialAbuseEventRow[] = (data ?? []).map((r) => ({
+    id: String(r.id),
+    kind: typeof r.kind === 'string' ? r.kind : 'unknown',
+    userId: typeof r.user_id === 'string' ? r.user_id : '',
+    clientIp: typeof r.client_ip === 'string' ? r.client_ip : null,
+    detail:
+      r.detail && typeof r.detail === 'object' && !Array.isArray(r.detail)
+        ? (r.detail as Record<string, unknown>)
+        : {},
+    createdAt: typeof r.created_at === 'string' ? r.created_at : '',
+  }));
+
+  return { rows, missingTable: false, error: null };
 }
 
 export async function listAdminUserAiTrialRows(

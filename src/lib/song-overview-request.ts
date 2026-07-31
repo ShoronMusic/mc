@@ -45,10 +45,15 @@ export function canRequestSongOverviewAtQuestion(status: AiTrialStatus | null | 
   if (!status) return false;
   if (status.phase === 'developer_unlimited' || status.phase === 'supporter_unlimited') return true;
   if (status.phase === 'email_unconfirmed' || status.phase === 'trial_exhausted') return false;
+  if (status.phase === 'trial_ip_limited' || status.phase === 'trial_email_cooling') return false;
   if (status.phase === 'credits_active') {
     return status.creditsRemaining >= AI_CREDIT_COST_PER_AT_QUESTION;
   }
-  if (status.phase === 'trial_active' || status.phase === 'preview') {
+  if (
+    status.phase === 'trial_active' ||
+    status.phase === 'trial_eligible' ||
+    status.phase === 'preview'
+  ) {
     if (status.phase === 'preview' && !status.enforcementEnabled) return true;
     return status.atQuestionsRemaining > 0;
   }

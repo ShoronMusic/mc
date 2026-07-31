@@ -44,7 +44,7 @@ export function ServicePricingNotice() {
       </ul>
       <p>
         <strong className="text-gray-300">AI 機能</strong>（曲解説・@ 質問・曲クイズ等）はクラウド AI
-        の利用原価がかかるため、<strong className="text-gray-300">基本は有料</strong>です。無料登録ユーザーにはお試し枠があります。クレジットの消費単位・購入価格・前払いについては、
+        の利用原価がかかるため、<strong className="text-gray-300">基本は有料</strong>です。無料登録ユーザーにはお試し枠があります（原則 1 アカウント生涯 1 回。付与は初回の AI 実利用時、メール登録では確認後の短い待機や同一ネットワーク上限がある場合があります）。クレジットの消費単位・購入価格・前払いについては、
         <AiCreditsPricingGuideLink /> をご確認ください。
         AI エージェントによる選曲参加は参加者のクレジットを消費せず、サイト運営側が負担します。
       </p>

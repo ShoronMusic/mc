@@ -18,6 +18,11 @@ import {
   guardConsumeAiCreditSong,
   type AiCreditGuardDeny,
 } from '@/lib/user-ai-credits-server';
+import {
+  evaluateAiTrialGrantEligibility,
+  recordAiTrialAbuseEvent,
+  type AiTrialGrantEligibility,
+} from '@/lib/ai-trial-abuse-guard';
 
 export type UserAiTrialRow = {
   user_id: string;
@@ -127,7 +132,7 @@ export function computeTrialSongsGrantBump(
   };
 }
 
-async function bumpExistingTrialSongsIfNeeded(
+export async function bumpExistingTrialSongsIfNeeded(
   admin: SupabaseClient,
   row: UserAiTrialRow,
 ): Promise<{ row: UserAiTrialRow; error: string | null }> {
@@ -159,11 +164,105 @@ async function bumpExistingTrialSongsIfNeeded(
   return { row: retry.row ?? row, error: retry.error };
 }
 
-/** メール確認済みユーザーに初回付与。既存で付与が定数未満なら差分を加算して揃える */
+export type EnsureUserAiTrialGrantResult = {
+  row: UserAiTrialRow | null;
+  error: string | null;
+  missingTable: boolean;
+  /** 新規付与が拒否されたときの理由（既存行がある場合は付かない） */
+  eligibility?: AiTrialGrantEligibility;
+};
+
+function grantBlockMessage(eligibility: Extract<AiTrialGrantEligibility, { ok: false }>): string {
+  return eligibility.message;
+}
+
+/** 付与資格のみ（INSERT しない）。GET 表示・consume:false ガード用 */
+export async function peekUserAiTrialGrantEligibility(
+  user: User,
+  clientIp?: string,
+): Promise<{
+  missingTable: boolean;
+  error: string | null;
+  hasRow: boolean;
+  row: UserAiTrialRow | null;
+  eligibility: AiTrialGrantEligibility;
+}> {
+  if (!isUserEmailConfirmed(user)) {
+    return {
+      missingTable: false,
+      error: null,
+      hasRow: false,
+      row: null,
+      eligibility: {
+        ok: false,
+        reason: 'email_unconfirmed',
+        message: 'メールアドレスの確認が完了すると、AI お試し枠が付与されます。',
+      },
+    };
+  }
+
+  const admin = createAdminClient();
+  if (!admin) {
+    return {
+      missingTable: false,
+      error: 'admin_not_configured',
+      hasRow: false,
+      row: null,
+      eligibility: { ok: true },
+    };
+  }
+
+  const existing = await fetchUserAiTrialRow(admin, user.id);
+  if (existing.missingTable) {
+    return {
+      missingTable: true,
+      error: existing.error,
+      hasRow: false,
+      row: null,
+      eligibility: { ok: true },
+    };
+  }
+  if (existing.error) {
+    return {
+      missingTable: false,
+      error: existing.error,
+      hasRow: false,
+      row: null,
+      eligibility: { ok: true },
+    };
+  }
+  if (existing.row) {
+    return {
+      missingTable: false,
+      error: null,
+      hasRow: true,
+      row: existing.row,
+      eligibility: { ok: true },
+    };
+  }
+
+  const eligibility = await evaluateAiTrialGrantEligibility({
+    admin,
+    user,
+    clientIp,
+  });
+  return {
+    missingTable: false,
+    error: null,
+    hasRow: false,
+    row: null,
+    eligibility,
+  };
+}
+
+/**
+ * メール確認済みユーザーに初回付与。既存で付与が定数未満なら差分を加算して揃える。
+ * 新規 INSERT 前に IP ソフト上限・メール待機を検査する。
+ */
 export async function ensureUserAiTrialGrant(
   user: User,
   clientIp?: string,
-): Promise<{ row: UserAiTrialRow | null; error: string | null; missingTable: boolean }> {
+): Promise<EnsureUserAiTrialGrantResult> {
   if (!isUserEmailConfirmed(user)) {
     return { row: null, error: 'email_unconfirmed', missingTable: false };
   }
@@ -182,6 +281,36 @@ export async function ensureUserAiTrialGrant(
       console.error('[user-ai-trial] songs grant bump', bumped.error);
     }
     return { row: bumped.row, error: null, missingTable: false };
+  }
+
+  const eligibility = await evaluateAiTrialGrantEligibility({
+    admin,
+    user,
+    clientIp,
+  });
+  if (!eligibility.ok) {
+    if (eligibility.reason === 'ip_soft_cap' || eligibility.reason === 'email_min_age') {
+      void recordAiTrialAbuseEvent(admin, {
+        kind: eligibility.reason,
+        userId: user.id,
+        clientIp,
+        detail: {
+          reason: eligibility.reason,
+          ipKey: 'ipKey' in eligibility ? eligibility.ipKey : undefined,
+          grantCountInWindow:
+            'grantCountInWindow' in eligibility ? eligibility.grantCountInWindow : undefined,
+          softCap: 'softCap' in eligibility ? eligibility.softCap : undefined,
+          retryAfterMinutes:
+            'retryAfterMinutes' in eligibility ? eligibility.retryAfterMinutes : undefined,
+        },
+      });
+    }
+    return {
+      row: null,
+      error: eligibility.reason,
+      missingTable: false,
+      eligibility,
+    };
   }
 
   const now = new Date().toISOString();
@@ -316,11 +445,20 @@ function trialDenied(
   return { ok: false, status, body: { error, message, ...extra } };
 }
 
+function denyFromGrantEligibility(
+  eligibility: Extract<AiTrialGrantEligibility, { ok: false }>,
+): AiTrialGuardDeny {
+  return trialDenied(eligibility.reason, grantBlockMessage(eligibility), 403, {
+    songsRemaining: 0,
+  });
+}
+
 /**
  * 選曲付随 AI。
  * - packPhase=frees: 直前の base 消費済み前提で枠残のみ検証（消費しない）
  * - packPhase=base / 省略（一括生成）: 既定では 1 曲分を消費（後方互換）
  * - consume: false で残数チェックのみ（成功後に commitAiTrialSongSelection すること）
+ * - 未付与かつ consume:false のときは INSERT せず資格のみ確認（付与は commit / 即時消費時）
  * - user_ai_trial テーブル欠落時は fail-closed（枠なし生成を防ぐ）
  */
 export async function guardAiTrialSongSelection(params: {
@@ -374,23 +512,29 @@ export async function guardAiTrialSongSelection(params: {
   /** credits 側も同一判定に揃える */
   const consumePhase: 'base' | 'frees' | null = shouldConsumeSong ? 'base' : 'frees';
 
-  const grant = await ensureUserAiTrialGrant(params.user, params.clientIp);
-  if (grant.missingTable) {
-    return trialDenied(
-      'trial_unavailable',
-      'AI お試し枠の確認ができません。しばらくしてから再度お試しください。',
-      503,
-    );
-  }
-  if (grant.error && !grant.row) {
-    return trialDenied('trial_load_failed', 'AI お試し残数の取得に失敗しました。', 500);
-  }
-  if (!grant.row) {
-    return trialDenied('trial_not_granted', 'AI お試し枠が付与されていません。', 403);
-  }
-
-  const row = grant.row;
-  if (shouldConsumeSong) {
+  if (!shouldConsumeSong) {
+    const peek = await peekUserAiTrialGrantEligibility(params.user, params.clientIp);
+    if (peek.missingTable) {
+      return trialDenied(
+        'trial_unavailable',
+        'AI お試し枠の確認ができません。しばらくしてから再度お試しください。',
+        503,
+      );
+    }
+    if (peek.error && !peek.hasRow) {
+      return trialDenied('trial_load_failed', 'AI お試し残数の取得に失敗しました。', 500);
+    }
+    if (!peek.hasRow) {
+      if (!peek.eligibility.ok) {
+        return denyFromGrantEligibility(peek.eligibility);
+      }
+      return {
+        ok: true,
+        songsRemaining: AI_TRIAL_SONGS_GRANTED,
+        source: 'trial',
+      };
+    }
+    const row = peek.row!;
     if (row.songs_remaining <= 0) {
       return consumeSongFromCreditsOrDeny({
         user: params.user,
@@ -400,9 +544,28 @@ export async function guardAiTrialSongSelection(params: {
         videoId: params.videoId,
       });
     }
-    return consumeAiTrialSong(admin, params.user.id, params.clientIp);
+    return { ok: true, songsRemaining: row.songs_remaining, source: 'trial' };
   }
 
+  const grant = await ensureUserAiTrialGrant(params.user, params.clientIp);
+  if (grant.missingTable) {
+    return trialDenied(
+      'trial_unavailable',
+      'AI お試し枠の確認ができません。しばらくしてから再度お試しください。',
+      503,
+    );
+  }
+  if (grant.eligibility && !grant.eligibility.ok) {
+    return denyFromGrantEligibility(grant.eligibility);
+  }
+  if (grant.error && !grant.row) {
+    return trialDenied('trial_load_failed', 'AI お試し残数の取得に失敗しました。', 500);
+  }
+  if (!grant.row) {
+    return trialDenied('trial_not_granted', 'AI お試し枠が付与されていません。', 403);
+  }
+
+  const row = grant.row;
   if (row.songs_remaining <= 0) {
     return consumeSongFromCreditsOrDeny({
       user: params.user,
@@ -412,12 +575,15 @@ export async function guardAiTrialSongSelection(params: {
       videoId: params.videoId,
     });
   }
-
-  return { ok: true, songsRemaining: row.songs_remaining, source: 'trial' };
+  return consumeAiTrialSong(admin, params.user.id, params.clientIp, {
+    roomId: params.roomId,
+    videoId: params.videoId,
+  });
 }
 
 /**
  * comment-pack / commentary が本文返却に成功したあとに呼ぶ 1 曲分の確定消費。
+ * 未付与ならここで付与してから消費する（初回実利用時付与）。
  * 無制限ユーザー・enforcement OFF では no-op。
  */
 export async function commitAiTrialSongSelection(params: {
@@ -450,7 +616,7 @@ export async function commitAiTrialSongSelection(params: {
     return trialDenied('trial_unavailable', 'AI お試しの確認に失敗しました。', 503);
   }
 
-  const { row, missingTable, error } = await fetchUserAiTrialRow(admin, params.user.id);
+  let { row, missingTable, error } = await fetchUserAiTrialRow(admin, params.user.id);
   if (missingTable) {
     return trialDenied(
       'trial_unavailable',
@@ -462,7 +628,27 @@ export async function commitAiTrialSongSelection(params: {
     return trialDenied('trial_load_failed', 'AI お試し残数の取得に失敗しました。', 500);
   }
   if (!row) {
-    return trialDenied('trial_not_granted', 'AI お試し枠が付与されていません。', 403);
+    const grant = await ensureUserAiTrialGrant(params.user, params.clientIp);
+    if (grant.missingTable) {
+      return trialDenied(
+        'trial_unavailable',
+        'AI お試し枠の確認ができません。しばらくしてから再度お試しください。',
+        503,
+      );
+    }
+    if (grant.eligibility && !grant.eligibility.ok) {
+      return denyFromGrantEligibility(grant.eligibility);
+    }
+    if (grant.error || !grant.row) {
+      return trialDenied(
+        grant.error === 'email_unconfirmed' ? 'email_unconfirmed' : 'trial_not_granted',
+        grant.eligibility && !grant.eligibility.ok
+          ? grantBlockMessage(grant.eligibility)
+          : 'AI お試し枠が付与されていません。',
+        403,
+      );
+    }
+    row = grant.row;
   }
 
   if (row.songs_remaining <= 0) {
@@ -600,10 +786,26 @@ export async function guardAndConsumeAiTrialAtQuestion(params: {
         503,
       );
     }
+    if (grant.eligibility && !grant.eligibility.ok) {
+      return denyFromGrantEligibility(grant.eligibility);
+    }
     row = grant.row;
     error = grant.error;
   }
   if (error || !row) {
+    if (
+      error === 'ip_soft_cap' ||
+      error === 'email_min_age' ||
+      error === 'email_unconfirmed'
+    ) {
+      return trialDenied(
+        error,
+        error === 'email_unconfirmed'
+          ? 'メール確認後に AI への質問（お試し @ 5 回）が使えます。'
+          : 'AI お試し枠を付与できませんでした。選曲のみ（AI なし）でご利用ください。',
+        403,
+      );
+    }
     return trialDenied('trial_load_failed', 'AI お試し残数の取得に失敗しました。', 500);
   }
 

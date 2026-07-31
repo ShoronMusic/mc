@@ -120,7 +120,7 @@ SQL: `docs/supabase-setup.md` 第 15 章
 | `user_id` | ログインユーザー（主キー） |
 | `visible_in_rooms` | 他ユーザーに公開するか |
 | `tagline` | 一言（最大約200文字） |
-| `favorite_artists` | JSON 配列（最大5・各約80文字） |
+| `favorite_artists` | JSON 配列（最大10・各約80文字） |
 | `listening_note` | 補足（最近の傾向など・最大約300文字） |
 | `updated_at` | 最終更新 |
 

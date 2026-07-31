@@ -4,6 +4,7 @@ import { requireStyleAdminApi } from '@/lib/admin-access';
 import {
   fetchAdminUserAiTrialDetail,
   fetchAdminUserAiTrialOverview,
+  listAdminAiTrialAbuseEvents,
   listAdminUserAiTrialRows,
   type AdminTrialStatusFilter,
 } from '@/lib/admin-user-ai-trial-aggregate';
@@ -73,6 +74,8 @@ export async function GET(request: Request) {
       sort: parseSort(url.searchParams.get('sort')),
     });
 
+    const abuse = await listAdminAiTrialAbuseEvents(admin, { limit: 30 });
+
     return NextResponse.json({
       enabled: true,
       mode: 'list',
@@ -80,6 +83,9 @@ export async function GET(request: Request) {
       rows: list.rows,
       total: list.total,
       enforcementEnabled: overview.enforcementEnabled,
+      abuseEvents: abuse.rows,
+      abuseEventsMissingTable: abuse.missingTable,
+      abuseEventsError: abuse.error,
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : '集計エラー';

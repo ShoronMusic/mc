@@ -16,13 +16,14 @@ type MypageFontSizeSectionProps = {
   onChange: (next: McUiFontSize) => void;
 };
 
-/** mc マイページ — 表示文字サイズ（端末ローカル保存） */
+/** マイページ — 表示文字サイズ（端末ローカル保存） */
 export function MypageFontSizeSection({ value, onChange }: MypageFontSizeSectionProps) {
   return (
     <div className={mypagePanelClass()}>
       <h3 className={mypageSectionTitleClass()}>文字サイズ</h3>
       <p className={`mb-2 ${mypageBodyTextClass()}`}>
         部屋画面（チャット・視聴履歴の表など）とマイページの文字を大きく表示できます。設定はこの端末に保存されます。
+        「特大」は標準のおよそ1.45倍です。
       </p>
       <div className="flex flex-wrap gap-2">
         {MC_UI_FONT_SIZE_OPTIONS.map((opt) => (

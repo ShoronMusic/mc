@@ -108,6 +108,44 @@ assert.equal(
   'exhausted: no AI',
 );
 
+const trialEligible: AiTrialStatus = {
+  ...trialActive,
+  phase: 'trial_eligible',
+  songsRemaining: 20,
+};
+assert.equal(
+  resolveAiSelectionMode({
+    isGuest: false,
+    participatesInSelection: true,
+    aiTrialStatus: trialEligible,
+  }),
+  'full',
+  'eligible (not yet granted): full',
+);
+assert.equal(
+  shouldShowAiDualSelectionButtons({
+    isGuest: false,
+    participatesInSelection: true,
+    aiTrialStatus: trialEligible,
+  }),
+  true,
+  'eligible: dual buttons',
+);
+
+const ipLimited: AiTrialStatus = {
+  ...exhausted,
+  phase: 'trial_ip_limited',
+};
+assert.equal(
+  resolveAiSelectionMode({
+    isGuest: false,
+    participatesInSelection: true,
+    aiTrialStatus: ipLimited,
+  }),
+  'none',
+  'ip limited: no AI',
+);
+
 assert.equal(
   resolveAiSelectionMode({
     isGuest: false,

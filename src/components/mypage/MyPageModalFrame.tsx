@@ -15,7 +15,7 @@ type MyPageModalFrameProps = {
   title: string;
   subtitle?: string;
   onClose: () => void;
-  /** mc — 部屋画面・マイページ共通の文字サイズ */
+  /** 部屋画面・マイページ共通の文字サイズ */
   fontSize?: McUiFontSize;
   children: ReactNode;
 };

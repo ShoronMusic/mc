@@ -481,7 +481,7 @@ export function mypageModalShellClass(): string {
   if (IS_MC_PRODUCT) {
     return 'mc-mypage-modal relative flex h-[88vh] w-full max-w-[100rem] flex-col overflow-hidden rounded-lg border border-gray-200 bg-white text-left shadow-xl';
   }
-  return 'relative flex h-[88vh] w-full max-w-[100rem] flex-col overflow-hidden rounded-lg border border-sky-600/50 bg-gray-950 text-left shadow-xl';
+  return 'mc-mypage-modal relative flex h-[88vh] w-full max-w-[100rem] flex-col overflow-hidden rounded-lg border border-sky-600/50 bg-gray-950 text-left shadow-xl';
 }
 
 export function mypageHeaderTitleClass(): string {

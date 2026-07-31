@@ -82,6 +82,11 @@ function run() {
   const vBeatles = expandLibrarySearchQueryVariants('ビートルズ');
   assert.ok(vBeatles.includes('The Beatles'));
 
+  const vDct = expandLibrarySearchQueryVariants('ドリカム');
+  assert.ok(vDct.includes('ドリカム'));
+  assert.ok(vDct.includes('Dreams Come True'));
+  assert.ok(vDct.some((x) => /ドリームズ/.test(x)));
+
   // artists.name に曲名が入っているケース: credits 先の支配的 main_artist へ寄せる
   assert.equal(
     pickCanonicalLibraryMainArtistName(

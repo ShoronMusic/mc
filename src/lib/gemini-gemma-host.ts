@@ -62,6 +62,24 @@ function stripGemmaTrailingCharEnumeratorRun(text: string): string {
   });
 }
 
+/**
+ * モデルが文字数制約の自己チェックとして本文末尾に付けるメタを除去。
+ * 例: `(136文字)` / `（約120字）` / `(112 characters)` / `(136文字)。`
+ */
+export function stripTrailingSelfReportedCharCount(raw: string): string {
+  let t = typeof raw === 'string' ? raw : '';
+  if (!t) return t;
+  for (let i = 0; i < 4; i++) {
+    const next = t.replace(
+      /\s*[（(]\s*(?:約\s*)?\d{1,4}\s*(?:文字|字|characters?|chars?)\s*[）)]\s*[。．.]?\s*$/iu,
+      '',
+    );
+    if (next === t) break;
+    t = next;
+  }
+  return t.trimEnd();
+}
+
 /** `〜でした。"。」` のように閉じ `"` が余った末尾を直す */
 function stripGemmaStrayClosingQuoteBeforePeriod(text: string): string {
   return text
@@ -642,7 +660,7 @@ export function extractTextFromGenerateContentResponse(
   if (isGemmaHostedModelId(resolvedModelId)) {
     return polishGemmaModelVisibleText(s);
   }
-  return s;
+  return stripTrailingSelfReportedCharCount(s);
 }
 
 /** DB キャッシュ返却・再表示用。生成時の extractText（Gemma）と同じパイプライン */
@@ -655,8 +673,12 @@ export function polishGemmaModelVisibleText(raw: string): string {
   const pre = stripGemmaEnglishPreambles(stripGemmaStarMetaLabels(pre0));
   const peeled = stripGemmaCoTLeakage(pre);
   const collapsed = collapseImmediateDuplicateBody(sanitizeGemmaVisibleOutputText(peeled));
-  const deduped = dedupeRoughJapaneseSentences(stripGemmaTrailingCharEnumeratorRun(collapsed));
-  return stripGemmaStrayClosingQuoteBeforePeriod(
-    stripGemmaLeadingTotalsAndAck(stripGemmaStarMetaLabels(deduped)),
+  /** 文字数メタは dedupe の句点補完より先に落とす（`(136文字)` → `(136文字)。` 化を防ぐ） */
+  const withoutCharMeta = stripTrailingSelfReportedCharCount(collapsed);
+  const deduped = dedupeRoughJapaneseSentences(stripGemmaTrailingCharEnumeratorRun(withoutCharMeta));
+  return stripTrailingSelfReportedCharCount(
+    stripGemmaStrayClosingQuoteBeforePeriod(
+      stripGemmaLeadingTotalsAndAck(stripGemmaStarMetaLabels(deduped)),
+    ),
   ).trim();
 }

@@ -3,6 +3,9 @@ import {
   buildDeveloperUnlimitedAiTrialStatus,
   buildPreviewAiTrialStatus,
   buildSupporterUnlimitedAiTrialStatus,
+  buildTrialEligibleAiTrialStatus,
+  buildTrialEmailCoolingAiTrialStatus,
+  buildTrialIpLimitedAiTrialStatus,
   formatAiTrialStatusHeaderLabel,
   formatAiTrialStatusPrimaryLine,
   formatAiTrialStatusSecondaryLine,
@@ -15,6 +18,15 @@ const preview = buildPreviewAiTrialStatus();
 assert.match(formatAiTrialStatusPrimaryLine(preview), /残 20\/20 曲/);
 assert.match(formatAiTrialStatusPrimaryLine(preview), /@質問 残 5\/5/);
 assert.match(formatAiTrialStatusSecondaryLine(preview)!, /試験運用/);
+
+const eligible = buildTrialEligibleAiTrialStatus();
+assert.equal(eligible.phase, 'trial_eligible');
+assert.match(formatAiTrialStatusPrimaryLine(eligible), /初回の AI 利用時に付与/);
+assert.match(formatAiTrialStatusHeaderLabel(eligible), /付与待ち/);
+
+assert.equal(buildTrialIpLimitedAiTrialStatus().phase, 'trial_ip_limited');
+assert.equal(buildTrialEmailCoolingAiTrialStatus().phase, 'trial_email_cooling');
+assert.match(formatAiTrialStatusSecondaryLine(buildTrialEmailCoolingAiTrialStatus())!, /メール登録/);
 
 const devUnlimited = buildDeveloperUnlimitedAiTrialStatus();
 assert.match(formatAiTrialStatusPrimaryLine(devUnlimited), /開発者/);

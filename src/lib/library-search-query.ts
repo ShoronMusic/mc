@@ -1,9 +1,15 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { stripLeadingArticleForSort } from '@/lib/admin-library-index';
+import {
+  artistAliasesContainsOrFilter,
+  expandArtistSearchNicknameVariants,
+  resolveArtistSearchNicknameCanonical,
+} from '@/lib/artist-search-nicknames';
 
 /**
  * ライブラリ検索（`/api/library/search`）用クエリ展開。
- * 日本語カタカナ表記ゆれ（・／スペース／スウィフト↔スイフト）と代表英語名の補完。
+ * 日本語カタカナ表記ゆれ（・／スペース／スウィフト↔スイフト）、
+ * 愛称マスタ（`artist-search-nicknames.json`）、代表英語名の補完。
  */
 
 /** カタカナ検索から追加する英語 main_artist */
@@ -34,6 +40,8 @@ export function resolveLibrarySearchPriorityArtistNames(rawQuery: string): strin
   if (!q) return [];
 
   const names = new Set<string>();
+  const nicknameCanonical = resolveArtistSearchNicknameCanonical(q);
+  if (nicknameCanonical) names.add(nicknameCanonical);
   const compact = compactJa(q);
   for (const hint of KATAKANA_MAIN_ARTIST_HINTS) {
     if (hint.test(compact)) {
@@ -75,6 +83,9 @@ export function expandLibrarySearchQueryVariants(raw: string, max = 12): string[
   }
 
   for (const name of resolveLibrarySearchPriorityArtistNames(q)) {
+    add(name);
+  }
+  for (const name of expandArtistSearchNicknameVariants(q)) {
     add(name);
   }
 
@@ -527,7 +538,10 @@ export async function fetchSongsForLibraryArtistSelection<T extends SongRowWithM
   return [...byId.values()];
 }
 
-/** `artists.name_ja` / `name` の部分一致から main_artist（英語表記）を集める */
+/** `artists.aliases` が無い DB では 42703 のあと列なし扱いにする */
+let artistsAliasesColumnAvailable: boolean | null = null;
+
+/** `artists.name_ja` / `name` / `aliases` の一致から main_artist（英語表記）を集める */
 export async function resolveMainArtistsForLibrarySearch(
   admin: SupabaseClient,
   rawQuery: string,
@@ -540,16 +554,33 @@ export async function resolveMainArtistsForLibrarySearch(
     LIBRARY_SEARCH_QUERY_CONCURRENCY,
     async (v): Promise<{ name?: string }[]> => {
       const escaped = escapeLikeForIlike(v);
+      const tryAliases = artistsAliasesColumnAvailable !== false;
+      const aliasOr = tryAliases ? artistAliasesContainsOrFilter(v) : null;
+      const orFilter = aliasOr
+        ? `name_ja.ilike.%${escaped}%,name.ilike.%${escaped}%,${aliasOr}`
+        : `name_ja.ilike.%${escaped}%,name.ilike.%${escaped}%`;
       const { data, error } = await admin
         .from('artists')
         .select('name, name_ja')
-        .or(`name_ja.ilike.%${escaped}%,name.ilike.%${escaped}%`)
+        .or(orFilter)
         .limit(40);
       if (error?.code === '42703') {
+        if (tryAliases && aliasOr) artistsAliasesColumnAvailable = false;
+        // aliases 未導入、または name_ja 無し
+        const { data: withJa, error: jaErr } = await admin
+          .from('artists')
+          .select('name, name_ja')
+          .or(`name_ja.ilike.%${escaped}%,name.ilike.%${escaped}%`)
+          .limit(40);
+        if (!jaErr) {
+          if (artistsAliasesColumnAvailable === null) artistsAliasesColumnAvailable = false;
+          return (withJa ?? []) as { name?: string }[];
+        }
         const { data: fallback } = await admin.from('artists').select('name').ilike('name', `%${escaped}%`).limit(40);
         return (fallback ?? []) as { name?: string }[];
       }
       if (error) return [];
+      if (tryAliases && aliasOr) artistsAliasesColumnAvailable = true;
       return (data ?? []) as { name?: string }[];
     },
   );
@@ -561,6 +592,8 @@ export async function resolveMainArtistsForLibrarySearch(
       if (n) names.add(n);
     }
   }
+  const nicknameCanonical = resolveArtistSearchNicknameCanonical(rawQuery);
+  if (nicknameCanonical) names.add(nicknameCanonical);
 
   // 曲名が artists.name に入り name_ja だけ正しいケース（Billie Jean←マイケル・ジャクソン 等）を、
   // 紐づく曲の支配的な main_artist へ寄せる。

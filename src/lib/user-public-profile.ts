@@ -4,7 +4,7 @@
 
 export const USER_PUBLIC_PROFILE_TAGLINE_MAX = 200;
 export const USER_PUBLIC_PROFILE_LISTENING_MAX = 300;
-export const USER_PUBLIC_PROFILE_ARTIST_SLOTS = 5;
+export const USER_PUBLIC_PROFILE_ARTIST_SLOTS = 10;
 export const USER_PUBLIC_PROFILE_ARTIST_EACH_MAX = 80;
 
 export type UserPublicProfilePayload = {

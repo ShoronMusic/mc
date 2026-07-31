@@ -48,7 +48,8 @@ export default function GuideFaqPage({ searchParams }: GuideFaqPageProps) {
           <strong className="text-gray-300">無料登録（初回クレジット付き）</strong>、
           <strong className="text-gray-300">無料登録（クレジット購入）</strong>
           の3区分です。同時視聴・選曲・通常チャットはどの区分でも無料です。有料なのはクラウドAI（曲のAI解説、@
-          での質問など）だけで、登録後のお試し枠のあとはクレジット購入で続けられます。区分ごとの一覧は{' '}
+          での質問など）だけで、登録後のお試し枠のあとはクレジット購入で続けられます。お試しは原則 1
+          アカウント生涯 1 回で、付与は初回の AI 実利用時です（メール登録では確認後の短い待機や、同一ネットワークの付与上限がある場合があります。複数アカウントでの周回取得は利用規約で禁止しています）。区分ごとの一覧は{' '}
           <Link href={guideInternalHref('/guide/ai-pricing', searchParams)} className={linkClass}>
             AI利用料金・クレジット
           </Link>

@@ -1,0 +1,372 @@
+[
+  {
+    "canonical": "Dreams Come True",
+    "nameJa": ["ドリームズ・カム・トゥルー", "ドリームズカムトゥルー"],
+    "nicknames": ["ドリカム", "DCT"]
+  },
+  {
+    "canonical": "サザンオールスターズ",
+    "alsoSearch": ["Southern All Stars"],
+    "nicknames": ["サザン"]
+  },
+  {
+    "canonical": "Mr.Children",
+    "nameJa": ["ミスターチルドレン"],
+    "nicknames": ["ミスチル"]
+  },
+  {
+    "canonical": "BUMP OF CHICKEN",
+    "nameJa": ["バンプオブチキン"],
+    "nicknames": ["バンプ"]
+  },
+  {
+    "canonical": "RADWIMPS",
+    "nameJa": ["ラッドウィンプス", "ラッドウインプス"],
+    "nicknames": ["ラジ"]
+  },
+  {
+    "canonical": "ONE OK ROCK",
+    "nameJa": ["ワンオクロック"],
+    "nicknames": ["ワンオク"]
+  },
+  {
+    "canonical": "SEKAI NO OWARI",
+    "nameJa": ["セカイノオワリ"],
+    "nicknames": ["セカオワ"]
+  },
+  {
+    "canonical": "L'Arc-en-Ciel",
+    "nameJa": ["ラルクアンシエル", "ラルク・アン・シエル"],
+    "nicknames": ["ラルク"]
+  },
+  {
+    "canonical": "B'z",
+    "nameJa": ["ビーズ"],
+    "nicknames": ["ビーズ"]
+  },
+  {
+    "canonical": "松任谷由実",
+    "alsoSearch": ["Yumi Matsutoya", "荒井由実"],
+    "nicknames": ["ユーミン"]
+  },
+  {
+    "canonical": "ASIAN KUNG-FU GENERATION",
+    "nameJa": ["アジアン・カンフー・ジェネレーション", "アジアンカンフージェネレーション"],
+    "nicknames": ["アジカン"]
+  },
+  {
+    "canonical": "エレファントカシマシ",
+    "alsoSearch": ["Elephant Kashimashi"],
+    "nicknames": ["エレカシ"]
+  },
+  {
+    "canonical": "ポルノグラフィティ",
+    "alsoSearch": ["Porno Graffitti"],
+    "nicknames": ["ポルノ"]
+  },
+  {
+    "canonical": "サカナクション",
+    "alsoSearch": ["Sakanaction"],
+    "nicknames": ["サカナ"]
+  },
+  {
+    "canonical": "プリンセス プリンセス",
+    "alsoSearch": ["Princess Princess", "プリンセスプリンセス"],
+    "nicknames": ["プリプリ"]
+  },
+  {
+    "canonical": "いきものがかり",
+    "alsoSearch": ["Ikimonogakari"],
+    "nicknames": ["いきもの"]
+  },
+  {
+    "canonical": "スキマスイッチ",
+    "alsoSearch": ["Sukima Switch"],
+    "nicknames": ["スキマ"]
+  },
+  {
+    "canonical": "KinKi Kids",
+    "nameJa": ["キンキキッズ"],
+    "nicknames": ["キンキ"]
+  },
+  {
+    "canonical": "嵐",
+    "alsoSearch": ["Arashi"],
+    "nicknames": ["アラシ"]
+  },
+  {
+    "canonical": "BABYMETAL",
+    "nameJa": ["ベビーメタル"],
+    "nicknames": ["ベビメタ"]
+  },
+  {
+    "canonical": "MAN WITH A MISSION",
+    "nameJa": ["マンウィズアミッション"],
+    "nicknames": ["マンウィズ"]
+  },
+  {
+    "canonical": "Perfume",
+    "nameJa": ["パフューム"],
+    "nicknames": ["パフ"]
+  },
+  {
+    "canonical": "チャットモンチー",
+    "alsoSearch": ["Chatmonchy"],
+    "nicknames": ["チャモン"]
+  },
+  {
+    "canonical": "Spitz",
+    "nameJa": ["スピッツ"],
+    "nicknames": ["スピッツ"]
+  },
+  {
+    "canonical": "GLAY",
+    "nameJa": ["グレイ"],
+    "nicknames": ["グレイ"]
+  },
+  {
+    "canonical": "EXILE",
+    "nameJa": ["エグザイル"],
+    "nicknames": ["エグザイル"]
+  },
+  {
+    "canonical": "MAXIMUM THE HORMONE",
+    "nameJa": ["マキシマムザホルモン"],
+    "nicknames": ["マキシマム"]
+  },
+  {
+    "canonical": "Yellow Magic Orchestra",
+    "nameJa": ["イエロー・マジック・オーケストラ"],
+    "nicknames": ["YMO"]
+  },
+  {
+    "canonical": "TM NETWORK",
+    "nameJa": ["ティーエムネットワーク"],
+    "nicknames": ["TMN"]
+  },
+  {
+    "canonical": "X JAPAN",
+    "nameJa": ["エックスジャパン"],
+    "nicknames": ["エックス"]
+  },
+
+  {
+    "canonical": "The Rolling Stones",
+    "nameJa": ["ザ・ローリング・ストーンズ", "ローリング・ストーンズ", "ローリングストーンズ"],
+    "nicknames": ["ストーンズ"]
+  },
+  {
+    "canonical": "The Beatles",
+    "nameJa": ["ザ・ビートルズ", "ビートルズ"],
+    "nicknames": ["ビートルズ"]
+  },
+  {
+    "canonical": "Led Zeppelin",
+    "nameJa": ["レッド・ツェッペリン", "レード・ツェッペリン", "レッドツェッペリン"],
+    "nicknames": ["ZEPP", "Zepp", "ゼップ", "ツェッペリン"]
+  },
+  {
+    "canonical": "Pink Floyd",
+    "nameJa": ["ピンク・フロイド", "ピンクフロイド"],
+    "nicknames": ["ピンフロ"]
+  },
+  {
+    "canonical": "Guns N' Roses",
+    "nameJa": ["ガンズ・アンド・ローゼズ", "ガンズアンドローゼズ"],
+    "nicknames": ["ガンズ", "GNR"]
+  },
+  {
+    "canonical": "Red Hot Chili Peppers",
+    "nameJa": ["レッド・ホット・チリ・ペッパーズ", "レッドホットチリペッパーズ"],
+    "nicknames": ["レッチリ", "RHCP", "Chili Peppers"]
+  },
+  {
+    "canonical": "Rage Against the Machine",
+    "nameJa": ["レイジ・アゲインスト・ザ・マシーン", "レイジアゲインストザマシーン"],
+    "nicknames": ["レイジ", "RATM"]
+  },
+  {
+    "canonical": "Arctic Monkeys",
+    "nameJa": ["アークティック・モンキーズ", "アークティックモンキーズ"],
+    "nicknames": ["アクモン"]
+  },
+  {
+    "canonical": "Manic Street Preachers",
+    "nameJa": ["マニック・ストリート・プリーチャーズ", "マニックストリートプリーチャーズ"],
+    "nicknames": ["マニックス"]
+  },
+  {
+    "canonical": "Green Day",
+    "nameJa": ["グリーン・デイ", "グリーンデイ"],
+    "nicknames": ["グリデイ"]
+  },
+  {
+    "canonical": "Linkin Park",
+    "nameJa": ["リンキン・パーク", "リンキンパーク"],
+    "nicknames": ["リンキン"]
+  },
+  {
+    "canonical": "My Chemical Romance",
+    "nameJa": ["マイ・ケミカル・ロマンス", "マイケミカルロマンス"],
+    "nicknames": ["マイケミ", "MCR"]
+  },
+  {
+    "canonical": "The Strokes",
+    "nameJa": ["ザ・ストロークス", "ストロークス"],
+    "nicknames": ["ストロークス"]
+  },
+  {
+    "canonical": "The Libertines",
+    "nameJa": ["ザ・リバティーンズ", "リバティーンズ"],
+    "nicknames": ["リバティーンズ", "リバ"]
+  },
+  {
+    "canonical": "System of a Down",
+    "nameJa": ["システム・オブ・ア・ダウン", "システムオブアダウン"],
+    "nicknames": ["SOAD"]
+  },
+  {
+    "canonical": "Nine Inch Nails",
+    "nameJa": ["ナイン・インチ・ネイルズ", "ナインインチネイルズ"],
+    "nicknames": ["NIN"]
+  },
+  {
+    "canonical": "Stone Temple Pilots",
+    "nameJa": ["ストーン・テンプル・パイロッツ", "ストーンテンプルパイロッツ"],
+    "nicknames": ["STP"]
+  },
+  {
+    "canonical": "Queens of the Stone Age",
+    "nameJa": ["クイーンズ・オブ・ザ・ストーン・エイジ", "クイーンズオブザストーンエイジ"],
+    "nicknames": ["QOTSA"]
+  },
+  {
+    "canonical": "Creedence Clearwater Revival",
+    "nameJa": ["クリーデンス・クリアウォーター・リバイバル"],
+    "nicknames": ["CCR"]
+  },
+  {
+    "canonical": "Electric Light Orchestra",
+    "nameJa": ["エレクトリック・ライト・オーケストラ"],
+    "nicknames": ["ELO"]
+  },
+  {
+    "canonical": "Crosby, Stills, Nash & Young",
+    "alsoSearch": ["Crosby Stills Nash & Young", "Crosby, Stills & Nash"],
+    "nicknames": ["CSNY", "CSN"]
+  },
+
+  {
+    "canonical": "Prince",
+    "nameJa": ["プリンス"],
+    "nicknames": ["殿下"]
+  },
+  {
+    "canonical": "Bruce Springsteen",
+    "nameJa": ["ブルース・スプリングスティーン", "ブルーススプリングスティーン"],
+    "nicknames": ["The Boss", "ザ・ボス", "ザボス"]
+  },
+  {
+    "canonical": "Michael Jackson",
+    "nameJa": ["マイケル・ジャクソン", "マイケルジャクソン"],
+    "nicknames": ["マイコー", "MJ", "King of Pop", "The King of Pop"]
+  },
+  {
+    "canonical": "Elvis Presley",
+    "nameJa": ["エルヴィス・プレスリー", "エルビス・プレスリー", "エルビスプレスリー"],
+    "nicknames": ["エルビス", "Elvis", "The King"]
+  },
+  {
+    "canonical": "Eric Clapton",
+    "nameJa": ["エリック・クラプトン", "エリッククラプトン"],
+    "nicknames": ["スローハンド", "スロウハンド", "Slowhand"]
+  },
+  {
+    "canonical": "David Bowie",
+    "nameJa": ["デヴィッド・ボウイ", "デビッド・ボウイ", "デヴィッドボウイ"],
+    "nicknames": ["The Thin White Duke", "シン・ホワイト・デューク", "ボウイ"]
+  },
+  {
+    "canonical": "Aretha Franklin",
+    "nameJa": ["アレサ・フランクリン", "アレサフランクリン"],
+    "nicknames": ["Queen of Soul", "The Queen of Soul"]
+  },
+  {
+    "canonical": "Taylor Swift",
+    "nameJa": ["テイラー・スウィフト", "テイラー・スイフト", "テイラースウィフト"],
+    "nicknames": ["Tay-Tay", "TayTay", "テイテイ"]
+  },
+  {
+    "canonical": "Paul McCartney",
+    "nameJa": ["ポール・マッカートニー", "ポールマッカートニー"],
+    "nicknames": ["Macca", "マッカ"]
+  },
+  {
+    "canonical": "Liam Gallagher",
+    "nameJa": ["リアム・ギャラガー", "リアムギャラガー"],
+    "nicknames": ["RkID", "Our Kid"]
+  },
+  {
+    "canonical": "Noel Gallagher",
+    "nameJa": ["ノエル・ギャラガー", "ノエルギャラガー"],
+    "nicknames": ["The Chief"]
+  },
+  {
+    "canonical": "Eminem",
+    "nameJa": ["エミネム"],
+    "nicknames": ["Slim Shady", "スリムシェイディ"]
+  },
+  {
+    "canonical": "Ozzy Osbourne",
+    "nameJa": ["オジー・オズボーン", "オジーオズボーン"],
+    "nicknames": ["オジー", "Ozzy"]
+  },
+  {
+    "canonical": "Madonna",
+    "nameJa": ["マドンナ"],
+    "nicknames": ["マコ様"]
+  },
+  {
+    "canonical": "Jennifer Lopez",
+    "nameJa": ["ジェニファー・ロペス", "ジェニファーロペス"],
+    "nicknames": ["J.Lo", "JLo"]
+  },
+  {
+    "canonical": "Lady Gaga",
+    "nameJa": ["レディー・ガガ", "レディーガガ"],
+    "nicknames": ["GAGA", "ガガ"]
+  },
+  {
+    "canonical": "Rihanna",
+    "nameJa": ["リアーナ"],
+    "nicknames": ["RiRi"]
+  },
+  {
+    "canonical": "Billy Joel",
+    "nameJa": ["ビリー・ジョエル", "ビリージョエル"],
+    "nicknames": ["ピアノマン", "ピアノ・マン"]
+  },
+
+  {
+    "canonical": "BTS",
+    "alsoSearch": ["Bangtan Sonyeondan", "Bangtan Boys"],
+    "nameJa": ["防弾少年団"],
+    "nicknames": ["バンタン", "BTS"]
+  },
+  {
+    "canonical": "BLACKPINK",
+    "nameJa": ["ブラックピンク"],
+    "nicknames": ["ブルピン"]
+  },
+  {
+    "canonical": "Stray Kids",
+    "nameJa": ["ストレイキッズ"],
+    "nicknames": ["スキズ", "Skz", "SKZ"]
+  },
+  {
+    "canonical": "TOMORROW X TOGETHER",
+    "alsoSearch": ["TXT"],
+    "nameJa": ["トゥモローバイトゥギャザー"],
+    "nicknames": ["トゥバ", "TXT"]
+  }
+]

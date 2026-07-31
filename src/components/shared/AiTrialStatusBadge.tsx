@@ -47,8 +47,10 @@ export function AiTrialStatusBadge({
   const exhausted = status.phase === 'trial_exhausted';
   const creditsActive = status.phase === 'credits_active';
   const unconfirmed = status.phase === 'email_unconfirmed';
+  const grantBlocked =
+    status.phase === 'trial_ip_limited' || status.phase === 'trial_email_cooling';
 
-  const borderClass = exhausted
+  const borderClass = exhausted || grantBlocked
     ? 'border-amber-700/50 bg-amber-950/30 text-amber-100/95'
     : creditsActive
       ? 'border-emerald-700/50 bg-emerald-950/30 text-emerald-100/95'

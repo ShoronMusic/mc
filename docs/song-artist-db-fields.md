@@ -99,7 +99,7 @@ Music8 ではアーティストがカテゴリ＋ JSON で表現されている�
 | `image_url` | text | 代表画像 |
 | `bio_short` | text | 短い説明（一覧用） |
 | `bio_long` | text | 長文（別ページ用） |
-| `aliases` | text[] | 別名・表記ゆれ検索用 |
+| `aliases` | text[] | 別名・表記ゆれ・**愛称**検索用。運用マスタは `src/config/artist-search-nicknames.json`（アプリ展開）。DB 列は任意シード（`docs/supabase-songs-and-performances-tables.md` アーティスト愛称） |
 
 **バンドメンバー**は `band_members`（`band_artist_id`, `person_artist_id`, `role`, `from`, `to`）のような関連テーブルが拡張向き。
 

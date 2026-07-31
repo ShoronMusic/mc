@@ -69,7 +69,7 @@ export default function PrivacyPage({ searchParams }: PrivacyPageProps) {
           <li>
             <span className="font-semibold text-white">利用目的</span>
             <p className="mt-1 text-gray-400">
-              サービス提供、ログイン管理、機能改善、利用状況分析、不正利用の防止、お問い合わせ対応のために利用します。
+              サービス提供、ログイン管理、機能改善、利用状況分析、不正利用の防止（AI お試し枠の濫用防止を含む）、お問い合わせ対応のために利用します。アクセスログ（IP アドレス等）は、同一ネットワークからの不自然な連続登録・お試し枠の不正取得の検知およびソフト上限の運用にも用います。
             </p>
             <p className="mt-1 text-gray-400">
               チャットの会話ログは、主に音楽データ・利用傾向の分析およびサービス改善のために利用し、法令に基づく場合を除き外部に提供しません。

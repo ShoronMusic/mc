@@ -125,6 +125,11 @@ export default function TermsPage({ searchParams }: TermsPageProps) {
             <div className="mt-1">
               <ServicePricingNotice />
             </div>
+            <p className="mt-2 text-gray-400">
+              登録ユーザー向けの AI お試し枠は、原則として
+              <strong className="text-gray-300">1 アカウントにつき生涯 1 回</strong>
+              です。付与はログイン直後ではなく、初回の AI 付き選曲または @ 質問などの実利用時に行われる場合があります。メール登録では確認完了後に短い待機を設けることがあります。同一ネットワークからの短時間の連続付与には上限があり、上限到達時は選曲のみ（AI なし）でご利用いただけます。
+            </p>
           </li>
           <li>
             <span className="font-semibold text-white">会の主催（ログイン時）</span>
@@ -141,6 +146,11 @@ export default function TermsPage({ searchParams }: TermsPageProps) {
             <span className="font-semibold text-white">禁止行為（代表例）</span>
             <p className="mt-1 text-gray-400">
               次に該当し、またはそのおそれがある行為を禁止します：チャット妨害・荒らし、特定者への嫌がらせやストーキング、出会い目的の募集、初対面に近い相手への一方的な連絡先の伝達・勧誘・強要、公序良俗に反する発言、誹謗中傷、著しく乱暴な言葉、無関係な広告・宣伝・スパム、法令違反、その他運営が不適切と判断する行為。
+            </p>
+            <p className="mt-2 text-gray-400">
+              加えて、AI お試し枠・無料クレジット・キャンペーン特典等について、
+              <strong className="text-gray-300">複数アカウントの作成・使い捨てメール等による不正取得や周回利用</strong>
+              、自動化・ボットによる大量利用、同一端末・同一ネットワークからの不自然な連続登録など、運営が不正または濫用と判断する行為を禁止します。運営は IP アドレス等の技術情報を用いた上限・遅延・付与拒否・アカウント制限等の措置を行うことがあります。
             </p>
           </li>
           <li>

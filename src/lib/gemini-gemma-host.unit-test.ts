@@ -5,11 +5,40 @@ import {
   polishGemmaModelVisibleText,
   sanitizeGemmaVisibleOutputText,
   stripGemmaCoTLeakage,
+  stripTrailingSelfReportedCharCount,
 } from '@/lib/gemini-gemma-host';
 
 test('sanitizeGemmaVisibleOutputText: keeps short text unchanged', () => {
   const s = 'Blurの『Song 2』は短い解説です。';
   assert.equal(sanitizeGemmaVisibleOutputText(s), s);
+});
+
+test('stripTrailingSelfReportedCharCount: Japanese (N文字)', () => {
+  const s =
+    "Noel Gallagher's High Flying Birdsの『AKA... What a Life!』は、2011年発表のデビューアルバム収録曲です。(136文字)";
+  const out = stripTrailingSelfReportedCharCount(s);
+  assert.ok(out.endsWith('収録曲です。'));
+  assert.ok(!out.includes('文字'));
+});
+
+test('stripTrailingSelfReportedCharCount: fullwidth parens and 約', () => {
+  const s = 'サウンドの躍動感が魅力です。（約134字）';
+  const out = stripTrailingSelfReportedCharCount(s);
+  assert.equal(out, 'サウンドの躍動感が魅力です。');
+});
+
+test('stripTrailingSelfReportedCharCount: English chars suffix', () => {
+  const s = 'A short note about the song. (112 characters)';
+  const out = stripTrailingSelfReportedCharCount(s);
+  assert.equal(out, 'A short note about the song.');
+});
+
+test('polishGemmaModelVisibleText: strips trailing Japanese char count', () => {
+  const s =
+    'Post Maloneの『Better Now』は、2018年のアルバムに収録された楽曲です。(136文字)';
+  const out = polishGemmaModelVisibleText(s);
+  assert.ok(out.includes('Post Malone'));
+  assert.ok(!/\(\d+文字\)/.test(out));
 });
 
 test('sanitizeGemmaVisibleOutputText: strips leading English meta before JP commentary', () => {

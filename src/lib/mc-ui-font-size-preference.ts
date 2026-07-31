@@ -1,5 +1,5 @@
 /**
- * mc 部屋画面・マイページ共通の文字サイズ。同一ブラウザに保存。
+ * 部屋画面・マイページ共通の文字サイズ。同一ブラウザに保存。
  */
 export type McUiFontSize = 'normal' | 'large' | 'xlarge';
 

@@ -152,6 +152,13 @@ create index if not exists idx_artists_name_trgm
 create index if not exists idx_artists_name_ja_trgm
   on public.artists using gin (name_ja gin_trgm_ops);
 
+-- アーティスト愛称・略称（任意・2026-07）
+-- アプリ正本は `src/config/artist-search-nicknames.json`。DB に入れると JSON 未更新でも
+-- `aliases` 配列の完全一致で `/api/library/match-main-artists` 等がヒットする。
+alter table public.artists add column if not exists aliases text[] null;
+create index if not exists idx_artists_aliases_gin
+  on public.artists using gin (aliases);
+
 -- 付随: 検索結果の「自分の再生回数」と代表動画の引き当て
 create index if not exists idx_room_playback_history_user_video
   on public.room_playback_history (user_id, video_id);
@@ -163,6 +170,58 @@ create index if not exists idx_song_videos_song_id
 - 効果確認は `explain analyze` で `Bitmap Index Scan on idx_songs_main_artist_trgm` 等になるかを見る。
 - **1〜2 文字**のキーワードは trigram が効かない（3 文字未満）ため、短い語は従来どおり遅い可能性がある。
 - 取り消す場合は `drop index if exists public.idx_songs_main_artist_trgm;` のように個別に削除する。
+
+### アーティスト愛称（`artists.aliases`・2026-07）
+
+ファン愛称（例: **ドリカム** → Dreams Come True / ドリームズ・カム・トゥルー）でライブラリ検索を当てる。
+
+| 層 | 場所 | 役割 |
+|----|------|------|
+| アプリ正本 | `src/config/artist-search-nicknames.json` | クエリ全体一致時に正規名・和名へ展開（再ビルド要） |
+| DB（任意） | `artists.aliases text[]` | 配列要素の完全一致（`aliases.cs.{"ドリカム"}`）。JSON を待たずに手編集可 |
+
+**列追加**（上記 trgm ブロック内の `aliases` でも可）:
+
+```sql
+alter table public.artists add column if not exists aliases text[] null;
+create index if not exists idx_artists_aliases_gin
+  on public.artists using gin (aliases);
+```
+
+**シード例**（既存行の `name` / `name_ja` に合わせて UPDATE。表記が違う行は先に確認）:
+
+```sql
+-- Dreams Come True（ドリカム）
+update public.artists
+set aliases = (
+  select array_agg(distinct a)
+  from unnest(coalesce(aliases, '{}'::text[]) || array['ドリカム', 'DCT']::text[]) as t(a)
+)
+where lower(name) = lower('Dreams Come True')
+   or coalesce(name_ja, '') ilike '%ドリームズ%カム%トゥルー%'
+   or coalesce(name_ja, '') ilike '%ドリームズカムトゥルー%';
+
+-- Mr.Children（ミスチル）
+update public.artists
+set aliases = (
+  select array_agg(distinct a)
+  from unnest(coalesce(aliases, '{}'::text[]) || array['ミスチル']::text[]) as t(a)
+)
+where lower(name) = lower('Mr.Children')
+   or coalesce(name_ja, '') ilike '%ミスターチルドレン%';
+
+-- サザンオールスターズ
+update public.artists
+set aliases = (
+  select array_agg(distinct a)
+  from unnest(coalesce(aliases, '{}'::text[]) || array['サザン']::text[]) as t(a)
+)
+where name ilike '%サザンオールスターズ%'
+   or coalesce(name_ja, '') ilike '%サザンオールスターズ%'
+   or lower(name) = lower('Southern All Stars');
+```
+
+追加の愛称は JSON に追記するか、同様の `update` で `aliases` に足す。シード SQL の一括出力は `npx tsx scripts/print-artist-nickname-seed-sql.ts`。
 
 ### アーティスト索引スナップショット（`library_artist_index_snapshots`・2026-07）
 

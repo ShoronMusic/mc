@@ -34,6 +34,7 @@ import {
   extractTextFromGenerateContentResponse,
   isGemmaHostedModelId,
   polishGemmaModelVisibleText,
+  stripTrailingSelfReportedCharCount,
 } from '@/lib/gemini-gemma-host';
 import { getGeminiModel, logGeminiUsage } from '@/lib/gemini';
 import { resolveGenerationModelId } from '@/lib/gemini-model-routing';
@@ -719,7 +720,7 @@ export async function POST(request: Request) {
           } else {
             let baseOut = polishCachedBodiesForGemma
               ? polishGemmaModelVisibleText(nrCached.baseComment)
-              : nrCached.baseComment;
+              : stripTrailingSelfReportedCharCount(nrCached.baseComment);
             if (sessionBlock) {
               baseOut = await prependLibrarySessionBridge(baseOut, {
                 sessionBlock,
@@ -763,9 +764,13 @@ export async function POST(request: Request) {
               ? filtered.freeComments.map((c) =>
                   typeof c === 'string' && c.trim() ? polishGemmaModelVisibleText(c) : c,
                 )
-              : filtered.freeComments;
+              : filtered.freeComments.map((c) =>
+                  typeof c === 'string' && c.trim() ? stripTrailingSelfReportedCharCount(c) : c,
+                );
             if (polishCachedBodiesForGemma && baseOutLib.trim()) {
               baseOutLib = polishGemmaModelVisibleText(baseOutLib);
+            } else if (baseOutLib.trim()) {
+              baseOutLib = stripTrailingSelfReportedCharCount(baseOutLib);
             }
             if (sessionBlock && baseOutLib.trim()) {
               baseOutLib = await prependLibrarySessionBridge(baseOutLib, {
@@ -938,6 +943,9 @@ ${basePromptTail}`;
 
     if (packPhase === 'frees') {
       let fromClient = typeof body?.baseComment === 'string' ? body.baseComment.trim() : '';
+      if (fromClient) {
+        fromClient = stripTrailingSelfReportedCharCount(fromClient);
+      }
       if (!fromClient && reader) {
         const { data: row } = await reader
           .from('song_tidbits')
@@ -949,6 +957,9 @@ ${basePromptTail}`;
           .limit(1)
           .maybeSingle();
         fromClient = typeof row?.body === 'string' ? row.body.trim() : '';
+        if (fromClient) {
+          fromClient = stripTrailingSelfReportedCharCount(fromClient);
+        }
       }
       if (!fromClient) {
         return NextResponse.json(

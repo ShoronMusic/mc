@@ -1343,66 +1343,68 @@ html[data-product='musicchat'] input.mc-chat-input-field:focus {
   outline: none;
 }
 
-/* mc 部屋画面・マイページ — 文字サイズ（端末ローカル設定） */
-html[data-product='musicchat'] .mc-room-viewport,
-html[data-product='musicchat'] .mc-mypage-modal {
+/* 部屋画面・マイページ — 文字サイズ（端末ローカル設定・ma/mc 共通） */
+.mc-room-viewport,
+.mc-mypage-modal {
   --mc-ui-font-scale: 1;
 }
 
-html[data-product='musicchat'] .mc-room-viewport[data-mc-ui-font-size='large'],
-html[data-product='musicchat'] .mc-mypage-modal[data-mc-ui-font-size='large'] {
-  --mc-ui-font-scale: 1.125;
+.mc-room-viewport[data-mc-ui-font-size='large'],
+.mc-mypage-modal[data-mc-ui-font-size='large'] {
+  /* 標準比 +約22%（旧 1.125 では差が分かりにくかった） */
+  --mc-ui-font-scale: 1.22;
 }
 
-html[data-product='musicchat'] .mc-room-viewport[data-mc-ui-font-size='xlarge'],
-html[data-product='musicchat'] .mc-mypage-modal[data-mc-ui-font-size='xlarge'] {
-  --mc-ui-font-scale: 1.25;
+.mc-room-viewport[data-mc-ui-font-size='xlarge'],
+.mc-mypage-modal[data-mc-ui-font-size='xlarge'] {
+  /* 標準比 +約45%（「特大」として分かる差） */
+  --mc-ui-font-scale: 1.45;
 }
 
-html[data-product='musicchat'] .mc-room-viewport[data-mc-ui-font-size='large'] .text-xs,
-html[data-product='musicchat'] .mc-mypage-modal[data-mc-ui-font-size='large'] .text-xs,
-html[data-product='musicchat'] .mc-room-viewport[data-mc-ui-font-size='xlarge'] .text-xs,
-html[data-product='musicchat'] .mc-mypage-modal[data-mc-ui-font-size='xlarge'] .text-xs,
-html[data-product='musicchat'] .mc-room-viewport[data-mc-ui-font-size='large'] .sm\:text-xs,
-html[data-product='musicchat'] .mc-mypage-modal[data-mc-ui-font-size='large'] .sm\:text-xs,
-html[data-product='musicchat'] .mc-room-viewport[data-mc-ui-font-size='xlarge'] .sm\:text-xs,
-html[data-product='musicchat'] .mc-mypage-modal[data-mc-ui-font-size='xlarge'] .sm\:text-xs {
+.mc-room-viewport[data-mc-ui-font-size='large'] .text-xs,
+.mc-mypage-modal[data-mc-ui-font-size='large'] .text-xs,
+.mc-room-viewport[data-mc-ui-font-size='xlarge'] .text-xs,
+.mc-mypage-modal[data-mc-ui-font-size='xlarge'] .text-xs,
+.mc-room-viewport[data-mc-ui-font-size='large'] .sm\:text-xs,
+.mc-mypage-modal[data-mc-ui-font-size='large'] .sm\:text-xs,
+.mc-room-viewport[data-mc-ui-font-size='xlarge'] .sm\:text-xs,
+.mc-mypage-modal[data-mc-ui-font-size='xlarge'] .sm\:text-xs {
   font-size: calc(0.75rem * var(--mc-ui-font-scale)) !important;
 }
 
-html[data-product='musicchat'] .mc-room-viewport[data-mc-ui-font-size='large'] .text-sm,
-html[data-product='musicchat'] .mc-mypage-modal[data-mc-ui-font-size='large'] .text-sm,
-html[data-product='musicchat'] .mc-room-viewport[data-mc-ui-font-size='xlarge'] .text-sm,
-html[data-product='musicchat'] .mc-mypage-modal[data-mc-ui-font-size='xlarge'] .text-sm,
-html[data-product='musicchat'] .mc-room-viewport[data-mc-ui-font-size='large'] .sm\:text-sm,
-html[data-product='musicchat'] .mc-mypage-modal[data-mc-ui-font-size='large'] .sm\:text-sm,
-html[data-product='musicchat'] .mc-room-viewport[data-mc-ui-font-size='xlarge'] .sm\:text-sm,
-html[data-product='musicchat'] .mc-mypage-modal[data-mc-ui-font-size='xlarge'] .sm\:text-sm {
+.mc-room-viewport[data-mc-ui-font-size='large'] .text-sm,
+.mc-mypage-modal[data-mc-ui-font-size='large'] .text-sm,
+.mc-room-viewport[data-mc-ui-font-size='xlarge'] .text-sm,
+.mc-mypage-modal[data-mc-ui-font-size='xlarge'] .text-sm,
+.mc-room-viewport[data-mc-ui-font-size='large'] .sm\:text-sm,
+.mc-mypage-modal[data-mc-ui-font-size='large'] .sm\:text-sm,
+.mc-room-viewport[data-mc-ui-font-size='xlarge'] .sm\:text-sm,
+.mc-mypage-modal[data-mc-ui-font-size='xlarge'] .sm\:text-sm {
   font-size: calc(0.875rem * var(--mc-ui-font-scale)) !important;
 }
 
-html[data-product='musicchat'] .mc-room-viewport[data-mc-ui-font-size='large'] .text-base,
-html[data-product='musicchat'] .mc-mypage-modal[data-mc-ui-font-size='large'] .text-base,
-html[data-product='musicchat'] .mc-room-viewport[data-mc-ui-font-size='xlarge'] .text-base,
-html[data-product='musicchat'] .mc-mypage-modal[data-mc-ui-font-size='xlarge'] .text-base,
-html[data-product='musicchat'] .mc-room-viewport[data-mc-ui-font-size='large'] .sm\:text-base,
-html[data-product='musicchat'] .mc-mypage-modal[data-mc-ui-font-size='large'] .sm\:text-base,
-html[data-product='musicchat'] .mc-room-viewport[data-mc-ui-font-size='xlarge'] .sm\:text-base,
-html[data-product='musicchat'] .mc-mypage-modal[data-mc-ui-font-size='xlarge'] .sm\:text-base {
+.mc-room-viewport[data-mc-ui-font-size='large'] .text-base,
+.mc-mypage-modal[data-mc-ui-font-size='large'] .text-base,
+.mc-room-viewport[data-mc-ui-font-size='xlarge'] .text-base,
+.mc-mypage-modal[data-mc-ui-font-size='xlarge'] .text-base,
+.mc-room-viewport[data-mc-ui-font-size='large'] .sm\:text-base,
+.mc-mypage-modal[data-mc-ui-font-size='large'] .sm\:text-base,
+.mc-room-viewport[data-mc-ui-font-size='xlarge'] .sm\:text-base,
+.mc-mypage-modal[data-mc-ui-font-size='xlarge'] .sm\:text-base {
   font-size: calc(1rem * var(--mc-ui-font-scale)) !important;
 }
 
-html[data-product='musicchat'] .mc-room-viewport[data-mc-ui-font-size='large'] .text-\[10px\],
-html[data-product='musicchat'] .mc-mypage-modal[data-mc-ui-font-size='large'] .text-\[10px\],
-html[data-product='musicchat'] .mc-room-viewport[data-mc-ui-font-size='xlarge'] .text-\[10px\],
-html[data-product='musicchat'] .mc-mypage-modal[data-mc-ui-font-size='xlarge'] .text-\[10px\] {
+.mc-room-viewport[data-mc-ui-font-size='large'] .text-\[10px\],
+.mc-mypage-modal[data-mc-ui-font-size='large'] .text-\[10px\],
+.mc-room-viewport[data-mc-ui-font-size='xlarge'] .text-\[10px\],
+.mc-mypage-modal[data-mc-ui-font-size='xlarge'] .text-\[10px\] {
   font-size: calc(10px * var(--mc-ui-font-scale)) !important;
 }
 
-html[data-product='musicchat'] .mc-room-viewport[data-mc-ui-font-size='large'] .text-\[11px\],
-html[data-product='musicchat'] .mc-mypage-modal[data-mc-ui-font-size='large'] .text-\[11px\],
-html[data-product='musicchat'] .mc-room-viewport[data-mc-ui-font-size='xlarge'] .text-\[11px\],
-html[data-product='musicchat'] .mc-mypage-modal[data-mc-ui-font-size='xlarge'] .text-\[11px\] {
+.mc-room-viewport[data-mc-ui-font-size='large'] .text-\[11px\],
+.mc-mypage-modal[data-mc-ui-font-size='large'] .text-\[11px\],
+.mc-room-viewport[data-mc-ui-font-size='xlarge'] .text-\[11px\],
+.mc-mypage-modal[data-mc-ui-font-size='xlarge'] .text-\[11px\] {
   font-size: calc(11px * var(--mc-ui-font-scale)) !important;
 }
 

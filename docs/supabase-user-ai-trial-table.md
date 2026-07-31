@@ -63,9 +63,20 @@ alter table public.user_ai_trial
 
 ## 付与タイミング
 
-- **メール確認済み**の登録ユーザーが `GET /api/user/ai-trial` を初めて呼んだとき、行がなければ **20 曲 + @ 5 回** を service_role で INSERT。
-- Google OAuth 等、確認済みで入ったユーザーは初回 GET で即付与。
-- **既存で `songs_granted < 20` の行**は、次回 `ensureUserAiTrialGrant`（GET / 選曲ガード）時に **差分を `songs_remaining` に加算**して 20 に揃える（使用済み曲数は維持）。
+- **メール確認済み**の登録ユーザーが **初回の AI 実利用**（AI 付き選曲の成功課金、または @ 質問の消費）時に、行がなければ **20 曲 + @ 5 回** を service_role で INSERT。
+- `GET /api/user/ai-trial` は **付与しない**（既存行の参照、または未付与なら `trial_eligible` / 上限・待機ステータスのみ）。
+- Google OAuth 等、確認済みで入ったユーザーも同様（ログイン直後の自動付与はしない）。
+- **既存で `songs_granted < 20` の行**は、次回 bump（GET / 選曲ガード）時に **差分を `songs_remaining` に加算**して 20 に揃える（使用済み曲数は維持）。
+
+### 不正抑制（Phase C）
+
+| 手段 | 既定 | env |
+|------|------|-----|
+| 同一 IP（IPv4 は /24）の 24h 新規付与ソフト上限 | OAuth 等 **3** / メール専用 **1** | `AI_TRIAL_IP_SOFT_CAP_PER_DAY` · `AI_TRIAL_IP_SOFT_CAP_EMAIL_PER_DAY`（0 で無効） |
+| メール確認後の最低待機 | **15 分**（メール＋パスワードのみ） | `AI_TRIAL_EMAIL_GRANT_MIN_AGE_MINUTES`（0 で無効） |
+| 付与拒否の管理通知 | `user_ai_trial_abuse_event` + サーバーログ `[ai-trial-abuse]` + `/admin/user-ai-trial` | テーブル SQL は下記 |
+
+付与拒否時は選曲のみ（AI なし）は継続可能。家族・学校回線の誤爆時はお問い合わせ対応。
 
 ### 一括更新（任意・SQL Editor）
 
@@ -122,3 +133,36 @@ alter table public.user_ai_trial_consumption_log enable row level security;
 | room_id | 任意（将来 API から渡す） |
 | video_id | 任意 |
 | client_ip | 消費時 IP |
+
+## `user_ai_trial_abuse_event`（Phase C · 付与拒否・管理通知）
+
+`user_ai_trial` 作成後、任意で次も実行する。
+
+```sql
+create table if not exists public.user_ai_trial_abuse_event (
+  id uuid primary key default gen_random_uuid(),
+  kind text not null check (kind in ('ip_soft_cap', 'email_min_age')),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  client_ip text,
+  detail jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_user_ai_trial_abuse_event_created
+  on public.user_ai_trial_abuse_event (created_at desc);
+
+create index if not exists idx_user_ai_trial_abuse_event_ip_created
+  on public.user_ai_trial_abuse_event (client_ip, created_at desc);
+
+alter table public.user_ai_trial_abuse_event enable row level security;
+
+-- 参照・INSERT は service_role / 管理画面のみ
+```
+
+| 列 | 説明 |
+|----|------|
+| kind | `ip_soft_cap` / `email_min_age` |
+| user_id | 付与を試みたユーザー |
+| client_ip | リクエスト IP |
+| detail | softCap・ipKey・件数等の JSON |
+

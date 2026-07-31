@@ -819,7 +819,7 @@ export default function MyPage({
 
   const [mypageFontSize, handleMypageFontSizeChange] = useMcUiFontSize();
   const [mcUiAccentTheme, handleMcUiAccentThemeChange] = useMcUiAccentTheme();
-  const mypageFrameFontSize = IS_MC_PRODUCT ? mypageFontSize : undefined;
+  const mypageFrameFontSize = mypageFontSize;
 
   useEffect(() => {
     if (!effectiveRoomId || isGuest) {
@@ -2476,6 +2476,10 @@ export default function MyPage({
             </div>
           )}
         </div>
+
+        {!IS_MC_PRODUCT ? (
+          <MypageFontSizeSection value={mypageFontSize} onChange={handleMypageFontSizeChange} />
+        ) : null}
 
         {/* 選曲に参加する */}
         {onParticipatesInSelectionChange && (

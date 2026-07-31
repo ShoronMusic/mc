@@ -4,7 +4,7 @@
 > 収益モデル全般・収支試算は `docs/monetization-options.md`、原価帰属・管理集計は `docs/room-gathering-history-and-ai-billing-project.md` を参照。
 
 最終更新: **2026-07-18**  
-ステータス: **Phase B 実装済み・ローカル実機 OK / 本番デプロイ＋20曲検証待ち** / ゲスト UX 完了 / 登録ユーザー UX 追補完了 / Phase C 一部着手 / **お試し付与 20 曲**
+ステータス: **Phase B 実装済み** / **Phase C 不正抑制（IP ソフト上限・付与遅延・メール厳格化・管理通知）実装済み** / ゲスト UX 完了 / 登録ユーザー UX 追補完了 / **お試し付与 20 曲** / 本番デプロイ検証は別途
 
 ---
 
@@ -24,8 +24,8 @@
 | 参加方法 | 20 曲お試し | 選曲のみ（無料） | 不正対策上の位置づけ |
 |----------|:-----------:|:----------------:|----------------------|
 | **ゲスト**（ハンドル名のみ） | **×** | ○ | `user_id` なし → **trial テーブルに載せられない** |
-| **Google 登録** | ○（初回ログイン時付与） | ○ | Google 側でメール実在性が高い。`user_id` 固定 |
-| **メール登録** | ○（**メール確認後**付与） | ○（確認前も可） | 捨てメール・複垢は **確認 + IP 補助** で抑える |
+| **Google 登録** | ○（**初回 AI 実利用時**付与） | ○ | Google 側でメール実在性が高い。`user_id` 固定 |
+| **メール登録** | ○（**メール確認後**・短い待機後・**初回 AI 実利用時**付与） | ○（確認前も可） | 捨てメール・複垢は **確認 + 待機 + IP 補助** で抑える |
 
 ### なぜ登録限定の方がよいか
 
@@ -39,8 +39,9 @@
 
 | 経路 | 20 曲付与 |
 |------|-----------|
-| Google `signInWithOAuth` 成功・初回 `user_id` 作成 | **即付与**（`email_confirmed_at` あり想定） |
-| メール新規登録 | **確認リンク完了後**に付与（確認前は U5 · 選曲のみ） |
+| Google `signInWithOAuth` 成功・確認済み | **初回の AI 付き選曲成功（commit）または @ 消費時**（ログイン直後の GET では付与しない） |
+| メール新規登録 | **確認リンク完了**かつ **最低待機（既定 15 分）後**、上記と同じ初回実利用時 |
+| 同一 IP（/24）ソフト上限超過 | **付与しない**（選曲のみ可。管理に abuse_event） |
 | 既存登録ユーザー（本機能リリース前から在籍） | リリース時 **一括付与 20 曲** か **未付与** — 別途決定（実装ログに追記） |
 
 ### ゲストに AI を付けないことのトレードオフ
@@ -359,15 +360,17 @@ authUserId?: string;           // 既存
 
 | 優先 | 手段 | 実装目安 | 備考 |
 |:----:|------|----------|------|
-| 1 | **登録必須**で 10 曲 | Phase B | ゲストは AI 0 |
-| 2 | **`user_id` 生涯 10 曲**（DB） | Phase B | 再ログインでリセットしない |
+| 1 | **登録必須**でお試し | Phase B | ゲストは AI 0 |
+| 2 | **`user_id` 生涯 20 曲**（DB） | Phase B | 再ログインでリセットしない |
 | 3 | **メール確認済み**のみ付与 | Phase B（判定は **`supabase-email-auth.ts`** 実装済） | Supabase Auth **Confirm email ON** |
-| 4 | **IP 記録 + ソフト上限** | Phase C | 同一 /24 で新規お試し **3 アカウント/日** 等。家族・学校は誤爆に注意 |
-| 5 | **レート制限** | 既存拡張 | `src/lib/chat-ai-rate-limit.ts`・YouTube 検索系。サーバーレスはインスタンス単位 → **Vercel Pro + WAF 併用** |
-| 6 | **異常フラグ** | Phase C | 短時間に同一 IP から大量 signup → STYLE_ADMIN 通知 |
-| 7 | VPN/プロキシ API | **将来** | コスト・誤検知あり。初期は必須にしない |
+| 4 | **初回 AI 実利用まで付与遅延** | Phase C | `GET /api/user/ai-trial` は付与しない。commit / @ 消費時に INSERT |
+| 5 | **IP 記録 + ソフト上限** | Phase C | 同一 /24 で新規お試し **3/日**（OAuth）· **1/日**（メール）。`AI_TRIAL_IP_SOFT_CAP_*` |
+| 6 | **メール経路の最低待機** | Phase C | 確認後 **15 分**（`AI_TRIAL_EMAIL_GRANT_MIN_AGE_MINUTES`） |
+| 7 | **異常フラグ（管理通知）** | Phase C | `user_ai_trial_abuse_event` + `/admin/user-ai-trial` + `[ai-trial-abuse]` ログ |
+| 8 | **レート制限** | 既存拡張 | `src/lib/chat-ai-rate-limit.ts`・YouTube 検索系。サーバーレスはインスタンス単位 → **Vercel Pro + WAF 併用** |
+| 9 | VPN/プロキシ API | **将来** | コスト・誤検知あり。初期は必須にしない |
 
-IP 取得: 既存 `getChatAiClientIp()`（`x-forwarded-for`）を trial 消費・signup 時に記録。
+IP 取得: 既存 `getChatAiClientIp()`（`x-forwarded-for`）を trial 消費・付与時に記録。
 
 ---
 
@@ -510,9 +513,11 @@ SQL 確定後は **`docs/supabase-user-ai-trial-table.md`** を新設（未作�
 ### Phase C — 不正・運用
 
 - [x] IP 記録（`first_ip` / `last_ip` — 付与・消費時に `user_ai_trial` 更新）
-- [ ] 同一 IP 新規アカウントソフト上限 + 管理通知
+- [x] 同一 IP 新規アカウントソフト上限 + 管理通知（`ai-trial-abuse-guard.ts` · `user_ai_trial_abuse_event`）
+- [x] 付与を初回 AI 実利用まで遅延（GET は付与しない）
+- [x] メール経路の最低待機・より厳しい IP 上限
 - [x] `user_ai_trial_consumption_log`（SQL + 消費時 INSERT。テーブル未作成時はログのみ失敗）
-- [x] 管理画面: ユーザー別 trial 残数・消費ログ（`/admin/user-ai-trial`）
+- [x] 管理画面: ユーザー別 trial 残数・消費ログ・付与拒否イベント（`/admin/user-ai-trial`）
 - [ ] レート制限の env チューニング（`CHAT_AI_RATE_LIMIT_*`）
 
 ### Phase D — 課金接続（プリペイド中心 · `docs/00-prepaid-pricing-summary.md`）
@@ -597,7 +602,8 @@ AI 解説・曲クイズ・@ による質問は、今後クレジットまたは
 
 ### Phase C — 不正・運用
 
-- [ ] 同一 IP 新規アカウント **ソフト上限** + 管理通知
+- [x] 同一 IP 新規アカウント **ソフト上限** + 管理通知
+- [x] 付与遅延・メール経路厳格化
 - [x] 管理画面: **ユーザー別 trial 残数・消費ログ**（`/admin/user-ai-trial`）
 - [ ] `CHAT_AI_RATE_LIMIT_*` 本番チューニング
 
@@ -605,14 +611,14 @@ AI 解説・曲クイズ・@ による質問は、今後クレジットまたは
 
 - [ ] Stripe プリペイド（¥500＝20 · ¥1,000＝40）
 - [ ] クレジット残高テーブル + trial 枯渇後の `full` 判定
-- [ ] 利用規約・FAQ（お試し 10 曲・選曲のみ無料・プリペイド残高）
+- [x] 利用規約・FAQ（お試し枠の濫用禁止・付与条件・プライバシーの IP 利用）
 
 ---
 
 ## 次のステップ（要約・1 行）
 
-1. **デプロイ → 本番 10 曲検証**（最優先）
-2. **Phase C** — IP 上限・管理画面 trial 一覧
+1. **デプロイ → 本番検証**（最優先）＋ Supabase で `user_ai_trial_abuse_event` SQL 実行
+2. **Phase C 残** — `CHAT_AI_RATE_LIMIT_*` チューニング
 3. **Phase A 任意** — ✦ · participantTier
 4. **Phase D** — 課金接続
 

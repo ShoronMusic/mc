@@ -604,7 +604,7 @@ create policy "user_public_profile_select_visible"
   using (visible_in_rooms = true);
 ```
 
-`favorite_artists` は JSON 配列（文字列のリスト）。アプリ側で最大5件・各80文字程度に制限します。
+`favorite_artists` は JSON 配列（文字列のリスト）。アプリ側で最大10件・各80文字程度に制限します。
 
 ---
 

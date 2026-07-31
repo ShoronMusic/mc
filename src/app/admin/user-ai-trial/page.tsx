@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { AdminMenuBar } from '@/components/admin/AdminMenuBar';
 import { downloadCsvFile } from '@/lib/admin-csv-download';
 import type {
+  AdminAiTrialAbuseEventRow,
   AdminAiTrialConsumptionLogRow,
   AdminTrialRowPhase,
   AdminTrialStatusFilter,
@@ -71,6 +72,8 @@ export default function AdminUserAiTrialPage() {
   const [rows, setRows] = useState<AdminUserAiTrialListRow[]>([]);
   const [total, setTotal] = useState(0);
   const [enforcementEnabled, setEnforcementEnabled] = useState(false);
+  const [abuseEvents, setAbuseEvents] = useState<AdminAiTrialAbuseEventRow[]>([]);
+  const [abuseEventsMissingTable, setAbuseEventsMissingTable] = useState(false);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -115,6 +118,8 @@ export default function AdminUserAiTrialPage() {
       setRows((data?.rows ?? []) as AdminUserAiTrialListRow[]);
       setTotal(Number(data?.total) || 0);
       setEnforcementEnabled(Boolean(data?.enforcementEnabled));
+      setAbuseEvents((data?.abuseEvents ?? []) as AdminAiTrialAbuseEventRow[]);
+      setAbuseEventsMissingTable(Boolean(data?.abuseEventsMissingTable));
     } catch {
       setError('読み込みに失敗しました。');
       setRows([]);
@@ -291,10 +296,48 @@ export default function AdminUserAiTrialPage() {
             </p>
             <p className="mt-1 text-xs text-gray-500">
               クレジット: {overview.creditsEnabled ? (overview.creditsTableMissing ? 'テーブル未作成' : 'ON') : 'OFF'}
+              {' · '}
+              付与拒否 24h: {overview.abuseEventEnabled ? overview.abuseEventsLast24h : '—'}
             </p>
           </div>
         </section>
       )}
+
+      {abuseEventsMissingTable ? (
+        <p className="mb-4 rounded-lg border border-gray-800 bg-gray-950/40 px-3 py-2 text-xs text-gray-400">
+          付与拒否イベント表（`user_ai_trial_abuse_event`）が未作成です。SQL は{' '}
+          <code className="text-gray-300">docs/supabase-user-ai-trial-table.md</code> を参照。
+        </p>
+      ) : null}
+
+      {abuseEvents.length > 0 ? (
+        <section className="mb-6 rounded-xl border border-amber-900/50 bg-amber-950/20 p-4">
+          <h2 className="text-sm font-semibold text-amber-100">付与拒否・不正抑制イベント（直近）</h2>
+          <p className="mt-1 text-xs text-amber-100/70">
+            IP ソフト上限・メール待機での付与拒否。サーバーログにも `[ai-trial-abuse]` で出力されます。
+          </p>
+          <ul className="mt-3 max-h-48 space-y-2 overflow-y-auto text-xs">
+            {abuseEvents.map((ev) => (
+              <li
+                key={ev.id}
+                className="rounded border border-amber-900/40 bg-black/20 px-2 py-1.5 font-mono text-amber-50/90"
+              >
+                <span className="text-amber-200">{formatJst(ev.createdAt)}</span>
+                {' · '}
+                <span>{ev.kind}</span>
+                {' · '}
+                <span className="text-gray-300">{ev.userId.slice(0, 8)}…</span>
+                {ev.clientIp ? (
+                  <>
+                    {' · IP '}
+                    <span>{ev.clientIp}</span>
+                  </>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       <section className="mb-4 flex flex-col gap-3 rounded-xl border border-gray-800 bg-gray-950/40 p-4 sm:flex-row sm:flex-wrap sm:items-end">
         <label className="flex flex-col gap-1 text-xs text-gray-400">

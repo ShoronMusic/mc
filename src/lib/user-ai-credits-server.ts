@@ -125,14 +125,17 @@ export async function loadComposedAiTrialStatus(
   trialRow: UserAiTrialRow | null,
   userId: string,
 ): Promise<AiTrialStatus> {
-  if (!trialRow) {
-    return composeAiTrialStatus(null, 0);
-  }
   if (!isAiCreditsEnabled()) {
+    if (!trialRow) {
+      return composeAiTrialStatus(null, 0);
+    }
     return rowToAiTrialStatus(trialRow);
   }
   const credits = await fetchUserAiCreditsRow(admin, userId);
   if (credits.missingTable) {
+    if (!trialRow) {
+      return composeAiTrialStatus(null, 0);
+    }
     return rowToAiTrialStatus(trialRow);
   }
   const remaining = credits.row

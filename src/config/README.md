@@ -48,3 +48,18 @@
 ```
 
 - 編集後は **再ビルド・再デプロイ** が必要です。
+
+## `artist-search-nicknames.json`
+
+ライブラリ検索（`/api/library/search`・`match-main-artists`）で、**愛称・略称**から既存アーティストに届けるマスタです。
+
+| フィールド | 意味 |
+|-----------|------|
+| `canonical` | 優先表示・`artists.name` / `main_artist` に近い正規表記 |
+| `nameJa` | 和名（任意） |
+| `alsoSearch` | 追加で ilike する別名（任意） |
+| `nicknames` | ドリカム・ミスチルなどの愛称 |
+
+- クエリ**全体**が愛称／和名／正規名に一致したときだけ展開します（「ドリカムの曲」は展開しません）。
+- アプリ側の展開が主。DB の `artists.aliases`（任意列）にも同じ愛称を入れておくと、JSON 未更新でも配列完全一致でヒットできます。SQL は `docs/supabase-songs-and-performances-tables.md` の「アーティスト愛称」節。
+- 編集後は **再ビルド・再デプロイ** が必要です。

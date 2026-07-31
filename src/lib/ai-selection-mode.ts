@@ -30,6 +30,13 @@ export function resolveAiSelectionMode(params: {
     return 'none';
   }
 
+  if (
+    status.phase === 'trial_ip_limited' ||
+    status.phase === 'trial_email_cooling'
+  ) {
+    return 'none';
+  }
+
   if (status.phase === 'credits_active') {
     return 'full';
   }
@@ -41,6 +48,7 @@ export function resolveAiSelectionMode(params: {
   if (
     !status.enforcementEnabled ||
     status.phase === 'preview' ||
+    status.phase === 'trial_eligible' ||
     (status.phase === 'trial_active' && status.songsRemaining > 0)
   ) {
     return 'full';
@@ -66,6 +74,9 @@ export function shouldShowAiDualSelectionButtons(params: {
     aiTrialStatus.creditsRemaining >= AI_CREDIT_COST_PER_SONG
   ) {
     return true;
+  }
+  if (aiTrialStatus.phase === 'trial_eligible') {
+    return aiTrialStatus.songsRemaining > 0;
   }
   return aiTrialStatus.phase === 'trial_active' && aiTrialStatus.songsRemaining > 0;
 }

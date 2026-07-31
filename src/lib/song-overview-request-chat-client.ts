@@ -85,7 +85,9 @@ export async function requestSongOverviewChat(params: {
       data.error === 'trial_exhausted' ||
       data.error === 'credits_exhausted' ||
       data.error === 'email_unconfirmed' ||
-      data.error === 'ai_trial_login_required')
+      data.error === 'ai_trial_login_required' ||
+      data.error === 'ip_soft_cap' ||
+      data.error === 'email_min_age')
   ) {
     return { ok: false, message: data.message.trim() };
   }
