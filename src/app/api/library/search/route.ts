@@ -236,6 +236,7 @@ export async function GET(request: Request) {
   const q = (url.searchParams.get('q') ?? '').trim();
   const limit = clampLimit(url.searchParams.get('limit'));
   const catalog = parseLibraryCatalogFilter(url.searchParams.get('catalog'), defaultLibraryCatalogFilter());
+  const deferDetails = url.searchParams.get('deferDetails') === '1';
 
   await ensureWesternTreatedJpArtistCache(admin);
 
@@ -331,58 +332,62 @@ export async function GET(request: Request) {
   }
 
   let myPlayBySong = new Map<string, number>();
-  try {
-    const supabase = await createClient();
-    if (supabase) {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      const uid = user?.id ?? null;
-      const videoIds = Array.from(songIdByVideo.keys());
-      if (uid && videoIds.length > 0) {
-        const PAGE = 1000;
-        const MAX_SCAN = 12000;
-        let scanned = 0;
-        const myPlayByVideo = new Map<string, number>();
-        for (let offset = 0; ; offset += PAGE) {
-          const { data: rows, error } = await admin
-            .from('room_playback_history')
-            .select('video_id')
-            .eq('user_id', uid)
-            .in('video_id', videoIds)
-            .range(offset, offset + PAGE - 1);
-          if (error) {
-            if (error.code !== '42P01') {
-              console.error('[api/library/search] my_play_count room_playback_history', error);
+  if (!deferDetails) {
+    try {
+      const supabase = await createClient();
+      if (supabase) {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        const uid = user?.id ?? null;
+        const videoIds = Array.from(songIdByVideo.keys());
+        if (uid && videoIds.length > 0) {
+          const PAGE = 1000;
+          const MAX_SCAN = 12000;
+          let scanned = 0;
+          const myPlayByVideo = new Map<string, number>();
+          for (let offset = 0; ; offset += PAGE) {
+            const { data: rows, error } = await admin
+              .from('room_playback_history')
+              .select('video_id')
+              .eq('user_id', uid)
+              .in('video_id', videoIds)
+              .range(offset, offset + PAGE - 1);
+            if (error) {
+              if (error.code !== '42P01') {
+                console.error('[api/library/search] my_play_count room_playback_history', error);
+              }
+              break;
             }
-            break;
+            const batch = (rows ?? []) as { video_id?: string }[];
+            for (const r of batch) {
+              const vid = typeof r.video_id === 'string' ? r.video_id : '';
+              if (!vid) continue;
+              myPlayByVideo.set(vid, (myPlayByVideo.get(vid) ?? 0) + 1);
+            }
+            scanned += batch.length;
+            if (batch.length < PAGE) break;
+            if (scanned >= MAX_SCAN) break;
           }
-          const batch = (rows ?? []) as { video_id?: string }[];
-          for (const r of batch) {
-            const vid = typeof r.video_id === 'string' ? r.video_id : '';
-            if (!vid) continue;
-            myPlayByVideo.set(vid, (myPlayByVideo.get(vid) ?? 0) + 1);
+          for (const [vid, c] of myPlayByVideo.entries()) {
+            const sid = songIdByVideo.get(vid);
+            if (!sid) continue;
+            myPlayBySong.set(sid, (myPlayBySong.get(sid) ?? 0) + c);
           }
-          scanned += batch.length;
-          if (batch.length < PAGE) break;
-          if (scanned >= MAX_SCAN) break;
-        }
-        for (const [vid, c] of myPlayByVideo.entries()) {
-          const sid = songIdByVideo.get(vid);
-          if (!sid) continue;
-          myPlayBySong.set(sid, (myPlayBySong.get(sid) ?? 0) + c);
         }
       }
+    } catch (e) {
+      console.error('[api/library/search] my_play_count exception', e);
     }
-  } catch (e) {
-    console.error('[api/library/search] my_play_count exception', e);
   }
 
   let commentarySongIds = new Set<string>();
-  try {
-    commentarySongIds = await fetchSongIdsWithAiCommentary(admin, ids, videoIdsBySongId);
-  } catch (e) {
-    console.error('[api/library/search] ai_commentary presence', e);
+  if (!deferDetails) {
+    try {
+      commentarySongIds = await fetchSongIdsWithAiCommentary(admin, ids, videoIdsBySongId);
+    } catch (e) {
+      console.error('[api/library/search] ai_commentary presence', e);
+    }
   }
 
   const items: LibrarySongItem[] = songs.map((s) => {
@@ -421,5 +426,6 @@ export async function GET(request: Request) {
     query: q,
     limit,
     catalog,
+    details_deferred: deferDetails,
   });
 }

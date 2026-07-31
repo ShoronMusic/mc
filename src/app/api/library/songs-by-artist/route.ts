@@ -58,6 +58,7 @@ export async function GET(request: Request) {
 
   const sort = parseSort(searchParams.get('sort'));
   const catalog = parseLibraryCatalogFilter(searchParams.get('catalog'), defaultLibraryCatalogFilter());
+  const deferDetails = searchParams.get('deferDetails') === '1';
 
   await ensureWesternTreatedJpArtistCache(admin);
 
@@ -145,32 +146,36 @@ export async function GET(request: Request) {
   }
 
   let myPlayBySong = new Map<string, number>();
-  try {
-    const supabase = await createClient();
-    if (supabase) {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      const uid = user?.id ?? null;
-      const videoIds = Array.from(songIdByVideo.keys());
-      if (uid && videoIds.length > 0) {
-        const myPlayByVideo = await fetchMyPlayCountByVideoIds(admin, uid, videoIds);
-        for (const [vid, c] of myPlayByVideo.entries()) {
-          const sid = songIdByVideo.get(vid);
-          if (!sid) continue;
-          myPlayBySong.set(sid, c);
+  if (!deferDetails) {
+    try {
+      const supabase = await createClient();
+      if (supabase) {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        const uid = user?.id ?? null;
+        const videoIds = Array.from(songIdByVideo.keys());
+        if (uid && videoIds.length > 0) {
+          const myPlayByVideo = await fetchMyPlayCountByVideoIds(admin, uid, videoIds);
+          for (const [vid, c] of myPlayByVideo.entries()) {
+            const sid = songIdByVideo.get(vid);
+            if (!sid) continue;
+            myPlayBySong.set(sid, c);
+          }
         }
       }
+    } catch (e) {
+      console.error('[api/library/songs-by-artist] my_play_count exception', e);
     }
-  } catch (e) {
-    console.error('[api/library/songs-by-artist] my_play_count exception', e);
   }
 
   let commentarySongIds = new Set<string>();
-  try {
-    commentarySongIds = await fetchSongIdsWithAiCommentary(admin, ids, videoIdsBySongId);
-  } catch (e) {
-    console.error('[api/library/songs-by-artist] ai_commentary presence', e);
+  if (!deferDetails) {
+    try {
+      commentarySongIds = await fetchSongIdsWithAiCommentary(admin, ids, videoIdsBySongId);
+    } catch (e) {
+      console.error('[api/library/songs-by-artist] ai_commentary presence', e);
+    }
   }
 
   const items: LibrarySongByArtistItem[] = songs.map((s) => {
@@ -232,5 +237,5 @@ export async function GET(request: Request) {
     return ta.localeCompare(tb, 'en', { sensitivity: 'base' });
   });
 
-  return NextResponse.json({ items, sort, catalog });
+  return NextResponse.json({ items, sort, catalog, details_deferred: deferDetails });
 }

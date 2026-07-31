@@ -1009,6 +1009,8 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
   const librarySongListScrollRef = useRef<HTMLDivElement | null>(null);
   /** 曲一覧の並行リクエストを無効化（キーワード検索 vs アーティスト全曲） */
   const librarySongListRequestIdRef = useRef(0);
+  /** 曲一覧の後続詳細（自分の再生回数・AI解説有無）の古い応答を無効化 */
+  const librarySongDetailsRequestIdRef = useRef(0);
   /** アーティストを素早く切り替えたとき、古い詳細応答を反映しない */
   const libraryArtistInfoRequestIdRef = useRef(0);
   /** 日本語名マッチの実行中／取得済み Promise（入力中と検索実行で同じ語を二重取得しない） */
@@ -1311,11 +1313,57 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
     void runYoutubeKeywordSearch(value.trim());
   };
 
+  /** 基本一覧を表示した後、自分の再生回数と AI 解説有無だけを非同期で差し込む */
+  const loadLibrarySongDetails = useCallback(
+    async (rows: LibrarySongRow[], songListRequestId: number) => {
+      const songIds = rows.map((row) => row.id).filter(Boolean);
+      if (songIds.length === 0) return;
+      const detailsRequestId = ++librarySongDetailsRequestIdRef.current;
+      try {
+        const res = await fetch('/api/library/song-details', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ songIds }),
+        });
+        const data = await res.json().catch(() => null);
+        if (
+          !res.ok ||
+          detailsRequestId !== librarySongDetailsRequestIdRef.current ||
+          songListRequestId !== librarySongListRequestIdRef.current
+        ) {
+          return;
+        }
+        const details = new Map<
+          string,
+          { my_play_count: number | null; has_ai_commentary: boolean }
+        >();
+        for (const item of Array.isArray(data?.items) ? data.items : []) {
+          if (!item || typeof item.id !== 'string') continue;
+          details.set(item.id, {
+            my_play_count:
+              typeof item.my_play_count === 'number' ? item.my_play_count : null,
+            has_ai_commentary: item.has_ai_commentary === true,
+          });
+        }
+        setLibraryRows((current) =>
+          current.map((row) => {
+            const detail = details.get(row.id);
+            return detail ? { ...row, ...detail } : row;
+          }),
+        );
+      } catch {
+        // 付加情報だけの失敗なので、表示済みの基本一覧は維持する。
+      }
+    },
+    [],
+  );
+
   const loadLibraryRows = useCallback(
     async (rawQuery: string) => {
       const q = rawQuery.trim();
       if (!q) return;
       const requestId = ++librarySongListRequestIdRef.current;
+      librarySongDetailsRequestIdRef.current += 1;
       setLibraryLoading(true);
       setLibraryError(null);
       try {
@@ -1323,6 +1371,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
         params.set('q', q);
         params.set('limit', '100');
         params.set('catalog', libraryCatalog);
+        params.set('deferDetails', '1');
         const res = await fetch(`/api/library/search?${params.toString()}`);
         const data = await res.json().catch(() => null);
         if (requestId !== librarySongListRequestIdRef.current) return;
@@ -1362,6 +1411,9 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
               }))
           : [];
         setLibraryRows(rows);
+        if (data?.details_deferred === true) {
+          void loadLibrarySongDetails(rows, requestId);
+        }
         setLibrarySelectedArtistName(null);
         setLibrarySelectedSongId((prev) => (prev && rows.some((r) => r.id === prev) ? prev : null));
       } catch {
@@ -1377,7 +1429,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
         }
       }
     },
-    [libraryCatalog],
+    [libraryCatalog, loadLibrarySongDetails],
   );
 
   const loadLibraryArtists = useCallback(async (): Promise<boolean> => {
@@ -1443,10 +1495,16 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
       const name = artist.trim();
       if (!name) return;
       const requestId = ++librarySongListRequestIdRef.current;
+      librarySongDetailsRequestIdRef.current += 1;
       setLibraryLoading(true);
       setLibraryError(null);
       try {
-        const params = new URLSearchParams({ artist: name, sort: 'release', catalog: libraryCatalog });
+        const params = new URLSearchParams({
+          artist: name,
+          sort: 'release',
+          catalog: libraryCatalog,
+          deferDetails: '1',
+        });
         const res = await fetch(`/api/library/songs-by-artist?${params.toString()}`);
         const data = await res.json().catch(() => null);
         if (requestId !== librarySongListRequestIdRef.current) return;
@@ -1489,6 +1547,9 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
               }))
           : [];
         setLibraryRows(rows);
+        if (data?.details_deferred === true) {
+          void loadLibrarySongDetails(rows, requestId);
+        }
         if (!options?.keepSearchMode) {
           setLibrarySongSource('browse');
         }
@@ -1506,7 +1567,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
         }
       }
     },
-    [libraryCatalog],
+    [libraryCatalog, loadLibrarySongDetails],
   );
 
   const loadLibrarySongVideos = useCallback(async (songId: string) => {

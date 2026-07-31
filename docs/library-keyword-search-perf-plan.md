@@ -3,7 +3,7 @@
 **目的**: 部屋ライブラリ（アーティスト／曲名キーワード検索）の体感遅延を削減する。  
 **対象 UI**: チャット入力のライブラリモーダル（`ChatInput`）  
 **開始**: 2026-07-30  
-**状態**: Phase 1・Phase 2.1/2.5・Phase 3.4 完了。DB 索引適用後の速度改善を確認済み。
+**状態**: Phase 1・Phase 2.1/2.5・Phase 3.4/3.5 完了。DB 索引適用後の速度改善を確認済み。
 
 関連: [`library-feature-spec-ja.md`](./library-feature-spec-ja.md)（機能仕様）／[`supabase-songs-and-performances-tables.md`](./supabase-songs-and-performances-tables.md)（索引定義）
 
@@ -83,7 +83,7 @@
 | 3.2 | 索引キャッシュの **インスタンス間共有**＋ in-flight 一本化 | サーバーレスでの再構築競合を抑制 | 未着手 |
 | 3.3 | 索引レスポンスに日本語名・正規化キーを含め、**入力中照合 API を廃止可能に** | クライアント完結の候補出し | 未着手 |
 | 3.4 | `artist-info` の Music8 を **DB 不足時のみ**、詳細 API の **二重呼び出し解消** | 選択後の待ち削減 | **完了**（2026-07-31） |
-| 3.5 | 検索初回レスポンスから `my_play_count`／AI 解説有無などを **遅延取得** | 初回表示優先 | 未着手 |
+| 3.5 | 検索初回レスポンスから `my_play_count`／AI 解説有無などを **遅延取得** | 初回表示優先 | **完了**（2026-07-31） |
 
 ### Phase 4 — 運用・検証
 
@@ -121,6 +121,15 @@
 | `src/app/api/library/artist-info/route.ts` | DB 情報が十分なら Music8 GCS を取得しない。短期 Cache-Control |
 | `src/lib/music8-artist-json-by-name-server.ts` | 成功 1 時間／不在 5 分キャッシュ、同時取得 Promise の共有 |
 | `src/components/chat/ChatInput.tsx` | 詳細 API の明示呼び出し 3 箇所を廃止し effect へ一本化。古い応答の反映防止 |
+
+### Phase 3.5（2026-07-31）
+
+| ファイル | 内容 |
+|----------|------|
+| `src/app/api/library/song-details/route.ts` | 最大 500 曲の `my_play_count`／AI 解説有無を後続取得 |
+| `src/app/api/library/search/route.ts` | `deferDetails=1` では付加情報を待たず基本一覧を返す |
+| `src/app/api/library/songs-by-artist/route.ts` | アーティスト全曲にも同じ二段階取得を適用 |
+| `src/components/chat/ChatInput.tsx` | 基本一覧を即時反映し、後続詳細を曲 ID で安全にマージ |
 
 同時実行数（現行）:
 
@@ -166,6 +175,20 @@ Supabase へ一度に投げすぎないよう上限を定数化している（�
 → 遅さは **候補アーティスト数 × `songs` の全走査**に比例し、走査が増えるとインスタンス側で不安定化する。  
 ベンチは必ず **3 回以上**測り、軽いクエリ（`beatles`）を対照に置くこと。
 
+### Phase 3.5（二段階取得）の計測
+
+ローカル・同一 DB の単回スモーク（通信・DB 状態で変動するため絶対値ではなく分離効果を見る）:
+
+| 操作 | 従来（全情報） | 基本一覧 | 後続詳細 |
+|------|----------------|----------|----------|
+| `マイケル` 100件 | 約 4.33 s | **約 1.64 s** | 約 0.73 s |
+| `love` 100件 | 約 3.85 s | **約 2.57 s** | 約 0.55 s |
+| Michael Jackson 53曲 | 約 2.94 s | **約 0.62 s** | 約 0.43 s |
+
+- 基本一覧が返った時点で曲名・代表動画・リリース日等を表示する。
+- `my_play_count` と AI 解説アイコンは後続 API 完了時に差し込む。失敗しても基本一覧は維持する。
+- 従来レスポンスと後続 API で AI 解説あり件数が一致（マイケル 18/18、love 11/11、Michael Jackson 14/14）。
+
 検証済み:
 
 - `npx tsc --noEmit` 通過
@@ -176,9 +199,9 @@ Supabase へ一度に投げすぎないよう上限を定数化している（�
 
 ## 7. 推奨の次アクション
 
-1. **Phase 2.1 の SQL を実行**（運用者）… 現状ここが最大のボトルネック。候補アーティストごとの `main_artist ILIKE '%名前%'` が毎回 `songs` を全走査している。
-2. 適用後に §6 を再測し、**`LIBRARY_SEARCH_ARTIST_CONCURRENCY` の引き上げ**と 2.3（RPC 化）の必要性を判断。
-3. **Phase 3.4 選択後 Music8／二重 fetch** … キーワード検索とは別だが、ライブラリ全体の体感に効く。
+1. **Phase 3.1 アーティスト索引の永続集計** … cold start／15分キャッシュ切れ時の全件走査を廃止。
+2. **Phase 3.3 索引へ日本語検索キーを統合** … 入力中の照合 API を削減または廃止。
+3. 幅広い検索語がなお遅い場合のみ **Phase 2.3 RPC 化**を検討。
 
 ---
 
@@ -199,3 +222,4 @@ Supabase へ一度に投げすぎないよう上限を定数化している（�
 | 2026-07-31 | ボトルネックを再測（`love` は候補アーティスト 36 件 → 全走査の反復が支配的）。Phase 2.1 の SQL を `supabase-songs-and-performances-tables.md` に用意。Phase 2.5 クレジット経路の一括化を実装（結果 id 列が完全一致）。2.2 は洋楽扱い判定のため保留と判断。 |
 | 2026-07-31 | 「マイケル」検索で C 列に曲名 `Billie Jean` / `Faith` が出る不具合を修正。原因は `artists.name` に曲名・`name_ja` に本人名が付いた行。照合結果を `song_credits` 先の支配的 `main_artist` へ正規化（`pickCanonicalLibraryMainArtistName`）。 |
 | 2026-07-31 | Phase 2.1 の索引適用後、利用者が検索速度改善を確認。Phase 3.4 を実装。詳細 API 呼び出しを一本化し、DB 情報が十分なアーティストでは Music8 GCS 待ちを廃止。 |
+| 2026-07-31 | Phase 3.5 を実装。基本一覧と `my_play_count`／AI 解説有無を二段階化。`マイケル` は全情報約 4.33s に対し基本一覧約 1.64s、Michael Jackson 全曲は約 2.94s に対し基本一覧約 0.62s。 |
