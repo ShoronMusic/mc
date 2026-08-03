@@ -13,11 +13,12 @@ import {
 import { resolveGuestDisplayNameForJoin, roomDisplayNameValidationMessage } from '@/lib/room-display-name';
 import { setOAuthReturnPathCookie, buildGoogleOAuthSignInOptions } from '@/lib/oauth-return-path';
 import { getBrowserAppOrigin } from '@/lib/app-origin';
-import { getProductDisplayName, IS_MC_PRODUCT } from '@/lib/product-branding';
+import { getProductDisplayName, IS_MC_PRODUCT, MA_TITLE_LOGO_SRC } from '@/lib/product-branding';
 import { MusicChatTitleBrand } from '@/components/home/MusicChatTitleLogo';
 import { rememberGuestRoom, readGuestDisplayNameHint } from '@/lib/guest-room-persistence';
 import { SimpleAuthForm } from './SimpleAuthForm';
 import { AuthErrorBanner } from './AuthErrorBanner';
+import Image from 'next/image';
 
 export {
   GUEST_NAME_STORAGE_KEY,
@@ -225,7 +226,14 @@ export function JoinChoice({ onJoin, roomId, joinVerifying = false }: JoinChoice
           {IS_MC_PRODUCT ? (
             <MusicChatTitleBrand logoClassName="h-20 w-20" />
           ) : (
-            getProductDisplayName()
+            <Image
+              src={MA_TITLE_LOGO_SRC}
+              alt={getProductDisplayName()}
+              width={520}
+              height={520}
+              className="h-auto w-[min(100%,220px)] object-contain"
+              priority
+            />
           )}
         </h1>
         <p className="mb-6 text-center text-sm text-gray-400">

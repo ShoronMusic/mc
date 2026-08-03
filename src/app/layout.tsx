@@ -5,6 +5,7 @@ import GoogleAnalytics from '@/components/analytics/GoogleAnalytics';
 import PwaDisplayModeAnalytics from '@/components/pwa/PwaDisplayModeAnalytics';
 import PwaInstallHint from '@/components/pwa/PwaInstallHint';
 import { McUiAccentThemeSync } from '@/components/mc/McUiAccentThemeSync';
+import { MA_ICON_LOGO_SRC, MUSICCHAT_ICON_LOGO_SRC } from '@/lib/product-branding';
 import { getProductId, getProductTheme, isMcProduct } from '@/lib/product-mode';
 
 /** OAuth 戻りが Site URL 直下に ?code= で付いたとき、React・同意ゲートより先に /auth/callback へ送る */
@@ -46,15 +47,15 @@ export function generateMetadata(): Metadata {
       title: 'Music Chat（β版）',
       description:
         '邦楽も洋楽も、YouTube同期視聴×チャット。完全無料。みんなで選曲して一緒に聴こう。',
-      manifest: '/manifest.webmanifest',
+      manifest: '/manifest-musicchat.webmanifest',
       appleWebApp: {
         capable: true,
         title: 'Music Chat',
         statusBarStyle: 'default',
       },
       icons: {
-        icon: [{ url: '/musicchat_icon.png', type: 'image/png' }],
-        apple: '/musicchat_icon.png',
+        icon: [{ url: MUSICCHAT_ICON_LOGO_SRC, type: 'image/png', sizes: '512x512' }],
+        apple: MUSICCHAT_ICON_LOGO_SRC,
       },
     };
   }
@@ -70,8 +71,8 @@ export function generateMetadata(): Metadata {
       statusBarStyle: 'black-translucent',
     },
     icons: {
-      icon: [{ url: '/Music_AI_Chat_logo_fabicon.png', type: 'image/png' }],
-      apple: '/Music_AI_Chat_logo_fabicon.png',
+      icon: [{ url: MA_ICON_LOGO_SRC, type: 'image/png', sizes: '512x512' }],
+      apple: MA_ICON_LOGO_SRC,
     },
   };
 }

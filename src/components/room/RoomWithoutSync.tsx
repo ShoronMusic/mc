@@ -2705,8 +2705,8 @@ export default function RoomWithoutSync({
             <Image
               src={MA_HEADER_LOGO_SRC}
               alt=""
-              width={527}
-              height={312}
+              width={200}
+              height={200}
               className="h-11 w-auto max-h-11 shrink-0 object-contain object-left sm:h-12 sm:max-h-12"
               priority
             />

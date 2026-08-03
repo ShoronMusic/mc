@@ -1,22 +1,28 @@
 'use client';
 
 import Image from 'next/image';
-import { MUSICCHAT_TITLE_LOGO_SRC, getRoomServiceTagline } from '@/lib/product-branding';
+import {
+  MUSICCHAT_HEADER_LOGO_SRC,
+  MUSICCHAT_TITLE_LOGO_SRC,
+  getRoomServiceTagline,
+} from '@/lib/product-branding';
 
 type MusicChatTitleLogoVariant = 'header' | 'title';
 
 const VARIANTS: Record<
   MusicChatTitleLogoVariant,
-  { width: number; height: number; className: string }
+  { src: string; width: number; height: number; className: string }
 > = {
   header: {
-    width: 40,
-    height: 40,
-    className: 'h-10 w-10 shrink-0 object-contain object-left',
+    src: MUSICCHAT_HEADER_LOGO_SRC,
+    width: 200,
+    height: 106,
+    className: 'h-10 w-auto max-h-10 shrink-0 object-contain object-left sm:h-11 sm:max-h-11',
   },
   title: {
-    width: 120,
-    height: 120,
+    src: MUSICCHAT_TITLE_LOGO_SRC,
+    width: 520,
+    height: 520,
     className: 'h-24 w-24 shrink-0 object-contain lg:h-20 lg:w-20',
   },
 };
@@ -36,7 +42,7 @@ export function MusicChatTitleLogo({
   const size = VARIANTS[variant];
   return (
     <Image
-      src={MUSICCHAT_TITLE_LOGO_SRC}
+      src={size.src}
       alt="Music Chat"
       width={size.width}
       height={size.height}

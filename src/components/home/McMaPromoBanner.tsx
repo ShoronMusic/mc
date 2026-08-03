@@ -7,7 +7,7 @@ import {
   getSisterSiteAccountNoteShort,
   getSisterSiteNameJa,
   IS_MC_PRODUCT,
-  MA_TITLE_LOGO_SRC,
+  MA_MARK_LOGO_SRC,
   MC_MA_PROMO_HEADER,
 } from '@/lib/product-branding';
 
@@ -87,14 +87,30 @@ export function McMaPromoHeaderBanner({ className = '' }: { className?: string }
           </svg>
         ) : null}
         <Image
-          src={MA_TITLE_LOGO_SRC}
+          src={MA_MARK_LOGO_SRC}
           alt=""
-          width={36}
-          height={36}
+          width={80}
+          height={80}
           className="relative z-[1] h-9 w-9 shrink-0 object-contain"
         />
         <span className="mc-ma-promo-header-copy relative z-[1] min-w-0 text-left text-[10px] leading-snug sm:text-[11px]">
-          <span className="mc-ma-promo-header-title block font-medium">AIの曲解説や選曲参加で一人でも楽しめる！</span>
+          <span className="mc-ma-promo-header-title flex items-center gap-1.5 font-medium">
+            <span className="min-w-0">AIの曲解説や選曲参加で一人でも楽しめる！</span>
+            <span
+              className="mc-ma-promo-header-go inline-flex shrink-0 items-center gap-0.5 text-[9px] font-bold tracking-wide sm:text-[10px]"
+              aria-hidden
+            >
+              GO
+              <svg
+                viewBox="0 0 8 10"
+                className="h-2.5 w-2"
+                fill="currentColor"
+                aria-hidden
+              >
+                <path d="M0 0 L8 5 L0 10 Z" />
+              </svg>
+            </span>
+          </span>
           <span className="mc-ma-promo-header-sub">
             {maName}
             <span className="mc-ma-promo-header-muted"> — 姉妹サイト・同じアカウントで利用可</span>

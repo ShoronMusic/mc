@@ -95,14 +95,26 @@ export function getMcTopSubtitle(): string {
     : '部屋を選んで入室してください';
 }
 
-/** mc タイトルロゴ（`public/musicchat_icon.png`） */
-export const MUSICCHAT_TITLE_LOGO_SRC = '/musicchat_icon.png';
+/** mc トップ等のタイトルロゴ（520px） */
+export const MUSICCHAT_TITLE_LOGO_SRC = '/logo/Music_Chat_logo_520px.png';
 
-/** ma タイトル／ヘッダーロゴ（テスト: Music_AI_Chat_logo_2_wh_5） */
-export const MA_TITLE_LOGO_SRC = '/Music_AI_Chat_logo_2_wh_5.png';
+/** mc 部屋ヘッダー・小サイズ用（200px） */
+export const MUSICCHAT_HEADER_LOGO_SRC = '/logo/Music_Chat_logo_200px.png';
 
-/** ma 部屋ヘッダー用（現状はタイトルと同ファイル） */
-export const MA_HEADER_LOGO_SRC = MA_TITLE_LOGO_SRC;
+/** mc ファビコン・ブックマーク・PWA アイコン */
+export const MUSICCHAT_ICON_LOGO_SRC = '/logo/Music_Chat_logo_fabicon.png';
+
+/** ma トップ等のタイトルロゴ（白・520px） */
+export const MA_TITLE_LOGO_SRC = '/logo/Music_AI_Chat_logo_wh_520px.png';
+
+/** ma 部屋ヘッダー・小サイズ用（白・200px） */
+export const MA_HEADER_LOGO_SRC = '/logo/Music_AI_Chat_logo_wh_200px.png';
+
+/** ma ファビコン・ブックマーク・PWA アイコン */
+export const MA_ICON_LOGO_SRC = '/logo/Music_AI_Chat_logo_wh_fabicon.png';
+
+/** ma バナー等のマークのみ（白・テキストなし） */
+export const MA_MARK_LOGO_SRC = '/logo/Music_AI_Chat_logo_only_wh.png';
 
 /** チャット進行メッセージの表示名（選曲アナウンス・順番案内等。曲解説 AI とは別） */
 export function getRoomProgressChatDisplayName(): string {

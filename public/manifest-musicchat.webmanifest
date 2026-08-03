@@ -1,14 +1,14 @@
 {
-  "id": "https://musicai.jp/",
-  "name": "洋楽AIチャット（β版）",
-  "short_name": "洋楽AIチャット",
-  "description": "YouTube同時視聴×チャットで洋楽を楽しむ。AIが選曲の進行と曲解説をサポート。",
+  "id": "https://musicchat.jp/",
+  "name": "Music Chat（β版）",
+  "short_name": "Music Chat",
+  "description": "邦楽も洋楽も、YouTube同期視聴×チャット。完全無料。みんなで選曲して一緒に聴こう。",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#222222",
-  "theme_color": "#222222",
+  "background_color": "#fafafa",
+  "theme_color": "#fafafa",
   "lang": "ja",
   "share_target": {
     "action": "/share",
@@ -22,13 +22,13 @@
   },
   "icons": [
     {
-      "src": "/logo/Music_AI_Chat_logo_wh_fabicon.png",
+      "src": "/logo/Music_Chat_logo_fabicon.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/logo/Music_AI_Chat_logo_wh_fabicon.png",
+      "src": "/logo/Music_Chat_logo_fabicon.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"

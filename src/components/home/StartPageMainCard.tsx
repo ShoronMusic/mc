@@ -28,9 +28,9 @@ function StartPageTitle() {
           <Image
             src={MA_TITLE_LOGO_SRC}
             alt={getProductDisplayName()}
-            width={527}
-            height={312}
-            className="h-auto w-[min(100%,280px)] object-contain"
+            width={520}
+            height={520}
+            className="h-auto w-[min(100%,220px)] object-contain"
             priority
           />
         )}
