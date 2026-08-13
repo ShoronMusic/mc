@@ -25,6 +25,10 @@ export type LibraryArtistAutoplayRequest = {
   orderLabel?: string;
   /** null / 未指定は一覧の先頭から開始 */
   startVideoId?: string | null;
+  /** 特集ページ経由 */
+  featuredPageId?: string;
+  featuredAiUsageFree?: boolean;
+  featuredPageTitle?: string;
 };
 
 export type LibrarySongListSortKey =
@@ -119,12 +123,16 @@ export function buildLibraryArtistAutoplayLaunch(params: LibraryArtistAutoplayRe
   if (songs.length === 0) return null;
 
   const orderLabel = params.orderLabel?.trim() || '一覧の並び順';
+  const featuredTitle = params.featuredPageTitle?.trim();
+  const sourceLabel = featuredTitle ? `特集「${featuredTitle}」` : 'ライブラリ';
   const state = createMusic8PlaylistAutoplayState({
     slug: libraryArtistAutoplaySlug(artistName),
     title: artistName,
-    sourceLabel: 'ライブラリ',
+    sourceLabel,
     orderLabel,
     songs,
+    featuredPageId: params.featuredPageId?.trim() || undefined,
+    featuredAiUsageFree: params.featuredAiUsageFree === true,
   });
   if (!state) return null;
 

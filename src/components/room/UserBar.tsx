@@ -173,6 +173,13 @@ interface UserBarProps {
   playlistAutoplayActive?: boolean;
   /** 連続再生の次曲へ（キューは維持） */
   onSkipPlaylistTrack?: () => void;
+  /**
+   * 連続再生中の曲ジャンプモーダルを開く（ライブラリ／再生リスト共通）。
+   * `playlistSongPickLabel` でボタン表記を切り替える。
+   */
+  onOpenPlaylistSongPick?: () => void;
+  /** 「ライブラリ」または「再生リスト」 */
+  playlistSongPickLabel?: string;
   /** 次の選曲ターン（再生終了後に仮アクティブとして表示するため） */
   nextTurnClientId?: string;
   /** チャットオーナー基準の選曲ラウンド数（同期部屋。未指定は 1） */
@@ -277,6 +284,8 @@ export default function UserBar({
   skipCurrentTrackDisabled = false,
   playlistAutoplayActive = false,
   onSkipPlaylistTrack,
+  onOpenPlaylistSongPick,
+  playlistSongPickLabel = 'ライブラリ',
   onSkipCurrentTrack,
   onManageSongReservation,
   onOwnerPickSelector,
@@ -301,6 +310,29 @@ export default function UserBar({
   const skipTrackButtons = (opts: { forCurrentPoster: boolean; className?: string }) => {
     if (!opts.forCurrentPoster) return null;
     const wrapClass = opts.className ?? 'mt-0.5 flex flex-wrap items-center gap-1';
+    const songPickLabel = playlistSongPickLabel.trim() || 'ライブラリ';
+    const libraryBtnActive =
+      playlistAutoplayActive && skipCurrentTrackActive && onOpenPlaylistSongPick ? (
+        <button
+          type="button"
+          onClick={onOpenPlaylistSongPick}
+          className="rounded border border-sky-600/70 bg-sky-950/45 px-2 py-0.5 text-[10px] font-medium leading-tight text-sky-100 hover:bg-sky-900/55"
+          aria-label={`${songPickLabel}の曲リストを開く`}
+          title={`${songPickLabel}の曲リストから前の曲や別の曲を指定して再生します`}
+        >
+          {songPickLabel}
+        </button>
+      ) : null;
+    const libraryBtnDisabled =
+      playlistAutoplayActive && skipCurrentTrackDisabled && onOpenPlaylistSongPick ? (
+        <span
+          className="inline-flex rounded border border-gray-700 bg-gray-800/50 px-2 py-0.5 text-[10px] font-medium leading-tight text-gray-500"
+          aria-hidden
+          title="選曲した方かチャットオーナーのみ使えます"
+        >
+          {songPickLabel}
+        </span>
+      ) : null;
     const nextBtn =
       playlistAutoplayActive && skipCurrentTrackActive && onSkipPlaylistTrack ? (
         <button
@@ -316,6 +348,7 @@ export default function UserBar({
     if (skipCurrentTrackActive && onSkipCurrentTrack) {
       return (
         <span className={wrapClass}>
+          {libraryBtnActive}
           {nextBtn}
           <button
             type="button"
@@ -340,6 +373,7 @@ export default function UserBar({
     if (skipCurrentTrackDisabled) {
       return (
         <span className={wrapClass}>
+          {libraryBtnDisabled}
           {playlistAutoplayActive ? (
             <span
               className="inline-flex rounded border border-gray-700 bg-gray-800/50 px-2 py-0.5 text-[10px] font-medium leading-tight text-gray-500"
@@ -359,7 +393,15 @@ export default function UserBar({
         </span>
       );
     }
-    return nextBtn ? <span className={wrapClass}>{nextBtn}</span> : null;
+    if (libraryBtnActive || nextBtn) {
+      return (
+        <span className={wrapClass}>
+          {libraryBtnActive}
+          {nextBtn}
+        </span>
+      );
+    }
+    return null;
   };
 
   const participantNamesTitle =

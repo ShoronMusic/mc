@@ -98,10 +98,17 @@ export async function resolveJapaneseDomesticWithMusicBrainz(
 
 /**
  * comment-pack の邦楽節約と同条件（COMMENT_PACK_JP_ECONOMY=0 のときは常に false）。
+ * 同一選曲で domestic を既に取っているときは {@link japaneseEconomyFromDomestic} を使い、MB 二重呼び出しを避ける。
  */
 export async function resolveJapaneseEconomyWithMusicBrainz(
   opts: JapaneseEconomyMetadataInput,
 ): Promise<boolean> {
   if (process.env.COMMENT_PACK_JP_ECONOMY === '0') return false;
   return resolveJapaneseDomesticWithMusicBrainz(opts);
+}
+
+/** domestic 判定結果から economy フラグを派生（追加の MusicBrainz 呼び出しなし） */
+export function japaneseEconomyFromDomestic(isDomestic: boolean): boolean {
+  if (process.env.COMMENT_PACK_JP_ECONOMY === '0') return false;
+  return isDomestic;
 }

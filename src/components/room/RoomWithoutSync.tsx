@@ -96,6 +96,7 @@ import {
   advanceMusic8PlaylistAutoplay,
   createMusic8PlaylistAutoplayState,
   formatMusic8PlaylistFinishedMessage,
+  formatMusic8PlaylistJumpMessage,
   formatMusic8PlaylistManualNextMessage,
   formatMusic8PlaylistSkipUnplayableMessage,
   formatMusic8PlaylistStartMessage,
@@ -104,12 +105,16 @@ import {
   getMusic8PlaylistCurrentSong,
   isMusic8PlaylistAutoplayCurrentVideo,
   isYoutubePlayerErrorWorthPlaylistSkip,
+  jumpMusic8PlaylistAutoplay,
+  playlistAutoplaySongPickButtonLabel,
+  playlistAutoplaySongPickModalHeading,
   type Music8PlaylistAutoplayState,
 } from '@/lib/music8-playlist-autoplay';
 import {
   buildLibraryArtistAutoplayLaunch,
   type LibraryArtistAutoplayRequest,
 } from '@/lib/library-artist-autoplay';
+import { PlaylistAutoplaySongPickModal } from '@/components/chat/PlaylistAutoplaySongPickModal';
 import { isYoutubeKeywordSearchEnabled } from '@/lib/youtube-keyword-search-ui';
 import { extractCharacterSongPickResolvedYoutube } from '@/lib/character-song-pick-youtube';
 import {
@@ -486,11 +491,18 @@ export default function RoomWithoutSync({
   } | null>(null);
   /** Music8 プレイリスト連続再生（専用キュー・予約キューとは別） */
   const music8PlaylistAutoplayRef = useRef<Music8PlaylistAutoplayState | null>(null);
-  const [playlistAutoplayUiActive, setPlaylistAutoplayUiActive] = useState(false);
+  const [playlistAutoplayUi, setPlaylistAutoplayUi] = useState<Music8PlaylistAutoplayState | null>(
+    null,
+  );
+  const [playlistSongPickOpen, setPlaylistSongPickOpen] = useState(false);
   const assignMusic8PlaylistAutoplay = useCallback((next: Music8PlaylistAutoplayState | null) => {
     music8PlaylistAutoplayRef.current = next;
-    setPlaylistAutoplayUiActive(Boolean(next));
+    setPlaylistAutoplayUi(next);
+    if (!next) setPlaylistSongPickOpen(false);
   }, []);
+  const playlistAutoplayUiActive = Boolean(playlistAutoplayUi);
+  const playlistSongPickLabel = playlistAutoplaySongPickButtonLabel(playlistAutoplayUi);
+  const playlistSongPickHeading = playlistAutoplaySongPickModalHeading(playlistAutoplayUi);
   const music8PlaylistSkipErrorVideoIdRef = useRef<string | null>(null);
   const skipMusic8PlaylistOnPlayerErrorRef = useRef<(errorCode: number) => void>(() => {});
   const userRoomAiCommentaryEnabledRef = useRef(DEFAULT_USER_ROOM_AI_COMMENTARY_ENABLED);
@@ -840,6 +852,19 @@ export default function RoomWithoutSync({
   const stopPlaylistAutoplayOnSkipRef = useRef<() => void>(() => {});
   const handleSkipPlaylistTrack = useCallback(() => {
     skipPlaylistTrackManualRef.current();
+  }, []);
+
+  const handleOpenPlaylistLibrary = useCallback(() => {
+    const ap = music8PlaylistAutoplayRef.current;
+    if (!ap) return;
+    const vid = videoIdRef.current;
+    if (!vid || !isMusic8PlaylistAutoplayCurrentVideo(ap, vid)) return;
+    setPlaylistSongPickOpen(true);
+  }, []);
+
+  const handleJumpPlaylistSongRef = useRef<(videoId: string) => void>(() => {});
+  const handleJumpPlaylistSong = useCallback((videoIdToPlay: string) => {
+    handleJumpPlaylistSongRef.current(videoIdToPlay);
   }, []);
 
   const addSystemMessage = useCallback((body: string, searchQueryOrOpts?: SystemMessageOptions) => {
@@ -1250,6 +1275,15 @@ export default function RoomWithoutSync({
         return;
       }
       if (isDevMinimalSongAi()) {
+        const featuredAp = music8PlaylistAutoplayRef.current;
+        const featuredPageId =
+          featuredAp?.featuredAiUsageFree && featuredAp.featuredPageId
+            ? featuredAp.featuredPageId
+            : '';
+        const featuredArtistName =
+          featuredPageId && featuredAp
+            ? (getMusic8PlaylistCurrentSong(featuredAp)?.artist || featuredAp.title || '').trim()
+            : '';
         fetch('/api/ai/comment-pack', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1264,6 +1298,9 @@ export default function RoomWithoutSync({
               body: typeof m.body === 'string' ? m.body : '',
               messageType: m.messageType ?? 'user',
             })),
+            ...(featuredPageId && featuredArtistName
+              ? { featuredPageId, featuredArtistName }
+              : {}),
           }),
         })
           .then((r) => (r.ok ? r.json() : null))
@@ -1419,10 +1456,27 @@ export default function RoomWithoutSync({
           });
         return;
       }
+      const featuredAp = music8PlaylistAutoplayRef.current;
+      const featuredPageId =
+        featuredAp?.featuredAiUsageFree && featuredAp.featuredPageId
+          ? featuredAp.featuredPageId
+          : '';
+      const featuredArtistName =
+        featuredPageId && featuredAp
+          ? (getMusic8PlaylistCurrentSong(featuredAp)?.artist || featuredAp.title || '').trim()
+          : '';
       fetch('/api/ai/commentary', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ videoId: vid, roomId, aiMode: selectionAiMode, isGuest }),
+        body: JSON.stringify({
+          videoId: vid,
+          roomId,
+          aiMode: selectionAiMode,
+          isGuest,
+          ...(featuredPageId && featuredArtistName
+            ? { featuredPageId, featuredArtistName }
+            : {}),
+        }),
       })
         .then((r) => (r.ok ? r.json() : null))
         .then((data) => {
@@ -1732,6 +1786,47 @@ export default function RoomWithoutSync({
     ],
   );
 
+  handleJumpPlaylistSongRef.current = (videoIdToPlay: string) => {
+    const ap = music8PlaylistAutoplayRef.current;
+    if (!ap) return;
+    const vid = videoIdRef.current;
+    if (!vid || !isMusic8PlaylistAutoplayCurrentVideo(ap, vid)) return;
+
+    const targetId = videoIdToPlay.trim();
+    const index = ap.songs.findIndex((s) => s.videoId === targetId);
+    if (index < 0) return;
+
+    if (index === ap.index && targetId === vid) {
+      setPlaylistSongPickOpen(false);
+      return;
+    }
+
+    const jumped = jumpMusic8PlaylistAutoplay(ap, index);
+    if (!jumped) return;
+    const song = getMusic8PlaylistCurrentSong(jumped);
+    if (!song) return;
+
+    if (songQuizFetchTimeoutRef.current) {
+      clearTimeout(songQuizFetchTimeoutRef.current);
+      songQuizFetchTimeoutRef.current = null;
+    }
+    if (nextSongRecommendTimeoutRef.current) {
+      clearTimeout(nextSongRecommendTimeoutRef.current);
+      nextSongRecommendTimeoutRef.current = null;
+    }
+    if (themePlaylistBlurbTimeoutRef.current) {
+      clearTimeout(themePlaylistBlurbTimeoutRef.current);
+      themePlaylistBlurbTimeoutRef.current = null;
+    }
+
+    setPlaylistSongPickOpen(false);
+    assignMusic8PlaylistAutoplay(jumped);
+    addSystemMessage(formatMusic8PlaylistJumpMessage(jumped));
+    const trackMsg = formatMusic8PlaylistTrackMessage(jumped);
+    if (trackMsg) addSystemMessage(trackMsg);
+    playMusic8PlaylistVideoLocal(song.videoId, { withAi: true });
+  };
+
   advanceMusic8PlaylistOnEndedRef.current = () => {
     const ap = music8PlaylistAutoplayRef.current;
     if (!ap) return;
@@ -1964,6 +2059,9 @@ export default function RoomWithoutSync({
         songs: params.songs,
         orderLabel: params.orderLabel,
         startVideoId: params.startVideoId,
+        featuredPageId: params.featuredPageId,
+        featuredAiUsageFree: params.featuredAiUsageFree,
+        featuredPageTitle: params.featuredPageTitle,
         maxSongs: chatStyleAdminTools ? null : undefined,
       });
       if (!launch) {
@@ -2797,10 +2895,24 @@ export default function RoomWithoutSync({
           onSkipCurrentTrack={handleSkipCurrentTrack}
           playlistAutoplayActive={playlistAutoplayUiActive}
           onSkipPlaylistTrack={handleSkipPlaylistTrack}
+          onOpenPlaylistSongPick={
+            playlistAutoplayUiActive ? handleOpenPlaylistLibrary : undefined
+          }
+          playlistSongPickLabel={playlistSongPickLabel}
           participants={[{ clientId: 'local-client', displayName: displayNameProp, textColor: userTextColor, yellowCards }]}
           myClientId="local-client"
+          currentSongPosterClientId="local-client"
         />
       </section>
+
+      {playlistSongPickOpen && playlistAutoplayUi ? (
+        <PlaylistAutoplaySongPickModal
+          state={playlistAutoplayUi}
+          heading={playlistSongPickHeading}
+          onCancel={() => setPlaylistSongPickOpen(false)}
+          onConfirm={handleJumpPlaylistSong}
+        />
+      ) : null}
 
       <SiteFeedbackModal
         open={siteFeedbackOpen}

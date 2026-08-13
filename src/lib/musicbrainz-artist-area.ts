@@ -18,6 +18,11 @@ const MIN_INTERVAL_MS = 1100;
 let lastRequestTime = 0;
 let throttleChain: Promise<unknown> = Promise.resolve();
 
+/** 同一アーティスト名の Japan 判定を短時間メモ化（選曲内の多重呼び出し・frees 並列対策） */
+const artistJapanResultCache = new Map<string, { value: boolean; expiresAt: number }>();
+const ARTIST_JAPAN_CACHE_TTL_MS = 30 * 60 * 1000;
+const ARTIST_JAPAN_CACHE_MAX = 400;
+
 /** recording 検索など他モジュールと共有（1 req/s 遵守） */
 export function scheduleMusicBrainzRequest<T>(fn: () => Promise<T>): Promise<T> {
   const next = throttleChain.then(async () => {
@@ -84,6 +89,11 @@ export async function isJapaneseArtistByMusicBrainzLookup(artistName: string | n
   const q = typeof artistName === 'string' ? artistName.trim() : '';
   if (q.length < 2 || q.length > 200) return false;
 
+  const cacheKey = q.toLowerCase();
+  const now = Date.now();
+  const cached = artistJapanResultCache.get(cacheKey);
+  if (cached && cached.expiresAt > now) return cached.value;
+
   const query = buildArtistSearchQuery(q);
   if (!query) return false;
 
@@ -105,12 +115,23 @@ export async function isJapaneseArtistByMusicBrainzLookup(artistName: string | n
       return (await res.json()) as SearchResponse;
     });
 
-    if (!data?.artists?.length) return false;
-
-    const MIN_SCORE = 85;
-    const top = data.artists[0];
-    if (!top || typeof top.score !== 'number') return false;
-    return musicBrainzHitIndicatesJapan(top, MIN_SCORE);
+    let result = false;
+    if (data?.artists?.length) {
+      const MIN_SCORE = 85;
+      const top = data.artists[0];
+      if (top && typeof top.score === 'number') {
+        result = musicBrainzHitIndicatesJapan(top, MIN_SCORE);
+      }
+    }
+    if (artistJapanResultCache.size >= ARTIST_JAPAN_CACHE_MAX) {
+      const first = artistJapanResultCache.keys().next().value;
+      if (first !== undefined) artistJapanResultCache.delete(first);
+    }
+    artistJapanResultCache.set(cacheKey, {
+      value: result,
+      expiresAt: now + ARTIST_JAPAN_CACHE_TTL_MS,
+    });
+    return result;
   } catch (e) {
     console.warn('[musicbrainz-artist-area] lookup failed', e instanceof Error ? e.message : e);
     return false;

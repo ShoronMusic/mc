@@ -1,4 +1,4 @@
-#requires -Version 5.1
+﻿#requires -Version 5.1
 <#
 .SYNOPSIS
   同世代並列: m8 JSON 生成 → GCS rsync → mc Supabase 差分適用

@@ -49,6 +49,11 @@ export type MbReleaseGroupSummary = {
 const MIN_RECORDING_SCORE = 88;
 const SEARCH_LIMIT = '8';
 
+/** 同一 artist+title の事実ブロックを短時間メモ化（base→frees・多重呼び出し対策） */
+const factsBlockCache = new Map<string, { value: string | null; expiresAt: number }>();
+const FACTS_CACHE_TTL_MS = 30 * 60 * 1000;
+const FACTS_CACHE_MAX = 200;
+
 function extractYear(iso: string | null | undefined): string | null {
   if (!iso || typeof iso !== 'string') return null;
   const m = iso.match(/^(\d{4})/);
@@ -172,6 +177,11 @@ export async function fetchMusicBrainzCommentaryFactsBlock(
   const t = recordingTitle.trim();
   if (a.length < 2 || t.length < 1 || a.length > 200 || t.length > 200) return null;
 
+  const cacheKey = `${a.toLowerCase()}\n${t.toLowerCase()}`;
+  const now = Date.now();
+  const cached = factsBlockCache.get(cacheKey);
+  if (cached && cached.expiresAt > now) return cached.value;
+
   const aq = escapeLucenePhrase(a);
   const tq = escapeLucenePhrase(t);
   if (!aq || !tq) return null;
@@ -180,6 +190,15 @@ export async function fetchMusicBrainzCommentaryFactsBlock(
   url.searchParams.set('query', `artist:"${aq}" AND recording:"${tq}"`);
   url.searchParams.set('fmt', 'json');
   url.searchParams.set('limit', SEARCH_LIMIT);
+
+  const store = (value: string | null) => {
+    if (factsBlockCache.size >= FACTS_CACHE_MAX) {
+      const first = factsBlockCache.keys().next().value;
+      if (first !== undefined) factsBlockCache.delete(first);
+    }
+    factsBlockCache.set(cacheKey, { value, expiresAt: now + FACTS_CACHE_TTL_MS });
+    return value;
+  };
 
   try {
     const data = await scheduleMusicBrainzRequest(async () => {
@@ -190,13 +209,13 @@ export async function fetchMusicBrainzCommentaryFactsBlock(
       if (!res.ok) return null;
       return (await res.json()) as RecordingSearchJson;
     });
-    if (!data?.recordings?.length) return null;
+    if (!data?.recordings?.length) return store(null);
 
     const raw = extractReleaseGroupsFromRecordingSearch(data);
     const filtered = filterReleaseGroupsForCommentary(raw);
-    if (!filtered.length) return null;
+    if (!filtered.length) return store(null);
     const sorted = sortReleaseGroupsForCommentary(filtered);
-    return formatMusicBrainzFactsBlock(sorted);
+    return store(formatMusicBrainzFactsBlock(sorted));
   } catch (e) {
     console.warn(
       '[musicbrainz-commentary-facts] fetch failed',

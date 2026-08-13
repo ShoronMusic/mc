@@ -1,0 +1,33 @@
+﻿**********************
+Windows PowerShell トランスクリプト開始
+開始時刻: 20260803103450
+ユーザー名: G15-5535\maeha
+RunAs ユーザー: G15-5535\maeha
+構成名: 
+コンピューター: G15-5535 (Microsoft Windows NT 10.0.26200.0)
+ホスト アプリケーション: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -ExecutionPolicy Bypass -NonInteractive -File C:\Users\maeha\AppData\Local\Temp\ps-script-00fbae1a-55b8-4c81-a1d8-ccc40e4e7653.ps1
+プロセス ID: 30948
+PSVersion: 5.1.26100.8875
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.26100.8875
+BuildVersion: 10.0.26100.8875
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+[1/3] diff plan
+[log] step -> E:\mc\tmp\music8-parallel-sync-logs\2026-08-03T10-22-23\02-mc-supabase\01-diff-plan.log
+[log] live output -> console + E:\mc\tmp\music8-parallel-sync-logs\2026-08-03T10-22-23\02-mc-supabase\transcript.log (not E:\mc\tmp\music8-parallel-sync-logs\2026-08-03T10-22-23\02-mc-supabase\01-diff-plan.log until end)
+
+[2/3] skipped (-SkipDryRun)
+[3/3] apply (DB update)
+[3/3] real-delta-only: new artists + fingerprint-stale songs only
+[log] step -> E:\mc\tmp\music8-parallel-sync-logs\2026-08-03T10-22-23\02-mc-supabase\03-apply-db.log
+[log] live output -> console + E:\mc\tmp\music8-parallel-sync-logs\2026-08-03T10-22-23\02-mc-supabase\transcript.log (not E:\mc\tmp\music8-parallel-sync-logs\2026-08-03T10-22-23\02-mc-supabase\03-apply-db.log until end)
+
+[log] done. combined=E:\mc\tmp\music8-parallel-sync-logs\2026-08-03T10-22-23\02-mc-supabase\run.log errors=E:\mc\tmp\music8-parallel-sync-logs\2026-08-03T10-22-23\02-mc-supabase\run-errors.log transcript=E:\mc\tmp\music8-parallel-sync-logs\2026-08-03T10-22-23\02-mc-supabase\transcript.log
+**********************
+Windows PowerShell トランスクリプト終了
+終了時刻: 20260803111117
+**********************

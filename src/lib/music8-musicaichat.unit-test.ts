@@ -116,7 +116,7 @@ test('Music8 listing boilerplate is stripped from facts block and song extract',
   assert.match(ex.description, /ボーカル/);
 });
 
-test('shouldRegenerateLibraryWhenMusicaichatSong: default on when song JSON and inject on', () => {
+test('shouldRegenerateLibraryWhenMusicaichatSong: default off; opt-in with 1', () => {
   const song = { stable_key: { artist_slug: 'a', song_slug: 'b' } };
   const prev = process.env.COMMENT_PACK_REGENERATE_LIBRARY_WHEN_MUSIC8;
   const prevInject = process.env.COMMENT_PACK_INJECT_MUSIC8_FACTS;
@@ -124,6 +124,8 @@ test('shouldRegenerateLibraryWhenMusicaichatSong: default on when song JSON and 
     delete process.env.COMMENT_PACK_REGENERATE_LIBRARY_WHEN_MUSIC8;
     delete process.env.COMMENT_PACK_INJECT_MUSIC8_FACTS;
     assert.equal(skipMusic8FactInjectEnv(), false);
+    assert.equal(shouldRegenerateLibraryWhenMusicaichatSong(song, false), false);
+    process.env.COMMENT_PACK_REGENERATE_LIBRARY_WHEN_MUSIC8 = '1';
     assert.equal(shouldRegenerateLibraryWhenMusicaichatSong(song, false), true);
     process.env.COMMENT_PACK_REGENERATE_LIBRARY_WHEN_MUSIC8 = '0';
     assert.equal(shouldRegenerateLibraryWhenMusicaichatSong(song, false), false);

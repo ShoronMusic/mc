@@ -208,6 +208,16 @@ assert.equal(isSupergroupByManualHints('Traveling Wilburys'), true);
   assert.equal(r.artistDisplay, 'The-Dream, Usher');
   assert.equal(r.song, 'Tampa');
 }
+{
+  const r = getArtistAndSong('BAND - MAID - DOMINATION', null);
+  assert.equal(r.artistDisplay, 'BAND-MAID');
+  assert.equal(r.song, 'DOMINATION');
+}
+{
+  const r = getArtistAndSong('BAND-MAID - DOMINATION', null);
+  assert.equal(r.artistDisplay, 'BAND-MAID');
+  assert.equal(r.song, 'DOMINATION');
+}
 
 // クォート曲名の後ろに Official MV / Choreography などが続いても抽出できる
 {

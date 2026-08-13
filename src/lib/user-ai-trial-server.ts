@@ -474,6 +474,11 @@ export async function guardAiTrialSongSelection(params: {
   consume?: boolean;
   roomId?: string;
   videoId?: string;
+  /**
+   * 特集ページの AI 無料（サーバーで検証済み）。
+   * ログイン・メール確認・aiMode=full のみ見て、残枠・クレジットは不問。
+   */
+  promoAiFree?: boolean;
 }): Promise<AiTrialGuardAllow | AiTrialGuardDeny> {
   if (params.user?.id && isAiUnlimitedUserId(params.user.id)) {
     return { ok: true };
@@ -500,6 +505,10 @@ export async function guardAiTrialSongSelection(params: {
 
   if (aiMode !== 'full') {
     return trialDenied('ai_mode_none', 'この選曲は AI なしモードです。');
+  }
+
+  if (params.promoAiFree === true) {
+    return { ok: true, source: 'trial' };
   }
 
   const admin = createAdminClient();
@@ -591,11 +600,16 @@ export async function commitAiTrialSongSelection(params: {
   clientIp?: string;
   roomId?: string;
   videoId?: string;
+  /** 特集 AI 無料（検証済み）。消費しない。 */
+  promoAiFree?: boolean;
 }): Promise<AiTrialGuardAllow | AiTrialGuardDeny> {
   if (params.user?.id && isAiUnlimitedUserId(params.user.id)) {
     return { ok: true };
   }
   if (!isAiTrialEnforcementEnabled()) {
+    return { ok: true };
+  }
+  if (params.promoAiFree === true) {
     return { ok: true };
   }
   if (!params.user?.id) {

@@ -1120,3 +1120,15 @@ on conflict (name_key) do nothing;
 - **管理画面** `/admin/room-daily-summary`: プロダクトフィルタ対応。
 
 **product 列未実行時**: 従来どおり ma 扱いの1行保存（後方互換）。
+
+---
+
+## 30. 特集ページ（`featured_pages` / `featured_page_artists`）
+
+フェス等の特集を管理画面で作成し、ライブラリのアーティストをスタイル（Pop / Dance / … 9種）別に載せます。公開中の特集は部屋チャットに「ライブラリ」と同列のボタンが出て、アーティスト全曲選曲と同じ流れで連続再生できます。`ai_usage_free` を ON にすると、特集モーダル経由の AI 付き選曲はお試し枠・クレジットを消費しません。
+
+**SQL:** `docs/supabase-featured-pages-tables.md` を Supabase SQL Editor で実行してください。
+
+- **管理**: `/admin/featured-pages`
+- **公開 API**: `GET /api/featured-pages`（一覧・`?id=` / `?slug=`）
+- **部屋 UI**: `ChatInput` の特集ボタン → `FeaturedPageModal`

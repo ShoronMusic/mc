@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { fetchOEmbed } from '@/lib/youtube-oembed';
 import { isJpDomesticOfficialChannelAiException } from '@/lib/jp-official-channel-exception';
-import { resolveJapaneseEconomyWithMusicBrainz, resolveJapaneseDomesticWithMusicBrainz } from '@/lib/resolve-japanese-economy';
+import { resolveJapaneseDomesticWithMusicBrainz, japaneseEconomyFromDomestic } from '@/lib/resolve-japanese-economy';
 import {
   buildAiCommentaryPromptLabels,
   colorsStudiosTrustsOembedArtistFirst,
@@ -29,6 +29,7 @@ import {
   preferPlaybackDisplaySources,
 } from '@/lib/library-song-display-by-video';
 import { getVideoSnippet } from '@/lib/youtube-search';
+import type { VideoSnippet } from '@/lib/youtube-search';
 import { containsUnreliableCommentPackClaim } from '@/lib/ai-output-policy';
 import {
   extractTextFromGenerateContentResponse,
@@ -89,10 +90,15 @@ import { insertAiCommentaryUnavailableEntry } from '@/lib/ai-commentary-unavaila
 import { buildSongQuizApiExtension } from '@/lib/song-quiz-after-commentary';
 import { getChatAiClientIp } from '@/lib/chat-ai-rate-limit';
 import { guardAiTrialSongSelection, commitAiTrialSongSelection } from '@/lib/user-ai-trial-server';
+import { resolvePromoAiFreeFromRequestBody } from '@/lib/featured-page-ai-free';
 import { checkAiCostRateLimit } from '@/lib/ai-cost-rate-limit';
 import { aiCostRateLimitResponse } from '@/lib/ai-cost-rate-limit-response';
 import { isAiUnlimitedUserId } from '@/lib/ai-unlimited-user-ids';
 import { roomSyncServerLog } from '@/lib/room-sync-server-log';
+import {
+  getCommentPackPrepSnapshot,
+  setCommentPackPrepSnapshot,
+} from '@/lib/comment-pack-prep-cache';
 
 export const dynamic = 'force-dynamic';
 
@@ -286,10 +292,10 @@ ${secondaryHint}・世界的知名度の高い客演者がいる一曲では、�
  * - 同一動画は song_tidbits から再利用（新曲は注釈付き基本のみキャッシュ、それ以外は4本そろいでキャッシュ）
  * - 邦楽節約: タイトル等の主要メタが日本語っぽい／音声言語が ja／（概要だけ日本語なら英字主体のメタでは除外し）MusicBrainz で Area=Japan 等のときは AI 曲解説を出さない（skipAiCommentary）。ただし ONE OK ROCK / XG / Ado / ATARASHII GAKKO!（＋88rising）/ YOASOBI の公式 YouTube チャンネル（channelId 固定＋ env 追加分）は除外。COMMENT_PACK_JP_ECONOMY=0 でオフ
  * - COMMENT_PACK_SKIP_CACHE=1 で常に新規生成
- * - musicaichat 曲 JSON が取れ、Music8 注入オン時は既定で [DB] キャッシュを使わず再生成（`COMMENT_PACK_REGENERATE_LIBRARY_WHEN_MUSIC8=0` でオフ）。`/api/ai/commentary` も同条件
+ * - musicaichat 曲 JSON が取れ、Music8 注入オン時でも [DB] は既定で再利用。強制再生成は `COMMENT_PACK_REGENERATE_LIBRARY_WHEN_MUSIC8=1`（`/api/ai/commentary` も同条件）
  * - NEXT_PUBLIC_DEV_MINIMAL_SONG_AI=1 で開発簡略: 基本1本のみ生成・キャッシュ返却も自由4本を落とす（新曲30日以内扱いと同様）
  * - 自由コメント4本の**初回生成は並列**（基本のあと Promise.all）。ポリシー・重複検証に落ちた枠だけ従来どおり逐次リトライ（遅いモデルでもレスポンスが返るまでの壁時計時間を短縮）
- * - **packPhase=base**: 基本だけ生成し DB に ai_commentary のみ保存して即 JSON 返却（遅いモデルでも最初の解説を先に出せる）。**packPhase=frees**: 直前の基本文と一致する ai_commentary を前提に自由4本だけ生成し ai_chat_* のみ差し替え
+ * - **packPhase=base**: 基本だけ生成し DB に ai_commentary のみ保存して即 JSON 返却（遅いモデルでも最初の解説を先に出せる）。**packPhase=frees**: 直前の基本文と一致する ai_commentary を前提に自由4本だけ生成し ai_chat_* のみ差し替え。同一インスタンスでは base の前処理スナップショットを再利用。クライアントは枠ごと HTTP 分割より **1 回の frees（freeSlotIndex なし）** が推奨（Fluid の多重 invocation を避ける）
  * - メタからアーティストを信頼できない（曲名も空・キュレーターchでアップローダー名=アーティスト等）は skipAiCommentary。AI_COMMENTARY_ALLOW_UNCERTAIN_ARTIST=1 で無効化
  * - YouTube タイトル／説明が宣伝文・長文プローズっぽいときは skipAiCommentary（skipReason: promotional_metadata）。視聴履歴の表記修正でタイトルが付いているときはスキップしない。AI_COMMENTARY_SKIP_PROMO_METADATA=0 で無効化
  */
@@ -340,6 +346,8 @@ export async function POST(request: Request) {
       if (limited) return limited;
     }
 
+    const promoAiFree = await resolvePromoAiFreeFromRequestBody(body);
+
     const trialGuard = await guardAiTrialSongSelection({
       user: authUser,
       isGuest: requestIsGuest,
@@ -350,6 +358,7 @@ export async function POST(request: Request) {
       consume: false,
       roomId: roomId || undefined,
       videoId,
+      promoAiFree,
     });
     if (!trialGuard.ok) {
       roomSyncServerLog('comment-pack:denied', {
@@ -390,6 +399,7 @@ export async function POST(request: Request) {
           clientIp: clientIpForBilling,
           roomId: roomId || undefined,
           videoId,
+          promoAiFree,
         });
         if (!charged.ok) {
           roomSyncServerLog('comment-pack:charge_denied', {
@@ -436,47 +446,82 @@ export async function POST(request: Request) {
     }
 
     const reader = createAdminClient() ?? supabase;
+    const prepReuse = packPhase === 'frees' ? getCommentPackPrepSnapshot(videoId) : null;
 
-    const [oembed, snippet] = await Promise.all([
-      fetchOEmbed(videoId),
-      getVideoSnippet(videoId, { roomId: roomId || undefined, source: 'api/ai/comment-pack' }),
-    ]);
+    let oembed: { title?: string; author_name?: string } | null = null;
+    let snippet: VideoSnippet | null = null;
+    if (prepReuse) {
+      oembed = {
+        title: prepReuse.rawYouTubeTitle,
+        author_name: prepReuse.authorName ?? undefined,
+      };
+      snippet = {
+        title: prepReuse.rawYouTubeTitle,
+        description: prepReuse.description ?? '',
+        channelTitle: prepReuse.channelTitle ?? '',
+        channelId: prepReuse.channelId ?? undefined,
+        publishedAt: prepReuse.publishedAt ?? undefined,
+        viewCount: prepReuse.viewCount,
+        defaultAudioLanguage: prepReuse.defaultAudioLanguage ?? undefined,
+        categoryId: prepReuse.categoryId ?? undefined,
+      };
+    } else {
+      const fetched = await Promise.all([
+        fetchOEmbed(videoId),
+        getVideoSnippet(videoId, { roomId: roomId || undefined, source: 'api/ai/comment-pack' }),
+      ]);
+      oembed = fetched[0];
+      snippet = fetched[1];
+    }
 
-    const rawYouTubeTitleForPrompt = oembed?.title ?? snippet?.title ?? videoId;
-    const [adminOverride, librarySong] = reader
-      ? await Promise.all([
-          fetchPlaybackDisplayOverride(reader, videoId),
-          fetchLibrarySongDisplayByVideoId(reader, videoId),
-        ])
-      : [null, null];
+    const rawYouTubeTitleForPrompt = prepReuse?.rawYouTubeTitle ?? (oembed?.title ?? snippet?.title ?? videoId);
+    const [adminOverride, librarySong] = prepReuse
+      ? [null, null]
+      : reader
+        ? await Promise.all([
+            fetchPlaybackDisplayOverride(reader, videoId),
+            fetchLibrarySongDisplayByVideoId(reader, videoId),
+          ])
+        : [null, null];
     let displayOverride = adminOverride;
-    if (skipCommentPackCacheRequested && adminPlaybackHintRaw) {
+    if (!prepReuse && skipCommentPackCacheRequested && adminPlaybackHintRaw) {
       displayOverride = applyPlaybackDisplayHintWhenDbMissing(displayOverride, adminPlaybackHintRaw);
     }
-    displayOverride = preferPlaybackDisplaySources({
-      adminOverride: displayOverride,
-      library: librarySong,
-    });
+    if (!prepReuse) {
+      displayOverride = preferPlaybackDisplaySources({
+        adminOverride: displayOverride,
+        library: librarySong,
+      });
+    }
     const overrideTitle = displayOverride?.title?.trim() ?? '';
-    const title =
+    const title = prepReuse?.title ?? (
       overrideTitle && !looksLikeProseOrBloatedDisplayTitle(overrideTitle)
         ? overrideTitle
-        : rawYouTubeTitleForPrompt;
-    const authorName =
-      displayOverride?.artist_name?.trim() && !looksLikeProseOrBloatedDisplayTitle(overrideTitle)
+        : rawYouTubeTitleForPrompt
+    );
+    const authorName = prepReuse
+      ? prepReuse.authorName
+      : displayOverride?.artist_name?.trim() && !looksLikeProseOrBloatedDisplayTitle(overrideTitle)
         ? displayOverride.artist_name.trim()
         : oembed?.author_name;
     const resolvePackOpts: ResolveArtistSongForPackOptions | undefined =
-      displayOverride && overrideTitle && !looksLikeProseOrBloatedDisplayTitle(overrideTitle)
+      !prepReuse && displayOverride && overrideTitle && !looksLikeProseOrBloatedDisplayTitle(overrideTitle)
         ? { trustProvidedTitleOverFamousPv: true }
         : undefined;
-    const { artist, artistDisplay, song } = await resolveArtistSongForPackAsync(
-      title,
-      authorName,
-      snippet,
-      videoId,
-      resolvePackOpts,
-    );
+    const resolvedArtistSong = prepReuse
+      ? {
+          artist: prepReuse.artist,
+          artistDisplay: prepReuse.artistDisplay,
+          song: prepReuse.song,
+        }
+      : await resolveArtistSongForPackAsync(
+          title,
+          authorName,
+          snippet,
+          videoId,
+          resolvePackOpts,
+        );
+    const { artist, artistDisplay, song } = resolvedArtistSong;
 
     const songQuizExtension = buildSongQuizApiExtension({
       channelId: snippet?.channelId ?? null,
@@ -487,24 +532,20 @@ export async function POST(request: Request) {
     });
 
     const devMinimalSongAi = isDevMinimalSongAi();
-    const isJpDomestic = await resolveJapaneseDomesticWithMusicBrainz({
-      title,
-      artistDisplay,
-      artist,
-      song,
-      description: snippet?.description ?? null,
-      channelTitle: snippet?.channelTitle ?? null,
-      defaultAudioLanguage: snippet?.defaultAudioLanguage ?? null,
-    });
-    const isJpEconomy = await resolveJapaneseEconomyWithMusicBrainz({
-      title,
-      artistDisplay,
-      artist,
-      song,
-      description: snippet?.description ?? null,
-      channelTitle: snippet?.channelTitle ?? null,
-      defaultAudioLanguage: snippet?.defaultAudioLanguage ?? null,
-    });
+    const isJpDomestic = prepReuse
+      ? prepReuse.isJpDomestic
+      : await resolveJapaneseDomesticWithMusicBrainz({
+          title,
+          artistDisplay,
+          artist,
+          song,
+          description: snippet?.description ?? null,
+          channelTitle: snippet?.channelTitle ?? null,
+          defaultAudioLanguage: snippet?.defaultAudioLanguage ?? null,
+        });
+    const isJpEconomy = prepReuse
+      ? prepReuse.isJpEconomy
+      : japaneseEconomyFromDomestic(isJpDomestic);
     const roomJpAiUnlock = roomId ? await isRoomJpAiUnlockEnabled(roomId) : false;
     const jpAiUnlockEnabled = roomJpAiUnlock;
     /** 新曲のみ基本1本（自由4本なし）。開発フラグ時も同様。邦楽は公式チャンネル例外を除き生成しない */
@@ -520,37 +561,52 @@ export async function POST(request: Request) {
       });
     }
 
-    // songs / song_videos 登録＋ song_id
-    let songId: string | null = null;
-    try {
-      songId = await upsertSongAndVideo({
-        supabase,
-        videoId,
-        mainArtist: artist ?? authorName ?? null,
-        songTitle: song ?? title,
-        variant: 'tidbit',
-        catalogScope: resolveSongCatalogScope({
-          mainArtist: artist ?? authorName ?? null,
-          songTitle: song ?? title,
-          displayTitle: title,
-          isJapaneseEconomy: isJpDomestic,
-        }),
-        registrationCheck: buildSongDbRegistrationInput({
+    // songs / song_videos 登録＋ song_id（frees は base 済みなので upsert せず参照のみ）
+    let songId: string | null = prepReuse?.songId ?? null;
+    if (packPhase === 'frees') {
+      if (!songId && reader) {
+        try {
+          const { data: sv } = await reader
+            .from('song_videos')
+            .select('song_id')
+            .eq('video_id', videoId)
+            .maybeSingle();
+          songId = typeof sv?.song_id === 'string' ? sv.song_id : null;
+        } catch (e) {
+          console.warn('[api/ai/comment-pack] frees song_id lookup', e);
+        }
+      }
+    } else {
+      try {
+        songId = await upsertSongAndVideo({
+          supabase,
           videoId,
-          rawTitle: title,
-          channelTitle: snippet?.channelTitle ?? null,
-          channelId: snippet?.channelId ?? null,
-          categoryId: snippet?.categoryId ?? null,
-          description: snippet?.description ?? null,
           mainArtist: artist ?? authorName ?? null,
           songTitle: song ?? title,
-          isJapaneseDomestic: isJpDomestic,
-          channelAuthorName: authorName ?? null,
-          viewCount: snippet?.viewCount ?? null,
-        }),
-      });
-    } catch (e) {
-      console.error('[api/ai/comment-pack] upsertSongAndVideo', e);
+          variant: 'tidbit',
+          catalogScope: resolveSongCatalogScope({
+            mainArtist: artist ?? authorName ?? null,
+            songTitle: song ?? title,
+            displayTitle: title,
+            isJapaneseEconomy: isJpDomestic,
+          }),
+          registrationCheck: buildSongDbRegistrationInput({
+            videoId,
+            rawTitle: title,
+            channelTitle: snippet?.channelTitle ?? null,
+            channelId: snippet?.channelId ?? null,
+            categoryId: snippet?.categoryId ?? null,
+            description: snippet?.description ?? null,
+            mainArtist: artist ?? authorName ?? null,
+            songTitle: song ?? title,
+            isJapaneseDomestic: isJpDomestic,
+            channelAuthorName: authorName ?? null,
+            viewCount: snippet?.viewCount ?? null,
+          }),
+        });
+      } catch (e) {
+        console.error('[api/ai/comment-pack] upsertSongAndVideo', e);
+      }
     }
 
     if (isJpEconomy && !isJpDomesticOfficialChannelAiException(snippet?.channelId) && !jpAiUnlockEnabled) {
@@ -564,6 +620,7 @@ export async function POST(request: Request) {
     }
 
     if (
+      !prepReuse &&
       shouldSkipAiCommentaryForUncertainArtistResolution({
         artist,
         artistDisplay,
@@ -585,6 +642,7 @@ export async function POST(request: Request) {
       overrideTitle && !looksLikeProseOrBloatedDisplayTitle(overrideTitle),
     );
     if (
+      !prepReuse &&
       !hasTrustedDisplayTitle &&
       shouldSkipAiCommentaryForPromotionalOrProseMetadata({
         rawYouTubeTitle: rawYouTubeTitleForPrompt,
@@ -606,20 +664,29 @@ export async function POST(request: Request) {
       (artist && artist.trim()) ||
       (authorName && authorName.trim()) ||
       '';
-    const music8Ctx = await resolveMusic8ContextForCommentPack(
-      videoId,
-      artistLookupForMusic8,
-      song || title,
-    );
+    const music8Ctx = prepReuse
+      ? {
+          artistJsonHit: prepReuse.music8ModeratorHints?.artistJsonHit ?? false,
+          songJsonHit: prepReuse.music8ModeratorHints?.songJsonHit ?? false,
+          musicaichatSong: null,
+          fallbackMusic8Song: null,
+        }
+      : await resolveMusic8ContextForCommentPack(
+          videoId,
+          artistLookupForMusic8,
+          song || title,
+        );
     const { musicaichatSong, fallbackMusic8Song } = music8Ctx;
-    const isNewRelease = shouldApplyCommentPackNewReleaseMode({
-      youtubePublishedAt: snippet?.publishedAt ?? null,
-      youtubeDescription: snippet?.description ?? null,
-      musicaichatSong: musicaichatSong as Record<string, unknown> | null,
-      fallbackMusic8Song: fallbackMusic8Song as Record<string, unknown> | null,
-    });
+    const isNewRelease = prepReuse
+      ? prepReuse.isNewRelease
+      : shouldApplyCommentPackNewReleaseMode({
+          youtubePublishedAt: snippet?.publishedAt ?? null,
+          youtubeDescription: snippet?.description ?? null,
+          musicaichatSong: musicaichatSong as Record<string, unknown> | null,
+          fallbackMusic8Song: fallbackMusic8Song as Record<string, unknown> | null,
+        });
     const baseOnlyPackCore = baseOnlyPackCoreDeferred || isNewRelease;
-    if (songId) {
+    if (!prepReuse && songId) {
       const writer = createAdminClient() ?? supabase;
       const rawM8 = musicaichatSong ?? fallbackMusic8Song;
       try {
@@ -634,43 +701,53 @@ export async function POST(request: Request) {
       skipMusic8FactInject,
     );
     const music8ModeratorHintsPayload =
-      music8Ctx.artistJsonHit || music8Ctx.songJsonHit
-        ? {
-            music8ModeratorHints: {
-              artistJsonHit: music8Ctx.artistJsonHit,
-              songJsonHit: music8Ctx.songJsonHit,
-            },
-          }
-        : {};
+      prepReuse?.music8ModeratorHints
+        ? { music8ModeratorHints: prepReuse.music8ModeratorHints }
+        : music8Ctx.artistJsonHit || music8Ctx.songJsonHit
+          ? {
+              music8ModeratorHints: {
+                artistJsonHit: music8Ctx.artistJsonHit,
+                songJsonHit: music8Ctx.songJsonHit,
+              },
+            }
+          : {};
 
-    const music8FactsBlockTrimmed =
-      !skipMusic8FactInject && musicaichatSong != null
+    const music8FactsBlockTrimmed = prepReuse
+      ? prepReuse.music8FactsBlockTrimmed
+      : !skipMusic8FactInject && musicaichatSong != null
         ? buildMusicaichatFactsForAiPromptBlock(musicaichatSong).trim()
         : '';
-    const mbFactsBlockTrimmed =
-      (await fetchMusicBrainzCommentaryFactsBlock(
-        (artistDisplay ?? artist ?? authorName ?? '').trim(),
-        (song || title).trim(),
-      )) ?? '';
-    const songIntroOnlyDiscography = shouldUseSongIntroOnlyDiscographyMode({
-      music8Song: musicaichatSong ?? fallbackMusic8Song,
-      combinedFactsText: [music8FactsBlockTrimmed, mbFactsBlockTrimmed].filter(Boolean).join('\n'),
-    });
+    const mbFactsBlockTrimmed = prepReuse
+      ? prepReuse.mbFactsBlockTrimmed
+      : ((await fetchMusicBrainzCommentaryFactsBlock(
+          (artistDisplay ?? artist ?? authorName ?? '').trim(),
+          (song || title).trim(),
+        )) ?? '');
+    const songIntroOnlyDiscography = prepReuse
+      ? prepReuse.songIntroOnlyDiscography
+      : shouldUseSongIntroOnlyDiscographyMode({
+          music8Song: musicaichatSong ?? fallbackMusic8Song,
+          combinedFactsText: [music8FactsBlockTrimmed, mbFactsBlockTrimmed].filter(Boolean).join('\n'),
+        });
     const responseSlots: CommentPackSlotSelection = songIntroOnlyDiscography
       ? [true, false, false, false, false]
       : slots;
-    const baseOnlyPack = baseOnlyPackCore || songIntroOnlyDiscography;
+    const baseOnlyPack = prepReuse
+      ? prepReuse.baseOnlyPack
+      : baseOnlyPackCore || songIntroOnlyDiscography;
     const songQuizExtensionFinal = songIntroOnlyDiscography
       ? { songQuiz: { enabled: false as const } }
       : songQuizExtension;
 
-    const aiPromptLabels = buildAiCommentaryPromptLabels({
-      artistDisplay,
-      artist,
-      authorName: authorName ?? null,
-      song,
-      titleFallback: title,
-    });
+    const aiPromptLabels = prepReuse
+      ? { artistLabel: prepReuse.artistLabel, songLabel: prepReuse.songLabel }
+      : buildAiCommentaryPromptLabels({
+          artistDisplay,
+          artist,
+          authorName: authorName ?? null,
+          song,
+          titleFallback: title,
+        });
     const artistLabelPre =
       aiPromptLabels.artistLabel.trim() ||
       artistDisplay ||
@@ -680,6 +757,7 @@ export async function POST(request: Request) {
     const songLabelForAiPrompt = aiPromptLabels.songLabel.trim() || song || title;
 
     if (
+      !prepReuse &&
       looksLikeGarbageArtistSongMetadataForCommentary({
         artist,
         artistDisplay,
@@ -698,8 +776,49 @@ export async function POST(request: Request) {
       });
     }
 
-    const supergroupBlockPre = await buildSupergroupPromptBlock(artistLabelPre);
-    const isSupergroupArtist = supergroupBlockPre.trim().length > 0;
+    const supergroupBlockPre = prepReuse
+      ? prepReuse.supergroupBlock
+      : await buildSupergroupPromptBlock(artistLabelPre);
+    const isSupergroupArtist = prepReuse
+      ? prepReuse.isSupergroupArtist
+      : supergroupBlockPre.trim().length > 0;
+
+    if (!prepReuse) {
+      setCommentPackPrepSnapshot(videoId, {
+        rawYouTubeTitle: rawYouTubeTitleForPrompt,
+        title,
+        authorName,
+        artist,
+        artistDisplay,
+        song,
+        songId,
+        channelId: snippet?.channelId ?? null,
+        channelTitle: snippet?.channelTitle ?? null,
+        description: snippet?.description ?? null,
+        publishedAt: snippet?.publishedAt ?? null,
+        viewCount: snippet?.viewCount ?? null,
+        defaultAudioLanguage: snippet?.defaultAudioLanguage ?? null,
+        categoryId: snippet?.categoryId ?? null,
+        isJpDomestic,
+        isJpEconomy,
+        artistLabel: artistLabelPre,
+        songLabel: songLabelForAiPrompt,
+        music8FactsBlockTrimmed,
+        mbFactsBlockTrimmed,
+        music8ModeratorHints: music8ModeratorHintsPayload.music8ModeratorHints ?? null,
+        isSupergroupArtist,
+        supergroupBlock: supergroupBlockPre,
+        songIntroOnlyDiscography,
+        isNewRelease,
+        baseOnlyPack,
+        musicaichatCover: isMusicaichatCoverRecording(musicaichatSong),
+        knownCoverOriginalHint: buildKnownCoverOriginalHint({
+          songTitle: songLabelForAiPrompt,
+          artistName: artistLabelPre,
+        }),
+        hasMusic8SongBlob: Boolean(musicaichatSong ?? fallbackMusic8Song),
+      });
+    }
 
     const skipCache =
       process.env.COMMENT_PACK_SKIP_CACHE === '1' ||
@@ -808,14 +927,16 @@ export async function POST(request: Request) {
     const rawYouTubeTitle = rawYouTubeTitleForPrompt;
     const isLikelyLiveVersion =
       isLikelyLiveVersionLabel(rawYouTubeTitle) || isLikelyLiveVersionLabel(songLabel);
-    const knownCoverOriginalHint = buildKnownCoverOriginalHint({
-      songTitle: songLabel,
-      artistName: artistLabel,
-    });
+    const knownCoverOriginalHint = prepReuse
+      ? prepReuse.knownCoverOriginalHint
+      : buildKnownCoverOriginalHint({
+          songTitle: songLabel,
+          artistName: artistLabel,
+        });
     const isLikelyCoverVersion =
       isLikelyCoverVersionLabel(rawYouTubeTitle) ||
       isLikelyCoverVersionLabel(songLabel) ||
-      isMusicaichatCoverRecording(musicaichatSong) ||
+      (prepReuse ? prepReuse.musicaichatCover : isMusicaichatCoverRecording(musicaichatSong)) ||
       factsBlockHasCoverOriginalSignal(music8FactsBlockTrimmed) ||
       knownCoverOriginalHint.length > 0;
     const isLikelyRemixVersion =

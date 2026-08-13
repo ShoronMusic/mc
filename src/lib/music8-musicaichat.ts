@@ -374,7 +374,7 @@ export function skipMusic8FactInjectEnv(): boolean {
 
 /**
  * musicaichat 曲 JSON があるとき、song_tidbits の [DB] キャッシュを使わず再生成する。
- * 未設定または 1/true/on → オン（Music8 導入後の [DB] 更新用）。0/false/off でオフ（API 節約）。
+ * 既定オフ（[DB] 再利用で Fluid / Gemini 節約）。明示的に 1/true/on のときだけ再生成。
  */
 export function shouldRegenerateLibraryWhenMusicaichatSong(
   musicaichatSong: MusicaichatSongJson | null,
@@ -382,8 +382,7 @@ export function shouldRegenerateLibraryWhenMusicaichatSong(
 ): boolean {
   if (!musicaichatSong || skipFactInject) return false;
   const v = (process.env.COMMENT_PACK_REGENERATE_LIBRARY_WHEN_MUSIC8 ?? '').trim().toLowerCase();
-  if (v === '0' || v === 'false' || v === 'off') return false;
-  return true;
+  return v === '1' || v === 'true' || v === 'on';
 }
 
 export type Music8CommentPackContext = {

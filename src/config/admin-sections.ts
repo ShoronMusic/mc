@@ -199,6 +199,14 @@ export const ADMIN_SECTIONS: AdminSection[] = [
     activePathPrefix: '/admin/library/',
   },
   {
+    href: '/admin/featured-pages',
+    title: '特集ページ',
+    description:
+      'フェス等の特集を作成。ライブラリアーティストをスタイル別に載せ、部屋チャットから全曲選曲。AI無料オプション可',
+    category: 'library',
+    activePathPrefix: '/admin/featured-pages',
+  },
+  {
     href: '/admin/library-music8-pending',
     title: 'Music8未連携選曲',
     description:

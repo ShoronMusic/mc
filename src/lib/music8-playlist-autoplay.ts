@@ -18,6 +18,9 @@ export type Music8PlaylistAutoplayState = {
   /** 現在再生中の index */
   index: number;
   startedAt: string;
+  /** 特集ページ経由（AI無料検証用） */
+  featuredPageId?: string;
+  featuredAiUsageFree?: boolean;
 };
 
 export function createMusic8PlaylistAutoplayState(params: {
@@ -26,6 +29,8 @@ export function createMusic8PlaylistAutoplayState(params: {
   songs: Music8PlaylistAutoplaySong[];
   sourceLabel?: string;
   orderLabel?: string;
+  featuredPageId?: string;
+  featuredAiUsageFree?: boolean;
 }): Music8PlaylistAutoplayState | null {
   if (!params.songs.length) return null;
   return {
@@ -34,6 +39,8 @@ export function createMusic8PlaylistAutoplayState(params: {
     songs: params.songs,
     ...(params.sourceLabel ? { sourceLabel: params.sourceLabel } : {}),
     ...(params.orderLabel ? { orderLabel: params.orderLabel } : {}),
+    ...(params.featuredPageId ? { featuredPageId: params.featuredPageId } : {}),
+    ...(params.featuredAiUsageFree ? { featuredAiUsageFree: true } : {}),
     index: 0,
     startedAt: new Date().toISOString(),
   };
@@ -53,6 +60,40 @@ export function advanceMusic8PlaylistAutoplay(
   const nextIndex = state.index + 1;
   if (nextIndex >= state.songs.length) return null;
   return { ...state, index: nextIndex };
+}
+
+/**
+ * 連続再生キュー内の任意 index へ移動（前の曲へ戻る／別曲指定）。
+ * 範囲外なら null。同じ index でも state のコピーを返す（再再生用）。
+ */
+export function jumpMusic8PlaylistAutoplay(
+  state: Music8PlaylistAutoplayState,
+  index: number,
+): Music8PlaylistAutoplayState | null {
+  if (!Number.isInteger(index) || index < 0 || index >= state.songs.length) return null;
+  return { ...state, index };
+}
+
+/** ライブラリ／特集のアーティスト全曲選曲キューか（slug が library-） */
+export function isLibraryArtistPlaylistAutoplay(
+  state: Music8PlaylistAutoplayState | null | undefined,
+): boolean {
+  if (!state) return false;
+  return state.slug.startsWith('library-');
+}
+
+/** 参加者欄の曲ジャンプボタン表記 */
+export function playlistAutoplaySongPickButtonLabel(
+  state: Music8PlaylistAutoplayState | null | undefined,
+): 'ライブラリ' | '再生リスト' {
+  return isLibraryArtistPlaylistAutoplay(state) ? 'ライブラリ' : '再生リスト';
+}
+
+/** 曲ジャンプモーダル見出し */
+export function playlistAutoplaySongPickModalHeading(
+  state: Music8PlaylistAutoplayState | null | undefined,
+): string {
+  return isLibraryArtistPlaylistAutoplay(state) ? 'ライブラリ曲リスト' : '再生リスト曲リスト';
 }
 
 export function isMusic8PlaylistAutoplayCurrentVideo(
@@ -131,6 +172,21 @@ export function formatMusic8PlaylistManualNextMessage(
 ): string {
   const sourceLabel = state?.sourceLabel?.trim() || 'Music8';
   return `${sourceLabel}: この曲をスキップして次の曲へ進みます。`;
+}
+
+/** ユーザーが曲リストから任意曲を指定したとき */
+export function formatMusic8PlaylistJumpMessage(
+  state: Music8PlaylistAutoplayState | null,
+): string {
+  const sourceLabel = state?.sourceLabel?.trim() || 'Music8';
+  const song = state ? state.songs[state.index] : null;
+  const label = song
+    ? [song.artist, song.title].map((s) => s?.trim()).filter(Boolean).join(' - ')
+    : '';
+  if (label) {
+    return `${sourceLabel}: 曲リストから「${label}」を指定して再生します。`;
+  }
+  return `${sourceLabel}: 曲リストから指定した曲を再生します。`;
 }
 
 /** YouTube IFrame API onError の data。連続再生ではいずれも次曲スキップ対象。 */

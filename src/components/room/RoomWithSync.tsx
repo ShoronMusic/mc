@@ -124,6 +124,7 @@ import {
   advanceMusic8PlaylistAutoplay,
   createMusic8PlaylistAutoplayState,
   formatMusic8PlaylistFinishedMessage,
+  formatMusic8PlaylistJumpMessage,
   formatMusic8PlaylistManualNextMessage,
   formatMusic8PlaylistSkipUnplayableMessage,
   formatMusic8PlaylistStartMessage,
@@ -132,12 +133,16 @@ import {
   getMusic8PlaylistCurrentSong,
   isMusic8PlaylistAutoplayCurrentVideo,
   isYoutubePlayerErrorWorthPlaylistSkip,
+  jumpMusic8PlaylistAutoplay,
+  playlistAutoplaySongPickButtonLabel,
+  playlistAutoplaySongPickModalHeading,
   type Music8PlaylistAutoplayState,
 } from '@/lib/music8-playlist-autoplay';
 import {
   buildLibraryArtistAutoplayLaunch,
   type LibraryArtistAutoplayRequest,
 } from '@/lib/library-artist-autoplay';
+import { PlaylistAutoplaySongPickModal } from '@/components/chat/PlaylistAutoplaySongPickModal';
 import { isYoutubeKeywordSearchEnabled } from '@/lib/youtube-keyword-search-ui';
 import { extractCharacterSongPickResolvedYoutube } from '@/lib/character-song-pick-youtube';
 import { CHARACTER_SONG_PICK_AUTO_USER_PROMPT } from '@/lib/ai-character-song-pick-cues';
@@ -849,11 +854,18 @@ export default function RoomWithSync({
   } | null>(null);
   /** Music8 プレイリスト連続再生（予約キューとは別系統） */
   const music8PlaylistAutoplayRef = useRef<Music8PlaylistAutoplayState | null>(null);
-  const [playlistAutoplayUiActive, setPlaylistAutoplayUiActive] = useState(false);
+  const [playlistAutoplayUi, setPlaylistAutoplayUi] = useState<Music8PlaylistAutoplayState | null>(
+    null,
+  );
+  const [playlistSongPickOpen, setPlaylistSongPickOpen] = useState(false);
   const assignMusic8PlaylistAutoplay = useCallback((next: Music8PlaylistAutoplayState | null) => {
     music8PlaylistAutoplayRef.current = next;
-    setPlaylistAutoplayUiActive(Boolean(next));
+    setPlaylistAutoplayUi(next);
+    if (!next) setPlaylistSongPickOpen(false);
   }, []);
+  const playlistAutoplayUiActive = Boolean(playlistAutoplayUi);
+  const playlistSongPickLabel = playlistAutoplaySongPickButtonLabel(playlistAutoplayUi);
+  const playlistSongPickHeading = playlistAutoplaySongPickModalHeading(playlistAutoplayUi);
   const advanceMusic8PlaylistOnEndedRef = useRef<() => boolean>(() => false);
   /** 連続再生中の同一 video への onError 連打を抑止 */
   const music8PlaylistSkipErrorVideoIdRef = useRef<string | null>(null);
@@ -3406,6 +3418,24 @@ export default function RoomWithSync({
     skipPlaylistTrackManualRef.current();
   }, []);
 
+  const handleOpenPlaylistLibrary = useCallback(() => {
+    const ap = music8PlaylistAutoplayRef.current;
+    if (!ap) return;
+    const vid = videoIdRef.current;
+    const poster = lastChangeVideoPublisherRef.current;
+    if (!vid || !myClientId) return;
+    if (!isMusic8PlaylistAutoplayCurrentVideo(ap, vid)) return;
+    const isPoster = Boolean(poster && myClientId === poster);
+    const isOwnerSkip = canUseOwnerPlaybackProxy;
+    if (!isPoster && !isOwnerSkip) return;
+    setPlaylistSongPickOpen(true);
+  }, [myClientId, canUseOwnerPlaybackProxy]);
+
+  const handleJumpPlaylistSongRef = useRef<(videoId: string) => void>(() => {});
+  const handleJumpPlaylistSong = useCallback((videoIdToPlay: string) => {
+    handleJumpPlaylistSongRef.current(videoIdToPlay);
+  }, []);
+
   const handleRequestManageSongReservation = useCallback(() => {
     if (!myClientId) return;
     const entry = songReservationQueueRef.current.find((e) => e.publisherClientId === myClientId);
@@ -5299,6 +5329,15 @@ export default function RoomWithSync({
       }
       const skipPackCache = options?.skipCommentPackCache === true;
       const packHint = options?.adminPlaybackDisplayHint;
+      const featuredAp = music8PlaylistAutoplayRef.current;
+      const featuredPageId =
+        featuredAp?.featuredAiUsageFree && featuredAp.featuredPageId
+          ? featuredAp.featuredPageId
+          : '';
+      const featuredArtistName =
+        featuredPageId && featuredAp
+          ? (getMusic8PlaylistCurrentSong(featuredAp)?.artist || featuredAp.title || '').trim()
+          : '';
       const packBody = {
         videoId: vid,
         slots,
@@ -5319,6 +5358,9 @@ export default function RoomWithSync({
                 artist_name: packHint.artist_name,
               },
             }
+          : {}),
+        ...(featuredPageId && featuredArtistName
+          ? { featuredPageId, featuredArtistName }
           : {}),
       };
       roomSyncLog('commentary:fetch_start', {
@@ -5593,58 +5635,64 @@ export default function RoomWithSync({
               }
             };
 
-            let freesRequestsRemaining = freeIdxSorted.length;
+            let freesRequestsRemaining = 1;
 
-            freeIdxSorted.forEach((slotK) => {
-              void fetch('/api/ai/comment-pack', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  ...packBody,
-                  packPhase: 'frees',
-                  baseComment: pack.baseComment.trim(),
-                  freeSlotIndex: slotK,
-                }),
-              })
-                .then((r2) => (r2.ok ? r2.json() : null))
-                .then((pack2) => {
-                  if (videoIdRef.current !== vid) return;
+            void fetch('/api/ai/comment-pack', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                ...packBody,
+                packPhase: 'frees',
+                baseComment: pack.baseComment.trim(),
+              }),
+            })
+              .then((r2) => (r2.ok ? r2.json() : null))
+              .then((pack2) => {
+                if (videoIdRef.current !== vid) return;
+                const libPrefix = pack2?.source === 'library' ? '[DB] ' : '[NEW] ';
+                const fa: string[] = Array.isArray(pack2?.freeComments)
+                  ? pack2.freeComments.map((c: unknown) => (typeof c === 'string' ? c : ''))
+                  : [];
+                while (fa.length < COMMENT_PACK_MAX_FREE_COMMENTS) fa.push('');
+                const freeTidRaw: unknown[] = Array.isArray(pack2?.freeCommentTidbitIds)
+                  ? pack2.freeCommentTidbitIds
+                  : [];
+                const ids2: (string | null | undefined)[] = Array.isArray(pack2?.tidbitIds)
+                  ? pack2.tidbitIds
+                  : [];
+                for (const slotK of freeIdxSorted) {
                   finishedSlot[slotK] = true;
                   if (pack2 && !pack2.error && !pack2.skipAiCommentary) {
-                    if (pack2.source === 'library') prefixForSlot[slotK] = '[DB] ';
-                    const fa: string[] = Array.isArray(pack2.freeComments)
-                      ? pack2.freeComments.map((c: unknown) => (typeof c === 'string' ? c : ''))
-                      : [];
-                    while (fa.length < COMMENT_PACK_MAX_FREE_COMMENTS) fa.push('');
+                    prefixForSlot[slotK] = libPrefix;
                     const c = (fa[slotK] ?? '').trim();
                     if (c) {
                       filledForSlot[slotK] = c;
-                      const freeTidRaw: unknown[] = Array.isArray(pack2.freeCommentTidbitIds)
-                        ? pack2.freeCommentTidbitIds
-                        : [];
-                      const ids2: (string | null | undefined)[] = Array.isArray(pack2.tidbitIds)
-                        ? pack2.tidbitIds
-                        : [];
                       tidForSlot[slotK] =
                         parseTidbitIdFromPack(freeTidRaw[slotK]) ??
                         parseTidbitIdFromPack(ids2[slotK + 1]);
-                      const pendingFreeBodies2 = freeIdxSorted
-                        .map((ix) => filledForSlot[ix]?.trim())
-                        .filter(Boolean);
-                      suppressTidbitRef.current =
-                        equivalentBaseOnlySlots(commentPackSlotsRef.current) ||
-                        pendingFreeBodies2.length > 0;
                     }
                   }
-                  pumpFreesSequential();
-                })
-                .catch(() => {
+                }
+                const pendingFreeBodies2 = freeIdxSorted
+                  .map((ix) => filledForSlot[ix]?.trim())
+                  .filter(Boolean);
+                if (pendingFreeBodies2.length > 0) {
+                  suppressTidbitRef.current =
+                    equivalentBaseOnlySlots(commentPackSlotsRef.current) ||
+                    pendingFreeBodies2.length > 0;
+                }
+                pumpFreesSequential();
+              })
+              .catch(() => {
+                if (videoIdRef.current !== vid) return;
+                for (const slotK of freeIdxSorted) {
                   finishedSlot[slotK] = true;
-                  pumpFreesSequential();
-                })
-                .finally(() => {
-                  freesRequestsRemaining -= 1;
-                  if (freesRequestsRemaining === 0 && videoIdRef.current === vid) {
+                }
+                pumpFreesSequential();
+              })
+              .finally(() => {
+                freesRequestsRemaining -= 1;
+                if (freesRequestsRemaining === 0 && videoIdRef.current === vid) {
                     const pendingBodies = freeIdxSorted
                       .map((ix) => filledForSlot[ix]?.trim())
                       .filter(Boolean);
@@ -5752,7 +5800,6 @@ export default function RoomWithSync({
                     });
                   }
                 });
-            });
 
             return null;
           }
@@ -6401,10 +6448,11 @@ export default function RoomWithSync({
         commentaryFetch: commentaryDecisionApply,
         source: options?.preserveReservationQueue ? 'queue_apply' : 'direct',
       });
+      // forceSongAi: 同一 video の再選曲でも解説を出す（特集・PL 連続再生など）。
+      // DB キャッシュ（[DB]）は使う。skipCommentPackCache は視聴履歴の表記修正ルート専用。
       if ((!sameVideoReplay || forceSongAi) && commentaryDecisionApply.shouldFetch) {
         fetchCommentaryAndPublish(id, {
           aiMode: selectionAiMode,
-          ...(forceSongAi ? { skipCommentPackCache: true } : {}),
         });
       }
       const roundAtPost = Math.max(1, Math.floor(selectionRoundNumberRef.current));
@@ -6452,6 +6500,49 @@ export default function RoomWithSync({
       buildReservationQueuePayload,
     ]
   );
+
+  handleJumpPlaylistSongRef.current = (videoIdToPlay: string) => {
+    const ap = music8PlaylistAutoplayRef.current;
+    if (!ap || !myClientId) return;
+    const vid = videoIdRef.current;
+    const poster = lastChangeVideoPublisherRef.current;
+    if (!vid) return;
+    if (!isMusic8PlaylistAutoplayCurrentVideo(ap, vid)) return;
+    const isPoster = Boolean(poster && myClientId === poster);
+    const isOwnerSkip = canUseOwnerPlaybackProxy;
+    if (!isPoster && !isOwnerSkip) return;
+
+    const targetId = videoIdToPlay.trim();
+    const index = ap.songs.findIndex((s) => s.videoId === targetId);
+    if (index < 0) return;
+
+    if (index === ap.index && targetId === vid) {
+      setPlaylistSongPickOpen(false);
+      return;
+    }
+
+    const jumped = jumpMusic8PlaylistAutoplay(ap, index);
+    if (!jumped) return;
+    const song = getMusic8PlaylistCurrentSong(jumped);
+    if (!song) return;
+
+    if (freeCommentTimeoutsRef.current.length > 0) {
+      freeCommentTimeoutsRef.current.forEach((t) => clearTimeout(t));
+      freeCommentTimeoutsRef.current = [];
+    }
+    clearPendingSongQuizRoundState();
+    setPlaylistSongPickOpen(false);
+    assignMusic8PlaylistAutoplay(jumped);
+    addSystemMessage(formatMusic8PlaylistJumpMessage(jumped));
+    const trackMsg = formatMusic8PlaylistTrackMessage(jumped);
+    if (trackMsg) addSystemMessage(trackMsg);
+    applyImmediateChangeVideo(song.videoId, myClientId, {
+      aiMode: 'full',
+      forceSongAi: true,
+      nextTurnClientIdOverride: myClientId,
+      preserveReservationQueue: true,
+    });
+  };
 
   const handleOwnerPickSelector = useCallback(
     (targetClientId: string) => {
@@ -7566,6 +7657,9 @@ export default function RoomWithSync({
         songs: params.songs,
         orderLabel: params.orderLabel,
         startVideoId: params.startVideoId,
+        featuredPageId: params.featuredPageId,
+        featuredAiUsageFree: params.featuredAiUsageFree,
+        featuredPageTitle: params.featuredPageTitle,
         // STYLE_ADMIN（表記ツール権限あり）は AI 解説保存用に上限なし
         maxSongs: chatStyleAdminTools ? null : undefined,
       });
@@ -9179,6 +9273,10 @@ export default function RoomWithSync({
           onSkipCurrentTrack={handleSkipCurrentTrack}
           playlistAutoplayActive={playlistAutoplayUiActive}
           onSkipPlaylistTrack={handleSkipPlaylistTrack}
+          onOpenPlaylistSongPick={
+            playlistAutoplayUiActive ? handleOpenPlaylistLibrary : undefined
+          }
+          playlistSongPickLabel={playlistSongPickLabel}
           onManageSongReservation={handleRequestManageSongReservation}
           onOwnerPickSelector={
             canUseOwnerPlaybackProxy ? () => setOwnerPickSelectorOpen(true) : undefined
@@ -9202,6 +9300,15 @@ export default function RoomWithSync({
         displayName={participantPublicProfileModal?.displayName ?? ''}
         viewerIsGuest={isGuest}
       />
+
+      {playlistSongPickOpen && playlistAutoplayUi ? (
+        <PlaylistAutoplaySongPickModal
+          state={playlistAutoplayUi}
+          heading={playlistSongPickHeading}
+          onCancel={() => setPlaylistSongPickOpen(false)}
+          onConfirm={handleJumpPlaylistSong}
+        />
+      ) : null}
 
       {songReservationManageOpen && songReservationManageVideoId ? (
         <SongReservationManageModal

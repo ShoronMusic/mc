@@ -65,6 +65,7 @@ import { isLibraryArtistInfoSparse } from '@/lib/library-artist-info-display';
 import { buildLibraryArtistExternalLinks, formatLibraryArtistDetailTitleLines } from '@/lib/library-artist-public-display';
 import { LibraryMusic8SongComment } from '@/components/chat/LibraryMusic8SongComment';
 import { LibraryArtistAutoplayConfirmModal } from '@/components/chat/LibraryArtistAutoplayConfirmModal';
+import { FeaturedPageModal } from '@/components/chat/FeaturedPageModal';
 import {
   LibrarySongArtistsDetail,
   useLibrarySongArtists,
@@ -923,6 +924,11 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
   const [songHowtoOpen, setSongHowtoOpen] = useState(false);
   const [themePlaylistConfirmOpen, setThemePlaylistConfirmOpen] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
+  const [featuredOpen, setFeaturedOpen] = useState(false);
+  const [featuredPages, setFeaturedPages] = useState<
+    Array<{ id: string; title: string; ai_usage_free: boolean }>
+  >([]);
+  const [featuredInitialPageId, setFeaturedInitialPageId] = useState<string | null>(null);
   const [libraryArtistAutoplayConfirmOpen, setLibraryArtistAutoplayConfirmOpen] =
     useState(false);
   const [libraryArtistAutoplayStartVideoId, setLibraryArtistAutoplayStartVideoId] =
@@ -2179,6 +2185,39 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
     void loadLibraryArtists();
   }, [roomInteractionLocked, loadLibraryArtists]);
 
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/featured-pages');
+        const data = await res.json().catch(() => ({}));
+        if (cancelled || !res.ok) return;
+        const items = Array.isArray(data.items) ? data.items : [];
+        setFeaturedPages(
+          items.map((p: { id?: string; title?: string; ai_usage_free?: boolean }) => ({
+            id: String(p.id ?? ''),
+            title: String(p.title ?? ''),
+            ai_usage_free: p.ai_usage_free === true,
+          })).filter((p: { id: string; title: string }) => p.id && p.title),
+        );
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const openFeaturedModal = useCallback(
+    (pageId?: string | null) => {
+      if (roomInteractionLocked) return;
+      setFeaturedInitialPageId(pageId ?? (featuredPages.length === 1 ? featuredPages[0]!.id : null));
+      setFeaturedOpen(true);
+    },
+    [roomInteractionLocked, featuredPages],
+  );
+
   const closeLibraryModal = useCallback(() => {
     if (librarySongListScrollRef.current) {
       librarySongListScrollTopRef.current = librarySongListScrollRef.current.scrollTop;
@@ -3130,6 +3169,18 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
             </div>
           </div>
         </div>
+      ) : null}
+
+      {featuredOpen && onLibraryArtistAutoplay ? (
+        <FeaturedPageModal
+          open={featuredOpen}
+          onClose={() => setFeaturedOpen(false)}
+          initialPageId={featuredInitialPageId}
+          onLibraryArtistAutoplay={onLibraryArtistAutoplay}
+          isGuest={isGuest}
+          participatesInSelection={participatesInSelection}
+          roomInteractionLocked={roomInteractionLocked}
+        />
       ) : null}
 
       {libraryOpen && (
@@ -4280,11 +4331,11 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                   ? '別の端末で操作中…'
                   : IS_MC_PRODUCT
                     ? isYoutubeKeywordSearchEnabled()
-                      ? '会話・YouTubeのURL・アーティスト・曲名を入力…'
-                      : '会話・YouTubeのURLを入力して送信'
+                      ? '会話・YouTubeのURL／再生リストURL・アーティスト・曲名を入力…'
+                      : '会話・YouTubeのURL／再生リストURLを入力して送信'
                     : isYoutubeKeywordSearchEnabled()
-                      ? '会話・URL・アーティスト・曲名のどれでも入力…'
-                      : '会話・YouTubeのURL・AIへの質問は、@質問内容…を入力して送信ボタン'
+                      ? '会話・URL／再生リストURL・アーティスト・曲名のどれでも入力…'
+                      : '会話・YouTubeのURL／再生リストURL・AIへの質問は、@質問内容…を入力して送信ボタン'
               }
               value={value}
               onChange={(e) => setValue(e.target.value)}
@@ -4425,6 +4476,23 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                 <span>ライブラリ</span>
               </button>
             ) : null}
+            {onVideoUrl && onLibraryArtistAutoplay && featuredPages.length > 0 ? (
+              <button
+                type="button"
+                onClick={() => openFeaturedModal()}
+                title={
+                  featuredPages.length === 1
+                    ? `${featuredPages[0]!.title}（特集からアーティスト全曲選曲）`
+                    : '公開中の特集からアーティスト全曲選曲'
+                }
+                className="box-border flex h-11 min-w-0 flex-1 basis-1/2 items-center justify-center gap-1 rounded border border-amber-500/60 bg-amber-950/30 px-2 text-xs font-medium text-amber-100 hover:bg-amber-900/40 sm:text-sm"
+                aria-label="特集を開く"
+              >
+                <span className="truncate">
+                  {featuredPages.length === 1 ? featuredPages[0]!.title : '特集'}
+                </span>
+              </button>
+            ) : null}
           </div>
           <div className="hidden h-[3.75rem] shrink-0 items-center gap-2 sm:flex">
             <div className="flex min-h-0 flex-col items-start justify-center gap-0.5">
@@ -4552,6 +4620,23 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
             >
               <FolderIcon className="h-4 w-4" aria-hidden />
               <span>ライブラリ</span>
+            </button>
+          ) : null}
+          {onVideoUrl && onLibraryArtistAutoplay && featuredPages.length > 0 ? (
+            <button
+              type="button"
+              onClick={() => openFeaturedModal()}
+              title={
+                featuredPages.length === 1
+                  ? `${featuredPages[0]!.title}（特集からアーティスト全曲選曲）`
+                  : '公開中の特集からアーティスト全曲選曲'
+              }
+              className="box-border hidden h-[3.75rem] max-w-[11rem] shrink-0 items-center justify-center gap-1 rounded border border-amber-500/60 bg-amber-950/30 px-3 text-sm font-medium text-amber-100 hover:bg-amber-900/40 sm:flex"
+              aria-label="特集を開く"
+            >
+              <span className="truncate">
+                {featuredPages.length === 1 ? featuredPages[0]!.title : '特集'}
+              </span>
             </button>
           ) : null}
           {trailingSlot != null && trailingSlot !== false ? (

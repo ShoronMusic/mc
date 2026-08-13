@@ -44,6 +44,7 @@ import { insertAiCommentaryUnavailableEntry } from '@/lib/ai-commentary-unavaila
 import { buildSongQuizApiExtension } from '@/lib/song-quiz-after-commentary';
 import { getChatAiClientIp } from '@/lib/chat-ai-rate-limit';
 import { guardAiTrialSongSelection, commitAiTrialSongSelection } from '@/lib/user-ai-trial-server';
+import { resolvePromoAiFreeFromRequestBody } from '@/lib/featured-page-ai-free';
 import { checkAiCostRateLimit } from '@/lib/ai-cost-rate-limit';
 import { aiCostRateLimitResponse } from '@/lib/ai-cost-rate-limit-response';
 import { isAiUnlimitedUserId } from '@/lib/ai-unlimited-user-ids';
@@ -80,6 +81,8 @@ export async function POST(request: Request) {
       if (limited) return limited;
     }
 
+    const promoAiFree = await resolvePromoAiFreeFromRequestBody(body);
+
     const trialGuard = await guardAiTrialSongSelection({
       user: authUser,
       isGuest: requestIsGuest,
@@ -88,6 +91,7 @@ export async function POST(request: Request) {
       consume: false,
       roomId: roomId || undefined,
       videoId,
+      promoAiFree,
     });
     if (!trialGuard.ok) {
       return NextResponse.json(trialGuard.body, { status: trialGuard.status });
@@ -104,6 +108,7 @@ export async function POST(request: Request) {
           clientIp: clientIpForBilling,
           roomId: roomId || undefined,
           videoId,
+          promoAiFree,
         });
         if (!charged.ok) {
           return NextResponse.json(charged.body, { status: charged.status });
