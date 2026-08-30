@@ -34,6 +34,10 @@ import {
   shouldPersistVideoToSongDatabase,
   type SongDbRegistrationInput,
 } from '@/lib/song-db-registration-gate';
+import {
+  ensureArtistForSongRegistration,
+  ensureDomesticArtistForSongRegistration,
+} from '@/lib/artist-selection-register';
 
 export interface UpsertSongAndVideoParams {
   supabase: SupabaseClient | null;
