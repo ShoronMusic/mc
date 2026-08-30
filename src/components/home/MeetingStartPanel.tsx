@@ -486,7 +486,7 @@ export function MeetingStartPanel() {
                         : 'border-sky-400/70 bg-sky-600 text-white shadow-sky-950/40 ring-2 ring-sky-400/45 hover:bg-sky-500'
                   }`}
                 >
-                  {soleOrganizerRoom.isLive ? 'この部屋へ入る' : '開催を再開して入室'}
+                  {soleOrganizerRoom.isLive ? 'この部屋へ入る' : '終了済みを再開して入室'}
                 </button>
                 <button
                   type="button"
@@ -577,7 +577,7 @@ export function MeetingStartPanel() {
                         : 'border-sky-400/70 bg-sky-600 text-white shadow-sky-950/40 ring-2 ring-sky-400/45 hover:bg-sky-500'
                   }`}
                 >
-                  {selectedRoom?.isLive ? 'この部屋へ入る' : '開催を再開して入室'}
+                  {selectedRoom?.isLive ? 'この部屋へ入る' : '終了済みを再開して入室'}
                 </button>
                 <button
                   type="button"

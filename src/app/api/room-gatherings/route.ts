@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { clearRoomLivePresenceWatch } from '@/lib/empty-live-gathering-cron';
-import { endStaleLiveGatheringIfNeeded } from '@/lib/stale-live-gathering';
+import { endStaleLiveGatheringIfNeeded, endEmptyLiveGatheringForResume } from '@/lib/stale-live-gathering';
 import { persistRoomGatheringSnapshots } from '@/lib/room-gathering-snapshot';
 import { ROOM_DISPLAY_TITLE_MAX_CHARS } from '@/lib/room-lobby-message';
 import {
@@ -183,22 +183,37 @@ export async function POST(request: Request) {
         });
       }
       const adminStale = createAdminClient();
-      if (adminStale) {
-        const stale = await endStaleLiveGatheringIfNeeded(adminStale, roomId);
-        if (!stale.ended) {
-          return NextResponse.json(
-            {
-              error:
-                'この部屋ではすでに開催中の会があります。主催中の別部屋から入るか、空き部屋を新規作成してください。',
-            },
-            { status: 409 },
-          );
-        }
-      } else {
+      if (!adminStale) {
         return NextResponse.json(
           {
             error:
               'この部屋ではすでに開催中の会があります。主催中の別部屋から入るか、空き部屋を新規作成してください。',
+          },
+          { status: 409 },
+        );
+      }
+      let stale = await endStaleLiveGatheringIfNeeded(adminStale, roomId);
+      if (!stale.ended) {
+        const { data: hostedRaw } = await runGatheringQueryScoped((scopeProduct) => {
+          let q = supabase
+            .from('room_gatherings')
+            .select('id')
+            .eq('room_id', roomId)
+            .eq('created_by', user.id)
+            .limit(1);
+          if (scopeProduct) q = withGatheringProductEq(q);
+          return q;
+        });
+        const hostedBefore = ((hostedRaw as { id?: string }[] | null) ?? []).length > 0;
+        if (hostedBefore) {
+          stale = await endEmptyLiveGatheringForResume(adminStale, roomId);
+        }
+      }
+      if (!stale.ended) {
+        return NextResponse.json(
+          {
+            error:
+              'この部屋ではすでに開催中の会があります。在室がいれば参加、空なら少し待ってから再開してください。',
           },
           { status: 409 },
         );

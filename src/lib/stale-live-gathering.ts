@@ -74,7 +74,8 @@ export function isStartedAtOlderThanMaxAge(
 export type StaleLiveGatheringEndReason =
   | 'stale_started_at'
   | 'empty_presence_after_nonempty'
-  | 'stale_no_presence_watch';
+  | 'stale_no_presence_watch'
+  | 'organizer_resume_empty';
 
 export type EndStaleLiveGatheringResult = {
   ended: boolean;
@@ -262,4 +263,27 @@ export async function endStaleLiveGatheringWithoutWatch(
   }
 
   return endLiveGatheringRows(admin, rid, 'stale_no_presence_watch');
+}
+
+/**
+ * 過去に主催した部屋を再開するとき、在室 0（または Ably 未設定）の開催中会を終わらせて枠を空ける。
+ */
+export async function endEmptyLiveGatheringForResume(
+  admin: SupabaseClient,
+  roomId: string,
+): Promise<EndStaleLiveGatheringResult> {
+  const rid = roomId.trim();
+  if (!rid) return { ended: false, gatheringIds: [] };
+
+  const counted = await countAblyPresenceForRoom(rid);
+  if (typeof counted === 'number' && counted > 0) {
+    return { ended: false, gatheringIds: [] };
+  }
+  if (counted === 'error') {
+    return { ended: false, gatheringIds: [] };
+  }
+
+  const live = await fetchLiveGathering(admin, rid);
+  if (!live) return { ended: false, gatheringIds: [] };
+  return endLiveGatheringRows(admin, rid, 'organizer_resume_empty');
 }
