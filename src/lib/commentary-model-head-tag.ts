@@ -12,13 +12,21 @@ export function isGemma431bGenerationModel(modelId: string | null | undefined): 
 }
 
 /** クライアントは NODE_ENV（本番ビルドで inlined）。サーバーは VERCEL も見る。 */
-export function shouldShowGemma4CommentaryHeadTag(): boolean {
-  if (process.env.VERCEL) return false;
-  return process.env.NODE_ENV !== 'production';
+export type Gemma4HeadTagEnv = {
+  VERCEL?: string;
+  NODE_ENV?: string;
+};
+
+export function shouldShowGemma4CommentaryHeadTag(env: Gemma4HeadTagEnv = process.env): boolean {
+  if (env.VERCEL) return false;
+  return env.NODE_ENV !== 'production';
 }
 
-export function formatGemma4CommentaryHeadPrefix(modelId: string | null | undefined): string {
-  if (!shouldShowGemma4CommentaryHeadTag()) return '';
+export function formatGemma4CommentaryHeadPrefix(
+  modelId: string | null | undefined,
+  env: Gemma4HeadTagEnv = process.env,
+): string {
+  if (!shouldShowGemma4CommentaryHeadTag(env)) return '';
   return isGemma431bGenerationModel(modelId) ? '[G4] ' : '';
 }
 
@@ -44,8 +52,9 @@ export function commentaryBodyHasNewOrDbOriginPrefix(body: string): boolean {
 export function formatCommentPackChatOriginPrefix(
   source: string | null | undefined,
   generationModel?: string | null,
+  env: Gemma4HeadTagEnv = process.env,
 ): string {
   const origin = source === 'library' ? '[DB] ' : '[NEW] ';
   if (source === 'library') return origin;
-  return formatGemma4CommentaryHeadPrefix(generationModel) + origin;
+  return formatGemma4CommentaryHeadPrefix(generationModel, env) + origin;
 }
