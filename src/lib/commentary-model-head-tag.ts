@@ -2,6 +2,10 @@
  * 一時検証用: Gemma 4 31B が生成した曲解説チャット先頭に [G4] を付ける。
  * song_tidbits 本文には保存しない（表示時のみ）。
  * ローカル開発のみ。Vercel 等のリモート（本番ビルド）では出さない。
+ *
+ * 本番判定は `process.env.NODE_ENV` を**リテラル参照**すること。
+ * `env = process.env` 経由だとクライアントバンドルで NODE_ENV が展開されず、
+ * リモートでも [G4] が付いてしまう。
  */
 
 const GEMMA4_31B_MODEL_RE = /gemma-4-31b/i;
@@ -11,20 +15,27 @@ export function isGemma431bGenerationModel(modelId: string | null | undefined): 
   return GEMMA4_31B_MODEL_RE.test((modelId ?? '').trim());
 }
 
-/** クライアントは NODE_ENV（本番ビルドで inlined）。サーバーは VERCEL も見る。 */
+/** 単体テスト用の上書き。本番クライアントでは渡さない（NODE_ENV の inlined 参照を使う）。 */
 export type Gemma4HeadTagEnv = {
   VERCEL?: string;
   NODE_ENV?: string;
+  NEXT_PUBLIC_VERCEL_ENV?: string;
 };
 
-export function shouldShowGemma4CommentaryHeadTag(env: Gemma4HeadTagEnv = process.env): boolean {
-  if (env.VERCEL) return false;
-  return env.NODE_ENV !== 'production';
+export function shouldShowGemma4CommentaryHeadTag(env?: Gemma4HeadTagEnv): boolean {
+  if (env) {
+    if (env.VERCEL) return false;
+    if (env.NEXT_PUBLIC_VERCEL_ENV) return false;
+    return env.NODE_ENV !== 'production';
+  }
+  if (process.env.VERCEL) return false;
+  if (process.env.NEXT_PUBLIC_VERCEL_ENV) return false;
+  return process.env.NODE_ENV !== 'production';
 }
 
 export function formatGemma4CommentaryHeadPrefix(
   modelId: string | null | undefined,
-  env: Gemma4HeadTagEnv = process.env,
+  env?: Gemma4HeadTagEnv,
 ): string {
   if (!shouldShowGemma4CommentaryHeadTag(env)) return '';
   return isGemma431bGenerationModel(modelId) ? '[G4] ' : '';
@@ -52,7 +63,7 @@ export function commentaryBodyHasNewOrDbOriginPrefix(body: string): boolean {
 export function formatCommentPackChatOriginPrefix(
   source: string | null | undefined,
   generationModel?: string | null,
-  env: Gemma4HeadTagEnv = process.env,
+  env?: Gemma4HeadTagEnv,
 ): string {
   const origin = source === 'library' ? '[DB] ' : '[NEW] ';
   if (source === 'library') return origin;

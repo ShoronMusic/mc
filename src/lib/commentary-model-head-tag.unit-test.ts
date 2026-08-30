@@ -21,7 +21,10 @@ test('formatGemma4CommentaryHeadPrefix: hidden on production and Vercel', () => 
     '',
   );
   assert.equal(
-    formatCommentPackChatOriginPrefix('new', 'gemma-4-31b-it', { NODE_ENV: 'development', VERCEL: '1' }),
+    formatCommentPackChatOriginPrefix('new', 'gemma-4-31b-it', {
+      NODE_ENV: 'development',
+      NEXT_PUBLIC_VERCEL_ENV: 'production',
+    }),
     '[NEW] ',
   );
 });
