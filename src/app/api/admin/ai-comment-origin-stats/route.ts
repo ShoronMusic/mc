@@ -22,7 +22,9 @@ function toJstYmd(iso: string): string {
 
 /** room_chat_log の AI 本文先頭がアプリ付与の [NEW] / [DB] か */
 function classifyAiBodyPrefix(body: string): 'new' | 'db' | 'other' {
-  const t = typeof body === 'string' ? body.trimStart() : '';
+  let t = typeof body === 'string' ? body.trimStart() : '';
+  t = t.replace(/^【[^】]+】\s*/, '');
+  t = t.replace(/^\[G4\]\s*/, '');
   if (t.startsWith('[NEW]')) return 'new';
   if (t.startsWith('[DB]')) return 'db';
   return 'other';
@@ -35,6 +37,7 @@ const GEMINI_CONTEXT_SONG_COMMENTARY = new Set([
   'comment_pack_free_3',
   'comment_pack_free_4',
   'commentary',
+  'commentary_copyedit',
   'song_quiz',
   'next_song_recommend',
 ]);

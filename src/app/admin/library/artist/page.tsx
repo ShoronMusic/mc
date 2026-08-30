@@ -6,6 +6,7 @@ import { AdminArtistJsonImportPanel } from '@/components/admin/AdminArtistJsonIm
 import { AdminArtistDeletePanel } from '@/components/admin/AdminArtistDeletePanel';
 import { WesternArtistPlaylistImportPanel } from '@/components/admin/WesternArtistPlaylistImportPanel';
 import { artistNameToMusic8Slug } from '@/lib/music8-artist-display';
+import { loadArtistMemberGraph, type ArtistMemberLink } from '@/lib/artist-members';
 
 type ArtistRow = {
   id: string;
@@ -35,6 +36,28 @@ type SongRow = {
 
 function normalizeArtistNameLoose(name: string): string {
   return name.replace(/^\s*(?:The|A|An)\s+/i, '').trim().toLowerCase();
+}
+
+function adminArtistHref(link: ArtistMemberLink): string {
+  const slug = (link.music8_artist_slug ?? '').trim();
+  if (slug) return `/admin/library/artist?slug=${encodeURIComponent(slug)}`;
+  return `/admin/library/artist?name=${encodeURIComponent(link.name)}`;
+}
+
+function ArtistRelationDd({ links }: { links: ArtistMemberLink[] }) {
+  if (links.length === 0) return <dd className="inline">—</dd>;
+  return (
+    <dd className="inline">
+      {links.map((link, i) => (
+        <span key={link.id}>
+          {i > 0 ? '、' : null}
+          <Link href={adminArtistHref(link)} className="text-sky-400 hover:underline">
+            {link.name}
+          </Link>
+        </span>
+      ))}
+    </dd>
+  );
 }
 
 export default async function AdminLibraryArtistPage({
@@ -98,6 +121,18 @@ export default async function AdminLibraryArtistPage({
     }
   } catch {
     artist = null;
+  }
+
+  let memberGraph: { members: ArtistMemberLink[]; bands: ArtistMemberLink[] } = {
+    members: [],
+    bands: [],
+  };
+  if (artist?.id) {
+    try {
+      memberGraph = await loadArtistMemberGraph(supabase, artist.id);
+    } catch {
+      memberGraph = { members: [], bands: [] };
+    }
   }
 
   const displayName =
@@ -208,8 +243,16 @@ export default async function AdminLibraryArtistPage({
             <dd className="inline">{artist?.active_period ?? '—'}</dd>
           </div>
           <div>
+            <dt className="inline text-gray-500">所属バンド: </dt>
+            <ArtistRelationDd links={memberGraph.bands} />
+          </div>
+          <div>
             <dt className="inline text-gray-500">members: </dt>
-            <dd className="inline">{artist?.members ?? '—'}</dd>
+            {memberGraph.members.length > 0 ? (
+              <ArtistRelationDd links={memberGraph.members} />
+            ) : (
+              <dd className="inline">{artist?.members ?? '—'}</dd>
+            )}
           </div>
           <div>
             <dt className="inline text-gray-500">youtube_channel_title: </dt>

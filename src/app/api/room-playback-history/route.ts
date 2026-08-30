@@ -22,9 +22,13 @@ import { getVideoSnippet } from '@/lib/youtube-search';
 import { resolveJapaneseDomesticWithMusicBrainz } from '@/lib/resolve-japanese-economy';
 import { isJpDomesticOfficialChannelAiException } from '@/lib/jp-official-channel-exception';
 import { isRoomJpAiUnlockEnabled } from '@/lib/room-jp-ai-unlock-server';
-import { getOrAssignEra } from '@/lib/song-era';
+import {
+  fetchOriginalReleaseEraByVideoIds,
+  getOrAssignEra,
+  setEraInDb,
+} from '@/lib/song-era';
 import { getOrAssignStyle, setStyleInDb } from '@/lib/song-style';
-import { upsertSongAndVideo, updateSongStyle, incrementSongPlayCount } from '@/lib/song-entities';
+import { upsertSongAndVideo, updateSongStyleIfEmpty, incrementSongPlayCount } from '@/lib/song-entities';
 import { resolveSongCatalogScope } from '@/lib/song-catalog-scope';
 import { buildSongDbRegistrationInput } from '@/lib/song-db-registration-gate';
 import { resolveDomesticSongMetadataForRegistration } from '@/lib/domestic-song-registration';
@@ -38,6 +42,7 @@ import {
   fetchLibrarySongDisplayByVideoId,
 } from '@/lib/library-song-display-by-video';
 import { SONG_STYLE_OPTIONS } from '@/lib/song-styles';
+import type { SongEraOption } from '@/lib/song-era-options';
 import type { SongStyle } from '@/lib/gemini';
 import { gateRoomPlaybackHistoryRead } from '@/lib/room-playback-history-access';
 import {
@@ -211,6 +216,25 @@ export async function GET(request: Request) {
           era: typeof e === 'string' && e.trim() ? e.trim() : null,
         };
       });
+    }
+    const origEraMap = await fetchOriginalReleaseEraByVideoIds(
+      createAdminClient() ?? supabase,
+      videoIds,
+    );
+    if (origEraMap.size > 0) {
+      const repairs: { video_id: string; era: SongEraOption }[] = [];
+      items = items.map((row) => {
+        const fromOrig = origEraMap.get(row.video_id);
+        if (!fromOrig) return row;
+        if (row.era !== fromOrig) {
+          repairs.push({ video_id: row.video_id, era: fromOrig });
+        }
+        return { ...row, era: fromOrig };
+      });
+      if (repairs.length > 0) {
+        const writer = createAdminClient() ?? supabase;
+        await Promise.all(repairs.map((r) => setEraInDb(writer, r.video_id, r.era)));
+      }
     }
   }
 
@@ -511,10 +535,10 @@ export async function POST(request: Request) {
       song ?? title ?? videoId,
       artist,
       title,
-      { roomId, videoId }
+      { roomId, videoId, songId }
     );
     if (style && songId) {
-      await updateSongStyle(supabase, songId, style);
+      await updateSongStyleIfEmpty(supabase, songId, style);
     }
   } catch (e) {
     console.error('[room-playback-history] getOrAssignStyle', e);
@@ -527,6 +551,8 @@ export async function POST(request: Request) {
       oembedTitle: title,
       description: snippetDescription,
       publishedAtIso: snippet?.publishedAt ?? null,
+      originalReleaseDate: librarySong?.originalReleaseDate || originalReleaseDateIso,
+      songId,
     }, { roomId, videoId });
   } catch (e) {
     console.error('[room-playback-history] getOrAssignEra', e);

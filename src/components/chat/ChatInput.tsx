@@ -63,7 +63,8 @@ import { LibraryArtistDetailMusic8Body } from '@/components/chat/LibraryArtistDe
 import { LibraryArtistDetailDbBody } from '@/components/chat/LibraryArtistDetailDbBody';
 import { isLibraryArtistInfoSparse } from '@/lib/library-artist-info-display';
 import { buildLibraryArtistExternalLinks, formatLibraryArtistDetailTitleLines } from '@/lib/library-artist-public-display';
-import { LibraryMusic8SongComment } from '@/components/chat/LibraryMusic8SongComment';
+import { LibrarySongCommentary } from '@/components/chat/LibrarySongCommentary';
+import { LibrarySongVocalRows } from '@/components/chat/LibrarySongVocalRows';
 import { LibraryArtistAutoplayConfirmModal } from '@/components/chat/LibraryArtistAutoplayConfirmModal';
 import { FeaturedPageModal } from '@/components/chat/FeaturedPageModal';
 import {
@@ -146,6 +147,7 @@ type LibrarySongRow = {
   spotify_popularity: number | null;
   video_id: string | null;
   has_ai_commentary: boolean;
+  spotify_track_id?: string | null;
 };
 
 type LibrarySongVideoRow = {
@@ -171,7 +173,27 @@ type LibraryArtistInfo = {
   youtube_channel_id: string | null;
   spotify_artist_id: string | null;
   wikipedia_page: string | null;
+  memberArtists?: { name: string; music8_artist_slug?: string | null }[];
+  bandArtists?: { name: string; music8_artist_slug?: string | null }[];
 };
+
+function parseLibraryArtistNavLinks(
+  raw: unknown,
+): { name: string; music8_artist_slug?: string | null }[] {
+  if (!Array.isArray(raw)) return [];
+  const out: { name: string; music8_artist_slug?: string | null }[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const o = item as Record<string, unknown>;
+    const name = typeof o.name === 'string' ? o.name.trim() : '';
+    if (!name) continue;
+    out.push({
+      name,
+      music8_artist_slug: typeof o.music8_artist_slug === 'string' ? o.music8_artist_slug : null,
+    });
+  }
+  return out;
+}
 
 /** `/api/library/artists` と同型（部屋ライブラリの索引） */
 type LibraryArtistIndexRow = {
@@ -928,7 +950,6 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
   const [featuredPages, setFeaturedPages] = useState<
     Array<{ id: string; title: string; ai_usage_free: boolean }>
   >([]);
-  const [featuredInitialPageId, setFeaturedInitialPageId] = useState<string | null>(null);
   const [libraryArtistAutoplayConfirmOpen, setLibraryArtistAutoplayConfirmOpen] =
     useState(false);
   const [libraryArtistAutoplayStartVideoId, setLibraryArtistAutoplayStartVideoId] =
@@ -1354,7 +1375,12 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
         setLibraryRows((current) =>
           current.map((row) => {
             const detail = details.get(row.id);
-            return detail ? { ...row, ...detail } : row;
+            if (!detail) return row;
+            return {
+              ...row,
+              my_play_count: detail.my_play_count,
+              has_ai_commentary: detail.has_ai_commentary || row.has_ai_commentary,
+            };
           }),
         );
       } catch {
@@ -1414,6 +1440,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                     : null,
                 video_id: typeof r.video_id === 'string' ? r.video_id : null,
                 has_ai_commentary: r.has_ai_commentary === true,
+                spotify_track_id: typeof r.spotify_track_id === 'string' ? r.spotify_track_id : null,
               }))
           : [];
         setLibraryRows(rows);
@@ -1550,6 +1577,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                     : null,
                 video_id: typeof r.video_id === 'string' ? r.video_id : null,
                 has_ai_commentary: r.has_ai_commentary === true,
+                spotify_track_id: typeof r.spotify_track_id === 'string' ? r.spotify_track_id : null,
               }))
           : [];
         setLibraryRows(rows);
@@ -1665,6 +1693,8 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
         youtube_channel_id: typeof a.youtube_channel_id === 'string' ? a.youtube_channel_id : null,
         spotify_artist_id: typeof a.spotify_artist_id === 'string' ? a.spotify_artist_id : null,
         wikipedia_page: typeof a.wikipedia_page === 'string' ? a.wikipedia_page : null,
+        memberArtists: parseLibraryArtistNavLinks(a.memberArtists),
+        bandArtists: parseLibraryArtistNavLinks(a.bandArtists),
       };
       setLibraryArtistInfo(dbInfo);
       setLibraryDetailMusic8Artist(
@@ -2112,21 +2142,21 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
     if (!libraryArtistIndexActive || !libraryArtistsReady || libraryArtistLetter === null) {
       return;
     }
-    if (browseArtistIndexRows.length === 0) return;
 
-    const match = browseArtistIndexRows.find(
-      (a) => a.main_artist.toLowerCase() === selected.toLowerCase(),
-    );
-    if (!match) {
+    const indexedName = findLibraryMainArtistInIndex([selected], libraryArtistItems);
+    const canonical = indexedName ?? selected;
+    if (libraryModalArtistIndexKey(canonical) !== libraryArtistLetter) {
       setLibrarySelectedArtistName(null);
-    } else if (match.main_artist !== librarySelectedArtistName) {
-      setLibrarySelectedArtistName(match.main_artist);
+      return;
+    }
+    if (indexedName && indexedName !== librarySelectedArtistName) {
+      setLibrarySelectedArtistName(indexedName);
     }
   }, [
     librarySelectedArtistName,
     librarySongSource,
     searchArtistNameCandidates,
-    browseArtistIndexRows,
+    libraryArtistItems,
     libraryArtistIndexActive,
     libraryArtistsReady,
     libraryArtistLetter,
@@ -2209,14 +2239,10 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
     };
   }, []);
 
-  const openFeaturedModal = useCallback(
-    (pageId?: string | null) => {
-      if (roomInteractionLocked) return;
-      setFeaturedInitialPageId(pageId ?? (featuredPages.length === 1 ? featuredPages[0]!.id : null));
-      setFeaturedOpen(true);
-    },
-    [roomInteractionLocked, featuredPages],
-  );
+  const openFeaturedModal = useCallback(() => {
+    if (roomInteractionLocked) return;
+    setFeaturedOpen(true);
+  }, [roomInteractionLocked]);
 
   const closeLibraryModal = useCallback(() => {
     if (librarySongListScrollRef.current) {
@@ -3175,7 +3201,6 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
         <FeaturedPageModal
           open={featuredOpen}
           onClose={() => setFeaturedOpen(false)}
-          initialPageId={featuredInitialPageId}
           onLibraryArtistAutoplay={onLibraryArtistAutoplay}
           isGuest={isGuest}
           participatesInSelection={participatesInSelection}
@@ -3690,9 +3715,15 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                           ? buildLibraryArtistExternalLinks(libraryArtistInfo)
                           : null
                       }
+                      memberLinks={libraryArtistInfo?.memberArtists}
+                      bandLinks={libraryArtistInfo?.bandArtists}
+                      onSelectArtist={switchLibraryToArtist}
                     />
                   ) : libraryArtistInfo ? (
-                    <LibraryArtistDetailDbBody artist={libraryArtistInfo} />
+                    <LibraryArtistDetailDbBody
+                      artist={libraryArtistInfo}
+                      onSelectArtist={switchLibraryToArtist}
+                    />
                   ) : (
                     <p className="text-gray-500">このアーティストの詳細はまだ登録されていません。</p>
                   )}
@@ -3813,8 +3844,8 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                               <span className="mt-0.5 flex shrink-0 items-center gap-1">
                                 {row.has_ai_commentary ? (
                                   <span
-                                    title="AI曲解説が保存済み"
-                                    aria-label="AI曲解説あり"
+                                    title="曲解説あり"
+                                    aria-label="曲解説あり"
                                   >
                                     <BookOpenIcon
                                       className="h-4 w-4 text-sky-400/95"
@@ -4091,8 +4122,6 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                                 ? selectedLibraryRow.original_release_date.slice(0, 7)
                                 : null,
                             ],
-                            ['ボーカル', selectedLibraryRow.vocal],
-                            ['選曲回数', selectedLibraryRow.play_count != null ? String(selectedLibraryRow.play_count) : null],
                           ]
                             .filter(([, v]) => v != null && v !== '')
                             .map(([label, value]) => (
@@ -4101,11 +4130,26 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                                 <dd className="min-w-0 break-words">{value}</dd>
                               </Fragment>
                             ))}
+                          <LibrarySongVocalRows
+                            fallbackVocal={selectedLibraryRow.vocal}
+                            videoId={librarySelectedVideoId}
+                            artistName={
+                              librarySongArtists.artists?.[0]?.name ?? selectedLibraryRow.main_artist
+                            }
+                            songTitle={selectedLibraryRow.song_title ?? selectedLibraryRow.title}
+                          />
+                          {selectedLibraryRow.play_count != null ? (
+                            <>
+                              <dt className="whitespace-nowrap text-gray-500">選曲回数：</dt>
+                              <dd className="min-w-0 break-words">{String(selectedLibraryRow.play_count)}</dd>
+                            </>
+                          ) : null}
                         </dl>
                       )}
                       {selectedLibraryRow ? (
-                        <LibraryMusic8SongComment
+                        <LibrarySongCommentary
                           videoId={librarySelectedVideoId}
+                          songId={selectedLibraryRow.id}
                           artistName={
                             librarySongArtists.artists?.[0]?.name ?? selectedLibraryRow.main_artist
                           }
@@ -4219,6 +4263,57 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                         </button>
                       ) : null}
                     </div>
+                    <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-2 gap-y-1 text-xs text-gray-300">
+                      <LibrarySongArtistsDetail
+                        artists={librarySongArtists.artists}
+                        loading={librarySongArtists.loading}
+                        fallbackMainArtist={selectedLibraryRow.main_artist}
+                        onSelectArtist={switchLibraryToArtist}
+                      />
+                      {[
+                        ['曲タイトル', selectedLibraryRow.song_title],
+                        ...(showRoomStyleUi()
+                          ? [['スタイル', selectedLibraryRow.style] as const]
+                          : []),
+                        ['ジャンル', selectedLibraryRow.genres],
+                        [
+                          '公開日',
+                          selectedLibraryRow.original_release_date
+                            ? selectedLibraryRow.original_release_date.slice(0, 7)
+                            : null,
+                        ],
+                      ]
+                        .filter(([, v]) => v != null && v !== '')
+                        .map(([label, value]) => (
+                          <Fragment key={`m-${label}`}>
+                            <dt className="whitespace-nowrap text-gray-500">{label}：</dt>
+                            <dd className="min-w-0 break-words">{value}</dd>
+                          </Fragment>
+                        ))}
+                      <LibrarySongVocalRows
+                        fallbackVocal={selectedLibraryRow.vocal}
+                        videoId={librarySelectedVideoId}
+                        artistName={
+                          librarySongArtists.artists?.[0]?.name ?? selectedLibraryRow.main_artist
+                        }
+                        songTitle={selectedLibraryRow.song_title ?? selectedLibraryRow.title}
+                        rowKeyPrefix="m-"
+                      />
+                      {selectedLibraryRow.play_count != null ? (
+                        <>
+                          <dt className="whitespace-nowrap text-gray-500">選曲回数：</dt>
+                          <dd className="min-w-0 break-words">{String(selectedLibraryRow.play_count)}</dd>
+                        </>
+                      ) : null}
+                    </dl>
+                    <LibrarySongCommentary
+                      videoId={librarySelectedVideoId}
+                      songId={selectedLibraryRow.id}
+                      artistName={
+                        librarySongArtists.artists?.[0]?.name ?? selectedLibraryRow.main_artist
+                      }
+                      songTitle={selectedLibraryRow.song_title ?? selectedLibraryRow.title}
+                    />
                   </>
                 </div>
               </section>
@@ -4480,17 +4575,11 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
               <button
                 type="button"
                 onClick={() => openFeaturedModal()}
-                title={
-                  featuredPages.length === 1
-                    ? `${featuredPages[0]!.title}（特集からアーティスト全曲選曲）`
-                    : '公開中の特集からアーティスト全曲選曲'
-                }
+                title="公開中の特集からアーティスト全曲選曲"
                 className="box-border flex h-11 min-w-0 flex-1 basis-1/2 items-center justify-center gap-1 rounded border border-amber-500/60 bg-amber-950/30 px-2 text-xs font-medium text-amber-100 hover:bg-amber-900/40 sm:text-sm"
                 aria-label="特集を開く"
               >
-                <span className="truncate">
-                  {featuredPages.length === 1 ? featuredPages[0]!.title : '特集'}
-                </span>
+                <span className="truncate">特集</span>
               </button>
             ) : null}
           </div>
@@ -4626,17 +4715,11 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
             <button
               type="button"
               onClick={() => openFeaturedModal()}
-              title={
-                featuredPages.length === 1
-                  ? `${featuredPages[0]!.title}（特集からアーティスト全曲選曲）`
-                  : '公開中の特集からアーティスト全曲選曲'
-              }
+              title="公開中の特集からアーティスト全曲選曲"
               className="box-border hidden h-[3.75rem] max-w-[11rem] shrink-0 items-center justify-center gap-1 rounded border border-amber-500/60 bg-amber-950/30 px-3 text-sm font-medium text-amber-100 hover:bg-amber-900/40 sm:flex"
               aria-label="特集を開く"
             >
-              <span className="truncate">
-                {featuredPages.length === 1 ? featuredPages[0]!.title : '特集'}
-              </span>
+              <span className="truncate">特集</span>
             </button>
           ) : null}
           {trailingSlot != null && trailingSlot !== false ? (

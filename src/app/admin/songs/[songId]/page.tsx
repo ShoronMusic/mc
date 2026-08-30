@@ -671,7 +671,7 @@ export default async function SongDetailPage({ params, searchParams }: SongDetai
                   <th className="px-2 py-1 text-left">performance_id</th>
                   <th className="px-2 py-1 text-left">YouTube公開</th>
                   <th className="px-2 py-1 text-left">登録日時</th>
-                  <th className="px-2 py-1 text-left">基本コメント</th>
+                  <th className="px-2 py-1 text-left">曲解説</th>
                 </tr>
               </thead>
               <tbody>

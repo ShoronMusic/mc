@@ -1,0 +1,34 @@
+**********************
+PowerShell transcript start
+Start time: 20260823215156
+Username: LAPTOP-N3TR5NE7\ymap6
+RunAs User: LAPTOP-N3TR5NE7\ymap6
+Configuration Name: 
+Machine: LAPTOP-N3TR5NE7 (Microsoft Windows NT 10.0.26200.0)
+Host Application: C:\Program Files\PowerShell\7\pwsh.dll -ExecutionPolicy Bypass -NonInteractive -File C:\Users\ymap6\AppData\Local\Temp\ps-script-3e9a578d-9553-41df-89e9-0223b1e27629.ps1
+Process ID: 16332
+PSVersion: 7.6.3
+PSEdition: Core
+GitCommitId: 7.6.3
+OS: Microsoft Windows 10.0.26200
+Platform: Win32NT
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1, 6.0, 7.0
+PSRemotingProtocolVersion: 2.4
+SerializationVersion: 1.1.0.1
+WSManStackVersion: 3.0
+**********************
+[1/3] diff plan
+[log] step -> E:\mc\tmp\music8-parallel-sync-logs\2026-08-23T21-25-43\02-mc-supabase\01-diff-plan.log
+[log] live output -> console + E:\mc\tmp\music8-parallel-sync-logs\2026-08-23T21-25-43\02-mc-supabase\transcript.log (not E:\mc\tmp\music8-parallel-sync-logs\2026-08-23T21-25-43\02-mc-supabase\01-diff-plan.log until end)
+
+[2/3] skipped (-SkipDryRun)
+[3/3] apply (DB update)
+[3/3] real-delta-only: new artists + fingerprint-stale songs only
+[log] step -> E:\mc\tmp\music8-parallel-sync-logs\2026-08-23T21-25-43\02-mc-supabase\03-apply-db.log
+[log] live output -> console + E:\mc\tmp\music8-parallel-sync-logs\2026-08-23T21-25-43\02-mc-supabase\transcript.log (not E:\mc\tmp\music8-parallel-sync-logs\2026-08-23T21-25-43\02-mc-supabase\03-apply-db.log until end)
+
+[log] done. combined=E:\mc\tmp\music8-parallel-sync-logs\2026-08-23T21-25-43\02-mc-supabase\run.log errors=E:\mc\tmp\music8-parallel-sync-logs\2026-08-23T21-25-43\02-mc-supabase\run-errors.log transcript=E:\mc\tmp\music8-parallel-sync-logs\2026-08-23T21-25-43\02-mc-supabase\transcript.log
+**********************
+PowerShell transcript end
+End time: 20260823224636
+**********************

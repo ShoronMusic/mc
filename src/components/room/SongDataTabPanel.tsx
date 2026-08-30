@@ -2,55 +2,43 @@
 
 /**
  * ソングデータタブの内容。Music8 曲 JSON から取得し、上から順に
- * リリース・スタイル・ジャンル・説明文 を表示する。
+ * リリース・スタイル・ジャンル・ボーカル・説明文（全文）を表示する。
  */
 
 import { useEffect, useState } from 'react';
 import { showRoomStyleUi } from '@/lib/product-branding';
+import { formatLibraryVocalDisplay } from '@/lib/library-vocal-display';
+import { resolveSongTitleForMusic8 } from '@/lib/music8-song-lookup';
 import {
-  resolveSongTitleForMusic8,
-} from '@/lib/music8-song-lookup';
-import { extractMusic8SongFields, type Music8SongExtract } from '@/lib/music8-song-fields';
+  extractMusic8SongFields,
+  pickMusic8SongFullDescription,
+  preferFullerMusic8Description,
+  type Music8SongExtract,
+} from '@/lib/music8-song-fields';
 import { ReferencedMusicDataDisclaimer } from '@/components/room/ReferencedMusicDataDisclaimer';
 
-function escapeHtmlText(s: string): string {
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
-/** musicaichat のプレーン行（ジャンル： … 等）の項目名をリリース行と同じグレーにする */
-const ITEM_LABEL_LINE =
-  /^(\s*(?:ジャンル|スタイル|ボーカル|Genre|Style|Vocals?)(?:\s*\([^)]*\))?\s*[:：]\s*)([\s\S]*)$/;
-
-function formatSongDataDescriptionMarkup(raw: string): string {
-  const t = (raw ?? '').replace(/\r\n/g, '\n');
-  if (!t.trim()) return '';
-  if (/<[a-zA-Z!?/]/.test(t)) {
-    return t;
+function mergeSongExtracts(parts: Music8SongExtract[]): Music8SongExtract | null {
+  if (parts.length === 0) return null;
+  const out: Music8SongExtract = { ...parts[0] };
+  for (const p of parts.slice(1)) {
+    if (!out.releaseDate && p.releaseDate) out.releaseDate = p.releaseDate;
+    if (p.genres.length > out.genres.length) out.genres = p.genres;
+    if (p.styleNames.length > out.styleNames.length) {
+      out.styleIds = p.styleIds;
+      out.styleNames = p.styleNames;
+    }
+    if (!out.vocalLabel && p.vocalLabel) out.vocalLabel = p.vocalLabel;
+    if (!out.structuredStyleFromFacts && p.structuredStyleFromFacts) {
+      out.structuredStyleFromFacts = p.structuredStyleFromFacts;
+    }
   }
-  return t
-    .split('\n')
-    .map((line) => {
-      const m = line.match(ITEM_LABEL_LINE);
-      if (m) {
-        return `<span class="text-gray-500">${escapeHtmlText(m[1])}</span>${escapeHtmlText(m[2])}`;
-      }
-      return escapeHtmlText(line);
-    })
-    .join('\n');
+  return out;
 }
 
-/** 説明文内に個別のジャンル／スタイル行があるときは、上部の「スタイル：…」「ジャンル：…」集約と重複するため非表示にする */
-function descriptionImpliesStructuredGenreOrStyle(description: string): boolean {
-  const t = description.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
-  if (!t) return false;
-  // 「ジャンル (Genre):」のように括弧が挟まる表記も拾う
-  const jpGenre = /ジャンル\s*(?:\([^)]*\))?\s*[:：]/.test(t);
-  const jpStyle = /スタイル\s*(?:\([^)]*\))?\s*[:：]/.test(t);
-  return jpGenre || jpStyle || /\bGenre\s*:/i.test(t) || /\bStyle\s*:/i.test(t);
+async function fetchSongJson(url: string): Promise<unknown | null> {
+  const res = await fetch(url, { credentials: 'include' });
+  const json = (await res.json().catch(() => ({}))) as { song?: unknown };
+  return json?.song && typeof json.song === 'object' ? json.song : null;
 }
 
 interface SongDataTabPanelProps {
@@ -81,30 +69,37 @@ export default function SongDataTabPanel({
     const vid = (videoId ?? '').trim();
     (async () => {
       try {
+        const tasks: Promise<unknown | null>[] = [];
         if (vid) {
-          const mr = await fetch(
-            `/api/music8/musicaichat-by-video?videoId=${encodeURIComponent(vid)}`,
-            { credentials: 'include' },
+          tasks.push(
+            fetchSongJson(`/api/music8/musicaichat-by-video?videoId=${encodeURIComponent(vid)}`),
           );
-          const mj = (await mr.json().catch(() => ({}))) as { song?: unknown };
-          if (mj?.song && typeof mj.song === 'object') {
-            setFields(extractMusic8SongFields(mj.song));
-            setError(false);
-            return;
-          }
         }
-        const sr = await fetch(
-          `/api/music8/song-by-playback?artistName=${encodeURIComponent(artistName)}&songTitle=${encodeURIComponent(songTitle ?? '')}`,
-          { credentials: 'include' },
+        tasks.push(
+          fetchSongJson(
+            `/api/music8/song-by-playback?artistName=${encodeURIComponent(artistName)}&songTitle=${encodeURIComponent(songTitle ?? '')}`,
+          ),
         );
-        const sj = (await sr.json().catch(() => ({}))) as { song?: unknown };
-        if (sj?.song && typeof sj.song === 'object') {
-          setFields(extractMusic8SongFields(sj.song));
-          setError(false);
-        } else {
+        const songs = (await Promise.all(tasks)).filter((s): s is Record<string, unknown> =>
+          Boolean(s && typeof s === 'object'),
+        );
+        if (songs.length === 0) {
           setFields(null);
           setError(true);
+          return;
         }
+        const merged = mergeSongExtracts(songs.map((s) => extractMusic8SongFields(s)));
+        let description = '';
+        for (const s of songs) {
+          description = preferFullerMusic8Description(description, pickMusic8SongFullDescription(s));
+        }
+        if (!merged) {
+          setFields(null);
+          setError(true);
+          return;
+        }
+        setFields({ ...merged, description });
+        setError(false);
       } catch {
         setFields(null);
         setError(true);
@@ -195,30 +190,7 @@ export default function SongDataTabPanel({
     );
   }
 
-  const hasAny =
-    fields.releaseDate ||
-    (showRoomStyleUi() && fields.styleNames.length > 0) ||
-    fields.genres.length > 0 ||
-    fields.description;
-
-  if (!hasAny) {
-    return (
-      <div className="flex h-full flex-col gap-2 overflow-auto p-4 text-sm">
-        <p className="font-medium text-gray-200">
-          {artistName}
-          {displaySong ? ` - ${displaySong}` : ''}
-        </p>
-        <p className="text-xs text-gray-500">
-          {showRoomStyleUi()
-            ? 'リリース・スタイル・ジャンル・説明文はいずれもありません'
-            : 'リリース・ジャンル・説明文はいずれもありません'}
-        </p>
-        <ReferencedMusicDataDisclaimer />
-      </div>
-    );
-  }
-
-  const hideAggregatedStyleGenre = descriptionImpliesStructuredGenreOrStyle(fields.description);
+  const vocalDisplay = formatLibraryVocalDisplay(fields.vocalLabel);
   const showStyleUi = showRoomStyleUi();
   const descriptionForDisplay =
     showStyleUi || !fields.description
@@ -228,10 +200,35 @@ export default function SongDataTabPanel({
           .split('\n')
           .filter(
             (line) =>
-              !/^\s*スタイル\s*(?:\([^)]*\))?\s*[:：]/.test(line) && !/^\s*Style\s*(?:\([^)]*\))?\s*[:：]/i.test(line),
+              !/^\s*スタイル\s*(?:\([^)]*\))?\s*[:：]/.test(line) &&
+              !/^\s*Style\s*(?:\([^)]*\))?\s*[:：]/i.test(line),
           )
           .join('\n')
           .trim();
+
+  const hasAny =
+    fields.releaseDate ||
+    (showStyleUi && fields.styleNames.length > 0) ||
+    fields.genres.length > 0 ||
+    vocalDisplay ||
+    descriptionForDisplay;
+
+  if (!hasAny) {
+    return (
+      <div className="flex h-full flex-col gap-2 overflow-auto p-4 text-sm">
+        <p className="font-medium text-gray-200">
+          {artistName}
+          {displaySong ? ` - ${displaySong}` : ''}
+        </p>
+        <p className="text-xs text-gray-500">
+          {showStyleUi
+            ? 'リリース・スタイル・ジャンル・説明文はいずれもありません'
+            : 'リリース・ジャンル・説明文はいずれもありません'}
+        </p>
+        <ReferencedMusicDataDisclaimer />
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-full flex-col gap-3 overflow-auto p-4 text-sm">
@@ -241,24 +238,29 @@ export default function SongDataTabPanel({
           {fields.releaseDate}
         </p>
       )}
-      {showStyleUi && !hideAggregatedStyleGenre && fields.styleNames.length > 0 && (
+      {showStyleUi && fields.styleNames.length > 0 && (
         <p className="text-gray-200">
           <span className="text-gray-500">スタイル：</span>
           {fields.styleNames.join(', ')}
         </p>
       )}
-      {!hideAggregatedStyleGenre && fields.genres.length > 0 && (
+      {fields.genres.length > 0 && (
         <p className="text-gray-200">
           <span className="text-gray-500">ジャンル：</span>
           {fields.genres.join(', ')}
         </p>
       )}
-      {descriptionForDisplay && (
-        <div
-          className="prose prose-invert max-w-none whitespace-pre-wrap text-gray-300 prose-strong:text-gray-500 prose-p:my-1 prose-p:leading-relaxed prose-a:text-blue-400"
-          dangerouslySetInnerHTML={{ __html: formatSongDataDescriptionMarkup(descriptionForDisplay) }}
-        />
+      {vocalDisplay && (
+        <p className="text-gray-200">
+          <span className="text-gray-500">ボーカル：</span>
+          {vocalDisplay}
+        </p>
       )}
+      {descriptionForDisplay ? (
+        <p className="whitespace-pre-wrap break-words text-gray-300 leading-relaxed">
+          {descriptionForDisplay}
+        </p>
+      ) : null}
       <ReferencedMusicDataDisclaimer />
     </div>
   );

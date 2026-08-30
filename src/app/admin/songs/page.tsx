@@ -314,6 +314,11 @@ export default function AdminSongsPage() {
       <AdminMenuBar />
       <div className="mb-4">
         <h1 className="text-xl font-semibold">管理者: 曲ダッシュボード（検索）</h1>
+        <p className="mt-2 text-sm">
+          <Link href="/admin/songs/new" className="text-amber-300 hover:underline">
+            洋楽 1 曲登録（YouTube → Supabase + JSON）
+          </Link>
+        </p>
       </div>
 
       <form onSubmit={handleSearch} className="mb-4 flex gap-2">

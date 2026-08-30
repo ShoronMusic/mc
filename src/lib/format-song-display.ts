@@ -38,6 +38,20 @@ export function swapIfCompoundArtistStuckInSongSlot(
 
 /** アーティスト - 曲名 の区切り（ASCII/全角ハイフン・en/emダッシュ・水平線） */
 const ARTIST_TITLE_SEPARATOR = /\s*[-\u2013\u2014\u2015\uFF0D]\s*/;
+/** 「Passenger | It Was Gonna Be You」型。前後空白付きパイプだけ（COLORS の `| A COLORS SHOW` とは別扱い） */
+const ARTIST_TITLE_SPACED_PIPE = /\s+\|\s+/;
+
+/**
+ * パイプ右側が曲名ではなく、Vevo / COLORS / Official Video 等の末尾メタのとき true。
+ * `cleanTitle` が「| 以降を全部落とす」と曲名ごと消えるため、ゴミだけに限定する。
+ */
+function looksLikeJunkYoutubePipeSuffix(suffix: string): boolean {
+  const t = suffix.trim();
+  if (!t) return true;
+  return /^(?:a\s+colors\s+show\b|vevo\b|official(?:\s+(?:music\s+)?(?:video|audio|lyric\s*video|visualizer|trailer))?\b|lyric(?:s)?(?:\s+video)?\b|music\s+video\b|visualizer\b|audio\b|hq\b|hd\b|4k\b|8k\b|uhd\b)/i.test(
+    t,
+  );
+}
 
 function readHyphenArtistPrefixes(): readonly string[] {
   const raw = artistHyphenNamePrefixes as unknown;
@@ -167,7 +181,9 @@ export function cleanTitle(title: string): string {
     .replace(/\s*\[Clean\]\s*/gi, ' ')
     .replace(/\s*\[Radio Edit\]\s*/gi, ' ')
     .replace(/\s*\|\s*Vevo\s*/gi, ' ')
-    .replace(/\s*\|\s*[^|]*$/g, ' ')
+    .replace(/\s*\|\s*([^|]*)$/g, (full, suffix: string) =>
+      looksLikeJunkYoutubePipeSuffix(suffix) ? ' ' : full,
+    )
     /** 「曲名 • TopPop」「曲名 · 番組名」など TV・ライブ番組のタグ（曲名の一部ではない） */
     .replace(/\s+[·•]\s+[^\n]+$/, ' ')
     .replace(/\s*-\s*Official[^-]*$/gi, ' ')
@@ -943,6 +959,30 @@ export function parseArtistTitle(
       const out = { artist, song };
       if (isGarbageArtistSongParse(out)) return null;
       return out;
+    }
+  }
+
+  // ハイフンが無い「Artist | Song」（Passenger 公式など）。右側が公式タグなら分割しない
+  const pipeIdx = rawForHyphenSplit.indexOf(' | ');
+  if (pipeIdx > 0) {
+    const left = unshieldHyphenArtists(rawForHyphenSplit.slice(0, pipeIdx).trim());
+    let songRaw = unshieldHyphenArtists(rawForHyphenSplit.slice(pipeIdx + 3).trim());
+    if (left.length >= 2 && songRaw.length >= 2 && !looksLikeJunkYoutubePipeSuffix(songRaw)) {
+      let artist = left;
+      const featInSong = songRaw.match(/^(.+?)\s+(ft\.?|feat\.?|fet\.?|featuring|w\/?)\s+(.+)$/i);
+      if (featInSong) {
+        const songOnly = featInSong[1].trim();
+        const featured = stripTrailingOfficialStyleParensFromSegment(featInSong[3].trim());
+        if (songOnly && featured) {
+          artist = `${artist} ft. ${featured}`;
+          songRaw = songOnly;
+        }
+      }
+      const song = cleanTitle(songRaw);
+      if (artist && song) {
+        const out = { artist, song };
+        if (!isGarbageArtistSongParse(out)) return out;
+      }
     }
   }
   return null;
@@ -1872,9 +1912,11 @@ export function formatArtistTitle(
       : {}),
   };
   const opts = Object.keys(optsBase).length > 0 ? optsBase : undefined;
+  const hasArtistTitleSplit =
+    ARTIST_TITLE_SEPARATOR.test(cleaned) || ARTIST_TITLE_SPACED_PIPE.test(cleaned);
 
   if (!authorName) {
-    if (opts) {
+    if (opts || hasArtistTitleSplit) {
       const { artistDisplay, song } = getArtistAndSong(cleaned, null, opts);
       if (artistDisplay && song) return `${artistDisplay} - ${song}`;
     }
@@ -1885,7 +1927,7 @@ export function formatArtistTitle(
 
   const author = cleanAuthor(decodeCommonHtmlEntities(authorName));
   if (!author || isLikelyPersonalChannelName(author)) {
-    if (opts) {
+    if (opts || hasArtistTitleSplit) {
       const { artistDisplay, song } = getArtistAndSong(cleaned, null, opts);
       if (artistDisplay && song) return `${artistDisplay} - ${song}`;
     }
@@ -1894,16 +1936,10 @@ export function formatArtistTitle(
     return cleaned;
   }
 
-  if (opts) {
+  if (opts || hasArtistTitleSplit) {
     const { artistDisplay, song } = getArtistAndSong(cleaned, author, opts);
     if (artistDisplay && song) return `${artistDisplay} - ${song}`;
-  }
-
-  // 既に区切りがある場合でも、「曲名 - アーティスト」逆パターンを正規化して表示する
-  if (ARTIST_TITLE_SEPARATOR.test(cleaned)) {
-    const { artistDisplay, song } = getArtistAndSong(cleaned, author, opts);
-    if (artistDisplay && song) return `${artistDisplay} - ${song}`;
-    return cleaned;
+    if (hasArtistTitleSplit) return cleaned;
   }
 
   return `${author} - ${cleaned}`;

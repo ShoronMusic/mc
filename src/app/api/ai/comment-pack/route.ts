@@ -32,6 +32,7 @@ import { getVideoSnippet } from '@/lib/youtube-search';
 import type { VideoSnippet } from '@/lib/youtube-search';
 import { containsUnreliableCommentPackClaim } from '@/lib/ai-output-policy';
 import {
+  extractRawTextFromGenerateContentResponse,
   extractTextFromGenerateContentResponse,
   isGemmaHostedModelId,
   polishGemmaModelVisibleText,
@@ -39,6 +40,10 @@ import {
 } from '@/lib/gemini-gemma-host';
 import { getGeminiModel, logGeminiUsage } from '@/lib/gemini';
 import { resolveGenerationModelId } from '@/lib/gemini-model-routing';
+import {
+  copyeditGemmaCommentaryBodies,
+  copyeditGemmaCommentaryText,
+} from '@/lib/gemma-commentary-copyedit';
 import { persistGeminiUsageLog, buildGeminiUsagePersistMeta } from '@/lib/gemini-usage-log';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { attachMusic8SongDataIfFetched, upsertSongAndVideo } from '@/lib/song-entities';
@@ -50,7 +55,6 @@ import {
   COMMENT_PACK_NEW_RELEASE_DISCLAIMER,
   COMMENT_PACK_SOURCES,
   getStoredCommentPackByVideoId,
-  getStoredNewReleaseCommentPack,
   insertTidbit,
 } from '../../../../lib/song-tidbits';
 import { shouldApplyCommentPackNewReleaseMode } from '@/lib/comment-pack-new-release';
@@ -288,8 +292,8 @@ ${secondaryHint}・世界的知名度の高い客演者がいる一曲では、�
 /**
  * 曲ごとのコメントパック生成API
  * - 基本コメント1本 + 自由コメント最大4本（1:栄誉・チャート 2:歌詞 3:サウンド 4:アーティスト情報）をまとめて生成する
- * - 動画公開から30日以内は「新曲」とみなし、基本コメントのみ（末尾に注釈）。自由4本は生成しない
- * - 同一動画は song_tidbits から再利用（新曲は注釈付き基本のみキャッシュ、それ以外は4本そろいでキャッシュ）
+ * - 動画公開から30日以内は「新曲」とみなし、基本コメントのみ（末尾に注釈）。自由4本は生成しない。**song_tidbits には保存しない**（30日超の曲のみ DB 保存・キャッシュ）
+ * - 同一動画は song_tidbits から再利用（通常は基本＋自由4本そろいでキャッシュ。新曲は毎回新規生成）
  * - 邦楽節約: タイトル等の主要メタが日本語っぽい／音声言語が ja／（概要だけ日本語なら英字主体のメタでは除外し）MusicBrainz で Area=Japan 等のときは AI 曲解説を出さない（skipAiCommentary）。ただし ONE OK ROCK / XG / Ado / ATARASHII GAKKO!（＋88rising）/ YOASOBI の公式 YouTube チャンネル（channelId 固定＋ env 追加分）は除外。COMMENT_PACK_JP_ECONOMY=0 でオフ
  * - COMMENT_PACK_SKIP_CACHE=1 で常に新規生成
  * - musicaichat 曲 JSON が取れ、Music8 注入オン時でも [DB] は既定で再利用。強制再生成は `COMMENT_PACK_REGENERATE_LIBRARY_WHEN_MUSIC8=1`（`/api/ai/commentary` も同条件）
@@ -423,7 +427,12 @@ export async function POST(request: Request) {
           creditsRemaining: charged.creditsRemaining,
         });
       }
-      return NextResponse.json(payload);
+      return NextResponse.json({
+        ...payload,
+        generationModel: resolveGenerationModelId(
+          packPhase === 'frees' ? 'comment_pack_free_1' : 'comment_pack_base',
+        ),
+      });
     };
 
     const selectorGeminiLogMeta = buildGeminiUsagePersistMeta({
@@ -828,95 +837,69 @@ export async function POST(request: Request) {
     const polishCachedBodiesForGemma = isGemmaHostedModelId(
       resolveGenerationModelId('comment_pack_base'),
     );
-    if (!skipCache && packPhase !== 'frees') {
-      if (isNewRelease) {
-        const nrCached = await getStoredNewReleaseCommentPack(reader, videoId);
-        if (nrCached) {
-          if (isSupergroupArtist && !hasSupergroupContext(nrCached.baseComment)) {
-            // 旧キャッシュでスーパーグループ背景が欠ける場合は再生成を優先
-          } else if (storedCommentaryLooksLikeProductionCreditHallucination(nrCached.baseComment)) {
-            // 制作クレジット誤認で保存された旧 DB を返さない
-          } else {
-            let baseOut = polishCachedBodiesForGemma
-              ? polishGemmaModelVisibleText(nrCached.baseComment)
-              : stripTrailingSelfReportedCharCount(nrCached.baseComment);
-            if (sessionBlock) {
-              baseOut = await prependLibrarySessionBridge(baseOut, {
-                sessionBlock,
-                artistLabel: artistLabelPre,
-                songLabel: songLabelForAiPrompt,
-                videoId,
-                roomId,
-                userId: selectorUserId,
-                isGuestTrigger: requestIsGuest || !selectorUserId,
-              });
-            }
-            return respondPackSuccess({
-              songId,
+    // 新曲モードは DB 非保存のためキャッシュ参照もしない（毎回生成）
+    if (!skipCache && packPhase !== 'frees' && !isNewRelease) {
+      const cached = await getStoredCommentPackByVideoId(reader, videoId);
+      if (cached) {
+        if (isSupergroupArtist && !hasSupergroupContext(cached.baseComment)) {
+          // 旧キャッシュでスーパーグループ背景が欠ける場合は再生成を優先
+        } else if (storedCommentaryLooksLikeProductionCreditHallucination(cached.baseComment)) {
+          // 制作クレジット誤認で保存された旧 DB を返さない
+        } else {
+          const filtered = applySlotsToPackBodies(
+            cached.baseComment,
+            [...cached.freeComments],
+            responseSlots,
+          );
+          let baseOutLib = filtered.baseComment;
+          let freePolished = polishCachedBodiesForGemma
+            ? filtered.freeComments.map((c) =>
+                typeof c === 'string' && c.trim() ? polishGemmaModelVisibleText(c) : c,
+              )
+            : filtered.freeComments.map((c) =>
+                typeof c === 'string' && c.trim() ? stripTrailingSelfReportedCharCount(c) : c,
+              );
+          if (polishCachedBodiesForGemma && baseOutLib.trim()) {
+            baseOutLib = polishGemmaModelVisibleText(baseOutLib);
+          } else if (baseOutLib.trim()) {
+            baseOutLib = stripTrailingSelfReportedCharCount(baseOutLib);
+          }
+          if (sessionBlock && baseOutLib.trim()) {
+            baseOutLib = await prependLibrarySessionBridge(baseOutLib, {
+              sessionBlock,
+              artistLabel: artistLabelPre,
+              songLabel: songLabelForAiPrompt,
               videoId,
-              baseComment: baseOut,
-              freeComments: [],
-              source: 'library',
-              newReleaseOnly: true,
-              ...(nrCached.tidbitIds?.length ? { tidbitIds: nrCached.tidbitIds } : {}),
-              ...music8ModeratorHintsPayload,
-              ...songQuizExtensionFinal,
-              ...(songIntroOnlyDiscography ? { songIntroOnlyDiscography: true } : {}),
+              roomId,
+              userId: selectorUserId,
+              isGuestTrigger: requestIsGuest || !selectorUserId,
             });
           }
-        }
-      } else {
-        const cached = await getStoredCommentPackByVideoId(reader, videoId);
-        if (cached) {
-          if (isSupergroupArtist && !hasSupergroupContext(cached.baseComment)) {
-            // 旧キャッシュでスーパーグループ背景が欠ける場合は再生成を優先
-          } else if (storedCommentaryLooksLikeProductionCreditHallucination(cached.baseComment)) {
-            // 制作クレジット誤認で保存された旧 DB を返さない
-          } else {
-            const filtered = applySlotsToPackBodies(
-              cached.baseComment,
-              [...cached.freeComments],
-              responseSlots,
+          if (polishCachedBodiesForGemma && !songIntroOnlyDiscography) {
+            const editedLib = await copyeditGemmaCommentaryBodies(
+              [baseOutLib, ...freePolished],
+              {
+                draftModelId: resolveGenerationModelId('comment_pack_base'),
+                persistMeta: selectorGeminiLogMeta,
+              },
             );
-            let baseOutLib = filtered.baseComment;
-            const freePolished = polishCachedBodiesForGemma
-              ? filtered.freeComments.map((c) =>
-                  typeof c === 'string' && c.trim() ? polishGemmaModelVisibleText(c) : c,
-                )
-              : filtered.freeComments.map((c) =>
-                  typeof c === 'string' && c.trim() ? stripTrailingSelfReportedCharCount(c) : c,
-                );
-            if (polishCachedBodiesForGemma && baseOutLib.trim()) {
-              baseOutLib = polishGemmaModelVisibleText(baseOutLib);
-            } else if (baseOutLib.trim()) {
-              baseOutLib = stripTrailingSelfReportedCharCount(baseOutLib);
-            }
-            if (sessionBlock && baseOutLib.trim()) {
-              baseOutLib = await prependLibrarySessionBridge(baseOutLib, {
-                sessionBlock,
-                artistLabel: artistLabelPre,
-                songLabel: songLabelForAiPrompt,
-                videoId,
-                roomId,
-                userId: selectorUserId,
-                isGuestTrigger: requestIsGuest || !selectorUserId,
-              });
-            }
-            const tidbitIdsFull = cached.tidbitIds ?? [];
-            const freeCommentTidbitIds = tidbitIdsFull.length > 1 ? tidbitIdsFull.slice(1) : [];
-            return respondPackSuccess({
-              songId,
-              videoId,
-              baseComment: baseOutLib,
-              freeComments: freePolished,
-              source: 'library',
-              ...(tidbitIdsFull.length ? { tidbitIds: tidbitIdsFull } : {}),
-              ...(freeCommentTidbitIds.length > 0 ? { freeCommentTidbitIds } : {}),
-              ...music8ModeratorHintsPayload,
-              ...songQuizExtensionFinal,
-              ...(songIntroOnlyDiscography ? { songIntroOnlyDiscography: true } : {}),
-            });
+            baseOutLib = editedLib[0] ?? '';
+            freePolished = editedLib.slice(1);
           }
+          const tidbitIdsFull = cached.tidbitIds ?? [];
+          const freeCommentTidbitIds = tidbitIdsFull.length > 1 ? tidbitIdsFull.slice(1) : [];
+          return respondPackSuccess({
+            songId,
+            videoId,
+            baseComment: baseOutLib,
+            freeComments: freePolished,
+            source: 'library',
+            ...(tidbitIdsFull.length ? { tidbitIds: tidbitIdsFull } : {}),
+            ...(freeCommentTidbitIds.length > 0 ? { freeCommentTidbitIds } : {}),
+            ...music8ModeratorHintsPayload,
+            ...songQuizExtensionFinal,
+            ...(songIntroOnlyDiscography ? { songIntroOnlyDiscography: true } : {}),
+          });
         }
       }
     }
@@ -977,7 +960,8 @@ export async function POST(request: Request) {
         : '';
     const music8SourcePolicyLine =
       music8FactsSection.length > 0
-        ? `・下記【Music8 参照事実】はマスター由来の要約です。**記載のリリース時期・ジャンル分類・アルバム名などと本文を矛盾させないこと。**参照に無い受賞・チャート順位・固有名は捏造しないこと。参照と YouTube メタが明確に食い違うときは断定を避け、メタデータ優先でよい。`
+        ? `・下記【Music8 参照事実】はマスター由来の要約です。**記載のリリース時期・ジャンル分類・アルバム名などと本文を矛盾させないこと。**参照に無い受賞・チャート順位・固有名は捏造しないこと。参照と YouTube メタが明確に食い違うときは断定を避け、メタデータ優先でよい。
+・Music8 参照があるときは、雰囲気や「大ヒット」「広く知られる」だけの一文で終わらせないこと。参照事実から**リリース年または収録アルバム名**と、**ジャンルまたはサウンドの具体**を少なくとも1つ本文に入れること。書き出しの「${artistLabel}の『${songLabel}』」は省略禁止。`
         : musicBrainzFactsSection.length > 0
           ? `・下記【MusicBrainz 参照事実】は照合済みの事実です。盤名・年号・シングル/アルバム区分はこの範囲のみで述べ、補完・推測しないこと。`
           : `・本APIは Music8 等の外部楽曲DBを参照していません。根拠のない固有名・年号を作らないこと。`;
@@ -1105,22 +1089,24 @@ ${basePromptTail}`;
       const baseResult = await model.generateContent(basePrompt);
       logGeminiUsage('comment_pack_base', baseResult.response);
       await persistGeminiUsageLog('comment_pack_base', baseResult.response.usageMetadata, selectorGeminiLogMeta);
-      baseText = extractTextFromGenerateContentResponse(baseResult.response, commentPackModelId);
+      /** Gemma は polish 前の原文を清書へ渡す（思考漏れごと消えると解説01が欠ける） */
+      baseText = isGemmaHostedModelId(commentPackModelId)
+        ? extractRawTextFromGenerateContentResponse(baseResult.response)
+        : extractTextFromGenerateContentResponse(baseResult.response, commentPackModelId);
       if (isNewRelease) {
         baseText = (baseText + COMMENT_PACK_NEW_RELEASE_DISCLAIMER).trim();
       }
+      baseText = await copyeditGemmaCommentaryText(baseText, {
+        draftModelId: commentPackModelId,
+        persistMeta: selectorGeminiLogMeta,
+      });
 
       const filteredEarlyBaseOnly = applySlotsToPackBodies(
         baseText.trim(),
         ['', '', '', ''],
         responseSlots,
       );
-      if (
-        packPhase === 'base' &&
-        !baseOnlyPack &&
-        baseText.trim() &&
-        filteredEarlyBaseOnly.baseComment.trim()
-      ) {
+      if (packPhase === 'base' && baseText.trim()) {
         let tid0: string | null = null;
         if (supabase && songId) {
           const dbWrite = createAdminClient() ?? supabase;
@@ -1348,7 +1334,9 @@ ${isRemixFocusTopic ? banBlockRemixFocus : isCoverFocusTopic ? banBlockCoverFocu
               const res = await model.generateContent(p0);
               logGeminiUsage(`comment_pack_free_${i + 1}`, res.response);
               await persistGeminiUsageLog(`comment_pack_free_${i + 1}`, res.response.usageMetadata, selectorGeminiLogMeta);
-              draftTexts[i] = extractTextFromGenerateContentResponse(res.response, commentPackModelId);
+              draftTexts[i] = isGemmaHostedModelId(commentPackModelId)
+                ? extractRawTextFromGenerateContentResponse(res.response)
+                : extractTextFromGenerateContentResponse(res.response, commentPackModelId);
             } catch (e) {
               console.error('[api/ai/comment-pack] parallel free slot', i + 1, e);
               draftTexts[i] = '';
@@ -1372,7 +1360,10 @@ ${isRemixFocusTopic ? banBlockRemixFocus : isCoverFocusTopic ? banBlockCoverFocu
         const isLiveFocusTopic = i === 0 && !isSupergroupArtist && isLikelyLiveVersion;
         const isSupergroupMemberTopic = i === 0 && isSupergroupArtist;
         const isArtistInfoTopic = i === 3;
-        const parallelTxt = (draftTexts[i] ?? '').trim();
+        const parallelRaw = (draftTexts[i] ?? '').trim();
+        const parallelTxt = isGemmaHostedModelId(commentPackModelId)
+          ? polishGemmaModelVisibleText(parallelRaw) || parallelRaw
+          : parallelRaw;
 
         const policyHonorsParallel = isHonorsTopic;
         const okParallel =
@@ -1381,7 +1372,7 @@ ${isRemixFocusTopic ? banBlockRemixFocus : isCoverFocusTopic ? banBlockCoverFocu
           !isSimilarToExistingComment(parallelTxt, [baseText, ...existingFreeBodies()]);
 
         if (okParallel) {
-          freeComments[i] = parallelTxt;
+          freeComments[i] = isGemmaHostedModelId(commentPackModelId) ? parallelRaw : parallelTxt;
           continue;
         }
 
@@ -1395,12 +1386,17 @@ ${isRemixFocusTopic ? banBlockRemixFocus : isCoverFocusTopic ? banBlockCoverFocu
             const res = await model.generateContent(prompt);
             logGeminiUsage(`comment_pack_free_${i + 1}`, res.response);
             await persistGeminiUsageLog(`comment_pack_free_${i + 1}`, res.response.usageMetadata, selectorGeminiLogMeta);
-            const txt = extractTextFromGenerateContentResponse(res.response, commentPackModelId);
+            const txtRaw = isGemmaHostedModelId(commentPackModelId)
+              ? extractRawTextFromGenerateContentResponse(res.response)
+              : extractTextFromGenerateContentResponse(res.response, commentPackModelId);
+            const txt = isGemmaHostedModelId(commentPackModelId)
+              ? polishGemmaModelVisibleText(txtRaw) || txtRaw
+              : txtRaw;
             /** 3回目は栄誉枠でもチャート数字を避けるフォールバック → 歌詞・サウンド枠と同じ厳しさで通す */
             const policyHonors = isHonorsTopic && attempt < maxAttempts;
             const tooSimilar = isSimilarToExistingComment(txt, [baseText, ...existingFreeBodies()]);
             if (txt && !containsUnreliableCommentPackClaim(txt, policyHonors) && !tooSimilar) {
-              freeComments[i] = txt;
+              freeComments[i] = isGemmaHostedModelId(commentPackModelId) ? txtRaw : txt;
               break;
             }
             if (attempt >= maxAttempts) {
@@ -1468,13 +1464,19 @@ ${isRemixFocusTopic ? banBlockRemixFocus : isCoverFocusTopic ? banBlockCoverFocu
 
     const freeCommentsCapped = freeComments.slice(0, COMMENT_PACK_MAX_FREE_COMMENTS);
     /** スロット 0〜3 と DB の ai_chat_1〜4 を対応させる（空枠は '' のまま） */
-    const freeBodiesTrimmedTriple = freeCommentsCapped.map((t) =>
+    let freeBodiesTrimmedTriple = freeCommentsCapped.map((t) =>
       typeof t === 'string' ? t.trim() : '',
     );
+    if (!songIntroOnlyDiscography && freeBodiesTrimmedTriple.some((t) => t.length > 0)) {
+      freeBodiesTrimmedTriple = await copyeditGemmaCommentaryBodies(freeBodiesTrimmedTriple, {
+        draftModelId: resolveGenerationModelId('comment_pack_free_1'),
+        persistMeta: selectorGeminiLogMeta,
+      });
+    }
 
-    // song_tidbits に保存（新曲は基本のみ、通常は基本＋自由4本）
+    // song_tidbits に保存（新曲モードは保存しない。30日超のみ基本＋自由）
     const tidbitIds: (string | null)[] = [];
-    if (supabase && songId) {
+    if (supabase && songId && !isNewRelease) {
       const dbWrite = createAdminClient() ?? supabase;
       const baseTrim = baseText.trim();
 

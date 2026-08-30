@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 import { fetchSongIdsWithAiCommentary } from '@/lib/library-ai-commentary-presence';
 import { fetchMyPlayCountByVideoIds } from '@/lib/library-my-play-count';
+import { songHasLibraryCommentaryIcon } from '@/lib/library-commentary-icon';
 
 export const dynamic = 'force-dynamic';
 
@@ -111,16 +112,53 @@ export async function POST(request: Request) {
     return bySong;
   })();
 
+  const slugBySongId = new Map<string, { music8ArtistSlug: string | null; music8SongSlug: string | null }>();
+  const slugPromise = (async () => {
+    for (let i = 0; i < songIds.length; i += SONG_ID_CHUNK) {
+      const chunk = songIds.slice(i, i + SONG_ID_CHUNK);
+      const { data, error } = await admin
+        .from('songs')
+        .select('id, music8_artist_slug, music8_song_slug')
+        .in('id', chunk);
+      if (error) {
+        if (error.code !== '42703' && error.code !== '42P01') {
+          console.error('[api/library/song-details] music8 slugs', error);
+        }
+        break;
+      }
+      for (const row of (data ?? []) as {
+        id?: string;
+        music8_artist_slug?: string | null;
+        music8_song_slug?: string | null;
+      }[]) {
+        const id = row.id?.trim() ?? '';
+        if (!id) continue;
+        slugBySongId.set(id, {
+          music8ArtistSlug: typeof row.music8_artist_slug === 'string' ? row.music8_artist_slug : null,
+          music8SongSlug: typeof row.music8_song_slug === 'string' ? row.music8_song_slug : null,
+        });
+      }
+    }
+  })();
+
   const [commentarySongIds, myPlayBySong] = await Promise.all([
     commentaryPromise,
     myPlayPromise,
-  ]);
+    slugPromise,
+  ]).then(([c, m]) => [c, m] as const);
 
-  const items: SongDetailItem[] = songIds.map((id) => ({
-    id,
-    my_play_count: myPlayBySong.get(id) ?? null,
-    has_ai_commentary: commentarySongIds.has(id),
-  }));
+  const items: SongDetailItem[] = songIds.map((id) => {
+    const slugs = slugBySongId.get(id);
+    return {
+      id,
+      my_play_count: myPlayBySong.get(id) ?? null,
+      has_ai_commentary: songHasLibraryCommentaryIcon({
+        hasAiCommentary: commentarySongIds.has(id),
+        music8ArtistSlug: slugs?.music8ArtistSlug,
+        music8SongSlug: slugs?.music8SongSlug,
+      }),
+    };
+  });
 
   const response = NextResponse.json({ items });
   response.headers.set('Cache-Control', 'private, no-store');

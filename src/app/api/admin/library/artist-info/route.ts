@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { requireStyleAdminApi } from '@/lib/admin-access';
 import { artistNameToMusic8Slug } from '@/lib/music8-artist-display';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { loadArtistMemberGraph } from '@/lib/artist-members';
 
 export const dynamic = 'force-dynamic';
 
@@ -101,6 +102,21 @@ export async function GET(request: Request) {
     rows[0] ??
     null;
 
-  return NextResponse.json({ artist: picked });
+  let memberArtists: Awaited<ReturnType<typeof loadArtistMemberGraph>>['members'] = [];
+  let bandArtists: Awaited<ReturnType<typeof loadArtistMemberGraph>>['bands'] = [];
+  if (picked?.id) {
+    try {
+      const graph = await loadArtistMemberGraph(supabase, picked.id);
+      memberArtists = graph.members;
+      bandArtists = graph.bands;
+    } catch (e) {
+      console.warn('[api/admin/library/artist-info] artist_members', e);
+    }
+  }
+
+  const artistInfo =
+    picked == null ? null : { ...picked, memberArtists, bandArtists };
+
+  return NextResponse.json({ artist: artistInfo });
 }
 

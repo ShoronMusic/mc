@@ -3,6 +3,8 @@
 **目的**: m8 の静的 JSON（同一 `public/data` スナップショット）を **GCS と Supabase に同世代で反映**する。  
 **頻度**: 週 1〜2 回。
 
+**正本切替後**: JSON は WP ではなく `npx tsx scripts/export-music8-json-from-supabase.ts` から出す（`docs/supabase-music8-catalog-tables.md`）。切替までは本手順（WP JSON → GCS + DB）を継続。
+
 関連: [`music8-json-gcs-handoff.md`](./music8-json-gcs-handoff.md)（GCS・パス）／[`music8-library-import-notes.md`](./music8-library-import-notes.md)（差分の仕組み・初回フル取り込み）／[`music8-artist-import-handoff.md`](./music8-artist-import-handoff.md)（アーティスト一括の別経路）／m8 側 `E:\m8\docs\gcs-json-migration.md`
 
 ---

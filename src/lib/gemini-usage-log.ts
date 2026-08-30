@@ -17,9 +17,46 @@ import { fetchLiveGatheringForRoom } from '@/lib/room-live-gathering';
 export type GeminiUsageMeta = {
   promptTokenCount?: number;
   candidatesTokenCount?: number;
+  /** 一部 SDK / モデルは outputTokenCount を返す */
+  outputTokenCount?: number;
   totalTokenCount?: number;
   cachedContentTokenCount?: number;
+  prompt_token_count?: number;
+  candidates_token_count?: number;
+  output_token_count?: number;
+  total_token_count?: number;
+  cached_content_token_count?: number;
 };
+
+function asTokenCount(v: unknown): number | null {
+  if (typeof v === 'number' && Number.isFinite(v)) return v;
+  if (typeof v === 'string' && v.trim() !== '') {
+    const n = Number(v);
+    if (Number.isFinite(n)) return n;
+  }
+  return null;
+}
+
+/** usageMetadata のキー揺れを吸収して DB 列用の数値にする */
+export function readGeminiUsageTokenCounts(usage: GeminiUsageMeta | null | undefined): {
+  promptTokenCount: number | null;
+  outputTokenCount: number | null;
+  totalTokenCount: number | null;
+  cachedTokenCount: number | null;
+} {
+  const u = usage ?? {};
+  return {
+    promptTokenCount: asTokenCount(u.promptTokenCount) ?? asTokenCount(u.prompt_token_count),
+    outputTokenCount:
+      asTokenCount(u.candidatesTokenCount) ??
+      asTokenCount(u.outputTokenCount) ??
+      asTokenCount(u.candidates_token_count) ??
+      asTokenCount(u.output_token_count),
+    totalTokenCount: asTokenCount(u.totalTokenCount) ?? asTokenCount(u.total_token_count),
+    cachedTokenCount:
+      asTokenCount(u.cachedContentTokenCount) ?? asTokenCount(u.cached_content_token_count),
+  };
+}
 
 export type GeminiUsagePersistMeta = {
   roomId?: string | null;
@@ -68,7 +105,7 @@ export async function persistGeminiUsageLog(
   const admin = createAdminClient();
   if (!admin) return;
 
-  const u = usage ?? {};
+  const counts = readGeminiUsageTokenCounts(usage);
   const roomId = meta?.roomId?.trim() || null;
   let gatheringId = meta?.gatheringId?.trim() || null;
   let ownerUserId: string | null = null;
@@ -97,10 +134,10 @@ export async function persistGeminiUsageLog(
   const row: Record<string, unknown> = {
     context: context.slice(0, 120),
     model: resolveGenerationModelId(context),
-    prompt_token_count: u.promptTokenCount ?? null,
-    output_token_count: u.candidatesTokenCount ?? null,
-    total_token_count: u.totalTokenCount ?? null,
-    cached_token_count: u.cachedContentTokenCount ?? null,
+    prompt_token_count: counts.promptTokenCount,
+    output_token_count: counts.outputTokenCount,
+    total_token_count: counts.totalTokenCount,
+    cached_token_count: counts.cachedTokenCount,
     room_id: roomId,
     video_id: meta?.videoId?.trim() || null,
     user_id: triggerUserId,

@@ -19,6 +19,7 @@ import {
   type SongCreditDbRow,
 } from '@/lib/song-credits-sync';
 import { extractCreditNamesFromSong, type SongCreditInput } from '@/lib/song-credits-resolve';
+import { fetchSpotifyTrackWithArtistsById } from '@/lib/spotify-search-track';
 
 function loadDotEnvLocal(): void {
   const p = path.resolve(process.cwd(), '.env.local');
@@ -60,16 +61,38 @@ function parseArgs(argv: string[]) {
   };
 }
 
+function isRetryableTimeout(error: { code?: string } | null | undefined): boolean {
+  return error?.code === '57014' || error?.code === 'PGRST000';
+}
+
+async function withTimeoutRetry<T>(
+  label: string,
+  fn: () => Promise<{ data?: T; error: { code?: string; message?: string } | null }>,
+): Promise<T | undefined> {
+  const max = 6;
+  for (let i = 0; i < max; i++) {
+    const { data, error } = await fn();
+    if (!error) return data;
+    if (!isRetryableTimeout(error)) throw error;
+    const wait = 2500 * (i + 1);
+    console.error(`${label} timeout (${error.code}), retry in ${wait}ms (${i + 1}/${max})`);
+    await new Promise((r) => setTimeout(r, wait));
+  }
+  throw new Error(`${label} failed after ${max} statement-timeout retries`);
+}
+
 async function insertCreditRowsBatched(
   admin: ReturnType<typeof createAdminClient>,
   rows: SongCreditDbRow[],
 ): Promise<void> {
   if (!admin || rows.length === 0) return;
-  const INS = 500;
+  const INS = 200;
   for (let i = 0; i < rows.length; i += INS) {
     const slice = rows.slice(i, i + INS);
-    const { error } = await admin.from('song_credits').insert(slice);
-    if (error) throw error;
+    await withTimeoutRetry(`insert credits ${i}-${i + slice.length}`, async () => {
+      const { error } = await admin.from('song_credits').insert(slice);
+      return { error };
+    });
   }
 }
 
@@ -78,12 +101,15 @@ async function updatePrimaryArtistIds(
   links: { songId: string; artistId: string }[],
 ): Promise<void> {
   if (!admin) return;
-  const CONC = 40;
+  const CONC = 20;
   for (let i = 0; i < links.length; i += CONC) {
     const slice = links.slice(i, i + CONC);
     await Promise.all(
       slice.map(({ songId, artistId }) =>
-        admin.from('songs').update({ artist_id: artistId }).eq('id', songId),
+        withTimeoutRetry(`update artist_id ${songId}`, async () => {
+          const { error } = await admin.from('songs').update({ artist_id: artistId }).eq('id', songId);
+          return { error };
+        }),
       ),
     );
   }
@@ -109,7 +135,7 @@ async function main(): Promise<void> {
   const index = await loadArtistLookupIndex(admin);
   console.log('artist index loaded');
 
-  const PAGE = 100;
+  const PAGE = 50;
   let scanOffset = offset;
   let processed = 0;
   let withCredits = 0;
@@ -117,6 +143,8 @@ async function main(): Promise<void> {
   let noNames = 0;
   let allUnresolved = 0;
   let creditRowsInserted = 0;
+  let skippedJapanese = 0;
+  let spotifyLookups = 0;
   const failures: Record<string, unknown>[] = [];
 
   for (;;) {
@@ -124,12 +152,17 @@ async function main(): Promise<void> {
 
     const rangeEnd =
       limit !== null ? Math.min(scanOffset + PAGE - 1, offset + limit - 1) : scanOffset + PAGE - 1;
-    const { data: batch, error } = await admin
-      .from('songs')
-      .select('id, display_title, spotify_artists, main_artist, music8_song_data')
-      .order('id')
-      .range(scanOffset, rangeEnd);
-    if (error) throw error;
+    const batch = await withTimeoutRetry(
+      `select songs ${scanOffset}-${rangeEnd}`,
+      async () =>
+        await admin
+          .from('songs')
+          .select(
+            'id, display_title, spotify_artists, main_artist, music8_song_data, spotify_track_id',
+          )
+          .order('id')
+          .range(scanOffset, rangeEnd),
+    );
     if (!batch?.length) break;
 
     const chunkCreditRows: SongCreditDbRow[] = [];
@@ -146,9 +179,28 @@ async function main(): Promise<void> {
         main_artist: (row as { main_artist?: string | null }).main_artist ?? null,
         music8_song_data:
           (row as { music8_song_data?: Record<string, unknown> | null }).music8_song_data ?? null,
+        display_title: (row as { display_title?: string | null }).display_title ?? null,
       };
 
-      const planned = planSongCreditDbRows(songId, input, index);
+      let planned = planSongCreditDbRows(songId, input, index);
+      if (planned.skippedJapanese) {
+        skippedJapanese += 1;
+        continue;
+      }
+
+      const trackId = (row as { spotify_track_id?: string | null }).spotify_track_id?.trim() ?? '';
+      if ((planned.unresolved.length > 0 || planned.creditCount === 0) && trackId) {
+        const track = await fetchSpotifyTrackWithArtistsById(trackId);
+        spotifyLookups += 1;
+        if (track.artists.length > 0) {
+          input.trackArtistNames = track.artists.map((a) => a.name);
+          planned = planSongCreditDbRows(songId, input, index);
+          if (planned.skippedJapanese) {
+            skippedJapanese += 1;
+            continue;
+          }
+        }
+      }
 
       if (planned.creditCount > 0) {
         withCredits++;
@@ -182,11 +234,13 @@ async function main(): Promise<void> {
     }
 
     if (apply && chunkSongIds.length > 0) {
-      const DEL = 50;
+      const DEL = 10;
       for (let d = 0; d < chunkSongIds.length; d += DEL) {
         const ids = chunkSongIds.slice(d, d + DEL);
-        const { error: delErr } = await admin.from('song_credits').delete().in('song_id', ids);
-        if (delErr) throw delErr;
+        await withTimeoutRetry(`delete credits ${ids.length} songs`, async () => {
+          const { error } = await admin.from('song_credits').delete().in('song_id', ids);
+          return { error };
+        });
       }
       await insertCreditRowsBatched(admin, chunkCreditRows);
       creditRowsInserted += chunkCreditRows.length;
@@ -210,6 +264,8 @@ async function main(): Promise<void> {
     partial_unresolved: partialUnresolved,
     no_credit_names: noNames,
     all_names_unresolved: allUnresolved,
+    skipped_japanese: skippedJapanese,
+    spotify_lookups: spotifyLookups,
     failures_logged: failures.length,
   };
   console.log(JSON.stringify(summary, null, 2));

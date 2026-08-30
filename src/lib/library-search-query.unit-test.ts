@@ -44,6 +44,9 @@ function run() {
   assert.equal(primaryArtistForLibraryIndex('Calvin Harris, Dua Lipa'), 'Calvin Harris');
   assert.equal(primaryArtistForLibraryIndex('Calvin Harris, Disciples'), 'Calvin Harris');
   assert.equal(primaryArtistForLibraryIndex('Lady Gaga & Bruno Mars'), 'Lady Gaga');
+  // 分離しないアーティスト（カンマ＋The を維持）
+  assert.equal(primaryArtistForLibraryIndex('Tyler, The Creator'), 'Tyler, The Creator');
+  assert.equal(primaryArtistForLibraryIndex('Tyler, the Creator'), 'Tyler, The Creator');
 
   const index = [
     { main_artist: 'Oasis' },

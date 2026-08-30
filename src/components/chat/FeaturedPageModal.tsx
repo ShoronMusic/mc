@@ -7,7 +7,7 @@ import {
   type LibrarySongListSortKey,
 } from '@/lib/library-artist-autoplay';
 import { compareLibraryReleaseSort } from '@/lib/library-release-sort-date';
-import { formatFeaturedArtistDisplayLabel } from '@/lib/featured-pages';
+import { formatFeaturedArtistDisplayLabel, groupFeaturedPagesByYear } from '@/lib/featured-pages';
 import { LibraryArtistAutoplayConfirmModal } from '@/components/chat/LibraryArtistAutoplayConfirmModal';
 import {
   librarySelectSongBtnClass,
@@ -307,6 +307,7 @@ export function FeaturedPageModal({
   const showList = open && !detail;
   const pageTitle = detail?.title ?? '特集';
   const inArtistSongs = Boolean(selectedArtist);
+  const listByYear = useMemo(() => groupFeaturedPagesByYear(list), [list]);
 
   const disabledReason = useMemo(() => {
     if (isGuest) return 'ログインユーザーのみ利用できます';
@@ -323,7 +324,6 @@ export function FeaturedPageModal({
       role="dialog"
       aria-modal="true"
       aria-label={pageTitle}
-      onClick={onClose}
     >
       <div
         className={`relative flex w-full flex-col overflow-hidden rounded-lg border border-amber-700/50 bg-gray-950 shadow-xl ${
@@ -377,7 +377,7 @@ export function FeaturedPageModal({
                   >
                     アーティスト一覧
                   </button>
-                ) : detail && list.length > 1 ? (
+                ) : detail ? (
                   <button
                     type="button"
                     className="rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:bg-gray-800"
@@ -489,22 +489,31 @@ export function FeaturedPageModal({
                   ) : list.length === 0 ? (
                     <p className="text-sm text-gray-500">公開中の特集はありません。</p>
                   ) : (
-                    <ul className="space-y-2">
-                      {list.map((p) => (
-                        <li key={p.id}>
-                          <button
-                            type="button"
-                            className="w-full rounded border border-gray-700 bg-gray-900/60 px-3 py-2 text-left hover:border-amber-600/50 hover:bg-amber-950/20"
-                            onClick={() => void loadDetail(p.id)}
-                          >
-                            <span className="font-medium text-white">{p.title}</span>
-                            {p.ai_usage_free ? (
-                              <span className="ml-2 text-[11px] text-emerald-300">AI無料</span>
-                            ) : null}
-                          </button>
-                        </li>
+                    <div className="space-y-4">
+                      {listByYear.map((group) => (
+                        <section key={group.label}>
+                          <h3 className="mb-2 border-b border-amber-800/50 pb-1 text-sm font-semibold text-amber-100">
+                            {group.label}
+                          </h3>
+                          <ul className="space-y-2">
+                            {group.pages.map((p) => (
+                              <li key={p.id}>
+                                <button
+                                  type="button"
+                                  className="w-full rounded border border-amber-500/60 bg-amber-950/30 px-3 py-2 text-left hover:border-amber-400/80 hover:bg-amber-900/40"
+                                  onClick={() => void loadDetail(p.id)}
+                                >
+                                  <span className="font-medium text-amber-50">{p.title}</span>
+                                  {p.ai_usage_free ? (
+                                    <span className="ml-2 text-[11px] text-emerald-300">AI無料</span>
+                                  ) : null}
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        </section>
                       ))}
-                    </ul>
+                    </div>
                   )
                 ) : detailLoading ? (
                   <p className="text-sm text-gray-400">読み込み中…</p>

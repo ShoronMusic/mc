@@ -34,6 +34,53 @@ export type FeaturedPageWithArtists = FeaturedPageRow & {
   artists: FeaturedPageArtistRow[];
 };
 
+/**
+ * タイトル／slug から開催年を取る（最後の 19xx/20xx）。例: Summer Sonic 2026 → 2026
+ */
+export function extractFeaturedPageYear(title: string, slug?: string | null): number | null {
+  const pickLast = (s: string): number | null => {
+    const matches = s.match(/(?:19|20)\d{2}/g);
+    if (!matches || matches.length === 0) return null;
+    const n = Number(matches[matches.length - 1]);
+    return Number.isFinite(n) ? n : null;
+  };
+  return pickLast(title) ?? pickLast((slug ?? '').replace(/-/g, ' '));
+}
+
+export type FeaturedPageYearGroup<T extends { title: string; slug?: string | null }> = {
+  year: number | null;
+  label: string;
+  pages: T[];
+};
+
+/** 新しい年を上に。年が取れないものは「その他」。 */
+export function groupFeaturedPagesByYear<T extends { title: string; slug?: string | null }>(
+  pages: T[],
+): FeaturedPageYearGroup<T>[] {
+  const byYear = new Map<number, T[]>();
+  const other: T[] = [];
+  for (const page of pages) {
+    const year = extractFeaturedPageYear(page.title, page.slug);
+    if (year == null) {
+      other.push(page);
+      continue;
+    }
+    const arr = byYear.get(year);
+    if (arr) arr.push(page);
+    else byYear.set(year, [page]);
+  }
+  const years = [...byYear.keys()].sort((a, b) => b - a);
+  const groups: FeaturedPageYearGroup<T>[] = years.map((year) => ({
+    year,
+    label: `${year}年`,
+    pages: byYear.get(year) ?? [],
+  }));
+  if (other.length > 0) {
+    groups.push({ year: null, label: 'その他', pages: other });
+  }
+  return groups;
+}
+
 export function slugifyFeaturedPageTitle(title: string): string {
   const base = title
     .trim()

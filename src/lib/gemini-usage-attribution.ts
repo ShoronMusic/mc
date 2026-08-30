@@ -57,6 +57,10 @@ const RULES: Record<string, GeminiUsageAttributionRule> = {
     billingKind: 'participant_user',
     descriptionJa: 'comment-pack 会話つなぎ（選曲者）',
   },
+  commentary_copyedit: {
+    billingKind: 'participant_user',
+    descriptionJa: 'Gemma曲解説の清書抽出（選曲者）',
+  },
   song_quiz: {
     billingKind: 'participant_user',
     descriptionJa: '曲解説後クイズ（選曲者）',
@@ -76,6 +80,10 @@ const RULES: Record<string, GeminiUsageAttributionRule> = {
   next_song_recommend: {
     billingKind: 'participant_user',
     descriptionJa: '次に聴くなら（試験・依頼者）',
+  },
+  liked_song_axis_explore: {
+    billingKind: 'room_owner',
+    descriptionJa: '気に入り軸ラボ（管理）',
   },
   next_song_recomend: {
     billingKind: 'participant_user',

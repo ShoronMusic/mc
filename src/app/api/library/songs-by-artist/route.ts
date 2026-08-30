@@ -12,6 +12,9 @@ import {
 import { ensureWesternTreatedJpArtistCache } from '@/lib/western-treated-jp-artists';
 import { fetchSongIdsWithAiCommentary } from '@/lib/library-ai-commentary-presence';
 import { rankLibraryVideoVariant } from '@/lib/library-video-variant-rank';
+import { extractMusic8SongFieldsFromPersistedSnapshot } from '@/lib/music8-song-fields';
+import { formatLibraryVocalDisplay } from '@/lib/library-vocal-display';
+import { songHasLibraryCommentaryIcon } from '@/lib/library-commentary-icon';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,8 +33,9 @@ export type LibrarySongByArtistItem = {
   youtube_published_at: string | null;
   spotify_popularity: number | null;
   video_id: string | null;
-  /** 代表 video に song_tidbits.ai_commentary があるか */
+  /** 曲詳細に曲解説（AI または Music8 紹介）があるか */
   has_ai_commentary: boolean;
+  spotify_track_id: string | null;
 };
 
 function parseSort(raw: string | null): 'release' | 'plays' | 'popularity' {
@@ -63,7 +67,7 @@ export async function GET(request: Request) {
   await ensureWesternTreatedJpArtistCache(admin);
 
   const SONG_SELECT =
-    'id, display_title, main_artist, song_title, style, genres, vocal, play_count, original_release_date, spotify_popularity, catalog_scope, music8_artist_slug, primary_artist_name_ja, music8_song_data';
+    'id, display_title, main_artist, song_title, style, genres, vocal, play_count, original_release_date, spotify_popularity, spotify_track_id, catalog_scope, music8_artist_slug, music8_song_slug, primary_artist_name_ja, music8_song_data';
 
   let songsRaw: {
     id: string;
@@ -77,6 +81,9 @@ export async function GET(request: Request) {
     original_release_date: string | null;
     spotify_popularity: number | null;
     music8_song_data?: unknown;
+    spotify_track_id?: string | null;
+    music8_artist_slug?: string | null;
+    music8_song_slug?: string | null;
   }[];
 
   try {
@@ -195,7 +202,11 @@ export async function GET(request: Request) {
         : typeof s.genres === 'string'
           ? s.genres
           : null,
-      vocal: s.vocal,
+      vocal: formatLibraryVocalDisplay(
+        (typeof s.vocal === 'string' && s.vocal.trim()) ||
+          extractMusic8SongFieldsFromPersistedSnapshot(s.music8_song_data)?.vocalLabel ||
+          null,
+      ),
       play_count: s.play_count,
       my_play_count: myPlayBySong.get(s.id) ?? null,
       original_release_date: preferredOriginal,
@@ -205,7 +216,15 @@ export async function GET(request: Request) {
           ? s.spotify_popularity
           : null,
       video_id: videoId,
-      has_ai_commentary: commentarySongIds.has(s.id),
+      has_ai_commentary: songHasLibraryCommentaryIcon({
+        hasAiCommentary: commentarySongIds.has(s.id),
+        music8ArtistSlug: s.music8_artist_slug,
+        music8SongSlug: s.music8_song_slug,
+      }),
+      spotify_track_id:
+        typeof s.spotify_track_id === 'string' && s.spotify_track_id.trim()
+          ? s.spotify_track_id.trim()
+          : null,
     };
   });
 

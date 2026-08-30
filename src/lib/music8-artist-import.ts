@@ -13,6 +13,7 @@ import {
   getJapaneseDescription,
   type Music8ArtistJson,
 } from '@/lib/music8-artist-display';
+import { syncArtistMembersForArtist } from '@/lib/artist-members';
 
 export type Music8ArtistDbPatch = Record<string, unknown>;
 
@@ -622,6 +623,17 @@ export async function upsertArtistFromMusic8Json(params: {
 
   const result = await insertOrUpdateArtist(params.admin, patch, existingId, dryRun);
   if (result.error) return { error: result.error };
+
+  if (!dryRun && result.id) {
+    try {
+      await syncArtistMembersForArtist(params.admin, result.id, patch.music8_members);
+    } catch (e) {
+      console.warn(
+        '[music8-artist-import] artist_members',
+        e instanceof Error ? e.message : e,
+      );
+    }
+  }
 
   return {
     artistId: result.id,

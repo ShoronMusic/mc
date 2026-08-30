@@ -63,6 +63,41 @@ function run() {
     'g1',
   );
 
+  const aliasIndex = buildArtistLookupIndex([
+    { id: 'suede', name: 'Suede', music8_artist_slug: 'suede' },
+    { id: 'weeknd', name: 'The Weeknd', music8_artist_slug: 'weeknd' },
+    { id: 'mgk', name: 'Machine Gun Kelly', music8_artist_slug: 'machine-gun-kelly' },
+    { id: 'app', name: 'Alan Parsons Project', music8_artist_slug: 'alan-parsons-project' },
+  ]);
+  assert.equal(resolveArtistIdFromIndex(aliasIndex, 'The London Suede', null), 'suede');
+  assert.equal(resolveArtistIdFromIndex(aliasIndex, 'TheWeeknd', null), 'weeknd');
+  assert.equal(resolveArtistIdFromIndex(aliasIndex, 'mgk', null), 'mgk');
+  assert.equal(resolveArtistIdFromIndex(aliasIndex, 'The Alan Parsons Project', null), 'app');
+
+  const { skippedJapanese, credits: jpCredits } = resolveSongCreditsFromInput(
+    {
+      spotify_artists: 'テイラー・スウィフト',
+      main_artist: 'Taylor Swift',
+      music8_song_data: null,
+    },
+    aliasIndex,
+  );
+  assert.equal(skippedJapanese, true);
+  assert.equal(jpCredits.length, 0);
+
+  const { credits: suedeCredits, unresolved: suedeU, skippedJapanese: suedeJp } =
+    resolveSongCreditsFromInput(
+      {
+        spotify_artists: 'The London Suede',
+        main_artist: 'Suede',
+        music8_song_data: null,
+      },
+      aliasIndex,
+    );
+  assert.equal(suedeJp, false);
+  assert.equal(suedeU.length, 0);
+  assert.equal(suedeCredits[0]?.artistId, 'suede');
+
   const { credits: bcnr, unresolved: bcnrU } = resolveSongCreditsFromInput(
     {
       trackArtistNames: ['Black Country, New Road'],

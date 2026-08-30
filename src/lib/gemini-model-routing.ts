@@ -10,16 +10,25 @@
  */
 
 const DEFAULT_GENERATION_MODEL = 'gemini-2.5-flash';
+/** 曲解説清書の既定。2.5 Flash-Lite は新規キーで 404 になるため 3.5 を使う。 */
+const DEFAULT_SANITIZE_MODEL = 'gemini-3.5-flash-lite';
+
+/** 廃止・新規不可のモデル ID を現行 ID へ寄せる。 */
+export function remapRetiredGeminiModelId(modelId: string): string {
+  const n = modelId.trim().replace(/^models\//i, '');
+  if (n === 'gemini-2.5-flash-lite') return DEFAULT_SANITIZE_MODEL;
+  return modelId.trim();
+}
 
 /** プライマリ（既定）の生成モデル ID。`GEMINI_GENERATION_MODEL` で上書き。 */
 export function getPrimaryGenerationModelId(): string {
   const e = process.env.GEMINI_GENERATION_MODEL?.trim();
-  return e && e.length > 0 ? e : DEFAULT_GENERATION_MODEL;
+  return remapRetiredGeminiModelId(e && e.length > 0 ? e : DEFAULT_GENERATION_MODEL);
 }
 
 function getSecondaryGenerationModelId(): string | null {
   const s = process.env.GEMINI_MODEL_SECONDARY?.trim();
-  return s && s.length > 0 ? s : null;
+  return s && s.length > 0 ? remapRetiredGeminiModelId(s) : null;
 }
 
 /**
@@ -47,10 +56,31 @@ function shouldUseSecondaryForUsageContext(usageContext: string): boolean {
 }
 
 /**
+ * 曲解説の「清書」用モデル。下書きが Gemma のときだけ使う（思考漏れの抽出）。
+ * `GEMINI_SANITIZE_MODEL` があればそれを優先。なければ非 Gemma のプライマリ／セカンダリ、最後に 3.5 Flash-Lite。
+ */
+export function resolveSanitizeModelId(): string {
+  const override = process.env.GEMINI_SANITIZE_MODEL?.trim();
+  if (override) return remapRetiredGeminiModelId(override);
+  const primary = getPrimaryGenerationModelId();
+  if (!/gemma/i.test(primary)) return remapRetiredGeminiModelId(primary);
+  const secondary = getSecondaryGenerationModelId();
+  if (secondary && !/gemma/i.test(secondary)) return remapRetiredGeminiModelId(secondary);
+  return DEFAULT_SANITIZE_MODEL;
+}
+
+export function isCommentaryCopyeditUsageContext(usageContext: string): boolean {
+  return usageContext.trim() === 'commentary_copyedit';
+}
+
+/**
  * ログ・課金検証用: この API 呼び出しコンテキストで実際に使うモデル ID。
  * （`persistGeminiUsageLog` / `logGeminiUsage` の第1引数と同じキーを渡す）
  */
 export function resolveGenerationModelId(usageContext: string): string {
+  if (isCommentaryCopyeditUsageContext(usageContext)) {
+    return resolveSanitizeModelId();
+  }
   if (shouldUseSecondaryForUsageContext(usageContext)) {
     const sec = getSecondaryGenerationModelId();
     if (sec) return sec;

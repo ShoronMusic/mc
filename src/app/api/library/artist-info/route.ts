@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { artistNameToMusic8Slug, type Music8ArtistJson } from '@/lib/music8-artist-display';
 import { fetchMusic8ArtistJsonByName } from '@/lib/music8-artist-json-by-name-server';
 import { isLibraryArtistInfoSparse } from '@/lib/library-artist-info-display';
+import { loadArtistMemberGraph } from '@/lib/artist-members';
 
 export const dynamic = 'force-dynamic';
 
@@ -106,7 +107,24 @@ export async function GET(request: Request) {
     }
   }
 
-  const res = NextResponse.json({ artist: picked, music8 });
+  let memberArtists: Awaited<ReturnType<typeof loadArtistMemberGraph>>['members'] = [];
+  let bandArtists: Awaited<ReturnType<typeof loadArtistMemberGraph>>['bands'] = [];
+  if (picked?.id) {
+    try {
+      const graph = await loadArtistMemberGraph(admin, picked.id);
+      memberArtists = graph.members;
+      bandArtists = graph.bands;
+    } catch (e) {
+      console.warn('[api/library/artist-info] artist_members', e);
+    }
+  }
+
+  const artistInfo =
+    picked == null
+      ? null
+      : { ...picked, memberArtists, bandArtists };
+
+  const res = NextResponse.json({ artist: artistInfo, music8 });
   res.headers.set('Cache-Control', 'private, max-age=60, stale-while-revalidate=300');
   return res;
 }

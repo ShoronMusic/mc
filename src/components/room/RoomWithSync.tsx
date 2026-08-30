@@ -222,6 +222,7 @@ import {
   DEFAULT_USER_ROOM_AI_SONG_QUIZ_ENABLED,
 } from '@/lib/user-room-ai-features';
 import { formatMusic8ModeratorIntroPrefix } from '@/lib/music8-moderator-chat-prefix';
+import { formatCommentPackChatOriginPrefix } from '@/lib/commentary-model-head-tag';
 import {
   computeNextSelectionRound,
   getSelectablePresentRing,
@@ -5436,13 +5437,16 @@ export default function RoomWithSync({
             return null;
           }
           if (
-            pack?.packPhase === 'base' &&
-            typeof pack?.baseComment === 'string' &&
-            pack.baseComment.trim()
+            pack?.packPhase === 'base'
           ) {
+            const baseBodyPhase =
+              typeof pack?.baseComment === 'string' ? pack.baseComment.trim() : '';
             suppressTidbitRef.current = true;
             commentPackVideoIdRef.current = vid;
-            const packPrefixPhase = pack?.source === 'library' ? '[DB] ' : '[NEW] ';
+            const packPrefixPhase = formatCommentPackChatOriginPrefix(
+              typeof pack?.source === 'string' ? pack.source : undefined,
+              typeof pack?.generationModel === 'string' ? pack.generationModel : undefined,
+            );
             const idsPhase: (string | null | undefined)[] = Array.isArray(pack.tidbitIds)
               ? pack.tidbitIds
               : [];
@@ -5451,13 +5455,15 @@ export default function RoomWithSync({
               canRejectTidbit,
               pack.music8ModeratorHints,
             );
-            addAiMessage(`${buildCommentaryUiLabel('01')} ${packPrefixPhase + modIntroPhase + pack.baseComment.trim()}`, {
-              tidbitId: tid0Phase,
-              songId: pack.songId ?? null,
-              videoId: vid,
-              aiSource: 'tidbit',
-            });
-            touchActivity();
+            if (baseBodyPhase) {
+              addAiMessage(`${buildCommentaryUiLabel('01')} ${packPrefixPhase + modIntroPhase + baseBodyPhase}`, {
+                tidbitId: tid0Phase,
+                songId: pack.songId ?? null,
+                videoId: vid,
+                aiSource: 'tidbit',
+              });
+              touchActivity();
+            }
             tidbitPreferMainArtistLeftRef.current = 2;
 
             if (freeCommentTimeoutsRef.current.length > 0) {
@@ -5472,7 +5478,7 @@ export default function RoomWithSync({
             ).filter((i) => slots[i + 1]);
             if (freeIdxSorted.length === 0) {
               suppressTidbitRef.current = equivalentBaseOnlySlots(commentPackSlotsRef.current);
-              const baseOnlyCtx = pack.baseComment.trim();
+              const baseOnlyCtx = baseBodyPhase;
               const delayBaseOnly = 3500;
               scheduleAiCharacterPickReasonAfterCommentary(vid, delayBaseOnly);
               const skipQuizRecommendIntroOnly = Boolean(pack.songIntroOnlyDiscography);
@@ -5582,7 +5588,11 @@ export default function RoomWithSync({
             );
             const prefixForSlot: string[] = Array.from(
               { length: COMMENT_PACK_MAX_FREE_COMMENTS },
-              () => '[NEW] ',
+              () =>
+                formatCommentPackChatOriginPrefix(
+                  typeof pack?.source === 'string' ? pack.source : undefined,
+                  typeof pack?.generationModel === 'string' ? pack.generationModel : undefined,
+                ),
             );
 
             let nextToSchedule = 0;
@@ -5643,13 +5653,16 @@ export default function RoomWithSync({
               body: JSON.stringify({
                 ...packBody,
                 packPhase: 'frees',
-                baseComment: pack.baseComment.trim(),
+                baseComment: baseBodyPhase,
               }),
             })
               .then((r2) => (r2.ok ? r2.json() : null))
               .then((pack2) => {
                 if (videoIdRef.current !== vid) return;
-                const libPrefix = pack2?.source === 'library' ? '[DB] ' : '[NEW] ';
+                const libPrefix = formatCommentPackChatOriginPrefix(
+                  typeof pack2?.source === 'string' ? pack2.source : undefined,
+                  typeof pack2?.generationModel === 'string' ? pack2.generationModel : undefined,
+                );
                 const fa: string[] = Array.isArray(pack2?.freeComments)
                   ? pack2.freeComments.map((c: unknown) => (typeof c === 'string' ? c : ''))
                   : [];
@@ -5813,7 +5826,10 @@ export default function RoomWithSync({
 
           if (hasBase || hasAnyFree) {
             commentPackVideoIdRef.current = vid;
-            const packPrefix = pack?.source === 'library' ? '[DB] ' : '[NEW] ';
+            const packPrefix = formatCommentPackChatOriginPrefix(
+              typeof pack?.source === 'string' ? pack.source : undefined,
+              typeof pack?.generationModel === 'string' ? pack.generationModel : undefined,
+            );
             const ids: (string | null | undefined)[] = Array.isArray(pack.tidbitIds) ? pack.tidbitIds : [];
             const freeTidbitIdsRaw: unknown[] = Array.isArray(pack.freeCommentTidbitIds)
               ? pack.freeCommentTidbitIds
@@ -5998,7 +6014,10 @@ export default function RoomWithSync({
                   return null;
                 }
                 if (data?.text) {
-                  const prefix = data.source === 'library' ? '[DB] ' : '[NEW] ';
+                  const prefix = formatCommentPackChatOriginPrefix(
+                    typeof data.source === 'string' ? data.source : undefined,
+                    typeof data.generationModel === 'string' ? data.generationModel : undefined,
+                  );
                   const songRowId =
                     typeof data.songTidbitId === 'string' ? data.songTidbitId : undefined;
                   addAiMessage(`${buildCommentaryUiLabel('01')} ${prefix + data.text}`, {

@@ -218,6 +218,10 @@ const p18 = resolveOEmbedToMyListStylePack('Passenger | Let Her Go (Official Vid
 assert(p18.artistDisplay === 'Passenger', `p18 artistDisplay: ${p18.artistDisplay}`);
 assert(p18.song === 'Let Her Go', `p18 song: ${p18.song}`);
 
+const p18b = resolveOEmbedToMyListStylePack('Passenger | It Was Gonna Be You', 'Passenger');
+assert(p18b.artistDisplay === 'Passenger', `p18b artistDisplay: ${p18b.artistDisplay}`);
+assert(p18b.song === 'It Was Gonna Be You', `p18b song: ${p18b.song}`);
+
 // 区切り無し "Artist Song"（個人アップローダー）を救済
 const p19 = resolveOEmbedToMyListStylePack('Stevie Wonder Superstition', 'lozzagermain');
 assert(p19.artistDisplay === 'Stevie Wonder', `p19 artistDisplay: ${p19.artistDisplay}`);

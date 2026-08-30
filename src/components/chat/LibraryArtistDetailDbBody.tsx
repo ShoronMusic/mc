@@ -22,9 +22,17 @@ export type LibraryArtistDetailDbInfo = {
   youtube_channel_id: string | null;
   spotify_artist_id: string | null;
   wikipedia_page: string | null;
+  memberArtists?: { name: string; music8_artist_slug?: string | null }[];
+  bandArtists?: { name: string; music8_artist_slug?: string | null }[];
 };
 
-export function LibraryArtistDetailDbBody({ artist }: { artist: LibraryArtistDetailDbInfo }) {
+export function LibraryArtistDetailDbBody({
+  artist,
+  onSelectArtist,
+}: {
+  artist: LibraryArtistDetailDbInfo;
+  onSelectArtist?: (name: string) => void;
+}) {
   const links = buildLibraryArtistExternalLinks(artist);
 
   return (
@@ -37,6 +45,9 @@ export function LibraryArtistDetailDbBody({ artist }: { artist: LibraryArtistDet
         kind={artist.kind}
         activePeriod={artist.active_period}
         members={artist.members}
+        memberLinks={artist.memberArtists}
+        bandLinks={artist.bandArtists}
+        onSelectArtist={onSelectArtist}
       />
       <LibraryArtistExternalLinkButtons links={links} />
       {(artist.profile_text ?? '').trim() ? (

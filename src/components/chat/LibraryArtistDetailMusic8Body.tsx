@@ -17,10 +17,16 @@ export function LibraryArtistDetailMusic8Body({
   artist,
   dbRegistered = false,
   externalLinks,
+  memberLinks,
+  bandLinks,
+  onSelectArtist,
 }: {
   artist: Music8ArtistJson;
   dbRegistered?: boolean;
   externalLinks?: LibraryArtistExternalLinks | null;
+  memberLinks?: { name: string; music8_artist_slug?: string | null }[];
+  bandLinks?: { name: string; music8_artist_slug?: string | null }[];
+  onSelectArtist?: (name: string) => void;
 }) {
   const lines = formatMusic8ArtistDisplayLines(artist);
   const raw = artist as Record<string, unknown>;
@@ -60,6 +66,9 @@ export function LibraryArtistDetailMusic8Body({
         kind={lines.occupationDisplay || null}
         activePeriod={lines.activeYears || null}
         members={lines.memberDisplay || null}
+        memberLinks={memberLinks}
+        bandLinks={bandLinks}
+        onSelectArtist={onSelectArtist}
         extraMeta={
           lines.bornFormatted && !ageLabel ? (
             <p className="text-gray-400">{lines.bornFormatted}</p>

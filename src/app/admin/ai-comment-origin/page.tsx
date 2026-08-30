@@ -119,7 +119,8 @@ export default function AdminAiCommentOriginPage() {
             <li>
               <strong className="text-gray-300">Gemini API（gemini_usage_logs）</strong>
               … 実際に課金が発生した呼び出し回数・トークンです。下表の「曲解説系」には comment-pack・旧
-              commentary・<strong className="text-gray-300">曲解説後クイズ（song_quiz）</strong>
+              commentary・<strong className="text-gray-300">曲解説後クイズ（song_quiz）</strong>・
+              <strong className="text-gray-300">清書（commentary_copyedit）</strong>
               が含まれます。comment-pack が{' '}
               <strong className="text-gray-300">キャッシュヒット</strong>した場合は API 行が増えず、チャットには{' '}
               <code className="rounded bg-gray-800 px-1">[DB]</code> 発言だけが載る、という差が経費削減の指標になります。

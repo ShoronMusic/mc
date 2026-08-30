@@ -8,6 +8,7 @@ import { AdminYoutubePlayerWithVolume } from '@/components/admin/AdminYoutubePla
 import type { AdminLibraryArtistItem } from '@/app/api/admin/library/artists/route';
 import type { AdminLibrarySongItem } from '@/app/api/admin/library/songs/route';
 import { libraryEffectiveReleaseDateForSort } from '@/lib/library-release-sort-date';
+import { shouldShowArtistMembersLine } from '@/lib/artist-members';
 
 type SortMode = 'release_new' | 'release_old' | 'spotify_popularity';
 type AdminLibraryArtistInfo = {
@@ -24,7 +25,50 @@ type AdminLibraryArtistInfo = {
   image_url: string | null;
   image_credit: string | null;
   profile_text: string | null;
+  memberArtists?: { name: string; music8_artist_slug?: string | null }[];
+  bandArtists?: { name: string; music8_artist_slug?: string | null }[];
 };
+
+function adminArtistHref(link: { name: string; music8_artist_slug?: string | null }): string {
+  const slug = (link.music8_artist_slug ?? '').trim();
+  if (slug) return `/admin/library/artist?slug=${encodeURIComponent(slug)}`;
+  return `/admin/library/artist?name=${encodeURIComponent(link.name)}`;
+}
+
+function AdminArtistRelationLine({
+  label,
+  links,
+  fallback,
+}: {
+  label: string;
+  links?: { name: string; music8_artist_slug?: string | null }[];
+  fallback?: string | null;
+}) {
+  const items = (links ?? []).filter((l) => (l.name ?? '').trim());
+  if (items.length > 0) {
+    return (
+      <p>
+        {label}：
+        {items.map((link, i) => (
+          <span key={`${link.name}-${i}`}>
+            {i > 0 ? '、' : null}
+            <Link href={adminArtistHref(link)} className="text-sky-400 hover:underline">
+              {link.name}
+            </Link>
+          </span>
+        ))}
+      </p>
+    );
+  }
+  if ((fallback ?? '').trim()) {
+    return (
+      <p>
+        {label}：{fallback}
+      </p>
+    );
+  }
+  return null;
+}
 
 export default function AdminLibraryPage() {
   const [artists, setArtists] = useState<AdminLibraryArtistItem[]>([]);
@@ -325,8 +369,24 @@ export default function AdminLibraryPage() {
                             })()}
                           </p>
                         ) : null}
-                        {(artistInfo.members ?? '').trim() ? (
-                          <p>メンバー：{artistInfo.members}</p>
+                        {(artistInfo.bandArtists ?? []).length > 0 ? (
+                          <AdminArtistRelationLine label="所属バンド" links={artistInfo.bandArtists} />
+                        ) : null}
+                        {shouldShowArtistMembersLine({
+                          kind: artistInfo.kind,
+                          memberLinkCount: (artistInfo.memberArtists ?? []).filter((l) =>
+                            (l.name ?? '').trim(),
+                          ).length,
+                          bandLinkCount: (artistInfo.bandArtists ?? []).filter((l) =>
+                            (l.name ?? '').trim(),
+                          ).length,
+                          hasMembersFallback: Boolean((artistInfo.members ?? '').trim()),
+                        }) ? (
+                          <AdminArtistRelationLine
+                            label="メンバー"
+                            links={artistInfo.memberArtists}
+                            fallback={artistInfo.members}
+                          />
                         ) : null}
                         {(artistInfo.youtube_channel_url ?? '').trim() ? (
                           <p className="pt-1">

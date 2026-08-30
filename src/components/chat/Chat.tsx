@@ -46,6 +46,11 @@ import {
   extractUiLabelFromBody,
   stripUiLabelPrefixFromBody,
 } from '@/lib/chat-message-ui-labels';
+import {
+  commentaryBodyHasNewOrDbOriginPrefix,
+  splitGemma4CommentaryHeadPrefix,
+} from '@/lib/commentary-model-head-tag';
+import { polishGemmaModelVisibleText } from '@/lib/gemini-gemma-host';
 import type { CommentPackSlotSelection } from '@/lib/comment-pack-slots';
 import {
   DEFAULT_OWNER_AI_CHARACTER_JOIN_ENABLED,
@@ -367,7 +372,7 @@ function isAiCommentaryFeedbackTarget(m: ChatMessageType): boolean {
   const body = stripUiLabelPrefix(m.body);
   return (
     m.messageType === 'ai' &&
-    ((body.startsWith('[NEW]') || body.startsWith('[DB]')) || m.aiSource === 'next_song_recommend')
+    (commentaryBodyHasNewOrDbOriginPrefix(body) || m.aiSource === 'next_song_recommend')
   );
 }
 
@@ -443,6 +448,8 @@ const AI_ARTIST_SONG_HIGHLIGHT_CLASS = 'font-semibold text-yellow-300';
 
 /** モデレータ向け Music8 ヒット行（[Music8 …]）を黄緑で示す */
 const AI_MUSIC8_HIT_LINE_CLASS = 'font-semibold text-lime-300';
+/** 一時検証: Gemma 4 31B 曲解説の [G4] */
+const AI_G4_HEAD_TAG_CLASS = 'font-semibold text-violet-300';
 
 const PACK_PREFIX_RE = /^(\[(?:NEW|DB)\]\s*)/;
 /** `[Music8 アーチストJSON_Hit ソングJSON_Hit]` など先頭の1行 */
@@ -692,13 +699,20 @@ function renderAiBodyWithArtistSongHighlight(
     nextSongRecommendPlay?: NextSongRecommendPlayActions;
   },
 ): ReactNode {
-  const pm = body.match(PACK_PREFIX_RE);
+  const g4split = splitGemma4CommentaryHeadPrefix(body);
+  const g4Prefix = g4split.prefix;
+  const afterG4 = g4split.rest;
+  const pm = afterG4.match(PACK_PREFIX_RE);
   const prefix = pm?.[1] ?? '';
-  const afterPackPrefix = pm ? body.slice(pm[0].length) : body;
+  const afterPackPrefix = pm ? afterG4.slice(pm[0].length) : afterG4;
 
   const mm = afterPackPrefix.match(MUSIC8_MODERATOR_LINE_RE);
   const music8Line = mm?.[1] ?? '';
-  const rest = mm ? afterPackPrefix.slice(mm[0].length) : afterPackPrefix;
+  const restRaw = mm ? afterPackPrefix.slice(mm[0].length) : afterPackPrefix;
+  const rest =
+    g4Prefix || prefix
+      ? polishGemmaModelVisibleText(restRaw)
+      : restRaw;
 
   const { mainRest, tailLines } = opts?.onYoutubeSearch
     ? extractTrailingAiYoutubeSearchLines(rest)
@@ -739,13 +753,13 @@ function renderAiBodyWithArtistSongHighlight(
   }
 
   if (!hasSearchTailRows) {
-    if (!prefix && !music8Line && out.length === 0) return body;
-    // keywordQuery があるときは下のフラグメントでキーワード行を付ける必要がある（単一文字列の早期 return では落ちる）
-    if (!prefix && !music8Line && out.length === 1 && typeof out[0] === 'string' && !keywordQuery)
+    if (!g4Prefix && !prefix && !music8Line && out.length === 0) return body;
+    if (!g4Prefix && !prefix && !music8Line && out.length === 1 && typeof out[0] === 'string' && !keywordQuery)
       return out[0] as string;
 
     return (
       <>
+        {g4Prefix ? <span className={AI_G4_HEAD_TAG_CLASS}>{g4Prefix}</span> : null}
         {prefix}
         {music8Line ? (
           <span className={AI_MUSIC8_HIT_LINE_CLASS}>{music8Line}</span>
@@ -758,6 +772,7 @@ function renderAiBodyWithArtistSongHighlight(
 
   return (
     <>
+      {g4Prefix ? <span className={AI_G4_HEAD_TAG_CLASS}>{g4Prefix}</span> : null}
       {prefix}
       {music8Line ? (
         <span className={AI_MUSIC8_HIT_LINE_CLASS}>{music8Line}</span>
@@ -1062,8 +1077,7 @@ export default function Chat({
     if (body.includes('再生が終了したら次の曲をどうぞ')) return false;
     return (
       getSelectorNameFromBody(body) != null ||
-      body.startsWith('[NEW]') ||
-      body.startsWith('[DB]')
+      commentaryBodyHasNewOrDbOriginPrefix(body)
     );
   }
 
@@ -2162,7 +2176,7 @@ export default function Chat({
                 )}
                 {m.messageType === 'ai' &&
                   !IS_MC_PRODUCT &&
-                  ((renderedBodyText.startsWith('[NEW]') || renderedBodyText.startsWith('[DB]')) ||
+                  (commentaryBodyHasNewOrDbOriginPrefix(renderedBodyText) ||
                     (m.aiSource === 'next_song_recommend' && m.nextSongRecommendPending !== true)) && (
                   <div className="mt-1 flex flex-wrap items-center gap-1 text-xs">
                     <button
@@ -2274,7 +2288,7 @@ export default function Chat({
                 {m.messageType === 'ai' &&
                   chatModeratorToolsEnabled &&
                   roomId?.trim() &&
-                  !(renderedBodyText.startsWith('[NEW]') || renderedBodyText.startsWith('[DB]')) && (
+                  !commentaryBodyHasNewOrDbOriginPrefix(renderedBodyText) && (
                     <div className="mt-1 flex justify-end">
                       <button
                         type="button"

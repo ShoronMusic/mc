@@ -32,11 +32,17 @@ export async function loadArtistLookupIndex(
   console.error('[song-credits-sync] loading artist lookup index (paginated)…');
   const rows: ArtistLookupRow[] = [];
   const PAGE = 1000;
+  let selectCols = 'id, name, music8_artist_slug, name_en, name_ja';
   for (let offset = 0; ; offset += PAGE) {
     const { data, error } = await admin
       .from('artists')
-      .select('id, name, music8_artist_slug')
+      .select(selectCols)
       .range(offset, offset + PAGE - 1);
+    if (error?.code === '42703' && selectCols.includes('name_en')) {
+      selectCols = 'id, name, music8_artist_slug';
+      offset -= PAGE;
+      continue;
+    }
     if (error) throw error;
     if (!data?.length) break;
     for (const r of data) {
@@ -47,6 +53,8 @@ export async function loadArtistLookupIndex(
         id,
         name,
         music8_artist_slug: (r as { music8_artist_slug?: string | null }).music8_artist_slug ?? null,
+        name_en: (r as { name_en?: string | null }).name_en ?? null,
+        name_ja: (r as { name_ja?: string | null }).name_ja ?? null,
       });
     }
     if (data.length < PAGE) break;
@@ -86,10 +94,21 @@ export function planSongCreditDbRows(
   unresolved: string[];
   source: string | null;
   primaryArtistId: string | null;
+  skippedJapanese: boolean;
 } {
-  const { credits, unresolved, source } = resolveSongCreditsFromInput(input, index);
+  const { credits, unresolved, source, skippedJapanese } = resolveSongCreditsFromInput(input, index);
+  if (skippedJapanese) {
+    return {
+      rows: [],
+      creditCount: 0,
+      unresolved: [],
+      source,
+      primaryArtistId: null,
+      skippedJapanese: true,
+    };
+  }
   if (credits.length === 0) {
-    return { rows: [], creditCount: 0, unresolved, source, primaryArtistId: null };
+    return { rows: [], creditCount: 0, unresolved, source, primaryArtistId: null, skippedJapanese: false };
   }
   const seenArtist = new Set<string>();
   const deduped = credits.filter((c) => {
@@ -111,6 +130,7 @@ export function planSongCreditDbRows(
     unresolved,
     source,
     primaryArtistId: deduped[0]?.artistId ?? null,
+    skippedJapanese: false,
   };
 }
 

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { stripLeadingArticleForSort } from '@/lib/admin-library-index';
+import { compoundArtistCanonicalIfKnown } from '@/lib/artist-compound-names';
 import {
   artistAliasesContainsOrFilter,
   expandArtistSearchNicknameVariants,
@@ -103,6 +104,8 @@ const MAIN_ARTIST_COLLAB_SPLIT = /\s*,\s*|\s+&\s+|\s+and\s+/i;
 export function parseCollabArtistNamesFromMainArtist(mainArtist: string): string[] {
   const s = mainArtist.trim();
   if (!s) return [];
+  const compound = compoundArtistCanonicalIfKnown(s);
+  if (compound) return [compound];
   const parts = s.split(MAIN_ARTIST_COLLAB_SPLIT).map((p) => p.trim()).filter(Boolean);
   return parts.length > 0 ? parts : [s];
 }

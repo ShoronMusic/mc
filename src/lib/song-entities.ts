@@ -21,7 +21,7 @@ import {
   resolveSongStyleForOverwriteFromMusic8,
   type Music8SongExtract,
 } from '@/lib/music8-song-fields';
-import { ensureArtistForSongRegistration, ensureDomesticArtistForSongRegistration } from '@/lib/artist-selection-register';
+import { parseUsableSongStyle } from '@/lib/song-styles';
 import { normalizeArtistAndTitleForRegistration } from '@/lib/song-registration-normalize';
 import { scheduleSongSelectionSpotifyEnrich } from '@/lib/song-selection-spotify-enrich';
 import { syncSongCreditsFromSongId } from '@/lib/song-credits-sync';
@@ -985,6 +985,22 @@ export async function updateSongStyle(
   return !error;
 }
 
+/** 曲マスタに確定スタイルが無いときだけ入れる（既存値は上書きしない） */
+export async function updateSongStyleIfEmpty(
+  supabase: SupabaseClient | null,
+  songId: string | null,
+  style: string | null,
+): Promise<boolean> {
+  if (!supabase || !songId || !style || !style.trim()) return false;
+  const { data, error } = await supabase.from('songs').select('style').eq('id', songId).maybeSingle();
+  if (error && error.code !== '42P01' && error.code !== '42703') {
+    console.error('[song-entities] updateSongStyleIfEmpty select', error.code, error.message);
+  }
+  const existing = parseUsableSongStyle(typeof data?.style === 'string' ? data.style : null);
+  if (existing) return true;
+  return updateSongStyle(supabase, songId, style);
+}
+
 /**
  * Music8 由来の `Music8SongExtract` で `songs.style` を上書きし、原盤日も Music8 取得値で上書き。
  */
@@ -997,7 +1013,7 @@ async function syncSongLibraryColumnsFromMusic8Extract(
   if (!supabase || !songId) return;
   const style = resolveSongStyleForOverwriteFromMusic8(ex);
   if (style) {
-    await updateSongStyle(supabase, songId, style);
+    await updateSongStyleIfEmpty(supabase, songId, style);
   }
   let iso: string | null = null;
   if (music8Context != null) {

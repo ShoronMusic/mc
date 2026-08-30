@@ -3,6 +3,7 @@ import {
   extractMusic8SongFields,
   extractMusic8SongFieldsFromPersistedSnapshot,
   parseMusicaichatStructuredMetadataFromFactsText,
+  pickMusic8SongFullDescription,
   resolveOriginalReleaseDateFromMusic8Json,
   resolveOriginalReleaseDateFromMusic8WpSongsFileJson,
   resolveSongStyleForOverwriteFromMusic8,
@@ -55,6 +56,19 @@ function run() {
   assert.equal(back!.structuredStyleFromFacts, 'Alt');
   assert.equal(back!.primaryArtistNameJa, '名');
 
+  const fromVocalsArray = extractMusic8SongFields({
+    title: 'Fragile',
+    vocals: [{ name: 'M', slug: 'male' }],
+    content: '<p>hello</p>',
+  });
+  assert.equal(fromVocalsArray.vocalLabel, 'M');
+
+  const fromBothVocals = extractMusic8SongFields({
+    vocal_data: [{ name: 'F', slug: 'female' }],
+    vocals: [{ name: 'M', slug: 'male' }],
+  });
+  assert.equal(fromBothVocals.vocalLabel, 'F, M');
+
   assert.equal(wordpressPublishDateToPostgresDate('2012-11-01T15:43:00'), '2012-11-01');
   assert.equal(
     resolveOriginalReleaseDateFromMusic8Json({
@@ -73,6 +87,30 @@ function run() {
     }),
     '1996-02-19',
   );
+
+  const excerptOnly = pickMusic8SongFullDescription({
+    stable_key: { artist_slug: 'sting', song_slug: 'fortress-around-your-heart' },
+    facts_for_ai: {
+      opening_lines: [
+        'ジャンル： New wave',
+        'ソロデビューアルバム収録のシングルで、「要塞」...',
+      ],
+    },
+  });
+  assert.ok(excerptOnly.includes('ソロデビュー'));
+  assert.ok(!excerptOnly.includes('ジャンル：'));
+
+  const fullFromWp = pickMusic8SongFullDescription({
+    content:
+      '<p>短い全文。</p>',
+    facts_for_ai: {
+      opening_lines: [
+        '長い抜粋の本文が続いて「要塞」...',
+      ],
+    },
+    stable_key: { artist_slug: 'sting', song_slug: 'fortress-around-your-heart' },
+  });
+  assert.equal(fullFromWp, '短い全文。');
 
   console.log('music8-song-fields.unit-test: ok');
 }

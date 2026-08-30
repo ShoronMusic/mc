@@ -1,0 +1,8 @@
+2026-08-23T21:25:43.8961928+09:00 [parallel] logDir=E:\mc\tmp\music8-parallel-sync-logs\2026-08-23T21-25-43
+2026-08-23T21:25:43.9243719+09:00 [parallel] McRoot=E:\mc M8Root=E:\m8
+2026-08-23T21:25:43.9355665+09:00 [parallel] SkipM8Generate=False SkipGcs=False SkipSupabase=False ArtistFullUpdate=False
+2026-08-23T21:25:43.9549942+09:00 [1/2] m8 update-all-data.js（JSON 生成 → 成功時 GCS）
+2026-08-23T21:25:43.9728455+09:00 [1/2] MUSIC8_GCS_SYNC=1（プロセス環境。m8 .env.local より優先される場合あり）
+2026-08-23T21:25:43.9820997+09:00 [1/2] live output → console; summary → E:\mc\tmp\music8-parallel-sync-logs\2026-08-23T21-25-43\01-m8-update-all-data.log
+2026-08-23T21:51:56.0328606+09:00 [2/2] mc Supabase: -Apply -SkipDryRun -RealDeltaOnly（毎週）
+2026-08-23T22:46:36.9279068+09:00 [parallel] done. log=E:\mc\tmp\music8-parallel-sync-logs\2026-08-23T21-25-43\run.log

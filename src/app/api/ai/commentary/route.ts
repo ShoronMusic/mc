@@ -12,6 +12,9 @@ import {
   storedCommentaryLooksLikeProductionCreditHallucination,
 } from '@/lib/format-song-display';
 import { generateCommentary } from '@/lib/gemini';
+import { resolveGenerationModelId } from '@/lib/gemini-model-routing';
+import { copyeditGemmaCommentaryText } from '@/lib/gemma-commentary-copyedit';
+import { buildGeminiUsagePersistMeta } from '@/lib/gemini-usage-log';
 import { attachMusic8SongDataIfFetched, upsertSongAndVideo } from '@/lib/song-entities';
 import { buildSongDbRegistrationInput } from '@/lib/song-db-registration-gate';
 import { insertTidbit } from '@/lib/song-tidbits';
@@ -114,7 +117,10 @@ export async function POST(request: Request) {
           return NextResponse.json(charged.body, { status: charged.status });
         }
       }
-      return NextResponse.json(payload);
+      return NextResponse.json({
+        ...payload,
+        generationModel: resolveGenerationModelId('commentary'),
+      });
     };
 
     const reader = createAdminClient() ?? supabase;
@@ -289,7 +295,18 @@ export async function POST(request: Request) {
         .maybeSingle();
       const bodyText = typeof data?.body === 'string' ? data.body.trim() : '';
       if (bodyText && !storedCommentaryLooksLikeProductionCreditHallucination(bodyText)) {
-        const bodyForReturn = songIntroOnlyDiscography ? introOnlyText : bodyText;
+        let bodyForReturn = songIntroOnlyDiscography ? introOnlyText : bodyText;
+        if (!songIntroOnlyDiscography) {
+          bodyForReturn = await copyeditGemmaCommentaryText(bodyForReturn, {
+            draftModelId: resolveGenerationModelId('commentary'),
+            persistMeta: buildGeminiUsagePersistMeta({
+              roomId: roomId || null,
+              videoId,
+              userId: selectorUserId,
+              isGuest: requestIsGuest,
+            }),
+          });
+        }
         if (
           !shouldRegenerateLibraryWhenMusicaichatSong(musicaichatSong, skipMusic8FactInject)
         ) {
@@ -353,7 +370,7 @@ export async function POST(request: Request) {
       artistLabel && artistLabel.trim().length > 0
         ? await buildSupergroupPromptBlock(artistLabel)
         : '';
-    const text = songIntroOnlyDiscography
+    let text = songIntroOnlyDiscography
       ? introOnlyText
       : await generateCommentary(commentarySongLabel, artistLabel, {
           videoId,
@@ -365,6 +382,17 @@ export async function POST(request: Request) {
           groundedFactsBlock: mbFactsBlock.length > 0 ? mbFactsBlock : null,
           songIntroOnlyDiscography,
         });
+    if (!songIntroOnlyDiscography && text) {
+      text = await copyeditGemmaCommentaryText(text, {
+        draftModelId: resolveGenerationModelId('commentary'),
+        persistMeta: buildGeminiUsagePersistMeta({
+          roomId: roomId || null,
+          videoId,
+          userId: selectorUserId,
+          isGuest: requestIsGuest,
+        }),
+      });
+    }
     if (!text) {
       return NextResponse.json(
         { error: 'AI is not configured or failed.', ...songQuizExtensionFinal },

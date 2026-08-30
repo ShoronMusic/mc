@@ -52,6 +52,7 @@ const COMMENTARY_CONTEXTS = new Set([
   'comment_pack_free_3',
   'comment_pack_free_4',
   'comment_pack_session_bridge',
+  'commentary_copyedit',
   'song_quiz',
   'get_song_style',
   'get_song_era',

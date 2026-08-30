@@ -34,6 +34,11 @@ assert.equal(compoundArtistCanonicalIfKnown('Katrina and The Waves'), 'Katrina &
 assert.equal(compoundArtistCanonicalIfKnown('Angus & Julia Stone'), 'Angus & Julia Stone');
 assert.equal(compoundArtistCanonicalIfKnown('Simon and Garfunkel'), 'Simon & Garfunkel');
 assert.equal(compoundArtistCanonicalIfKnown('Sleeping With Sirens'), 'Sleeping With Sirens');
+assert.equal(compoundArtistCanonicalIfKnown('Tyler, The Creator'), 'Tyler, The Creator');
+assert.equal(compoundArtistCanonicalIfKnown('Tyler, the Creator'), 'Tyler, The Creator');
+assert.equal(getMainArtist('Tyler, The Creator'), 'Tyler, The Creator');
+assert.equal(getArtistDisplayString('Tyler, The Creator'), 'Tyler, The Creator');
+assert.equal(getArtistDisplayString('Tyler, the Creator'), 'Tyler, The Creator');
 
 assert.equal(getMainArtist('Die With A Smile'), 'Die With A Smile');
 assert.equal(getArtistDisplayString('Die With A Smile'), 'Die With A Smile');
@@ -42,6 +47,35 @@ assert.equal(getMainArtist('Be With You'), 'Be With You');
 
 assert.equal(getMainArtist('Drake ft. Rihanna'), 'Drake');
 assert.equal(getArtistDisplayString('Drake ft. Rihanna'), 'Drake, Rihanna');
+
+// パイプ区切り「Artist | Song」（Passenger 公式）。旧 cleanTitle は | 以降を全部落として曲名が消えていた
+{
+  const r = getArtistAndSong('Passenger | It Was Gonna Be You', 'Passenger');
+  assert.equal(r.artistDisplay, 'Passenger');
+  assert.equal(r.song, 'It Was Gonna Be You');
+  assert.equal(
+    formatArtistTitle('Passenger | It Was Gonna Be You', 'Passenger'),
+    'Passenger - It Was Gonna Be You',
+  );
+  assert.equal(
+    formatArtistTitle('Passenger | It Was Gonna Be You'),
+    'Passenger - It Was Gonna Be You',
+  );
+  const r2 = getArtistAndSong('Passenger | Let Her Go (Official Video)', 'Passenger');
+  assert.equal(r2.artistDisplay, 'Passenger');
+  assert.equal(r2.song, 'Let Her Go');
+  assert.equal(cleanTitle('Passenger | It Was Gonna Be You'), 'Passenger | It Was Gonna Be You');
+  const pack = resolveArtistSongForPack('Passenger | It Was Gonna Be You', 'Passenger', null);
+  assert.equal(pack.artistDisplay, 'Passenger');
+  assert.equal(pack.song, 'It Was Gonna Be You');
+}
+
+// パイプ末尾が番組タグのときは従来どおり落とす（COLORS）
+{
+  const r = getArtistAndSong('Kehlani - Folded | A COLORS SHOW', 'COLORSxSTUDIOS');
+  assert.equal(r.artistDisplay, 'Kehlani');
+  assert.equal(r.song, 'Folded');
+}
 
 // 「曲名 - 単語バンド名」の逆順（YouTube タイトルで多い）
 {

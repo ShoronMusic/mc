@@ -3,6 +3,11 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getStyleAdminUserIds } from '@/lib/style-admin';
 import { parseAdminProductFilter, runAdminHistoryQueryScoped } from '@/lib/room-history-product';
+import {
+  addGeminiLogToSummary,
+  emptyGeminiUsageSummary,
+  type GeminiUsageTokenSummary,
+} from '@/lib/gemini-pricing';
 
 export const dynamic = 'force-dynamic';
 
@@ -98,7 +103,7 @@ export async function GET(request: Request) {
           error: 'テーブル gemini_usage_logs がありません。docs/supabase-gemini-usage-logs-table.md の SQL を実行してください。',
           logs: [],
           byContext: {},
-          totals: { calls: 0, promptTokens: 0, outputTokens: 0 },
+          totals: { calls: 0, promptTokens: 0, outputTokens: 0, costUsd: 0, costJpyApprox: 0 },
         },
         { status: 503 }
       );
@@ -108,40 +113,29 @@ export async function GET(request: Request) {
   }
 
   const list = (rows ?? []) as LogRow[];
-  let promptTokens = 0;
-  let outputTokens = 0;
-  const byContext: Record<string, { calls: number; promptTokens: number; outputTokens: number }> =
-    {};
-  const byModel: Record<string, { calls: number; promptTokens: number; outputTokens: number }> = {};
+  const totals = emptyGeminiUsageSummary();
+  const byContext: Record<string, GeminiUsageTokenSummary> = {};
+  const byModel: Record<string, GeminiUsageTokenSummary> = {};
 
   for (const r of list) {
-    const p = r.prompt_token_count ?? 0;
-    const o = r.output_token_count ?? 0;
-    promptTokens += p;
-    outputTokens += o;
+    addGeminiLogToSummary(totals, r);
     const c = r.context || 'unknown';
     const m = (r.model || 'unknown').trim() || 'unknown';
-    if (!byContext[c]) {
-      byContext[c] = { calls: 0, promptTokens: 0, outputTokens: 0 };
-    }
-    if (!byModel[m]) {
-      byModel[m] = { calls: 0, promptTokens: 0, outputTokens: 0 };
-    }
-    byContext[c].calls += 1;
-    byContext[c].promptTokens += p;
-    byContext[c].outputTokens += o;
-    byModel[m].calls += 1;
-    byModel[m].promptTokens += p;
-    byModel[m].outputTokens += o;
+    if (!byContext[c]) byContext[c] = emptyGeminiUsageSummary();
+    if (!byModel[m]) byModel[m] = emptyGeminiUsageSummary();
+    addGeminiLogToSummary(byContext[c], r);
+    addGeminiLogToSummary(byModel[m], r);
   }
 
   return NextResponse.json({
     days,
     product: productFilter,
     totals: {
-      calls: list.length,
-      promptTokens,
-      outputTokens,
+      calls: totals.calls,
+      promptTokens: totals.promptTokens,
+      outputTokens: totals.outputTokens,
+      costUsd: totals.costUsd,
+      costJpyApprox: totals.costJpyApprox,
     },
     byContext,
     byModel,

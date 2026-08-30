@@ -276,6 +276,67 @@ export function filterMusicaichatFactsBoilerplateLines(lines: string[]): string[
   return lines.filter((l) => !isMusicaichatFactsBoilerplateLine(l));
 }
 
+function music8HtmlOrTextToPlain(raw: string): string {
+  return (raw ?? '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|li|h[1-6])>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\r\n/g, '\n')
+    .replace(/\n{2,}/g, '\n')
+    .trim();
+}
+
+/** 曲紹介のジャンル／ボーカル／スタイル行（項目として別表示するため本文からは外す） */
+export function stripMusic8StructuredMetaLines(text: string): string {
+  return text
+    .split(/\r?\n/)
+    .filter((line) => !/^\s*(ジャンル|ボーカル|スタイル|Genre|Vocal|Style)\s*[:：]/i.test(line))
+    .join('\n')
+    .replace(/\n{2,}/g, '\n')
+    .trim();
+}
+
+/**
+ * 曲 JSON から紹介本文を取る。WP `content` 全文があればそれを優先し、
+ * musicaichat の opening_lines 抜粋（末尾 …）は短いときだけ使う。
+ */
+export function pickMusic8SongFullDescription(song: unknown): string {
+  const extracted = music8HtmlOrTextToPlain(extractMusic8SongFields(song).description);
+  const obj = asObj(song);
+  const contentRaw = obj?.content ?? obj?.description;
+  const contentStr =
+    typeof contentRaw === 'string'
+      ? contentRaw
+      : asStr(asObj(contentRaw)?.rendered ?? '');
+  const fromContent = music8HtmlOrTextToPlain(contentStr);
+  const facts = extracted ? stripMusic8StructuredMetaLines(extracted) : '';
+  const content = fromContent ? stripMusic8StructuredMetaLines(fromContent) : '';
+  if (content) {
+    const factsTruncated = /(?:\.{3}|…)\s*$/.test(facts);
+    if (!facts || factsTruncated || content.length >= facts.length) return content;
+  }
+  return facts;
+}
+
+/** 抜粋（末尾 …）より全文を優先。どちらも全文なら長い方。 */
+export function preferFullerMusic8Description(a: string, b: string): string {
+  const x = (a ?? '').trim();
+  const y = (b ?? '').trim();
+  if (!x) return y;
+  if (!y) return x;
+  const xTrunc = /(?:\.{3}|…)\s*$/.test(x);
+  const yTrunc = /(?:\.{3}|…)\s*$/.test(y);
+  if (xTrunc && !yTrunc) return y;
+  if (yTrunc && !xTrunc) return x;
+  return x.length >= y.length ? x : y;
+}
+
 /**
  * musicaichat/v1 の曲 JSON（stable_key・facts_for_ai・classification 等）
  */
@@ -398,11 +459,19 @@ export function extractMusic8SongFields(data: unknown): Music8SongExtract {
   const dateSrc = asStr(obj.releaseDate ?? obj.date ?? obj.date_gmt ?? '');
   result.releaseDate = dateSrc ? formatReleaseYearMonth(dateSrc) : '';
 
-  const vocalData = obj.vocal_data;
-  if (Array.isArray(vocalData) && vocalData.length > 0) {
-    const first = asObj(vocalData[0]);
-    const vocalName = first ? asStr(first.name ?? first.slug ?? '').trim() : '';
-    if (vocalName) result.vocalLabel = vocalName;
+  const vocalSrc = [...asArr(obj.vocal_data), ...asArr(obj.vocals)];
+  if (vocalSrc.length > 0) {
+    const names: string[] = [];
+    const seen = new Set<string>();
+    for (const item of vocalSrc) {
+      const o = asObj(item);
+      const vocalName = o ? asStr(o.name ?? o.slug ?? '').trim() : '';
+      const key = vocalName.toLowerCase();
+      if (!vocalName || seen.has(key)) continue;
+      seen.add(key);
+      names.push(vocalName);
+    }
+    if (names.length > 0) result.vocalLabel = names.join(', ');
   }
 
   const artistsSrc = obj.artists;

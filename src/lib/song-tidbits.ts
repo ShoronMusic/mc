@@ -72,11 +72,11 @@ export interface StoredCommentPack {
   tidbitIds?: string[];
 }
 
-/** 新曲モードで基本コメント末尾に付与する注釈（キャッシュ判定にも使う先頭フレーズ） */
+/** 新曲モードで基本コメント末尾に付与する注釈（表示用。新曲解説は DB 非保存） */
 export const COMMENT_PACK_NEW_RELEASE_DISCLAIMER =
   '\n\n【注釈】YouTube動画の公開が最近のため、周辺情報が十分でない場合もあり、AIコメントの真偽の精度が低い可能性があります。';
 
-/** 注釈キャッシュ判定用（旧文言も DB ヒットさせる） */
+/** 旧・新曲保存行の判定用（過去に DB へ残った注釈付き本文向け。新規保存はしない） */
 export const COMMENT_PACK_NEW_RELEASE_CACHE_MARKERS = [
   '【注釈】YouTube動画の公開が最近のため',
   '【注釈】新曲と判断したため',
@@ -87,7 +87,8 @@ function bodyHasNewReleaseCacheMarker(body: string): boolean {
 }
 
 /**
- * 新曲モードで保存された基本コメントのみキャッシュヒット（自由4本は使わない）
+ * （レガシー）新曲モードで過去に保存された基本コメントのみを読む。
+ * 現行 comment-pack は新曲を DB 保存しないため、通常パスでは呼ばない。
  */
 export async function getStoredNewReleaseCommentPack(
   supabase: SupabaseClient | null,

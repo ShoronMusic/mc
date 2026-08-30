@@ -9,12 +9,16 @@ function assert(cond: boolean, msg: string): void {
 }
 
 assert(
-  getGeminiUsageAttributionRule('tidbit').billingKind === 'room_owner',
-  'tidbit -> room_owner',
+  getGeminiUsageAttributionRule('commentary_copyedit').billingKind === 'participant_user',
+  'commentary_copyedit -> participant_user',
 );
 assert(
   getGeminiUsageAttributionRule('character_song_pick').billingKind === 'ai_agent',
   'character_song_pick -> ai_agent',
+);
+assert(
+  getGeminiUsageAttributionRule('liked_song_axis_explore').billingKind === 'room_owner',
+  'liked_song_axis_explore -> room_owner',
 );
 assert(
   resolveGeminiUsageBillingKind('chat_reply', { isGuestTrigger: true }) === 'guest_enjoy_owner_paid',

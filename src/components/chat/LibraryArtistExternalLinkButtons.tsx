@@ -40,8 +40,8 @@ export function LibraryArtistExternalLinkButtons({
     items.push({
       key: 'wikipedia',
       href: links.wikipedia,
-      icon: '/svg/wikipedia.svg',
-      label: 'Wikipedia',
+          icon: '/svg/logo_wikipedia.svg',
+          label: 'Wikipedia',
     });
   }
   if (items.length === 0) return null;
@@ -58,7 +58,13 @@ export function LibraryArtistExternalLinkButtons({
           aria-label={`${item.label}（別タブ）`}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={item.icon} alt="" width={16} height={16} className={ICON_CLASS} />
+          <img
+            src={item.icon}
+            alt=""
+            width={16}
+            height={16}
+            className={item.key === 'wikipedia' ? `${ICON_CLASS} invert` : ICON_CLASS}
+          />
           <span className="min-w-0 break-words">{item.label}</span>
         </a>
       ))}

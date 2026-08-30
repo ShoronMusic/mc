@@ -544,3 +544,12 @@ create table if not exists public.song_style (
 
 まずは `songs` / `song_videos` とスタイル周りから導入しておけば、後からライブ情報や視聴回数集計を拡張しやすくなります。
 
+---
+
+## 5. Music8 公開カタログ（2026-08）
+
+WP の style/genre/playlist/chart をこの DB に正規化する SQL は別ファイル。
+
+- [`supabase-music8-catalog-tables.md`](./supabase-music8-catalog-tables.md)
+- [`sql/music8-catalog-extension.sql`](./sql/music8-catalog-extension.sql)
+

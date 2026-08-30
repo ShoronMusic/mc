@@ -2,6 +2,7 @@
  * 曲に紐づくアーティスト名の抽出と artists マスタ解決（song_credits 用）。
  */
 
+import { stripLeadingArticleForSort } from '@/lib/admin-library-index';
 import { parseCollabArtistNamesFromMainArtist } from '@/lib/library-search-query';
 import { parseArtistTitleFromDisplayTitle } from '@/lib/spotify-search-track';
 
@@ -19,18 +20,78 @@ export type ArtistLookupRow = {
   id: string;
   name: string;
   music8_artist_slug: string | null;
+  name_en?: string | null;
+  name_ja?: string | null;
 };
 
 export type ArtistLookupIndex = {
   byNormName: Map<string, ArtistLookupRow[]>;
+  byMatchKey: Map<string, ArtistLookupRow[]>;
+  byCompact: Map<string, ArtistLookupRow[]>;
   bySlug: Map<string, ArtistLookupRow>;
+};
+
+/** カタカナ等の日本語名クレジットは補完しない（曲ごとスキップ） */
+const JAPANESE_SCRIPT = /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF]/;
+
+export function creditNameHasJapaneseScript(name: string): boolean {
+  return JAPANESE_SCRIPT.test(name);
+}
+
+export function filterNonJapaneseCreditNames(names: string[]): string[] {
+  return names.filter((n) => n.trim() && !creditNameHasJapaneseScript(n));
+}
+
+/** Spotify / 通称 → マスタで多い英語名 */
+const CREDIT_ARTIST_ALIASES: Record<string, string> = {
+  'the london suede': 'suede',
+  'london suede': 'suede',
+  theweeknd: 'the weeknd',
+  mgk: 'machine gun kelly',
+  'prince, the new power generation': 'prince & the new power generation',
+  'prince and the new power generation': 'prince & the new power generation',
 };
 
 function normName(s: string): string {
   return s.trim().toLowerCase();
 }
 
-/** Spotify が `artists[].name` を `, ` で連結した文字列を分解（名前内カンマは結合） */
+function matchKey(s: string): string {
+  return stripLeadingArticleForSort(s).toLowerCase();
+}
+
+function compactAlpha(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function aliasTarget(name: string): string | null {
+  const key = normName(name);
+  const hit = CREDIT_ARTIST_ALIASES[key];
+  if (hit) return hit;
+  const compact = compactAlpha(name);
+  for (const [from, to] of Object.entries(CREDIT_ARTIST_ALIASES)) {
+    if (compactAlpha(from) === compact) return to;
+  }
+  return null;
+}
+
+function pushIndex(map: Map<string, ArtistLookupRow[]>, key: string, row: ArtistLookupRow): void {
+  const k = key.trim();
+  if (!k) return;
+  const arr = map.get(k) ?? [];
+  if (!arr.some((x) => x.id === row.id)) arr.push(row);
+  map.set(k, arr);
+}
+
+function pickUniqueRow(hits: ArtistLookupRow[] | undefined): ArtistLookupRow | null {
+  if (!hits?.length) return null;
+  if (hits.length === 1) return hits[0];
+  return null;
+}
+
+/** Spotify が `artists[].name` を `, ` で連結した文字列を分解（名前内カンマは結合）
+ * Earth, Wind & Fire / Tyler, The Creator は1名のまま。クレジット補完の対象外。
+ */
 export function parseSpotifyArtistsString(raw: string | null | undefined): string[] {
   const s = (raw ?? '').trim();
   if (!s) return [];
@@ -62,10 +123,6 @@ export function parseSpotifyArtistsString(raw: string | null | undefined): strin
     if (chunk) out.push(chunk);
   }
   return expandCompoundArtistTokens(out);
-}
-
-function compactAlpha(s: string): string {
-  return s.toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
 /** display_title のアーティスト部とトークン列が同じバンドなら 1 名に寄せる（black country new road 等） */
@@ -131,18 +188,52 @@ function music8MainArtistsFromSnapshot(
 
 export function buildArtistLookupIndex(rows: ArtistLookupRow[]): ArtistLookupIndex {
   const byNormName = new Map<string, ArtistLookupRow[]>();
+  const byMatchKey = new Map<string, ArtistLookupRow[]>();
+  const byCompact = new Map<string, ArtistLookupRow[]>();
   const bySlug = new Map<string, ArtistLookupRow>();
+
+  const indexLabel = (row: ArtistLookupRow, label: string) => {
+    const t = label.trim();
+    if (!t || creditNameHasJapaneseScript(t)) return;
+    pushIndex(byNormName, normName(t), row);
+    pushIndex(byMatchKey, matchKey(label), row);
+    const compact = compactAlpha(t);
+    if (compact.length >= 4) pushIndex(byCompact, compact, row);
+  };
+
   for (const row of rows) {
-    const k = normName(row.name);
-    if (k) {
-      const arr = byNormName.get(k) ?? [];
-      arr.push(row);
-      byNormName.set(k, arr);
-    }
+    indexLabel(row, row.name);
+    if (row.name_en) indexLabel(row, row.name_en);
     const slug = (row.music8_artist_slug ?? '').trim().toLowerCase();
     if (slug && !bySlug.has(slug)) bySlug.set(slug, row);
   }
-  return { byNormName, bySlug };
+  return { byNormName, byMatchKey, byCompact, bySlug };
+}
+
+function lookupByNameVariants(
+  index: ArtistLookupIndex,
+  artistName: string,
+  slug: string,
+): string | null {
+  const namesToTry = [artistName];
+  const aliased = aliasTarget(artistName);
+  if (aliased) namesToTry.push(aliased);
+
+  for (const candidate of namesToTry) {
+    const unique =
+      pickUniqueRow(index.byNormName.get(normName(candidate))) ??
+      pickUniqueRow(index.byMatchKey.get(matchKey(candidate))) ??
+      pickUniqueRow(index.byCompact.get(compactAlpha(candidate)));
+    if (unique) return unique.id;
+
+    const hits = index.byNormName.get(normName(candidate));
+    if (hits?.length && slug) {
+      const bySlugHit = hits.find((h) => (h.music8_artist_slug ?? '').toLowerCase() === slug);
+      if (bySlugHit) return bySlugHit.id;
+    }
+    if (hits?.length === 1) return hits[0].id;
+  }
+  return null;
 }
 
 export function resolveArtistIdFromIndex(
@@ -150,6 +241,8 @@ export function resolveArtistIdFromIndex(
   artistName: string,
   music8Hint: Music8ArtistHint | null,
 ): string | null {
+  if (creditNameHasJapaneseScript(artistName)) return null;
+
   const slug = (music8Hint?.slug ?? '').trim().toLowerCase();
   if (slug) {
     const hit = index.bySlug.get(slug);
@@ -157,23 +250,12 @@ export function resolveArtistIdFromIndex(
   }
 
   const hintName = (music8Hint?.name ?? '').trim();
-  if (hintName) {
-    const hits = index.byNormName.get(normName(hintName));
-    if (hits?.length === 1) return hits[0].id;
-    if (hits && hits.length > 1 && slug) {
-      const bySlugHit = hits.find((h) => (h.music8_artist_slug ?? '').toLowerCase() === slug);
-      if (bySlugHit) return bySlugHit.id;
-    }
+  if (hintName && !creditNameHasJapaneseScript(hintName)) {
+    const fromHint = lookupByNameVariants(index, hintName, slug);
+    if (fromHint) return fromHint;
   }
 
-  const hits = index.byNormName.get(normName(artistName));
-  if (!hits?.length) return null;
-  if (hits.length === 1) return hits[0].id;
-  if (slug) {
-    const bySlugHit = hits.find((h) => (h.music8_artist_slug ?? '').toLowerCase() === slug);
-    if (bySlugHit) return bySlugHit.id;
-  }
-  return hits[0].id;
+  return lookupByNameVariants(index, artistName, slug);
 }
 
 export type SongCreditInput = {
@@ -226,18 +308,33 @@ export function extractCreditNamesFromSong(input: SongCreditInput): {
 export function resolveSongCreditsFromInput(
   input: SongCreditInput,
   index: ArtistLookupIndex,
-): { credits: ResolvedSongCredit[]; unresolved: string[]; source: SongCreditSource | null } {
+): {
+  credits: ResolvedSongCredit[];
+  unresolved: string[];
+  source: SongCreditSource | null;
+  skippedJapanese: boolean;
+} {
   const extracted = extractCreditNamesFromSong(input);
   if (!extracted) {
-    return { credits: [], unresolved: [], source: null };
+    return { credits: [], unresolved: [], source: null, skippedJapanese: false };
+  }
+
+  const latinNames = filterNonJapaneseCreditNames(extracted.names);
+  if (extracted.names.length > 0 && latinNames.length === 0) {
+    return {
+      credits: [],
+      unresolved: [],
+      source: extracted.source,
+      skippedJapanese: true,
+    };
   }
 
   const m8 = music8MainArtistsFromSnapshot(input.music8_song_data);
   const credits: ResolvedSongCredit[] = [];
   const unresolved: string[] = [];
-  const count = extracted.names.length;
+  const count = latinNames.length;
 
-  extracted.names.forEach((name, i) => {
+  latinNames.forEach((name, i) => {
     const hint = m8.find((a) => normName(a.name) === normName(name)) ?? m8[i] ?? null;
     const artistId = resolveArtistIdFromIndex(index, name, hint);
     if (!artistId) {
@@ -254,5 +351,5 @@ export function resolveSongCreditsFromInput(
     });
   });
 
-  return { credits, unresolved, source: extracted.source };
+  return { credits, unresolved, source: extracted.source, skippedJapanese: false };
 }

@@ -1,0 +1,860 @@
+[
+  {
+    "song": {
+      "id": "ce686648-4111-4b11-a24f-3331792a1a45",
+      "main_artist": "Sting",
+      "song_title": "Every Breath You Take",
+      "display_title": "Sting - Every Breath You Take",
+      "style": "Pop",
+      "created_at": "2026-03-17T06:07:08.419244+00:00",
+      "play_count": 1,
+      "original_release_date": null,
+      "music8_song_data": null,
+      "genres": null,
+      "spotify_track_id": "72s8HAZjlpevciwAFhhhBk",
+      "music8_song_id": null,
+      "music8_artist_slug": null,
+      "music8_song_slug": null,
+      "primary_artist_name_ja": null,
+      "vocal": null,
+      "structured_style": null,
+      "artist_id": "dad1e342-d5f1-4094-b926-facaf1ede8db",
+      "music8_video_id": null,
+      "spotify_release_date": "2019-05-24",
+      "spotify_name": "Every Breath You Take - My Songs Version",
+      "spotify_artists": "Sting",
+      "spotify_images": null,
+      "spotify_popularity": 55,
+      "catalog_scope": "unknown",
+      "song_title_ja": null,
+      "library_origin": null,
+      "is_liked": false,
+      "wp_post_modified": null,
+      "catalog_published_at": null
+    },
+    "song_videos": [
+      {
+        "song_id": "ce686648-4111-4b11-a24f-3331792a1a45",
+        "video_id": "H-4yodHCvu0",
+        "variant": "official",
+        "performance_id": null,
+        "created_at": "2026-03-17T06:07:08.53759+00:00",
+        "youtube_published_at": null
+      }
+    ],
+    "song_credits": [
+      {
+        "id": "d98e2e12-2bb7-41d8-9623-de3e28bd9167",
+        "song_id": "ce686648-4111-4b11-a24f-3331792a1a45",
+        "artist_id": "dad1e342-d5f1-4094-b926-facaf1ede8db",
+        "role": "main",
+        "display_order": 0,
+        "is_display_main": true,
+        "source": "spotify_artists",
+        "created_at": "2026-08-30T02:49:08.200272+00:00"
+      }
+    ],
+    "artists": [
+      {
+        "id": "dad1e342-d5f1-4094-b926-facaf1ede8db",
+        "name": "Sting",
+        "music8_artist_slug": "sting",
+        "name_ja": "スティング",
+        "created_at": "2026-05-01T09:26:48.520003+00:00",
+        "updated_at": "2026-05-01T09:26:48.520003+00:00",
+        "kind": "singer, songwriter, musician",
+        "origin_country": "UK",
+        "active_period": "1971 -",
+        "members": "Police",
+        "youtube_channel_title": "スティング YouTube Channel",
+        "youtube_channel_url": "https://www.youtube.com/channel/UCwERP8ZAI10RtZIAPsZQDDw",
+        "image_url": "https://i.scdn.co/image/ab676161000051749fdb4dab484a9f12e347c216",
+        "image_credit": null,
+        "profile_text": "英国ニューカッスル出身、伝説的バンド「ザ・ポリス」のリーダーとして世界を席巻し、その後ソロとして比類なき成功を収めた至高の音楽家。ロックを基盤に、ジャズ、レゲエ、クラシック、ワールドミュージックを自在に融合させる卓越した音楽知性と、ハスキーで伸びやかなヴォーカルが世界中のリスナーを魅了し続けている。社会問題や深い哲学を内包した知的なリリックと、精緻に構築された楽曲構成が最大の特徴。現在は、ジャンルの境界を軽やかに超え、音楽の精神的・芸術的価値を更新し続ける、現代音楽史に燦然と輝く生きた伝説の結晶。",
+        "spotify_artist_id": "0Ty63ceoRnnJKVEYP0VQpk",
+        "spotify_artist_images": "https://i.scdn.co/image/ab6761610000e5eb9fdb4dab484a9f12e347c216",
+        "spotify_artist_popularity": 68,
+        "wikipedia_page": "Sting_(musician)",
+        "name_base": "Sting",
+        "the_prefix": null,
+        "name_sort": "sting",
+        "music8_artist_id": 768,
+        "active_year_start": "1971",
+        "description_en": "Sting is a world-renowned English musician and singer-songwriter, celebrated for his work as the frontman of The Police and his prolific solo career spanning rock, jazz, and classical influences.\r\n\r\n英国ニューカッスル出身、伝説的バンド「ザ・ポリス」のリーダーとして世界を席巻し、その後ソロとして比類なき成功を収めた至高の音楽家。ロックを基盤に、ジャズ、レゲエ、クラシック、ワールドミュージックを自在に融合させる卓越した音楽知性と、ハスキーで伸びやかなヴォーカルが世界中のリスナーを魅了し続けている。社会問題や深い哲学を内包した知的なリリックと、精緻に構築された楽曲構成が最大の特徴。現在は、ジャンルの境界を軽やかに超え、音楽の精神的・芸術的価値を更新し続ける、現代音楽史に燦然と輝く生きた伝説の結晶。",
+        "music8_members": [
+          {
+            "name": "Police",
+            "slug": "police",
+            "count": 22,
+            "filter": "raw",
+            "parent": 0,
+            "term_id": 2,
+            "taxonomy": "category",
+            "term_group": 0,
+            "description": "The Police were an English rock band.\r\n\r\n英国ロンドンが生んだ、パンク、レゲエ、ジャズを高次元で融合させ、ニュー・ウェイヴの頂点を極めた伝説的3人組ロック・バンド。1977年の結成以来、一貫してスチュワート・コープランドの変則的なドラミング、アンディ・サマーズの空間的なギター、そしてスティングの叙情的なソングライティングを提示。最小限のユニットでありながら、スタジアムを埋め尽くす壮大な音像を構築し、後のロック・シーンに多大な影響を与えた、20世紀ポピュラー音楽における真の革新者。",
+            "term_taxonomy_id": 2
+          }
+        ],
+        "music8_synced_at": "2026-07-25T05:19:43.215+00:00",
+        "birth_date": null,
+        "death_date": null,
+        "occupations": null,
+        "youtube_channel_id": null,
+        "catalog_scope": null,
+        "ai_profile_generated_at": null,
+        "ai_profile_model": null,
+        "ai_profile_source": null,
+        "name_en": null,
+        "aliases": null,
+        "wp_term_id": 768,
+        "related_artists_raw": null
+      },
+      {
+        "id": "e6b364cb-4444-4bbd-922b-3c1612fa5827",
+        "name": "The Police",
+        "music8_artist_slug": "police",
+        "name_ja": "ポリス",
+        "created_at": "2026-04-28T05:51:20.504891+00:00",
+        "updated_at": "2026-04-28T05:51:20.504891+00:00",
+        "kind": "band",
+        "origin_country": "UK",
+        "active_period": "1977–1986 -",
+        "members": "Andy Summers, Sting, Stewart Copeland",
+        "youtube_channel_title": "ポリス YouTube Channel",
+        "youtube_channel_url": "https://www.youtube.com/channel/UCuCY8MR9LcAGIXetnKx5SnQ",
+        "image_url": "https://i.scdn.co/image/72fe2cadb69ab59960ae3dbd29618549e4432699",
+        "image_credit": null,
+        "profile_text": "英国ロンドンが生んだ、パンク、レゲエ、ジャズを高次元で融合させ、ニュー・ウェイヴの頂点を極めた伝説的3人組ロック・バンド。1977年の結成以来、一貫してスチュワート・コープランドの変則的なドラミング、アンディ・サマーズの空間的なギター、そしてスティングの叙情的なソングライティングを提示。最小限のユニットでありながら、スタジアムを埋め尽くす壮大な音像を構築し、後のロック・シーンに多大な影響を与えた、20世紀ポピュラー音楽における真の革新者。",
+        "spotify_artist_id": "5NGO30tJxFlKixkPSgXcFE",
+        "spotify_artist_images": "https://i.scdn.co/image/72fe2cadb69ab59960ae3dbd29618549e4432699",
+        "spotify_artist_popularity": 74,
+        "wikipedia_page": "The_Police",
+        "name_base": "Police",
+        "the_prefix": "The",
+        "name_sort": "police",
+        "music8_artist_id": 2,
+        "active_year_start": "1977–1986",
+        "description_en": "The Police were an English rock band.\r\n\r\n英国ロンドンが生んだ、パンク、レゲエ、ジャズを高次元で融合させ、ニュー・ウェイヴの頂点を極めた伝説的3人組ロック・バンド。1977年の結成以来、一貫してスチュワート・コープランドの変則的なドラミング、アンディ・サマーズの空間的なギター、そしてスティングの叙情的なソングライティングを提示。最小限のユニットでありながら、スタジアムを埋め尽くす壮大な音像を構築し、後のロック・シーンに多大な影響を与えた、20世紀ポピュラー音楽における真の革新者。",
+        "music8_members": [
+          {
+            "name": "Andy Summers",
+            "slug": "andy-summers",
+            "count": 1,
+            "filter": "raw",
+            "parent": 0,
+            "term_id": 6792,
+            "taxonomy": "category",
+            "term_group": 0,
+            "description": "Andy Summers is an English guitarist best known as a member of the rock band the Police.",
+            "term_taxonomy_id": 6792
+          },
+          {
+            "name": "Sting",
+            "slug": "sting",
+            "count": 52,
+            "filter": "raw",
+            "parent": 0,
+            "term_id": 768,
+            "taxonomy": "category",
+            "term_group": 0,
+            "description": "Sting is a world-renowned English musician and singer-songwriter, celebrated for his work as the frontman of The Police and his prolific solo career spanning rock, jazz, and classical influences.\r\n\r\n英国ニューカッスル出身、伝説的バンド「ザ・ポリス」のリーダーとして世界を席巻し、その後ソロとして比類なき成功を収めた至高の音楽家。ロックを基盤に、ジャズ、レゲエ、クラシック、ワールドミュージックを自在に融合させる卓越した音楽知性と、ハスキーで伸びやかなヴォーカルが世界中のリスナーを魅了し続けている。社会問題や深い哲学を内包した知的なリリックと、精緻に構築された楽曲構成が最大の特徴。現在は、ジャンルの境界を軽やかに超え、音楽の精神的・芸術的価値を更新し続ける、現代音楽史に燦然と輝く生きた伝説の結晶。",
+            "term_taxonomy_id": 768
+          },
+          {
+            "name": "Stewart Copeland",
+            "slug": "stewart-copeland",
+            "count": 0,
+            "filter": "raw",
+            "parent": 0,
+            "term_id": 7396,
+            "taxonomy": "category",
+            "term_group": 0,
+            "description": "",
+            "term_taxonomy_id": 7396
+          }
+        ],
+        "music8_synced_at": "2026-07-25T04:59:01.476+00:00",
+        "birth_date": null,
+        "death_date": null,
+        "occupations": null,
+        "youtube_channel_id": null,
+        "catalog_scope": null,
+        "ai_profile_generated_at": null,
+        "ai_profile_model": null,
+        "ai_profile_source": null,
+        "name_en": null,
+        "aliases": null,
+        "wp_term_id": 2,
+        "related_artists_raw": "Elton John (elton-john) [62] | Queen (queen) [56] | U2 (u2) [53] | Sting (sting) [51] | Bryan Adams (bryan-adams) [48] | Rod Stewart (rod-stewart) [43] | Tears For Fears (tears-for-fears) [30] | Billy Joel (billy-joel) [30] | Phil Collins (phil-collins) [23] | Billy Idol (billy-idol) [21] | Journey (journey) [20] | New Order (new-order) [19] | David Bowie (david-bowie) [18] | Duran Duran (duran-duran) [15] | Dire Straits (dire-straits) [14] | Electric Light Orchestra (electric-light-orchestra) [14] | Peter Gabriel (peter-gabriel) [11] | Led Zeppelin (led-zeppelin) [11] | Eurythmics (eurythmics) [10] | Blondie (blondie) [8] | Orchestral Manoeuvres In The Dark (orchestral-manoeuvres-in-the-dark) [8] | B-52's (b-52s) [8] | INXS (inxs) [7] | The Pretenders (pretenders) [7] | Chicago (chicago) [7] | Fine Young Cannibals (fine-young-cannibals) [7] | John Mellencamp (john-mellencamp) [7] | Simple Minds (simple-minds) [6] | The Jam (jam) [6] | The Style Council (style-council) [6] | The Cars (cars) [5] | Steve Winwood (steve-winwood) [5] | The Rolling Stones (rolling-stones) [5] | Frankie Goes To Hollywood (frankie-goes-to-hollywood) [5] | Alan Parsons Project (alan-parsons-project) [5] | The Buggles (buggles) [5] | Loverboy (loverboy) [5] | Pat Benatar (pat-benatar) [5] | The Human League (human-league) [4] | Paul McCartney (paul-mccartney) [4] | The Power Station (power-station) [4] | Howard Jones (howard-jones) [4] | Ultravox (ultravox) [4] | Men at Work (men-at-work) [3] | Joe Jackson (joe-jackson) [3] | XTC (xtc) [3] | The Fixx (fixx) [3] | Roxy Music (roxy-music) [3] | Thompson Twins (thompson-twins) [3] | Level 42 (level-42) [3] | A Flock Of Seagulls (flock-of-seagulls) [3] | Kajagoogoo (kaiagoogoo) [3] | Spandau Ballet (spandau-ballet) [3] | Don Henley (don-henley) [3] | Echo & The Bunnymen (echo-the-bunnymen) [3] | Thomas Dolby (thomas-dolby) [2] | Big Country (big-country) [2] | Mr. Mister (mr-mister) [2] | Wang Chung (wang-chung) [2] | Styx (styx) [2] | ABC (abc) [2] | Pink Floyd (pink-floyd) [2] | Genesis (genesis) [1] | Toto (toto) [1] | The Who (who) [1] | Foreigner (foreigner) [1] | Van Halen (van-halen) [1] | The Romantics (romantics) [1] | Boston (boston) [1] | The Kinks (kinks) [1] | REO Speedwagon (reo-speedwagon) [1] | Japan (japan) [1] | Asia (asia) [1] | Dexys Midnight Runners (dexys-midnight-runners) [1] | Supertramp (supertramp) [0] | Robert Palmer (robert-palmer) [0] | Huey Lewis & The News (huey-lewis-the-news) [0] | The Clash (clash) [0] | Knack (knack) [0] | The Steve Miller Band (steve-miller-band) [0] | Yes (yes) [0] | Cream (cream) [0] | Eagles (eagles) [0] | The J. Geils Band (j-geils-band) [0] | Emerson, Lake & Palmer (emerson-lake-palmer) [0] | Fleetwood Mac (fleetwood-mac) [0] | George Harrison (george-harrison) [0] |"
+      }
+    ],
+    "catalog": {
+      "styles": [],
+      "genres": [],
+      "vocals": [],
+      "tags": []
+    }
+  },
+  {
+    "song": {
+      "id": "f69bf9fb-df40-432a-9775-e744fa36e003",
+      "main_artist": "Nicolas Fernandez",
+      "song_title": "The Police Every Breath You Take 2008 Live Hd",
+      "display_title": "Nicolas Fernandez - The Police Every Breath You Take 2008 Live Hd",
+      "style": "Pop",
+      "created_at": "2026-03-17T06:08:39.914674+00:00",
+      "play_count": 1,
+      "original_release_date": null,
+      "music8_song_data": null,
+      "genres": null,
+      "spotify_track_id": null,
+      "music8_song_id": null,
+      "music8_artist_slug": null,
+      "music8_song_slug": null,
+      "primary_artist_name_ja": null,
+      "vocal": null,
+      "structured_style": null,
+      "artist_id": "d2c6b5d6-61c3-41ed-8b24-90890a2732ed",
+      "music8_video_id": null,
+      "spotify_release_date": null,
+      "spotify_name": null,
+      "spotify_artists": null,
+      "spotify_images": null,
+      "spotify_popularity": null,
+      "catalog_scope": "unknown",
+      "song_title_ja": null,
+      "library_origin": null,
+      "is_liked": false,
+      "wp_post_modified": null,
+      "catalog_published_at": null
+    },
+    "song_videos": [
+      {
+        "song_id": "f69bf9fb-df40-432a-9775-e744fa36e003",
+        "video_id": "HwvNkB5GwJ0",
+        "variant": "official",
+        "performance_id": null,
+        "created_at": "2026-03-17T06:08:40.057538+00:00",
+        "youtube_published_at": null
+      }
+    ],
+    "song_credits": [
+      {
+        "id": "671748f4-fbb1-4de4-8c66-dd4e12d020b4",
+        "song_id": "f69bf9fb-df40-432a-9775-e744fa36e003",
+        "artist_id": "d2c6b5d6-61c3-41ed-8b24-90890a2732ed",
+        "role": "main",
+        "display_order": 0,
+        "is_display_main": true,
+        "source": "main_artist",
+        "created_at": "2026-08-30T02:52:48.080545+00:00"
+      }
+    ],
+    "artists": [
+      {
+        "id": "d2c6b5d6-61c3-41ed-8b24-90890a2732ed",
+        "name": "Nicolas Fernandez",
+        "music8_artist_slug": null,
+        "name_ja": null,
+        "created_at": "2026-05-24T07:05:43.14841+00:00",
+        "updated_at": "2026-05-24T07:05:43.14841+00:00",
+        "kind": null,
+        "origin_country": null,
+        "active_period": null,
+        "members": null,
+        "youtube_channel_title": null,
+        "youtube_channel_url": null,
+        "image_url": null,
+        "image_credit": null,
+        "profile_text": null,
+        "spotify_artist_id": null,
+        "spotify_artist_images": null,
+        "spotify_artist_popularity": null,
+        "wikipedia_page": null,
+        "name_base": null,
+        "the_prefix": null,
+        "name_sort": null,
+        "music8_artist_id": null,
+        "active_year_start": null,
+        "description_en": null,
+        "music8_members": null,
+        "music8_synced_at": null,
+        "birth_date": null,
+        "death_date": null,
+        "occupations": null,
+        "youtube_channel_id": null,
+        "catalog_scope": null,
+        "ai_profile_generated_at": null,
+        "ai_profile_model": null,
+        "ai_profile_source": null,
+        "name_en": null,
+        "aliases": null,
+        "wp_term_id": null,
+        "related_artists_raw": null
+      },
+      {
+        "id": "e6b364cb-4444-4bbd-922b-3c1612fa5827",
+        "name": "The Police",
+        "music8_artist_slug": "police",
+        "name_ja": "ポリス",
+        "created_at": "2026-04-28T05:51:20.504891+00:00",
+        "updated_at": "2026-04-28T05:51:20.504891+00:00",
+        "kind": "band",
+        "origin_country": "UK",
+        "active_period": "1977–1986 -",
+        "members": "Andy Summers, Sting, Stewart Copeland",
+        "youtube_channel_title": "ポリス YouTube Channel",
+        "youtube_channel_url": "https://www.youtube.com/channel/UCuCY8MR9LcAGIXetnKx5SnQ",
+        "image_url": "https://i.scdn.co/image/72fe2cadb69ab59960ae3dbd29618549e4432699",
+        "image_credit": null,
+        "profile_text": "英国ロンドンが生んだ、パンク、レゲエ、ジャズを高次元で融合させ、ニュー・ウェイヴの頂点を極めた伝説的3人組ロック・バンド。1977年の結成以来、一貫してスチュワート・コープランドの変則的なドラミング、アンディ・サマーズの空間的なギター、そしてスティングの叙情的なソングライティングを提示。最小限のユニットでありながら、スタジアムを埋め尽くす壮大な音像を構築し、後のロック・シーンに多大な影響を与えた、20世紀ポピュラー音楽における真の革新者。",
+        "spotify_artist_id": "5NGO30tJxFlKixkPSgXcFE",
+        "spotify_artist_images": "https://i.scdn.co/image/72fe2cadb69ab59960ae3dbd29618549e4432699",
+        "spotify_artist_popularity": 74,
+        "wikipedia_page": "The_Police",
+        "name_base": "Police",
+        "the_prefix": "The",
+        "name_sort": "police",
+        "music8_artist_id": 2,
+        "active_year_start": "1977–1986",
+        "description_en": "The Police were an English rock band.\r\n\r\n英国ロンドンが生んだ、パンク、レゲエ、ジャズを高次元で融合させ、ニュー・ウェイヴの頂点を極めた伝説的3人組ロック・バンド。1977年の結成以来、一貫してスチュワート・コープランドの変則的なドラミング、アンディ・サマーズの空間的なギター、そしてスティングの叙情的なソングライティングを提示。最小限のユニットでありながら、スタジアムを埋め尽くす壮大な音像を構築し、後のロック・シーンに多大な影響を与えた、20世紀ポピュラー音楽における真の革新者。",
+        "music8_members": [
+          {
+            "name": "Andy Summers",
+            "slug": "andy-summers",
+            "count": 1,
+            "filter": "raw",
+            "parent": 0,
+            "term_id": 6792,
+            "taxonomy": "category",
+            "term_group": 0,
+            "description": "Andy Summers is an English guitarist best known as a member of the rock band the Police.",
+            "term_taxonomy_id": 6792
+          },
+          {
+            "name": "Sting",
+            "slug": "sting",
+            "count": 52,
+            "filter": "raw",
+            "parent": 0,
+            "term_id": 768,
+            "taxonomy": "category",
+            "term_group": 0,
+            "description": "Sting is a world-renowned English musician and singer-songwriter, celebrated for his work as the frontman of The Police and his prolific solo career spanning rock, jazz, and classical influences.\r\n\r\n英国ニューカッスル出身、伝説的バンド「ザ・ポリス」のリーダーとして世界を席巻し、その後ソロとして比類なき成功を収めた至高の音楽家。ロックを基盤に、ジャズ、レゲエ、クラシック、ワールドミュージックを自在に融合させる卓越した音楽知性と、ハスキーで伸びやかなヴォーカルが世界中のリスナーを魅了し続けている。社会問題や深い哲学を内包した知的なリリックと、精緻に構築された楽曲構成が最大の特徴。現在は、ジャンルの境界を軽やかに超え、音楽の精神的・芸術的価値を更新し続ける、現代音楽史に燦然と輝く生きた伝説の結晶。",
+            "term_taxonomy_id": 768
+          },
+          {
+            "name": "Stewart Copeland",
+            "slug": "stewart-copeland",
+            "count": 0,
+            "filter": "raw",
+            "parent": 0,
+            "term_id": 7396,
+            "taxonomy": "category",
+            "term_group": 0,
+            "description": "",
+            "term_taxonomy_id": 7396
+          }
+        ],
+        "music8_synced_at": "2026-07-25T04:59:01.476+00:00",
+        "birth_date": null,
+        "death_date": null,
+        "occupations": null,
+        "youtube_channel_id": null,
+        "catalog_scope": null,
+        "ai_profile_generated_at": null,
+        "ai_profile_model": null,
+        "ai_profile_source": null,
+        "name_en": null,
+        "aliases": null,
+        "wp_term_id": 2,
+        "related_artists_raw": "Elton John (elton-john) [62] | Queen (queen) [56] | U2 (u2) [53] | Sting (sting) [51] | Bryan Adams (bryan-adams) [48] | Rod Stewart (rod-stewart) [43] | Tears For Fears (tears-for-fears) [30] | Billy Joel (billy-joel) [30] | Phil Collins (phil-collins) [23] | Billy Idol (billy-idol) [21] | Journey (journey) [20] | New Order (new-order) [19] | David Bowie (david-bowie) [18] | Duran Duran (duran-duran) [15] | Dire Straits (dire-straits) [14] | Electric Light Orchestra (electric-light-orchestra) [14] | Peter Gabriel (peter-gabriel) [11] | Led Zeppelin (led-zeppelin) [11] | Eurythmics (eurythmics) [10] | Blondie (blondie) [8] | Orchestral Manoeuvres In The Dark (orchestral-manoeuvres-in-the-dark) [8] | B-52's (b-52s) [8] | INXS (inxs) [7] | The Pretenders (pretenders) [7] | Chicago (chicago) [7] | Fine Young Cannibals (fine-young-cannibals) [7] | John Mellencamp (john-mellencamp) [7] | Simple Minds (simple-minds) [6] | The Jam (jam) [6] | The Style Council (style-council) [6] | The Cars (cars) [5] | Steve Winwood (steve-winwood) [5] | The Rolling Stones (rolling-stones) [5] | Frankie Goes To Hollywood (frankie-goes-to-hollywood) [5] | Alan Parsons Project (alan-parsons-project) [5] | The Buggles (buggles) [5] | Loverboy (loverboy) [5] | Pat Benatar (pat-benatar) [5] | The Human League (human-league) [4] | Paul McCartney (paul-mccartney) [4] | The Power Station (power-station) [4] | Howard Jones (howard-jones) [4] | Ultravox (ultravox) [4] | Men at Work (men-at-work) [3] | Joe Jackson (joe-jackson) [3] | XTC (xtc) [3] | The Fixx (fixx) [3] | Roxy Music (roxy-music) [3] | Thompson Twins (thompson-twins) [3] | Level 42 (level-42) [3] | A Flock Of Seagulls (flock-of-seagulls) [3] | Kajagoogoo (kaiagoogoo) [3] | Spandau Ballet (spandau-ballet) [3] | Don Henley (don-henley) [3] | Echo & The Bunnymen (echo-the-bunnymen) [3] | Thomas Dolby (thomas-dolby) [2] | Big Country (big-country) [2] | Mr. Mister (mr-mister) [2] | Wang Chung (wang-chung) [2] | Styx (styx) [2] | ABC (abc) [2] | Pink Floyd (pink-floyd) [2] | Genesis (genesis) [1] | Toto (toto) [1] | The Who (who) [1] | Foreigner (foreigner) [1] | Van Halen (van-halen) [1] | The Romantics (romantics) [1] | Boston (boston) [1] | The Kinks (kinks) [1] | REO Speedwagon (reo-speedwagon) [1] | Japan (japan) [1] | Asia (asia) [1] | Dexys Midnight Runners (dexys-midnight-runners) [1] | Supertramp (supertramp) [0] | Robert Palmer (robert-palmer) [0] | Huey Lewis & The News (huey-lewis-the-news) [0] | The Clash (clash) [0] | Knack (knack) [0] | The Steve Miller Band (steve-miller-band) [0] | Yes (yes) [0] | Cream (cream) [0] | Eagles (eagles) [0] | The J. Geils Band (j-geils-band) [0] | Emerson, Lake & Palmer (emerson-lake-palmer) [0] | Fleetwood Mac (fleetwood-mac) [0] | George Harrison (george-harrison) [0] |"
+      }
+    ],
+    "catalog": {
+      "styles": [],
+      "genres": [],
+      "vocals": [],
+      "tags": []
+    }
+  },
+  {
+    "song": {
+      "id": "479ce425-3bf8-4a24-97a8-e0a8b7e90ad6",
+      "main_artist": "The Police",
+      "song_title": "Every Breath You Take",
+      "display_title": "The Police - Every Breath You Take",
+      "style": "Rock",
+      "created_at": "2026-03-17T05:18:25.441524+00:00",
+      "play_count": 20,
+      "original_release_date": "1983-05-20",
+      "music8_song_data": {
+        "id": 48794,
+        "kind": "music8_wp_song",
+        "slug": "every-breath-you-take",
+        "title": "Every Breath You Take",
+        "vocal": null,
+        "genres": [
+          "New wave",
+          "Soft rock"
+        ],
+        "videoId": "OMOGaugKpzs",
+        "styleIds": [
+          2849
+        ],
+        "styleNames": [
+          "Rock"
+        ],
+        "captured_at": "2026-05-27T08:02:14.800Z",
+        "main_artists": [
+          {
+            "id": 2,
+            "name": "Police",
+            "slug": "police"
+          }
+        ],
+        "spotify_name": "Every Breath You Take",
+        "spotify_images": "https://i.scdn.co/image/ab67616d0000b273c8e97cafeb2acb85b21a777e",
+        "spotify_artists": "The Police",
+        "spotify_track_id": "1JSTJqkT5qHq8MDJnJbRE1",
+        "structured_style": "Rock",
+        "artist_spotify_id": "5NGO30tJxFlKixkPSgXcFE",
+        "wp_published_date": null,
+        "import_fingerprint": "4e15e569a74c70b0bfce2ebf5698e50470cc041c8fd17fff3bf4814109a64e7e",
+        "spotify_popularity": 89,
+        "spotify_release_date": "1983/6/17",
+        "artist_spotify_images": "https://i.scdn.co/image/1f73a61faca2942cd5ea29c2143184db8645f0b3",
+        "artist_wikipedia_page": "The_Police",
+        "primary_artist_name_ja": "ポリス",
+        "releaseDate_normalized": "1983.05",
+        "artist_spotify_popularity": 74,
+        "artist_youtube_channel_id": "UCuCY8MR9LcAGIXetnKx5SnQ"
+      },
+      "genres": [
+        "New wave",
+        "Soft rock"
+      ],
+      "spotify_track_id": "1JSTJqkT5qHq8MDJnJbRE1",
+      "music8_song_id": 48794,
+      "music8_artist_slug": "police",
+      "music8_song_slug": "every-breath-you-take",
+      "primary_artist_name_ja": "ポリス",
+      "vocal": "M",
+      "structured_style": "Rock",
+      "artist_id": "e6b364cb-4444-4bbd-922b-3c1612fa5827",
+      "music8_video_id": "OMOGaugKpzs",
+      "spotify_release_date": "1983/6/17",
+      "spotify_name": "Every Breath You Take",
+      "spotify_artists": "The Police",
+      "spotify_images": "https://i.scdn.co/image/ab67616d0000b273c8e97cafeb2acb85b21a777e",
+      "spotify_popularity": 89,
+      "catalog_scope": "unknown",
+      "song_title_ja": null,
+      "library_origin": null,
+      "is_liked": true,
+      "wp_post_modified": null,
+      "catalog_published_at": null
+    },
+    "song_videos": [
+      {
+        "song_id": "479ce425-3bf8-4a24-97a8-e0a8b7e90ad6",
+        "video_id": "OMOGaugKpzs",
+        "variant": "official",
+        "performance_id": null,
+        "created_at": "2026-03-17T05:18:25.578505+00:00",
+        "youtube_published_at": "2010-02-23T15:22:13+00:00"
+      },
+      {
+        "song_id": "479ce425-3bf8-4a24-97a8-e0a8b7e90ad6",
+        "video_id": "gKimB6pvv6c",
+        "variant": null,
+        "performance_id": null,
+        "created_at": "2026-04-06T07:44:20.101848+00:00",
+        "youtube_published_at": "2026-02-25T15:01:15+00:00"
+      }
+    ],
+    "song_credits": [
+      {
+        "id": "885ea85e-116e-4efd-8f5f-b781f442a9ad",
+        "song_id": "479ce425-3bf8-4a24-97a8-e0a8b7e90ad6",
+        "artist_id": "e6b364cb-4444-4bbd-922b-3c1612fa5827",
+        "role": "main",
+        "display_order": 0,
+        "is_display_main": true,
+        "source": "spotify_artists",
+        "created_at": "2026-08-30T02:30:27.226134+00:00"
+      }
+    ],
+    "artists": [
+      {
+        "id": "e6b364cb-4444-4bbd-922b-3c1612fa5827",
+        "name": "The Police",
+        "music8_artist_slug": "police",
+        "name_ja": "ポリス",
+        "created_at": "2026-04-28T05:51:20.504891+00:00",
+        "updated_at": "2026-04-28T05:51:20.504891+00:00",
+        "kind": "band",
+        "origin_country": "UK",
+        "active_period": "1977–1986 -",
+        "members": "Andy Summers, Sting, Stewart Copeland",
+        "youtube_channel_title": "ポリス YouTube Channel",
+        "youtube_channel_url": "https://www.youtube.com/channel/UCuCY8MR9LcAGIXetnKx5SnQ",
+        "image_url": "https://i.scdn.co/image/72fe2cadb69ab59960ae3dbd29618549e4432699",
+        "image_credit": null,
+        "profile_text": "英国ロンドンが生んだ、パンク、レゲエ、ジャズを高次元で融合させ、ニュー・ウェイヴの頂点を極めた伝説的3人組ロック・バンド。1977年の結成以来、一貫してスチュワート・コープランドの変則的なドラミング、アンディ・サマーズの空間的なギター、そしてスティングの叙情的なソングライティングを提示。最小限のユニットでありながら、スタジアムを埋め尽くす壮大な音像を構築し、後のロック・シーンに多大な影響を与えた、20世紀ポピュラー音楽における真の革新者。",
+        "spotify_artist_id": "5NGO30tJxFlKixkPSgXcFE",
+        "spotify_artist_images": "https://i.scdn.co/image/72fe2cadb69ab59960ae3dbd29618549e4432699",
+        "spotify_artist_popularity": 74,
+        "wikipedia_page": "The_Police",
+        "name_base": "Police",
+        "the_prefix": "The",
+        "name_sort": "police",
+        "music8_artist_id": 2,
+        "active_year_start": "1977–1986",
+        "description_en": "The Police were an English rock band.\r\n\r\n英国ロンドンが生んだ、パンク、レゲエ、ジャズを高次元で融合させ、ニュー・ウェイヴの頂点を極めた伝説的3人組ロック・バンド。1977年の結成以来、一貫してスチュワート・コープランドの変則的なドラミング、アンディ・サマーズの空間的なギター、そしてスティングの叙情的なソングライティングを提示。最小限のユニットでありながら、スタジアムを埋め尽くす壮大な音像を構築し、後のロック・シーンに多大な影響を与えた、20世紀ポピュラー音楽における真の革新者。",
+        "music8_members": [
+          {
+            "name": "Andy Summers",
+            "slug": "andy-summers",
+            "count": 1,
+            "filter": "raw",
+            "parent": 0,
+            "term_id": 6792,
+            "taxonomy": "category",
+            "term_group": 0,
+            "description": "Andy Summers is an English guitarist best known as a member of the rock band the Police.",
+            "term_taxonomy_id": 6792
+          },
+          {
+            "name": "Sting",
+            "slug": "sting",
+            "count": 52,
+            "filter": "raw",
+            "parent": 0,
+            "term_id": 768,
+            "taxonomy": "category",
+            "term_group": 0,
+            "description": "Sting is a world-renowned English musician and singer-songwriter, celebrated for his work as the frontman of The Police and his prolific solo career spanning rock, jazz, and classical influences.\r\n\r\n英国ニューカッスル出身、伝説的バンド「ザ・ポリス」のリーダーとして世界を席巻し、その後ソロとして比類なき成功を収めた至高の音楽家。ロックを基盤に、ジャズ、レゲエ、クラシック、ワールドミュージックを自在に融合させる卓越した音楽知性と、ハスキーで伸びやかなヴォーカルが世界中のリスナーを魅了し続けている。社会問題や深い哲学を内包した知的なリリックと、精緻に構築された楽曲構成が最大の特徴。現在は、ジャンルの境界を軽やかに超え、音楽の精神的・芸術的価値を更新し続ける、現代音楽史に燦然と輝く生きた伝説の結晶。",
+            "term_taxonomy_id": 768
+          },
+          {
+            "name": "Stewart Copeland",
+            "slug": "stewart-copeland",
+            "count": 0,
+            "filter": "raw",
+            "parent": 0,
+            "term_id": 7396,
+            "taxonomy": "category",
+            "term_group": 0,
+            "description": "",
+            "term_taxonomy_id": 7396
+          }
+        ],
+        "music8_synced_at": "2026-07-25T04:59:01.476+00:00",
+        "birth_date": null,
+        "death_date": null,
+        "occupations": null,
+        "youtube_channel_id": null,
+        "catalog_scope": null,
+        "ai_profile_generated_at": null,
+        "ai_profile_model": null,
+        "ai_profile_source": null,
+        "name_en": null,
+        "aliases": null,
+        "wp_term_id": 2,
+        "related_artists_raw": "Elton John (elton-john) [62] | Queen (queen) [56] | U2 (u2) [53] | Sting (sting) [51] | Bryan Adams (bryan-adams) [48] | Rod Stewart (rod-stewart) [43] | Tears For Fears (tears-for-fears) [30] | Billy Joel (billy-joel) [30] | Phil Collins (phil-collins) [23] | Billy Idol (billy-idol) [21] | Journey (journey) [20] | New Order (new-order) [19] | David Bowie (david-bowie) [18] | Duran Duran (duran-duran) [15] | Dire Straits (dire-straits) [14] | Electric Light Orchestra (electric-light-orchestra) [14] | Peter Gabriel (peter-gabriel) [11] | Led Zeppelin (led-zeppelin) [11] | Eurythmics (eurythmics) [10] | Blondie (blondie) [8] | Orchestral Manoeuvres In The Dark (orchestral-manoeuvres-in-the-dark) [8] | B-52's (b-52s) [8] | INXS (inxs) [7] | The Pretenders (pretenders) [7] | Chicago (chicago) [7] | Fine Young Cannibals (fine-young-cannibals) [7] | John Mellencamp (john-mellencamp) [7] | Simple Minds (simple-minds) [6] | The Jam (jam) [6] | The Style Council (style-council) [6] | The Cars (cars) [5] | Steve Winwood (steve-winwood) [5] | The Rolling Stones (rolling-stones) [5] | Frankie Goes To Hollywood (frankie-goes-to-hollywood) [5] | Alan Parsons Project (alan-parsons-project) [5] | The Buggles (buggles) [5] | Loverboy (loverboy) [5] | Pat Benatar (pat-benatar) [5] | The Human League (human-league) [4] | Paul McCartney (paul-mccartney) [4] | The Power Station (power-station) [4] | Howard Jones (howard-jones) [4] | Ultravox (ultravox) [4] | Men at Work (men-at-work) [3] | Joe Jackson (joe-jackson) [3] | XTC (xtc) [3] | The Fixx (fixx) [3] | Roxy Music (roxy-music) [3] | Thompson Twins (thompson-twins) [3] | Level 42 (level-42) [3] | A Flock Of Seagulls (flock-of-seagulls) [3] | Kajagoogoo (kaiagoogoo) [3] | Spandau Ballet (spandau-ballet) [3] | Don Henley (don-henley) [3] | Echo & The Bunnymen (echo-the-bunnymen) [3] | Thomas Dolby (thomas-dolby) [2] | Big Country (big-country) [2] | Mr. Mister (mr-mister) [2] | Wang Chung (wang-chung) [2] | Styx (styx) [2] | ABC (abc) [2] | Pink Floyd (pink-floyd) [2] | Genesis (genesis) [1] | Toto (toto) [1] | The Who (who) [1] | Foreigner (foreigner) [1] | Van Halen (van-halen) [1] | The Romantics (romantics) [1] | Boston (boston) [1] | The Kinks (kinks) [1] | REO Speedwagon (reo-speedwagon) [1] | Japan (japan) [1] | Asia (asia) [1] | Dexys Midnight Runners (dexys-midnight-runners) [1] | Supertramp (supertramp) [0] | Robert Palmer (robert-palmer) [0] | Huey Lewis & The News (huey-lewis-the-news) [0] | The Clash (clash) [0] | Knack (knack) [0] | The Steve Miller Band (steve-miller-band) [0] | Yes (yes) [0] | Cream (cream) [0] | Eagles (eagles) [0] | The J. Geils Band (j-geils-band) [0] | Emerson, Lake & Palmer (emerson-lake-palmer) [0] | Fleetwood Mac (fleetwood-mac) [0] | George Harrison (george-harrison) [0] |"
+      }
+    ],
+    "catalog": {
+      "styles": [
+        {
+          "style_id": "90070a8a-b253-496f-8459-5552d8826b4b",
+          "catalog_styles": {
+            "name": "Rock",
+            "slug": "rock"
+          }
+        }
+      ],
+      "genres": [
+        {
+          "genre_id": "b5a609b3-5553-45db-83b9-629e529183b6",
+          "catalog_genres": {
+            "name": "Soft rock",
+            "slug": "soft-rock"
+          }
+        },
+        {
+          "genre_id": "ff9b366f-f7d8-4f80-aaa6-640518593521",
+          "catalog_genres": {
+            "name": "New wave",
+            "slug": "new-wave"
+          }
+        }
+      ],
+      "vocals": [
+        {
+          "vocal_id": "a94a319e-e89d-4660-8dff-97a6f76aba4d",
+          "catalog_vocals": {
+            "name": "M",
+            "slug": "male"
+          }
+        }
+      ],
+      "tags": []
+    }
+  },
+  {
+    "song": {
+      "id": "f84cc75b-427e-4a1e-bc24-0155226c22d3",
+      "main_artist": "Broken View",
+      "song_title": "Every Breath You Take",
+      "display_title": "Broken View - Every Breath You Take",
+      "style": "Pop",
+      "created_at": "2026-04-28T18:04:15.232387+00:00",
+      "play_count": 0,
+      "original_release_date": "2025-07-25",
+      "music8_song_data": {
+        "id": 107007,
+        "kind": "music8_wp_song",
+        "slug": "every-breath-you-take-2",
+        "title": "Every Breath You Take",
+        "vocal": null,
+        "genres": [
+          "Emo",
+          "Soft rock"
+        ],
+        "videoId": "jamuGUe9ZFI",
+        "styleIds": [
+          2844
+        ],
+        "styleNames": [
+          "Pop"
+        ],
+        "captured_at": "2026-05-27T01:02:23.734Z",
+        "main_artists": [
+          {
+            "id": 6847,
+            "name": "Broken View",
+            "slug": "broken-view"
+          }
+        ],
+        "spotify_name": "Every Breath You Take",
+        "spotify_images": "https://i.scdn.co/image/ab67616d0000b273f254bfc39fcdb7aee544334f",
+        "spotify_artists": "The Broken View",
+        "spotify_track_id": "0g8rrPoEmKtCiZbGDSkc2e",
+        "structured_style": "Pop",
+        "artist_spotify_id": "0WI8BqDOolPRIxJy1ZHleB",
+        "wp_published_date": null,
+        "import_fingerprint": "3789049f501547446e51f8679145509adf23d1d2de1aaa6777af8ece5927005e",
+        "spotify_release_date": "2025-07-25",
+        "artist_spotify_images": "https://i.scdn.co/image/ab67616100005174cf8d403d6a1b30b531d32b88",
+        "primary_artist_name_ja": null,
+        "releaseDate_normalized": "2025.07"
+      },
+      "genres": [
+        "Emo",
+        "Soft rock"
+      ],
+      "spotify_track_id": "0g8rrPoEmKtCiZbGDSkc2e",
+      "music8_song_id": 107007,
+      "music8_artist_slug": "broken-view",
+      "music8_song_slug": "every-breath-you-take-2",
+      "primary_artist_name_ja": null,
+      "vocal": null,
+      "structured_style": "Pop",
+      "artist_id": "9b08ba08-b5ae-4aab-a83e-ff9294989c4d",
+      "music8_video_id": "jamuGUe9ZFI",
+      "spotify_release_date": "2025-07-25",
+      "spotify_name": "Every Breath You Take",
+      "spotify_artists": "The Broken View",
+      "spotify_images": "https://i.scdn.co/image/ab67616d0000b273f254bfc39fcdb7aee544334f",
+      "spotify_popularity": 23,
+      "catalog_scope": "unknown",
+      "song_title_ja": null,
+      "library_origin": null,
+      "is_liked": true,
+      "wp_post_modified": null,
+      "catalog_published_at": null
+    },
+    "song_videos": [
+      {
+        "song_id": "f84cc75b-427e-4a1e-bc24-0155226c22d3",
+        "video_id": "jamuGUe9ZFI",
+        "variant": "official",
+        "performance_id": null,
+        "created_at": "2026-04-28T18:04:15.335946+00:00",
+        "youtube_published_at": null
+      }
+    ],
+    "song_credits": [
+      {
+        "id": "ca260407-9b5d-403a-b34d-0fcaca374c5b",
+        "song_id": "f84cc75b-427e-4a1e-bc24-0155226c22d3",
+        "artist_id": "9b08ba08-b5ae-4aab-a83e-ff9294989c4d",
+        "role": "main",
+        "display_order": 0,
+        "is_display_main": true,
+        "source": "spotify_artists",
+        "created_at": "2026-08-30T02:52:56.547602+00:00"
+      }
+    ],
+    "artists": [
+      {
+        "id": "9b08ba08-b5ae-4aab-a83e-ff9294989c4d",
+        "name": "Broken View",
+        "music8_artist_slug": "broken-view",
+        "name_ja": null,
+        "created_at": "2026-05-01T01:47:47.506237+00:00",
+        "updated_at": "2026-05-01T01:47:47.506237+00:00",
+        "kind": "band",
+        "origin_country": "US",
+        "active_period": "2018 -",
+        "members": null,
+        "youtube_channel_title": null,
+        "youtube_channel_url": null,
+        "image_url": "https://i.scdn.co/image/ab67616100005174cf8d403d6a1b30b531d32b88",
+        "image_credit": null,
+        "profile_text": null,
+        "spotify_artist_id": "0WI8BqDOolPRIxJy1ZHleB",
+        "spotify_artist_images": "https://i.scdn.co/image/ab67616100005174cf8d403d6a1b30b531d32b88",
+        "spotify_artist_popularity": null,
+        "wikipedia_page": null,
+        "name_base": "Broken View",
+        "the_prefix": null,
+        "name_sort": "broken view",
+        "music8_artist_id": 6847,
+        "active_year_start": "2018",
+        "description_en": null,
+        "music8_members": null,
+        "music8_synced_at": "2026-07-25T03:36:05.89+00:00",
+        "birth_date": null,
+        "death_date": null,
+        "occupations": null,
+        "youtube_channel_id": null,
+        "catalog_scope": null,
+        "ai_profile_generated_at": null,
+        "ai_profile_model": null,
+        "ai_profile_source": null,
+        "name_en": null,
+        "aliases": null,
+        "wp_term_id": 6847,
+        "related_artists_raw": null
+      },
+      {
+        "id": "e6b364cb-4444-4bbd-922b-3c1612fa5827",
+        "name": "The Police",
+        "music8_artist_slug": "police",
+        "name_ja": "ポリス",
+        "created_at": "2026-04-28T05:51:20.504891+00:00",
+        "updated_at": "2026-04-28T05:51:20.504891+00:00",
+        "kind": "band",
+        "origin_country": "UK",
+        "active_period": "1977–1986 -",
+        "members": "Andy Summers, Sting, Stewart Copeland",
+        "youtube_channel_title": "ポリス YouTube Channel",
+        "youtube_channel_url": "https://www.youtube.com/channel/UCuCY8MR9LcAGIXetnKx5SnQ",
+        "image_url": "https://i.scdn.co/image/72fe2cadb69ab59960ae3dbd29618549e4432699",
+        "image_credit": null,
+        "profile_text": "英国ロンドンが生んだ、パンク、レゲエ、ジャズを高次元で融合させ、ニュー・ウェイヴの頂点を極めた伝説的3人組ロック・バンド。1977年の結成以来、一貫してスチュワート・コープランドの変則的なドラミング、アンディ・サマーズの空間的なギター、そしてスティングの叙情的なソングライティングを提示。最小限のユニットでありながら、スタジアムを埋め尽くす壮大な音像を構築し、後のロック・シーンに多大な影響を与えた、20世紀ポピュラー音楽における真の革新者。",
+        "spotify_artist_id": "5NGO30tJxFlKixkPSgXcFE",
+        "spotify_artist_images": "https://i.scdn.co/image/72fe2cadb69ab59960ae3dbd29618549e4432699",
+        "spotify_artist_popularity": 74,
+        "wikipedia_page": "The_Police",
+        "name_base": "Police",
+        "the_prefix": "The",
+        "name_sort": "police",
+        "music8_artist_id": 2,
+        "active_year_start": "1977–1986",
+        "description_en": "The Police were an English rock band.\r\n\r\n英国ロンドンが生んだ、パンク、レゲエ、ジャズを高次元で融合させ、ニュー・ウェイヴの頂点を極めた伝説的3人組ロック・バンド。1977年の結成以来、一貫してスチュワート・コープランドの変則的なドラミング、アンディ・サマーズの空間的なギター、そしてスティングの叙情的なソングライティングを提示。最小限のユニットでありながら、スタジアムを埋め尽くす壮大な音像を構築し、後のロック・シーンに多大な影響を与えた、20世紀ポピュラー音楽における真の革新者。",
+        "music8_members": [
+          {
+            "name": "Andy Summers",
+            "slug": "andy-summers",
+            "count": 1,
+            "filter": "raw",
+            "parent": 0,
+            "term_id": 6792,
+            "taxonomy": "category",
+            "term_group": 0,
+            "description": "Andy Summers is an English guitarist best known as a member of the rock band the Police.",
+            "term_taxonomy_id": 6792
+          },
+          {
+            "name": "Sting",
+            "slug": "sting",
+            "count": 52,
+            "filter": "raw",
+            "parent": 0,
+            "term_id": 768,
+            "taxonomy": "category",
+            "term_group": 0,
+            "description": "Sting is a world-renowned English musician and singer-songwriter, celebrated for his work as the frontman of The Police and his prolific solo career spanning rock, jazz, and classical influences.\r\n\r\n英国ニューカッスル出身、伝説的バンド「ザ・ポリス」のリーダーとして世界を席巻し、その後ソロとして比類なき成功を収めた至高の音楽家。ロックを基盤に、ジャズ、レゲエ、クラシック、ワールドミュージックを自在に融合させる卓越した音楽知性と、ハスキーで伸びやかなヴォーカルが世界中のリスナーを魅了し続けている。社会問題や深い哲学を内包した知的なリリックと、精緻に構築された楽曲構成が最大の特徴。現在は、ジャンルの境界を軽やかに超え、音楽の精神的・芸術的価値を更新し続ける、現代音楽史に燦然と輝く生きた伝説の結晶。",
+            "term_taxonomy_id": 768
+          },
+          {
+            "name": "Stewart Copeland",
+            "slug": "stewart-copeland",
+            "count": 0,
+            "filter": "raw",
+            "parent": 0,
+            "term_id": 7396,
+            "taxonomy": "category",
+            "term_group": 0,
+            "description": "",
+            "term_taxonomy_id": 7396
+          }
+        ],
+        "music8_synced_at": "2026-07-25T04:59:01.476+00:00",
+        "birth_date": null,
+        "death_date": null,
+        "occupations": null,
+        "youtube_channel_id": null,
+        "catalog_scope": null,
+        "ai_profile_generated_at": null,
+        "ai_profile_model": null,
+        "ai_profile_source": null,
+        "name_en": null,
+        "aliases": null,
+        "wp_term_id": 2,
+        "related_artists_raw": "Elton John (elton-john) [62] | Queen (queen) [56] | U2 (u2) [53] | Sting (sting) [51] | Bryan Adams (bryan-adams) [48] | Rod Stewart (rod-stewart) [43] | Tears For Fears (tears-for-fears) [30] | Billy Joel (billy-joel) [30] | Phil Collins (phil-collins) [23] | Billy Idol (billy-idol) [21] | Journey (journey) [20] | New Order (new-order) [19] | David Bowie (david-bowie) [18] | Duran Duran (duran-duran) [15] | Dire Straits (dire-straits) [14] | Electric Light Orchestra (electric-light-orchestra) [14] | Peter Gabriel (peter-gabriel) [11] | Led Zeppelin (led-zeppelin) [11] | Eurythmics (eurythmics) [10] | Blondie (blondie) [8] | Orchestral Manoeuvres In The Dark (orchestral-manoeuvres-in-the-dark) [8] | B-52's (b-52s) [8] | INXS (inxs) [7] | The Pretenders (pretenders) [7] | Chicago (chicago) [7] | Fine Young Cannibals (fine-young-cannibals) [7] | John Mellencamp (john-mellencamp) [7] | Simple Minds (simple-minds) [6] | The Jam (jam) [6] | The Style Council (style-council) [6] | The Cars (cars) [5] | Steve Winwood (steve-winwood) [5] | The Rolling Stones (rolling-stones) [5] | Frankie Goes To Hollywood (frankie-goes-to-hollywood) [5] | Alan Parsons Project (alan-parsons-project) [5] | The Buggles (buggles) [5] | Loverboy (loverboy) [5] | Pat Benatar (pat-benatar) [5] | The Human League (human-league) [4] | Paul McCartney (paul-mccartney) [4] | The Power Station (power-station) [4] | Howard Jones (howard-jones) [4] | Ultravox (ultravox) [4] | Men at Work (men-at-work) [3] | Joe Jackson (joe-jackson) [3] | XTC (xtc) [3] | The Fixx (fixx) [3] | Roxy Music (roxy-music) [3] | Thompson Twins (thompson-twins) [3] | Level 42 (level-42) [3] | A Flock Of Seagulls (flock-of-seagulls) [3] | Kajagoogoo (kaiagoogoo) [3] | Spandau Ballet (spandau-ballet) [3] | Don Henley (don-henley) [3] | Echo & The Bunnymen (echo-the-bunnymen) [3] | Thomas Dolby (thomas-dolby) [2] | Big Country (big-country) [2] | Mr. Mister (mr-mister) [2] | Wang Chung (wang-chung) [2] | Styx (styx) [2] | ABC (abc) [2] | Pink Floyd (pink-floyd) [2] | Genesis (genesis) [1] | Toto (toto) [1] | The Who (who) [1] | Foreigner (foreigner) [1] | Van Halen (van-halen) [1] | The Romantics (romantics) [1] | Boston (boston) [1] | The Kinks (kinks) [1] | REO Speedwagon (reo-speedwagon) [1] | Japan (japan) [1] | Asia (asia) [1] | Dexys Midnight Runners (dexys-midnight-runners) [1] | Supertramp (supertramp) [0] | Robert Palmer (robert-palmer) [0] | Huey Lewis & The News (huey-lewis-the-news) [0] | The Clash (clash) [0] | Knack (knack) [0] | The Steve Miller Band (steve-miller-band) [0] | Yes (yes) [0] | Cream (cream) [0] | Eagles (eagles) [0] | The J. Geils Band (j-geils-band) [0] | Emerson, Lake & Palmer (emerson-lake-palmer) [0] | Fleetwood Mac (fleetwood-mac) [0] | George Harrison (george-harrison) [0] |"
+      }
+    ],
+    "catalog": {
+      "styles": [
+        {
+          "style_id": "6cd6a5b2-edfc-4d89-a6ac-1bd36a9f4599",
+          "catalog_styles": {
+            "name": "Pop",
+            "slug": "pop"
+          }
+        }
+      ],
+      "genres": [
+        {
+          "genre_id": "7765e72c-37ae-4a21-b896-bb88d604dc03",
+          "catalog_genres": {
+            "name": "Emo",
+            "slug": "emo"
+          }
+        },
+        {
+          "genre_id": "b5a609b3-5553-45db-83b9-629e529183b6",
+          "catalog_genres": {
+            "name": "Soft rock",
+            "slug": "soft-rock"
+          }
+        }
+      ],
+      "vocals": [
+        {
+          "vocal_id": "a94a319e-e89d-4660-8dff-97a6f76aba4d",
+          "catalog_vocals": {
+            "name": "M",
+            "slug": "male"
+          }
+        }
+      ],
+      "tags": []
+    }
+  }
+]

@@ -31,6 +31,7 @@ export {
   getPrimaryGenerationModelId,
   matchesGeminiSecondaryRoutingToken,
   resolveGenerationModelId,
+  resolveSanitizeModelId,
 } from '@/lib/gemini-model-routing';
 
 /** generateContent レスポンスの usageMetadata（モデル・バージョンでキー名が変わる場合あり） */
@@ -811,6 +812,31 @@ export const SONG_STYLES = [
 
 export type SongStyle = (typeof SONG_STYLES)[number];
 
+/** Gemma が前置きのあとにだけ正答ラベルを書く／文中に Pop 等だけ含むときの抽出 */
+export function extractSongStyleOptionFromModelText(raw: string): SongStyle | null {
+  const text = raw.trim();
+  if (!text) return null;
+  const stripped = text.replace(/^[*"'\s]+/, '').replace(/[.。!！]+$/u, '').trim();
+  if (SONG_STYLES.includes(stripped as SongStyle)) return stripped as SongStyle;
+  if (SONG_STYLES.includes(text as SongStyle)) return text as SongStyle;
+  const firstLine = stripped.split(/\n/)[0]?.trim() ?? '';
+  if (SONG_STYLES.includes(firstLine as SongStyle)) return firstLine as SongStyle;
+  const firstToken = stripped.split(/\s+/)[0]?.trim().replace(/[.,:;]+$/u, '') ?? '';
+  if (SONG_STYLES.includes(firstToken as SongStyle)) return firstToken as SongStyle;
+  const ordered = [...SONG_STYLES].filter((o) => o !== 'Other').sort((a, b) => b.length - a.length);
+  for (const opt of ordered) {
+    const esc = opt.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp(`(^|[^A-Za-z0-9])(${esc})([^A-Za-z0-9]|$)`, 'i');
+    const m = re.exec(text);
+    if (m) {
+      const hit = m[2];
+      const exact = SONG_STYLES.find((o) => o.toLowerCase() === hit.toLowerCase());
+      if (exact) return exact;
+    }
+  }
+  return null;
+}
+
 /**
  * 曲タイトルとアーティスト名からスタイルを1つ返す。分からない場合は Other。
  * Pop: Pop, Folk, Country, Reggae / Dance: Dance, Disco, Funk / Electronica: House, Techno, Trance, D&B, Synthwave
@@ -842,19 +868,15 @@ ${input}
 ・Metal = Metal, Hard rock
 ・Alternative rock = オルタナティブ・ロック、ポストグランジ、インディー・ロック（Foo Fighters, Nirvana, Radiohead, Coldplay など）
 ・Rock = Alternative rock と Metal 以外のロック
-上記以外のスタイルは使わないこと。リストの表記どおり出力（Alternative rock は2語で）。`;
+上記以外のスタイルは使わないこと。リストの表記どおり出力（Alternative rock は2語で）。
+・**出力はリストのラベルのみ（例: Pop）**。説明文・前置き・箇条書きは禁止。`;
 
   try {
     const result = await model.generateContent(prompt);
     logGeminiUsage('get_song_style', result.response);
     await persistGeminiUsageLog('get_song_style', result.response.usageMetadata, geminiUsagePersistMeta(usageMeta));
     const text = readGeneratedText(result.response, 'get_song_style');
-    // 全文がリストに含まれるか（Alternative rock など2語スタイル用）
-    if (SONG_STYLES.includes(text as SongStyle)) return text as SongStyle;
-    // 1語だけ返した場合
-    const firstWord = text.split(/\s+/)[0]?.trim() ?? '';
-    if (SONG_STYLES.includes(firstWord as SongStyle)) return firstWord as SongStyle;
-    return 'Other';
+    return extractSongStyleOptionFromModelText(text) ?? 'Other';
   } catch (e) {
     console.error('[gemini] getSongStyle:', e);
     return 'Other';

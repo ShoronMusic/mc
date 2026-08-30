@@ -8,10 +8,12 @@
   "Belle and Sebastian",
   "Bob Marley and The Wailers",
   "Chance the Rapper",
+  "Chase & Status",
   "Coheed and Cambria",
   "D'Angelo and The Vanguard",
   "Dexter and The Moonrocks",
   "Echo & The Bunnymen",
+  "Eli & Fur",
   {
     "canonical": "Earth, Wind & Fire",
     "aliases": ["Earth Wind & Fire", "Earth Wind and Fire"]
@@ -54,6 +56,10 @@
   "Sleeping With Sirens",
   "T-Pain",
   "THE-DREAM",
+  {
+    "canonical": "Tyler, The Creator",
+    "aliases": ["Tyler, the Creator"]
+  },
   {
     "canonical": "Tegan and Sara",
     "aliases": ["Tegan & Sara"]

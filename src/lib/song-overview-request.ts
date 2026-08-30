@@ -3,6 +3,7 @@ import {
   formatAiCreditAmount,
 } from '@/lib/ai-credits-config';
 import { extractUiLabelFromBody, stripUiLabelPrefixFromBody } from '@/lib/chat-message-ui-labels';
+import { stripGemma4CommentaryHeadPrefix } from '@/lib/commentary-model-head-tag';
 import type { AiTrialStatus } from '@/lib/ai-trial-status';
 
 export const SONG_OVERVIEW_REQUEST_PROMPT = 'この曲の概要を説明してください';
@@ -87,7 +88,7 @@ export function hasSongCommentaryForVideo(messages: readonly MessageLike[], vide
     if (m.messageType !== 'ai') continue;
     const { label, text } = extractUiLabelFromBody(m.body);
     if (label?.startsWith('AI曲解説')) return true;
-    const body = text.replace(/^\[DB\]\s*/, '');
+    const body = stripGemma4CommentaryHeadPrefix(text.replace(/^\[DB\]\s*/, ''));
     if (body.startsWith('[NEW]') || body.startsWith('[DB]')) return true;
   }
   return false;

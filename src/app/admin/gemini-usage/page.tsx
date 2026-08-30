@@ -26,6 +26,8 @@ type TokenSummary = {
   calls: number;
   promptTokens: number;
   outputTokens: number;
+  costUsd?: number;
+  costJpyApprox?: number;
 };
 
 /** Google AI Studio 左メニュー「使用量」に相当（リクエスト・トークン・エラーなど） */
@@ -47,10 +49,12 @@ const CONTEXT_HELP: Record<string, string> = {
   comment_pack_free_3: 'comment-pack 自由コメント3',
   comment_pack_free_4: 'comment-pack 自由コメント4',
   comment_pack_session_bridge: 'comment-pack ライブラリ返却時の会話つなぎ（直近チャットあり）',
+  commentary_copyedit: 'Gemma曲解説の清書（Flash-Lite による本文抽出）',
   song_quiz: '曲解説後の三択クイズ生成（/api/ai/song-quiz）',
   theme_playlist_comment:
     'お題のAI講評（お題プレイリスト／ルームお題ミッションの選曲がお題に合う観点の短文）',
   next_song_recommend: '「次に聴くなら（試験）」のおすすめ曲生成',
+  liked_song_axis_explore: '気に入り軸ラボ（管理）の類似候補選出',
   next_song_recomend: '「次に聴くなら（試験）」のおすすめ曲生成（旧キー）',
   question_guard_classify: '「@」音楽関連の二次判定（質問ガード分類）',
   character_song_pick: 'AIキャラの選曲クエリ生成（/api/ai/character-song-pick）',
@@ -70,7 +74,13 @@ export default function AdminGeminiUsagePage() {
   const [productFilter, setProductFilter] = useState<'all' | 'musicaichat' | 'musicchat'>('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [totals, setTotals] = useState({ calls: 0, promptTokens: 0, outputTokens: 0 });
+  const [totals, setTotals] = useState({
+    calls: 0,
+    promptTokens: 0,
+    outputTokens: 0,
+    costUsd: 0,
+    costJpyApprox: 0,
+  });
   const [byContext, setByContext] = useState<Record<string, TokenSummary>>({});
   const [byModel, setByModel] = useState<Record<string, TokenSummary>>({});
   const [logs, setLogs] = useState<LogRow[]>([]);
@@ -88,12 +98,20 @@ export default function AdminGeminiUsagePage() {
       if (!res.ok) {
         setError(data?.error || '読み込みに失敗しました。');
         setLogs([]);
-        setTotals({ calls: 0, promptTokens: 0, outputTokens: 0 });
+        setTotals({ calls: 0, promptTokens: 0, outputTokens: 0, costUsd: 0, costJpyApprox: 0 });
         setByContext({});
         setByModel({});
         return;
       }
-      setTotals(data.totals ?? { calls: 0, promptTokens: 0, outputTokens: 0 });
+      setTotals(
+        data.totals ?? {
+          calls: 0,
+          promptTokens: 0,
+          outputTokens: 0,
+          costUsd: 0,
+          costJpyApprox: 0,
+        },
+      );
       setByContext(data.byContext ?? {});
       setByModel(data.byModel ?? {});
       setLogs(Array.isArray(data.logs) ? data.logs : []);
@@ -110,10 +128,13 @@ export default function AdminGeminiUsagePage() {
 
   const ctxEntries = Object.entries(byContext).sort((a, b) => b[1].calls - a[1].calls);
   const modelEntries = Object.entries(byModel).sort((a, b) => b[1].calls - a[1].calls);
-  const totalCostUsd = modelEntries.reduce(
-    (sum, [model, v]) => sum + calcGeminiCostUsd(v.promptTokens, v.outputTokens, model),
-    0
-  );
+  const totalCostUsd =
+    typeof totals.costUsd === 'number'
+      ? totals.costUsd
+      : modelEntries.reduce(
+          (sum, [model, v]) => sum + calcGeminiCostUsd(v.promptTokens, v.outputTokens, model),
+          0,
+        );
   const approxSongCount = byContext.comment_pack_base?.calls ?? 0;
   const perSongUsd = approxSongCount > 0 ? totalCostUsd / approxSongCount : 0;
   const usdToJpy = GEMINI_USD_TO_JPY_APPROX;
@@ -127,7 +148,22 @@ export default function AdminGeminiUsagePage() {
     calls: 0,
     promptTokens: 0,
     outputTokens: 0,
+    costUsd: 0,
   };
+  const copyeditSummary = byContext.commentary_copyedit ?? {
+    calls: 0,
+    promptTokens: 0,
+    outputTokens: 0,
+    costUsd: 0,
+  };
+  const copyeditCostUsd =
+    typeof copyeditSummary.costUsd === 'number'
+      ? copyeditSummary.costUsd
+      : calcGeminiCostUsd(
+          copyeditSummary.promptTokens,
+          copyeditSummary.outputTokens,
+          'gemini-2.5-flash-lite',
+        );
 
   const blendedInputUsdPerM =
     totals.promptTokens > 0
@@ -241,7 +277,9 @@ export default function AdminGeminiUsagePage() {
               <strong className="text-gray-300">出力トークン</strong>（output）… AI が返した文字量。料金の出力単価に掛け算。
             </li>
             <li>
-              <strong className="text-gray-300">context</strong>… どの機能で呼んだか（下表の「種別」）。
+              <strong className="text-gray-300">context</strong>… どの機能で呼んだか（下表の「種別」）。曲解説の清書は{' '}
+              <code className="rounded bg-gray-800 px-1">commentary_copyedit</code>
+              （既定 Flash-Lite・有料単価）。Gemma 下書きは単価表に無いため概算 $0 です。
             </li>
             <li>
               保存には <code className="rounded bg-gray-800 px-1">SUPABASE_SERVICE_ROLE_KEY</code> とテーブル{' '}
@@ -283,6 +321,39 @@ export default function AdminGeminiUsagePage() {
                 <div className="text-xs text-violet-200/80">
                   入力 {characterSongPickSummary.promptTokens.toLocaleString()} / 出力{' '}
                   {characterSongPickSummary.outputTokens.toLocaleString()}
+                </div>
+              </div>
+            </section>
+
+            <section className="mb-6 rounded-lg border border-amber-800/60 bg-amber-950/20 p-4">
+              <h2 className="mb-1 text-sm font-medium text-amber-100">曲解説の清書（有料分）</h2>
+              <p className="mb-3 text-xs text-amber-200/80">
+                Gemma 下書きのあとに走った Flash-Lite 抽出（<code className="rounded bg-gray-800 px-1">commentary_copyedit</code>
+                ）。正規表現で足りた回はここには増えません。
+              </p>
+              <div className="grid gap-3 sm:grid-cols-4">
+                <div>
+                  <div className="text-xs text-amber-200/70">呼び出し</div>
+                  <div className="text-xl font-semibold text-amber-100">
+                    {copyeditSummary.calls.toLocaleString()} 回
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-amber-200/70">入力 / 出力</div>
+                  <div className="text-sm font-semibold text-amber-50">
+                    {copyeditSummary.promptTokens.toLocaleString()} /{' '}
+                    {copyeditSummary.outputTokens.toLocaleString()}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-amber-200/70">概算 USD</div>
+                  <div className="text-xl font-semibold text-amber-100">${copyeditCostUsd.toFixed(4)}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-amber-200/70">概算円（$1=¥{usdToJpy}）</div>
+                  <div className="text-xl font-semibold text-amber-100">
+                    約 ¥{(copyeditCostUsd * usdToJpy).toFixed(2)}
+                  </div>
                 </div>
               </div>
             </section>
@@ -407,15 +478,71 @@ export default function AdminGeminiUsagePage() {
                     ) : (
                       ctxEntries.map(([key, v]) => {
                         const costUsd =
-                          (v.promptTokens / 1_000_000) * blendedInputUsdPerM +
-                          (v.outputTokens / 1_000_000) * blendedOutputUsdPerM;
+                          typeof v.costUsd === 'number'
+                            ? v.costUsd
+                            : (v.promptTokens / 1_000_000) * blendedInputUsdPerM +
+                              (v.outputTokens / 1_000_000) * blendedOutputUsdPerM;
+                        const rowClass =
+                          key === 'commentary_copyedit'
+                            ? 'border-b border-amber-900/40 bg-amber-950/20'
+                            : 'border-b border-gray-800';
                         return (
-                          <tr key={key} className="border-b border-gray-800">
+                          <tr key={key} className={rowClass}>
                             <td className="px-3 py-1.5 font-mono text-xs text-gray-300">{key}</td>
                             <td className="px-3 py-1.5 text-gray-400">{CONTEXT_HELP[key] ?? '—'}</td>
                             <td className="px-3 py-1.5 text-right">{v.calls}</td>
                             <td className="px-3 py-1.5 text-right text-sky-200/90">{v.promptTokens.toLocaleString()}</td>
                             <td className="px-3 py-1.5 text-right text-emerald-200/90">{v.outputTokens.toLocaleString()}</td>
+                            <td className="px-3 py-1.5 text-right text-violet-200/90">${costUsd.toFixed(4)}</td>
+                            <td className="px-3 py-1.5 text-right font-semibold text-amber-200">
+                              ¥{(costUsd * usdToJpy).toFixed(2)}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <section className="mb-6">
+              <h2 className="mb-2 text-sm font-medium text-gray-300">モデルごとの内訳（有料単価があるものだけ概算に入る）</h2>
+              <div className="overflow-x-auto rounded-lg border border-gray-700">
+                <table className="w-full min-w-[420px] text-left text-sm">
+                  <thead className="border-b border-gray-700 bg-gray-800/80">
+                    <tr>
+                      <th className="px-3 py-2">model</th>
+                      <th className="px-3 py-2 text-right">回数</th>
+                      <th className="px-3 py-2 text-right">入力</th>
+                      <th className="px-3 py-2 text-right">出力</th>
+                      <th className="px-3 py-2 text-right">概算料金(USD)</th>
+                      <th className="px-3 py-2 text-right">概算料金(円)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {modelEntries.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="px-3 py-4 text-center text-gray-500">
+                          データがありません
+                        </td>
+                      </tr>
+                    ) : (
+                      modelEntries.map(([model, v]) => {
+                        const costUsd =
+                          typeof v.costUsd === 'number'
+                            ? v.costUsd
+                            : calcGeminiCostUsd(v.promptTokens, v.outputTokens, model);
+                        return (
+                          <tr key={model} className="border-b border-gray-800">
+                            <td className="px-3 py-1.5 font-mono text-xs text-gray-300">{model}</td>
+                            <td className="px-3 py-1.5 text-right">{v.calls}</td>
+                            <td className="px-3 py-1.5 text-right text-sky-200/90">
+                              {v.promptTokens.toLocaleString()}
+                            </td>
+                            <td className="px-3 py-1.5 text-right text-emerald-200/90">
+                              {v.outputTokens.toLocaleString()}
+                            </td>
                             <td className="px-3 py-1.5 text-right text-violet-200/90">${costUsd.toFixed(4)}</td>
                             <td className="px-3 py-1.5 text-right font-semibold text-amber-200">
                               ¥{(costUsd * usdToJpy).toFixed(2)}
@@ -446,7 +573,14 @@ export default function AdminGeminiUsagePage() {
                   </thead>
                   <tbody>
                     {logs.map((r) => (
-                      <tr key={r.id} className="border-b border-gray-800/80">
+                      <tr
+                        key={r.id}
+                        className={
+                          r.context === 'commentary_copyedit'
+                            ? 'border-b border-amber-900/30 bg-amber-950/15'
+                            : 'border-b border-gray-800/80'
+                        }
+                      >
                         <td className="whitespace-nowrap px-2 py-1 text-gray-400">{formatTime(r.created_at)}</td>
                         <td className="px-2 py-1 font-mono text-gray-300">{r.context}</td>
                         <td className="max-w-[200px] truncate px-2 py-1 font-mono text-gray-400" title={r.model}>

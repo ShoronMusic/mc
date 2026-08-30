@@ -81,6 +81,7 @@ import { resolveAiQuestionMusicRelated } from '@/lib/client-ai-question-guard-re
 import { isAiUnlimitedTrialStatus } from '@/lib/ai-trial-status';
 import { isDevMinimalSongAi } from '@/lib/dev-minimal-song-ai';
 import { formatMusic8ModeratorIntroPrefix } from '@/lib/music8-moderator-chat-prefix';
+import { formatCommentPackChatOriginPrefix } from '@/lib/commentary-model-head-tag';
 import {
   buildCommentaryUiLabel,
   NEXT_RECOMMEND_PENDING_UI_LABEL,
@@ -1325,7 +1326,10 @@ export default function RoomWithoutSync({
             }
             if (pack?.baseComment) {
               commentPackVideoIdRef.current = vid;
-              const packPrefix = pack?.source === 'library' ? '[DB] ' : '[NEW] ';
+              const packPrefix = formatCommentPackChatOriginPrefix(
+                typeof pack?.source === 'string' ? pack.source : undefined,
+                typeof pack?.generationModel === 'string' ? pack.generationModel : undefined,
+              );
               const modIntro = formatMusic8ModeratorIntroPrefix(
                 canRejectTidbit,
                 pack.music8ModeratorHints,
@@ -1498,7 +1502,10 @@ export default function RoomWithoutSync({
             return;
           }
           if (data?.text) {
-            const prefix = data.source === 'library' ? '[DB] ' : '[NEW] ';
+            const prefix = formatCommentPackChatOriginPrefix(
+              typeof data.source === 'string' ? data.source : undefined,
+              typeof data.generationModel === 'string' ? data.generationModel : undefined,
+            );
             addAiMessage(`${buildCommentaryUiLabel('01')} ${prefix + data.text}`, { videoId: vid });
             touchActivity();
             setTimeout(() => {

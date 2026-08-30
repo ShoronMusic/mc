@@ -131,6 +131,13 @@ export const ADMIN_SECTIONS: AdminSection[] = [
     category: 'ai',
   },
   {
+    href: '/admin/liked-song-axis-lab',
+    title: '気に入り軸ラボ（試験）',
+    description:
+      '種曲から AI が類似候補を選出。要素ごとの類似スコアを行列で評価（部屋非接続）',
+    category: 'ai',
+  },
+  {
     href: '/admin/artist-title-parse-reports',
     title: '曲名表記スナップショット',
     description:
@@ -266,6 +273,13 @@ export const ADMIN_SECTIONS: AdminSection[] = [
     title: '邦楽扱い英字アーティスト',
     description:
       '英字表記で洋楽誤判定されやすい邦楽アーティストの登録（catalog_scope・邦楽 DB・管理一覧に反映）',
+    category: 'library',
+  },
+  {
+    href: '/admin/songs/new',
+    title: '洋楽 1 曲登録',
+    description:
+      'YouTube から Supabase 曲マスタへ 1 曲登録し、Music8 公開 JSON を増分出力（YT to M7 の宛先）',
     category: 'library',
   },
   {
