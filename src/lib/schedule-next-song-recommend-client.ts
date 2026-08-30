@@ -155,7 +155,7 @@ export function scheduleNextSongRecommendAfterCommentary(options: {
       videoId: options.videoId,
       roomId: options.roomId ?? '',
       aiMode: options.aiMode ?? 'full',
-      isGuest: options.isGuest === true,
+      isGuest: false,
       commentarySnippet: (options.commentarySnippet ?? '').slice(0, 2000),
     }),
   })
