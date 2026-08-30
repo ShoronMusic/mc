@@ -1053,7 +1053,7 @@ ${basePromptTail}`;
 
     const commentPackModelId = resolveGenerationModelId('comment_pack_base');
 
-    let baseText: string;
+    let baseText = '';
 
     if (packPhase === 'frees') {
       let fromClient = typeof body?.baseComment === 'string' ? body.baseComment.trim() : '';
