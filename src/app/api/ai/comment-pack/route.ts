@@ -30,7 +30,12 @@ import {
 } from '@/lib/library-song-display-by-video';
 import { getVideoSnippet } from '@/lib/youtube-search';
 import type { VideoSnippet } from '@/lib/youtube-search';
-import { containsUnreliableCommentPackClaim } from '@/lib/ai-output-policy';
+import {
+  containsUnreliableCommentPackClaim,
+  MEDIA_PLACEMENT_WORK_TITLE_REGEN_HINT,
+  mentionsMediaPlacementWithoutWorkTitle,
+  stripMediaPlacementSentencesWithoutWorkTitle,
+} from '@/lib/ai-output-policy';
 import {
   extractRawTextFromGenerateContentResponse,
   extractTextFromGenerateContentResponse,
@@ -960,7 +965,8 @@ export async function POST(request: Request) {
         : '';
     const music8SourcePolicyLine =
       music8FactsSection.length > 0
-        ? `・下記【Music8 参照事実】はマスター由来の要約です。**記載のリリース時期・ジャンル分類・アルバム名などと本文を矛盾させないこと。**参照に無い受賞・チャート順位・固有名は捏造しないこと。参照と YouTube メタが明確に食い違うときは断定を避け、メタデータ優先でよい。
+        ? `・下記【Music8 参照事実】はマスター由来の要約です。**記載のリリース時期・ジャンル分類・アルバム名などと本文を矛盾させないこと。**参照に無い受賞・チャート順位は捏造しないこと。参照と YouTube メタが明確に食い違うときは断定を避け、メタデータ優先でよい。
+・映画・ドラマ・アニメ・ゲームの主題歌・エンディングとして広く知られる結びつきは、Music8 参照に無くても、**作品名に自信があるときだけ**書いてよい（例: 映画『レオン』）。作品名が曖昧なら起用に触れない（「映画のエンディングとしても浸透」は禁止）。
 ・Music8 参照があるときは、雰囲気や「大ヒット」「広く知られる」だけの一文で終わらせないこと。参照事実から**リリース年または収録アルバム名**と、**ジャンルまたはサウンドの具体**を少なくとも1つ本文に入れること。書き出しの「${artistLabel}の『${songLabel}』」は省略禁止。`
         : musicBrainzFactsSection.length > 0
           ? `・下記【MusicBrainz 参照事実】は照合済みの事実です。盤名・年号・シングル/アルバム区分はこの範囲のみで述べ、補完・推測しないこと。`
@@ -1004,10 +1010,12 @@ ${music8SourcePolicyLine}
 
     const baseOptionalExtrasBlock = isSupergroupArtist
       ? `【基本情報に足してよい一言（任意）】
-・【曲名】やタイトル原文から**リミックス版・別ミックス**と分かるときは、基本紹介内でその版に一言触れてよい（オリジナルよりこのミックスの方が後からメインになった、なども珍しいわけではない。不確かなら弱い表現か省略）。`
+・【曲名】やタイトル原文から**リミックス版・別ミックス**と分かるときは、基本紹介内でその版に一言触れてよい（オリジナルよりこのミックスの方が後からメインになった、なども珍しいわけではない。不確かなら弱い表現か省略）。
+・映画・ドラマ等の主題歌・エンディングとして広く知られる場合、作品名に自信があるときだけ『』で触れてよい。不確かなら起用に触れない。`
       : `【基本情報に足してよい一言（任意）】
 ・広く知られた大ヒット曲に限り、テーマの要約のあとに**一文だけ**「2010年代前半に世界的なヒットとなった」など、**時期＋規模の枠**を添えてよい（チャート名・順位・週数は書かない。具体は1本目の自由コメントに任せる）。
-・【曲名】やタイトル原文から**リミックス版・別ミックス**と分かるときは、基本紹介内でその版に一言触れてよい（オリジナルよりこのミックスの方が後からメインになった、なども珍しいわけではない。不確かなら弱い表現か省略）。`;
+・【曲名】やタイトル原文から**リミックス版・別ミックス**と分かるときは、基本紹介内でその版に一言触れてよい（オリジナルよりこのミックスの方が後からメインになった、なども珍しいわけではない。不確かなら弱い表現か省略）。
+・映画・ドラマ・アニメ・CM・ゲームの主題歌・エンディング・挿入歌として**広く知られている**場合、日本語で定着した作品名が言えるときだけ一文で触れてよい（例: 映画『レオン』のエンディングとしても知られています）。ユーザーが「あの作品だ」と分かるよう、作品名を『』または「」で書く。作品名が曖昧なら「映画のエンディングとしても広く浸透」のように無名のまま触れない（触れない方がよい）。候補曲の裏話や制作経緯は書かない。`;
 
     const basePrompt = `選曲アナウンスの直後に、最初にだけ表示する「曲の基本情報」を1本だけ書いてください。現在は${currentYear}年です。
 ${metaLockBlock}
@@ -1028,6 +1036,7 @@ ${baseIncludeCoverLine}
 【事実優先ポリシー（必須）】
 ・リリース年や収録アルバムが断定できない場合は、その不足を1フレーズで明示したうえで、確認できる事実（曲調・テーマ・クレジット上の役割など）を続けること。
 ・不確実な固有名詞・年号・制作逸話は書かない（推測禁止）。
+・映画・ドラマ等の起用に触れるときは作品名を『』または「」で書く。不確かなら触れない。
 ・「名曲です」「人気曲です」だけの当たり障りない説明で終わらせず、最低1つは曲固有の観点を入れること。
 
 【基本情報に含めないもの】
@@ -1086,20 +1095,32 @@ ${basePromptTail}`;
       if (!model) {
         return NextResponse.json({ error: 'Gemini is not configured', ...songQuizExtensionFinal }, { status: 503 });
       }
-      const baseResult = await model.generateContent(basePrompt);
-      logGeminiUsage('comment_pack_base', baseResult.response);
-      await persistGeminiUsageLog('comment_pack_base', baseResult.response.usageMetadata, selectorGeminiLogMeta);
-      /** Gemma は polish 前の原文を清書へ渡す（思考漏れごと消えると解説01が欠ける） */
-      baseText = isGemmaHostedModelId(commentPackModelId)
-        ? extractRawTextFromGenerateContentResponse(baseResult.response)
-        : extractTextFromGenerateContentResponse(baseResult.response, commentPackModelId);
-      if (isNewRelease) {
-        baseText = (baseText + COMMENT_PACK_NEW_RELEASE_DISCLAIMER).trim();
+      let baseAttempt = 0;
+      let basePromptUse = basePrompt;
+      while (baseAttempt < 2) {
+        baseAttempt += 1;
+        const baseResult = await model.generateContent(basePromptUse);
+        logGeminiUsage('comment_pack_base', baseResult.response);
+        await persistGeminiUsageLog('comment_pack_base', baseResult.response.usageMetadata, selectorGeminiLogMeta);
+        /** Gemma は polish 前の原文を清書へ渡す（思考漏れごと消えると解説01が欠ける） */
+        baseText = isGemmaHostedModelId(commentPackModelId)
+          ? extractRawTextFromGenerateContentResponse(baseResult.response)
+          : extractTextFromGenerateContentResponse(baseResult.response, commentPackModelId);
+        if (isNewRelease) {
+          baseText = (baseText + COMMENT_PACK_NEW_RELEASE_DISCLAIMER).trim();
+        }
+        baseText = await copyeditGemmaCommentaryText(baseText, {
+          draftModelId: commentPackModelId,
+          persistMeta: selectorGeminiLogMeta,
+        });
+        if (!mentionsMediaPlacementWithoutWorkTitle(baseText)) break;
+        if (baseAttempt >= 2) {
+          const stripped = stripMediaPlacementSentencesWithoutWorkTitle(baseText);
+          if (stripped) baseText = stripped;
+          break;
+        }
+        basePromptUse = basePrompt + MEDIA_PLACEMENT_WORK_TITLE_REGEN_HINT;
       }
-      baseText = await copyeditGemmaCommentaryText(baseText, {
-        draftModelId: commentPackModelId,
-        persistMeta: selectorGeminiLogMeta,
-      });
 
       const filteredEarlyBaseOnly = applySlotsToPackBodies(
         baseText.trim(),

@@ -1,6 +1,7 @@
 /**
  * 一時検証用: Gemma 4 31B が生成した曲解説チャット先頭に [G4] を付ける。
  * song_tidbits 本文には保存しない（表示時のみ）。
+ * ローカル開発のみ。Vercel 等のリモート（本番ビルド）では出さない。
  */
 
 const GEMMA4_31B_MODEL_RE = /gemma-4-31b/i;
@@ -10,7 +11,14 @@ export function isGemma431bGenerationModel(modelId: string | null | undefined): 
   return GEMMA4_31B_MODEL_RE.test((modelId ?? '').trim());
 }
 
+/** クライアントは NODE_ENV（本番ビルドで inlined）。サーバーは VERCEL も見る。 */
+export function shouldShowGemma4CommentaryHeadTag(): boolean {
+  if (process.env.VERCEL) return false;
+  return process.env.NODE_ENV !== 'production';
+}
+
 export function formatGemma4CommentaryHeadPrefix(modelId: string | null | undefined): string {
+  if (!shouldShowGemma4CommentaryHeadTag()) return '';
   return isGemma431bGenerationModel(modelId) ? '[G4] ' : '';
 }
 

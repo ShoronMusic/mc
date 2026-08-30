@@ -49,6 +49,44 @@ export function containsUnreliableCommentaryDiscographyClaim(txt: string | null 
   return patterns.some((re) => re.test(t));
 }
 
+/** 映画・ドラマ等の起用に触れる文。作品名なしは再生成／削除対象 */
+const MEDIA_PLACEMENT_NEAR_RE =
+  /(?:映画|ドラマ|アニメ|テレビ(?:ドラマ)?|TV(?:ドラマ)?|CM|ゲーム).{0,28}(?:エンディング(?:曲)?|主題歌|挿入歌|オープニング(?:曲)?|サントラ|サウンドトラック|タイアップ)/;
+const NAMED_MEDIA_WORK_RE =
+  /(?:映画|ドラマ|アニメ|テレビ(?:ドラマ)?|TV(?:ドラマ)?|CM|ゲーム)[「『][^」』]{1,80}[」』]/;
+
+function splitJaSentences(t: string): string[] {
+  return t
+    .split(/(?<=[。！？\n])/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+}
+
+/**
+ * 「映画のエンディングとしても知られる」のように起用に触れつつ作品名が無いとき true。
+ * ユーザーが「あの作品だ」と分かるよう、映画『レオン』等のタイトル必須。
+ */
+export function mentionsMediaPlacementWithoutWorkTitle(txt: string | null | undefined): boolean {
+  const t = (txt ?? '').trim();
+  if (!t) return false;
+  for (const s of splitJaSentences(t)) {
+    if (!MEDIA_PLACEMENT_NEAR_RE.test(s)) continue;
+    if (NAMED_MEDIA_WORK_RE.test(s)) continue;
+    return true;
+  }
+  return false;
+}
+
+/** 作品名のない起用文だけ落とす（再生成しても残ったときの最終フォールバック） */
+export function stripMediaPlacementSentencesWithoutWorkTitle(txt: string): string {
+  const kept = splitJaSentences(txt).filter((s) => !mentionsMediaPlacementWithoutWorkTitle(s));
+  const out = kept.join('').replace(/[ \t]+\n/g, '\n').replace(/\s{2,}/g, ' ').trim();
+  return out;
+}
+
+export const MEDIA_PLACEMENT_WORK_TITLE_REGEN_HINT =
+  '\n（追加指示）映画・ドラマ・アニメ・ゲーム等の主題歌・エンディング・挿入歌・サントラに触れるなら、作品名を『』または「」で必ず書くこと（例: 映画『レオン』のエンディング）。作品名が不確かなら、その起用には触れない。';
+
 /**
  * 全英（UK）と全米（Billboard 等）の最高位をモデルが同一数字にコピーする誤りが多い（例: 米33位を英にも当てはめる）。
  * 同一文中で両市場に触れ、かつ同じ順位（小さな順位＝両方でよくある一致は除外）のときは再生成する。

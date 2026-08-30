@@ -13,6 +13,27 @@ test('formatGemma4CommentaryHeadPrefix: 31b only', () => {
   assert.equal(formatGemma4CommentaryHeadPrefix('gemini-3.5-flash-lite'), '');
 });
 
+test('formatGemma4CommentaryHeadPrefix: hidden on production and Vercel', () => {
+  const prevNode = process.env.NODE_ENV;
+  const prevVercel = process.env.VERCEL;
+  try {
+    process.env.NODE_ENV = 'production';
+    delete process.env.VERCEL;
+    assert.equal(formatGemma4CommentaryHeadPrefix('gemma-4-31b-it'), '');
+    assert.equal(formatCommentPackChatOriginPrefix('new', 'gemma-4-31b-it'), '[NEW] ');
+
+    process.env.NODE_ENV = 'development';
+    process.env.VERCEL = '1';
+    assert.equal(formatGemma4CommentaryHeadPrefix('gemma-4-31b-it'), '');
+    assert.equal(formatCommentPackChatOriginPrefix('new', 'gemma-4-31b-it'), '[NEW] ');
+  } finally {
+    if (prevNode === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = prevNode;
+    if (prevVercel === undefined) delete process.env.VERCEL;
+    else process.env.VERCEL = prevVercel;
+  }
+});
+
 test('formatCommentPackChatOriginPrefix: new gemma 31b at head', () => {
   assert.equal(
     formatCommentPackChatOriginPrefix('new', 'gemma-4-31b-it'),

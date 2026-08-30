@@ -16,7 +16,7 @@ import {
 
 const preview = buildPreviewAiTrialStatus();
 assert.match(formatAiTrialStatusPrimaryLine(preview), /残 20\/20 曲/);
-assert.match(formatAiTrialStatusPrimaryLine(preview), /@質問 残 5\/5/);
+assert.match(formatAiTrialStatusPrimaryLine(preview), /@質問 残 10\/10/);
 assert.match(formatAiTrialStatusSecondaryLine(preview)!, /試験運用/);
 
 const eligible = buildTrialEligibleAiTrialStatus();

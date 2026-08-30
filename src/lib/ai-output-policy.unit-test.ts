@@ -9,6 +9,8 @@ import {
   hasFabricatedStyleChartRankNumber,
   hasSuspiciousUkUsIdenticalChartPeak,
   isRejectedChatOrTidbitOutput,
+  mentionsMediaPlacementWithoutWorkTitle,
+  stripMediaPlacementSentencesWithoutWorkTitle,
 } from './ai-output-policy';
 
 // --- チャット / tidbit ---
@@ -140,6 +142,37 @@ assert.equal(
 
 assert.equal(
   containsUnreliableCommentPackClaim('Wikipediaによれば全英で2位だったとあります。', true),
+  false,
+);
+
+{
+  const stingBare =
+    "Stingの『Shape Of My Heart』は、1993年リリースの4thアルバム『Ten Summoner's Tales』に収録されたポップ・ロックのバラードです。運命の中に潜む論理を探求する内省的なテーマが描かれており、繊細で憂いのあるサウンドが印象的な一曲です。映画のエンディング曲としても世界的に広く浸透しています。";
+  assert.equal(mentionsMediaPlacementWithoutWorkTitle(stingBare), true);
+  const stripped = stripMediaPlacementSentencesWithoutWorkTitle(stingBare);
+  assert.equal(/映画/.test(stripped), false);
+  assert.match(stripped, /Shape Of My Heart/);
+}
+assert.equal(
+  mentionsMediaPlacementWithoutWorkTitle(
+    "Stingの『Shape Of My Heart』は、映画『レオン』のエンディングとしても世界的に広く知られています。",
+  ),
+  false,
+);
+assert.equal(
+  mentionsMediaPlacementWithoutWorkTitle(
+    '2015年にリリースされた、映画『ワイルド・スピード SKY MISSION』のサウンドトラックに収録されています。',
+  ),
+  false,
+);
+assert.equal(
+  mentionsMediaPlacementWithoutWorkTitle(
+    "アルバム『Ten Summoner's Tales』に収録され、映画のエンディング曲としても知られます。",
+  ),
+  true,
+);
+assert.equal(
+  mentionsMediaPlacementWithoutWorkTitle('映画音楽のような壮大なアレンジが印象的です。'),
   false,
 );
 

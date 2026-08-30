@@ -306,6 +306,20 @@ assert.equal(isSupergroupByManualHints('Traveling Wilburys'), true);
   assert.equal(r.song, 'Mr. Roboto');
 }
 
+// VEVO 同一行の "YouTube view counts pre-VEVO" を曲名に取り込まない（KLVq0IAzh1A）
+{
+  const desc =
+    'Music video by Sting performing Fields Of Gold. YouTube view counts pre-VEVO: 5,830,897. (C) 1993 A&M Records';
+  assert.deepEqual(parsePerformingFromDescription(desc), { artist: 'Sting', song: 'Fields Of Gold' });
+  const r = getArtistAndSong('Sting - Fields Of Gold', 'StingVEVO', { videoDescription: desc });
+  assert.equal(r.artistDisplay, 'Sting');
+  assert.equal(r.song, 'Fields Of Gold');
+  assert.equal(
+    cleanTitle('Fields Of Gold. YouTube view counts pre-VEVO: 5,830,897. (C) 1993 A&M Records'),
+    'Fields Of Gold',
+  );
+}
+
 // 概要の performing が逆でも、合体アーティスト名が曲列に来ていれば補正
 {
   const desc = 'Music video by Maneater performing Daryl Hall & John Oates\n\nMore';

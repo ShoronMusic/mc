@@ -4,7 +4,7 @@ import { formatAiCreditAmount } from '@/lib/ai-credits-config';
 
 /** 初回付与: AI 付き選曲（1曲＝1消費。有料クレジットと同単位） */
 export const AI_TRIAL_SONGS_GRANTED = 20;
-export const AI_TRIAL_AT_QUESTIONS_GRANTED = 5;
+export const AI_TRIAL_AT_QUESTIONS_GRANTED = 10;
 
 /** 消費後に部屋 UI が残数を再取得する */
 export const AI_TRIAL_STATUS_UPDATED_EVENT = 'mc:ai-trial-status-updated';

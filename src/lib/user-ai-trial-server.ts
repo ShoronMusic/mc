@@ -132,23 +132,40 @@ export function computeTrialSongsGrantBump(
   };
 }
 
+/** 既付与 @ が現行定数より少ないとき、差分を残数に加算して at_questions_granted を揃える。 */
+export function computeTrialAtQuestionsGrantBump(
+  row: { at_questions_granted: number; at_questions_remaining: number },
+  targetGranted: number = AI_TRIAL_AT_QUESTIONS_GRANTED,
+): { at_questions_granted: number; at_questions_remaining: number } | null {
+  const granted = Math.max(0, Math.floor(Number(row.at_questions_granted) || 0));
+  const remaining = Math.max(0, Math.floor(Number(row.at_questions_remaining) || 0));
+  if (granted >= targetGranted) return null;
+  const delta = targetGranted - granted;
+  return {
+    at_questions_granted: targetGranted,
+    at_questions_remaining: remaining + delta,
+  };
+}
+
 export async function bumpExistingTrialSongsIfNeeded(
   admin: SupabaseClient,
   row: UserAiTrialRow,
 ): Promise<{ row: UserAiTrialRow; error: string | null }> {
-  const bump = computeTrialSongsGrantBump(row);
-  if (!bump) return { row, error: null };
+  const songsBump = computeTrialSongsGrantBump(row);
+  const atBump = computeTrialAtQuestionsGrantBump(row);
+  if (!songsBump && !atBump) return { row, error: null };
 
   const now = new Date().toISOString();
   const { data, error } = await admin
     .from('user_ai_trial')
     .update({
-      songs_granted: bump.songs_granted,
-      songs_remaining: bump.songs_remaining,
+      ...(songsBump ?? {}),
+      ...(atBump ?? {}),
       updated_at: now,
     })
     .eq('user_id', row.user_id)
     .eq('songs_granted', row.songs_granted)
+    .eq('at_questions_granted', row.at_questions_granted)
     .select(
       'user_id, songs_granted, songs_remaining, at_questions_granted, at_questions_remaining, first_ip, last_ip, email_verified_at_grant, created_at, updated_at',
     )
@@ -774,7 +791,7 @@ export async function guardAndConsumeAiTrialAtQuestion(params: {
   if (requiresEmailConfirmation(params.user)) {
     return trialDenied(
       'email_unconfirmed',
-      'メール確認後に AI への質問（お試し @ 5 回）が使えます。',
+      `メール確認後に AI への質問（お試し @ ${AI_TRIAL_AT_QUESTIONS_GRANTED} 回）が使えます。`,
     );
   }
 
@@ -791,7 +808,11 @@ export async function guardAndConsumeAiTrialAtQuestion(params: {
       503,
     );
   }
-  if (!row || (row.songs_granted < AI_TRIAL_SONGS_GRANTED)) {
+  if (
+    !row ||
+    row.songs_granted < AI_TRIAL_SONGS_GRANTED ||
+    row.at_questions_granted < AI_TRIAL_AT_QUESTIONS_GRANTED
+  ) {
     const grant = await ensureUserAiTrialGrant(params.user, params.clientIp);
     if (grant.missingTable) {
       return trialDenied(
@@ -815,7 +836,7 @@ export async function guardAndConsumeAiTrialAtQuestion(params: {
       return trialDenied(
         error,
         error === 'email_unconfirmed'
-          ? 'メール確認後に AI への質問（お試し @ 5 回）が使えます。'
+          ? `メール確認後に AI への質問（お試し @ ${AI_TRIAL_AT_QUESTIONS_GRANTED} 回）が使えます。`
           : 'AI お試し枠を付与できませんでした。選曲のみ（AI なし）でご利用ください。',
         403,
       );
@@ -841,7 +862,7 @@ export async function guardAndConsumeAiTrialAtQuestion(params: {
     }
     return trialDenied(
       'at_trial_exhausted',
-      'お試し @ 質問 5 回を使い切りました。',
+      `お試し @ 質問 ${AI_TRIAL_AT_QUESTIONS_GRANTED} 回を使い切りました。`,
       403,
       { atQuestionsRemaining: 0 },
     );

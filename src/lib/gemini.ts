@@ -6,6 +6,9 @@ import { GoogleGenerativeAI, type GenerationConfig } from '@google/generative-ai
 import {
   containsUnreliableCommentaryDiscographyClaim,
   isRejectedChatOrTidbitOutput,
+  MEDIA_PLACEMENT_WORK_TITLE_REGEN_HINT,
+  mentionsMediaPlacementWithoutWorkTitle,
+  stripMediaPlacementSentencesWithoutWorkTitle,
 } from '@/lib/ai-output-policy';
 import { buildSongIntroOnlyBaseComment } from '@/lib/commentary-song-intro-only-mode';
 import {
@@ -729,21 +732,25 @@ ${knownCoverOriginalHint ? `・原曲ヒント: ${knownCoverOriginalHint}\n` : '
   const discographyRules = hasReferenceFacts
     ? `・アルバム名・収録作・リリース年については、**直前の事実ブロック（MusicBrainz または Music8 参照事実）に書かれた内容に限って**触れてよい。それ以外の盤名・「デビュー／セカンド作」などの**補完・推測は禁止**。
 ・各国チャートの**具体順位**（○位・トップ10 等）は、事実ブロックに無い限り**禁止**。
+・例外: 映画・ドラマ・アニメ・ゲームの主題歌・エンディングとして**広く知られ、作品名に自信がある**ときは、事実ブロックに無くても**作品名**を書いてよい（例: 映画『レオン』のエンディング）。作品名が曖昧なら起用には触れない。
 ${hasCoverOriginalSignal ? '・ただし、カバー版であることや原曲アーティストへの短い言及は、上記の原曲ヒントまたは参照事実に基づく範囲で必ず入れてよい。\n' : ''}
 `
     : `・リリース時期は**西暦1年だけ**書いてよいが、自信がなければ「1980年代」など幅のある表現にするか**年は省略**してよい。
-・**検証済みディスコグラフィーがこのプロンプトに無い**ため、次を**禁止**：アルバム名（『○○』）の列挙、「デビューアルバム／セカンドアルバムに収録」「サントラ『○○』に収録」などの**収録作の断定**、各国チャートの**具体順位**。取り違えで虚偽になりやすい。
+・**検証済みディスコグラフィーがこのプロンプトに無い**ため、次を**禁止**：アルバム名（『○○』）の列挙、「デビューアルバム／セカンドアルバムに収録」、サントラ**盤**名を捏造した「サントラ『○○』に収録」、各国チャートの**具体順位**。取り違えで虚偽になりやすい。
 ・代わりにジャンル上の位置づけ（ニューウェーブ等）、サウンドの印象、歌詞の雰囲気など**検証不要な観点**で書くこと。
+・例外: 映画・ドラマ・アニメ・ゲームの主題歌・エンディングとして**広く知られ、作品名に自信がある**ときだけ、サントラ盤名ではなく**作品名**を書いてよい（例: 映画『レオン』のエンディングとしても知られています）。作品名が曖昧なら起用には触れない（「映画のエンディングとしても浸透」のような無名の言及は禁止）。
 `;
 
   const factFirstRules = hasReferenceFacts
     ? `・最優先ポリシー: **事実に徹する**。事実ブロックに無い固有名詞・年号・制作逸話は書かない。
+・例外: 映画・ドラマ等の主題歌・エンディングとして広く知られる作品名は、自信があるときだけ書いてよい。曖昧なら起用に触れない。
 ・もし「リリース年」または「収録アルバム／シングル情報」のどちらかが欠ける場合は、本文中で**不足している項目だけを1フレーズで明言**したうえで、確認できる事実（例: 参照事実にある年・盤名・曲の位置づけ・サウンド特徴）を続ける。
 ・「不明なので省略します」だけで終わらせない。確認できる事実を最低1点は必ず入れる。
 `
     : `・最優先ポリシー: **事実に徹する**。検証できない固有名詞・年号・制作逸話は書かない。
 ・リリース年や収録アルバムが断定できないときは、その不足を一言で明示してから、確認可能な要素（曲調・歌詞テーマ・クレジット上の役割）を具体的に述べる。
 ・「名曲です」「人気曲です」など当たり障りのない一般論だけで終わらせない。少なくとも1つ、曲固有の観点を入れる。
+・映画・ドラマ等の起用に触れるなら作品名を『』で書く。不確かなら触れない。
 `;
 
   const prompt = `選曲アナウンス（〇〇さんの選曲です！）の直後に表示する「曲の基本情報」を、80文字以上150文字以内で書いてください。現在は${currentYear}年です。自分を指すときは「私」を使ってください。
@@ -767,6 +774,7 @@ ${coverOriginalRules}
 ・専門用語は少なめ。事実ベース＋一言感想。歌詞の全文や長い説明は禁止。
 ・曲名を文中に出すとき、(Official Video)・(Lyric Video)・(Official Audio) など**公式動画・配信ラベル**は付けない。**Remix・Remaster が曲名に含まれる場合はそのまま**使うこと。
 ・タイトルやクレジットから**別ミックス・リミックス版**と分かるときは、その版であることに一言触れてよい（オリジナルよりこのミックスの方が後から広く知られる、といった文脈も珍しくない）。根拠が薄いときは断定しないこと。
+・映画・ドラマ等の起用に触れるなら作品名を『』または「」で書く。不確かなら触れない。
 ・「豆知識ですが、」の前フリは不要。アーティスト名や曲名から書き始めること。
 ・日本語で、です・ます調で。
 解説文だけを出力してください。`;
@@ -785,9 +793,17 @@ ${coverOriginalRules}
       await persistGeminiUsageLog('commentary', result.response.usageMetadata, geminiUsagePersistMeta(usageMeta));
       const text = readGeneratedText(result.response, 'commentary');
       if (!text) return null;
-      if (hasReferenceFacts || !containsUnreliableCommentaryDiscographyClaim(text)) return text;
-      if (attempt >= 2) return text;
-      promptUse = prompt + regenHint;
+      const filmBare = mentionsMediaPlacementWithoutWorkTitle(text);
+      const discoOk = hasReferenceFacts || !containsUnreliableCommentaryDiscographyClaim(text);
+      if (discoOk && !filmBare) return text;
+      if (attempt >= 2) {
+        if (filmBare) {
+          const stripped = stripMediaPlacementSentencesWithoutWorkTitle(text);
+          return stripped || text;
+        }
+        return text;
+      }
+      promptUse = prompt + (filmBare ? MEDIA_PLACEMENT_WORK_TITLE_REGEN_HINT : regenHint);
     }
     return null;
   } catch (e) {

@@ -156,6 +156,14 @@ function stripTrailingRightsMetadata(title: string): string {
   return t.replace(/\s+/g, ' ').trim();
 }
 
+/**
+ * VEVO 概要の定型サフィックスを落とす。
+ * 例: "Fields Of Gold. YouTube view counts pre-VEVO: 5,830,897." → "Fields Of Gold"
+ */
+function stripTrailingYoutubeViewCountBoilerplate(title: string): string {
+  return title.replace(/\s*\.?\s*YouTube\s+view\s+counts\b.*$/i, '').replace(/\s+/g, ' ').trim();
+}
+
 export function cleanTitle(title: string): string {
   let t = title
     .replace(/\s*\(Official Video\)\s*/gi, ' ')
@@ -196,6 +204,7 @@ export function cleanTitle(title: string): string {
     .replace(/\s+/g, ' ')
     .trim();
   t = stripStreamingEditionMarkers(t);
+  t = stripTrailingYoutubeViewCountBoilerplate(t);
   t = stripTrailingRightsMetadata(t);
   return t;
 }
@@ -689,6 +698,7 @@ function isYoutubeDescriptionMetadataLine(line: string): boolean {
   if (/^posted\s*:/i.test(s)) return true;
   if (/^upload\s*date\s*:/i.test(s)) return true;
   if (/^auto-generated\s+by\s+youtube/i.test(s)) return true;
+  if (/\bYouTube\s+view\s+counts\b/i.test(s)) return true;
   return false;
 }
 
@@ -1290,7 +1300,8 @@ export function parsePerformingFromDescription(description: string): { artist: s
   );
   if (!m?.[1] || !m?.[2]) return null;
   const artist = m[1].replace(/\s+/g, ' ').trim();
-  const song = m[2].replace(/\s+/g, ' ').trim().replace(/\.\s*$/, '');
+  const song = stripTrailingYoutubeViewCountBoilerplate(m[2].replace(/\s+/g, ' ').trim())
+    .replace(/\.\s*$/, '');
   if (!artist || !song || artist.length > 120 || song.length > 120) return null;
   return { artist, song };
 }

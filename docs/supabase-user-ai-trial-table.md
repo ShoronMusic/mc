@@ -1,8 +1,9 @@
 # AI お試し 20 曲（`user_ai_trial`）
 
-登録ユーザー向けの **生涯 20 曲** AI 付き選曲お試しと **@ 質問 5 回** 枠を保持します。  
+登録ユーザー向けの **生涯 20 曲** AI 付き選曲お試しと **@ 質問 10 回** 枠を保持します。  
 仕様: `docs/00-ai-trial-and-billing-implementation.md` · Phase B。  
-付与曲数のアプリ正本: `AI_TRIAL_SONGS_GRANTED`（`src/lib/ai-trial-status.ts`）＝ **20**。
+付与曲数のアプリ正本: `AI_TRIAL_SONGS_GRANTED`（`src/lib/ai-trial-status.ts`）＝ **20**。  
+@ 回数のアプリ正本: `AI_TRIAL_AT_QUESTIONS_GRANTED` ＝ **10**。
 
 ## 作成手順
 
@@ -14,13 +15,13 @@
 > **ポリシーだけ `already exists` で止まった場合** — テーブルと RLS は**すでに作成済み**です。エラーは無視して 4 へ進んでください。
 
 ```sql
--- 1 ユーザー 1 行: AI お試し 20 曲 + @ 5 回
+-- 1 ユーザー 1 行: AI お試し 20 曲 + @ 10 回（アプリ定数が正本。既存 DB の default 5 はそのままでも可）
 create table if not exists public.user_ai_trial (
   user_id uuid primary key references auth.users (id) on delete cascade,
   songs_granted int not null default 20 check (songs_granted >= 0),
   songs_remaining int not null default 20 check (songs_remaining >= 0),
-  at_questions_granted int not null default 5 check (at_questions_granted >= 0),
-  at_questions_remaining int not null default 5 check (at_questions_remaining >= 0),
+  at_questions_granted int not null default 10 check (at_questions_granted >= 0),
+  at_questions_remaining int not null default 10 check (at_questions_remaining >= 0),
   first_ip text,
   last_ip text,
   email_verified_at_grant timestamptz,
@@ -53,7 +54,7 @@ alter table public.user_ai_trial
 | user_id | uuid | auth.users（PK） |
 | songs_granted | int | 付与曲数（既定 **20**） |
 | songs_remaining | int | 残曲数 |
-| at_questions_granted | int | 付与 @ 回数（既定 5） |
+| at_questions_granted | int | 付与 @ 回数（アプリ既定 **10**。CREATE の SQL default は旧 5 のままでも可） |
 | at_questions_remaining | int | @ 残 |
 | first_ip | text | 初回付与時 IP（監査・Phase C） |
 | last_ip | text | 直近消費時 IP |
@@ -63,10 +64,11 @@ alter table public.user_ai_trial
 
 ## 付与タイミング
 
-- **メール確認済み**の登録ユーザーが **初回の AI 実利用**（AI 付き選曲の成功課金、または @ 質問の消費）時に、行がなければ **20 曲 + @ 5 回** を service_role で INSERT。
+- **メール確認済み**の登録ユーザーが **初回の AI 実利用**（AI 付き選曲の成功課金、または @ 質問の消費）時に、行がなければ **20 曲 + @ 10 回** を service_role で INSERT。
 - `GET /api/user/ai-trial` は **付与しない**（既存行の参照、または未付与なら `trial_eligible` / 上限・待機ステータスのみ）。
 - Google OAuth 等、確認済みで入ったユーザーも同様（ログイン直後の自動付与はしない）。
 - **既存で `songs_granted < 20` の行**は、次回 bump（GET / 選曲ガード）時に **差分を `songs_remaining` に加算**して 20 に揃える（使用済み曲数は維持）。
+- **既存で `at_questions_granted < 10` の行**も同様に、差分を `at_questions_remaining` に加算して 10 に揃える。
 
 ### 不正抑制（Phase C）
 

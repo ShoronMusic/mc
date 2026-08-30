@@ -972,7 +972,7 @@ alter table public.song_external_metrics enable row level security;
 
 ## 23. AI お試し 20 曲（`user_ai_trial`）
 
-登録ユーザー向け **生涯 20 曲** の AI 付き選曲お試しと **@ 5 回** 枠。
+登録ユーザー向け **生涯 20 曲** の AI 付き選曲お試しと **@ 10 回** 枠。
 
 **SQL・列説明・付与/消費**は **`docs/supabase-user-ai-trial-table.md`** を参照し、Supabase SQL Editor で実行してください。アプリ付与定数は `AI_TRIAL_SONGS_GRANTED`（20）。
 

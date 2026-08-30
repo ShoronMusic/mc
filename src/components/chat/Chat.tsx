@@ -48,6 +48,7 @@ import {
 } from '@/lib/chat-message-ui-labels';
 import {
   commentaryBodyHasNewOrDbOriginPrefix,
+  shouldShowGemma4CommentaryHeadTag,
   splitGemma4CommentaryHeadPrefix,
 } from '@/lib/commentary-model-head-tag';
 import { polishGemmaModelVisibleText } from '@/lib/gemini-gemma-host';
@@ -700,7 +701,7 @@ function renderAiBodyWithArtistSongHighlight(
   },
 ): ReactNode {
   const g4split = splitGemma4CommentaryHeadPrefix(body);
-  const g4Prefix = g4split.prefix;
+  const g4Prefix = shouldShowGemma4CommentaryHeadTag() ? g4split.prefix : '';
   const afterG4 = g4split.rest;
   const pm = afterG4.match(PACK_PREFIX_RE);
   const prefix = pm?.[1] ?? '';

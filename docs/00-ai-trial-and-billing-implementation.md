@@ -3,7 +3,7 @@
 > **重要**: 有料化 Phase 4 の**正本**。方針・進捗・API/DB/UI の実装チェックリストは**本ファイルを更新**する。  
 > 収益モデル全般・収支試算は `docs/monetization-options.md`、原価帰属・管理集計は `docs/room-gathering-history-and-ai-billing-project.md` を参照。
 
-最終更新: **2026-07-18**  
+最終更新: **2026-08-30**  
 ステータス: **Phase B 実装済み** / **Phase C 不正抑制（IP ソフト上限・付与遅延・メール厳格化・管理通知）実装済み** / ゲスト UX 完了 / 登録ユーザー UX 追補完了 / **お試し付与 20 曲** / 本番デプロイ検証は別途
 
 ---
@@ -410,7 +410,7 @@ SQL 確定後は **`docs/supabase-user-ai-trial-table.md`** を新設（未作�
 | `user_id` | uuid PK | auth.users |
 | `songs_granted` | int | 既定 **20** |
 | `songs_remaining` | int | 残数 |
-| `at_questions_granted` | int | 既定 **5** |
+| `at_questions_granted` | int | 既定 **10** |
 | `at_questions_remaining` | int | @質問 残 |
 | `first_ip` | text | 監査 |
 | `last_ip` | text | 監査 |
@@ -581,6 +581,7 @@ AI 解説・曲クイズ・@ による質問は、今後クレジットまたは
 | 2026-07-01 | **ローカル実機**: ハチアカウントで 8/10 曲・@質問 4/5 消費・質問履歴表示を確認 |
 | 2026-07-02 | **プリペイド方針確定目安**: プリペイド中心 · ¥500＝20曲 · ¥1,000＝40曲 · 1曲＝1クレジット · `docs/00-prepaid-pricing-summary.md` |
 | 2026-07-18 | **お試し付与 10→20 曲**（`AI_TRIAL_SONGS_GRANTED`）。既存行は差分加算で 20 に揃える（`computeTrialSongsGrantBump` · 任意 SQL） |
+| 2026-08-30 | **お試し @ 5→10 回**（`AI_TRIAL_AT_QUESTIONS_GRANTED`）。選曲20は維持。既存行は差分加算（`computeTrialAtQuestionsGrantBump`） |
 
 ---
 
