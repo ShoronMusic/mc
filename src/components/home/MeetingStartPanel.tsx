@@ -22,6 +22,10 @@ type OrganizerRoom = {
   lastStartedAt?: string | null;
 };
 
+type LiveStatusResponse = {
+  rooms?: Array<{ roomId?: string }>;
+};
+
 function preferLiveOrganizerRoom(rooms: OrganizerRoom[]): OrganizerRoom | undefined {
   return rooms.find((r) => r.isLive) ?? rooms[0];
 }
