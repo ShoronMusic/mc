@@ -22,9 +22,13 @@ type OrganizerRoom = {
   lastStartedAt?: string | null;
 };
 
-type LiveStatusResponse = {
-  rooms?: Array<{ roomId?: string }>;
-};
+function preferLiveOrganizerRoom(rooms: OrganizerRoom[]): OrganizerRoom | undefined {
+  return rooms.find((r) => r.isLive) ?? rooms[0];
+}
+
+function orderOrganizerRooms(rooms: OrganizerRoom[]): OrganizerRoom[] {
+  return [...rooms].sort((a, b) => Number(b.isLive) - Number(a.isLive));
+}
 
 /** トップの主催UI用。ログイン表示名（またはメール先頭）に「の部屋」を付ける。取れなければゲスト扱い。 */
 function defaultGatheringTitleFromUser(user: {
@@ -204,9 +208,12 @@ export function MeetingStartPanel() {
         const rooms = Array.isArray(data.rooms) ? data.rooms.filter((r) => !!r?.roomId) : [];
         setMyRooms(rooms);
         if (rooms.length > 0) {
-          setJoinRoomId(rooms[0].roomId);
-          if (rooms[0].title?.trim()) {
-            setJoinTitle(rooms[0].title.trim());
+          const preferred = preferLiveOrganizerRoom(rooms);
+          if (preferred) {
+            setJoinRoomId(preferred.roomId);
+            if (preferred.title?.trim()) {
+              setJoinTitle(preferred.title.trim());
+            }
           }
         }
       })
@@ -244,6 +251,7 @@ export function MeetingStartPanel() {
   }, [visible]);
 
   const selectedRoom = myRooms.find((r) => r.roomId === joinRoomId);
+  const orderedRooms = orderOrganizerRooms(myRooms);
   const createRoomOptions = DEFAULT_ROOM_IDS.filter((id) => !liveRoomIds.includes(id));
   const liveOrganizingCount = myRooms.filter((r) => r.isLive).length;
   const isSingleOrganizerRoom = myRooms.length === 1;
@@ -494,7 +502,7 @@ export function MeetingStartPanel() {
             <>
               <p className="mb-2 text-xs font-medium text-slate-400">主催する部屋を選択</p>
               <ul className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-2" role="list">
-                {myRooms.map((r) => {
+                {orderedRooms.map((r) => {
                   const selected = joinRoomId === r.roomId;
                   return (
                     <li key={r.roomId}>

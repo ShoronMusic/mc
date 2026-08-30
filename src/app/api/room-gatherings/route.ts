@@ -152,14 +152,14 @@ export async function POST(request: Request) {
     const { data: existingRaw, error: selErr } = await runGatheringQueryScoped((scopeProduct) => {
       let q = supabase
         .from('room_gatherings')
-        .select('id')
+        .select('id, created_by')
         .eq('room_id', roomId)
         .eq('status', 'live')
         .limit(1);
       if (scopeProduct) q = withGatheringProductEq(q);
       return q;
     });
-    const existing = (existingRaw as { id?: string }[] | null) ?? [];
+    const existing = (existingRaw as { id?: string; created_by?: string | null }[] | null) ?? [];
 
     if (selErr) {
       if (selErr.code === '42P01') {
@@ -172,18 +172,34 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: selErr.message }, { status: 500 });
     }
     if (existing.length) {
+      const existingCreatedBy =
+        typeof existing[0]?.created_by === 'string' ? existing[0].created_by.trim() : '';
+      if (existingCreatedBy && existingCreatedBy === user.id) {
+        return NextResponse.json({
+          ok: true,
+          roomId,
+          alreadyLive: true,
+          gatheringId: existing[0]?.id ?? null,
+        });
+      }
       const adminStale = createAdminClient();
       if (adminStale) {
         const stale = await endStaleLiveGatheringIfNeeded(adminStale, roomId);
         if (!stale.ended) {
           return NextResponse.json(
-            { error: 'この部屋ではすでに開催中の会があります。' },
+            {
+              error:
+                'この部屋ではすでに開催中の会があります。主催中の別部屋から入るか、空き部屋を新規作成してください。',
+            },
             { status: 409 },
           );
         }
       } else {
         return NextResponse.json(
-          { error: 'この部屋ではすでに開催中の会があります。' },
+          {
+            error:
+              'この部屋ではすでに開催中の会があります。主催中の別部屋から入るか、空き部屋を新規作成してください。',
+          },
           { status: 409 },
         );
       }

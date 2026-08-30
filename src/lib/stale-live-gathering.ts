@@ -181,24 +181,37 @@ export async function endStaleLiveGatheringIfNeeded(
   if (!live) return { ended: false, gatheringIds: [] };
 
   let presence = options?.presenceCount;
+  let presenceKnownEmpty = false;
+  let presenceUnavailable = false;
   if (presence === undefined && !options?.skipPresenceFetch) {
     const counted = await countAblyPresenceForRoom(rid);
     if (counted === 'unconfigured' || counted === 'error') {
-      return { ended: false, gatheringIds: [] };
+      presenceUnavailable = true;
+    } else {
+      presence = counted;
     }
-    presence = counted;
+  } else if (presence === undefined && options?.skipPresenceFetch) {
+    presenceUnavailable = true;
   }
 
   if (typeof presence === 'number' && presence > 0) {
     return { ended: false, gatheringIds: [] };
+  }
+  if (typeof presence === 'number' && presence === 0) {
+    presenceKnownEmpty = true;
   }
 
   const maxAgeMs = getStaleLiveGatheringMaxAgeMs();
   const emptyThresholdMs = getEmptyLiveGatheringThresholdMs();
   const now = Date.now();
 
+  /** 72時間超は Ably が取れなくても幽霊 live を終わらせる（再開 409 の主因） */
   if (isStartedAtOlderThanMaxAge(live.started_at, maxAgeMs, now)) {
     return endLiveGatheringRows(admin, rid, 'stale_started_at');
+  }
+
+  if (presenceUnavailable && !presenceKnownEmpty) {
+    return { ended: false, gatheringIds: [] };
   }
 
   const { data: watch, error: wErr } = await admin
@@ -217,7 +230,10 @@ export async function endStaleLiveGatheringIfNeeded(
       : '';
 
   if (!lastIso) {
-    return endStaleLiveGatheringWithoutWatch(admin, rid, live.started_at);
+    if (presenceKnownEmpty && isStartedAtOlderThanMaxAge(live.started_at, emptyThresholdMs, now)) {
+      return endLiveGatheringRows(admin, rid, 'stale_no_presence_watch');
+    }
+    return { ended: false, gatheringIds: [] };
   }
 
   const lastMs = new Date(lastIso).getTime();
