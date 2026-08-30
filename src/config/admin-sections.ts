@@ -29,7 +29,7 @@ export const ADMIN_CATEGORIES: readonly AdminCategory[] = [
   {
     id: 'library',
     label: '曲・DB',
-    description: '曲マスタ・選曲登録・Music8 / Spotify 連携',
+    description: '曲・アーティストマスタ（Supabase 正本）。登録・編集・選曲登録。公開 Music8 は JSON キャッシュ',
   },
   {
     id: 'other',
@@ -217,7 +217,7 @@ export const ADMIN_SECTIONS: AdminSection[] = [
     href: '/admin/library-music8-pending',
     title: 'Music8未連携選曲',
     description:
-      '視聴履歴ベースで、DB に曲があっても Music8 スナップショット未取得の video を JST 日別に一覧（手動登録のたたき台）',
+      'DB に曲があっても music8_song_data が空の video を日別一覧。正本は songs。公開 JSON からの個別取込はしない',
     category: 'library',
   },
   {
@@ -245,7 +245,7 @@ export const ADMIN_SECTIONS: AdminSection[] = [
     href: '/admin/artists-newly-registered',
     title: '選曲登録アーティスト（日別）',
     description:
-      '選曲で insert された未整備 artists。行から「邦楽登録で編集」へ（ライブラリ詳細は閲覧のみ）',
+      '選曲で insert された未整備 artists。行からアーティスト編集へ（ライブラリ詳細は閲覧）',
     category: 'library',
   },
   {

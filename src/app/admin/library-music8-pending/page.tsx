@@ -86,9 +86,11 @@ export default function AdminLibraryMusic8PendingPage() {
       <h1 className="text-xl font-semibold text-white sm:text-2xl">Music8 未連携の選曲（日別）</h1>
       <p className="mt-2 text-sm text-gray-400">
         <code className="rounded bg-gray-800 px-1">room_playback_history</code> を期間走査し、紐づく{' '}
-        <code className="rounded bg-gray-800 px-1">songs.music8_song_data</code> に Music8 由来スナップショット（
+        <code className="rounded bg-gray-800 px-1">songs.music8_song_data</code> にスナップショット（
         <code className="rounded bg-gray-800 px-1">kind</code> 付き）が無い <code className="rounded bg-gray-800 px-1">video_id</code>{' '}
-        を <strong className="text-gray-200">JST の日付</strong>ごとにまとめます。Music8 側で正規登録したあと、視聴が再度取れるとスナップショットが埋まり一覧から消えます。
+        を <strong className="text-gray-200">JST の日付</strong>ごとにまとめます。正本は{' '}
+        <code className="rounded bg-gray-800 px-1">songs</code> です。公開 JSON
+        から1曲ずつ取り込む必要はありません。曲詳細の基本情報を埋めるか、新規は「洋楽 1 曲登録」を使います。
       </p>
 
       <section className="mt-6 rounded-lg border border-gray-800 bg-gray-900/50 p-4">

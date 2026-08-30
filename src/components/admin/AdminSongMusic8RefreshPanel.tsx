@@ -39,12 +39,11 @@ export function AdminSongMusic8RefreshPanel({ songId }: Props) {
 
   return (
     <div className="mt-4 rounded border border-cyan-900/50 bg-cyan-950/15 p-3">
-      <h3 className="text-sm font-semibold text-cyan-200">Music8 スナップショット</h3>
+      <h3 className="text-sm font-semibold text-cyan-200">music8_song_data（空欄のときだけ）</h3>
       <p className="mt-2 text-xs leading-relaxed text-gray-400">
-        ① <strong className="text-gray-300">再取得</strong>: musicaichat 索引 → GCS 曲 JSON → 見つからなければ{' '}
-        <strong className="text-gray-300">WordPress REST</strong> を自動フォールバック。
-        ② <strong className="text-gray-300">WP REST から補完</strong>: JSON ファイル未エクスポートでも、WP
-        に登録済みなら <code className="text-gray-500">wp/v2/posts</code> から genres / Spotify / slug 等を取り込みます。
+        正本は <code className="text-gray-500">songs</code> の列です。公開 JSON や WP
+        から戻すと手修正を上書きすることがあるので、日常の編集には使いません。
+        スナップショットが空で曲解説用キャッシュだけ埋めたいとき用です。
       </p>
       {msg && (
         <p className="mt-2 text-xs text-amber-300" role="alert">

@@ -1,5 +1,10 @@
 'use client';
 
+/**
+ * 管理 UI からは外した（正本は songs。公開 JSON の個別取込は手修正を上書きする）。
+ * API `POST /api/admin/song-music8-json-import` は緊急用に残している。
+ */
+
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { MUSIC8_SONGS_BASE } from '@/lib/music8-data-urls';

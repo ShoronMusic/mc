@@ -6,7 +6,6 @@ import { isAdminSongJapaneseDomesticDisplay } from '@/lib/song-catalog-scope';
 import { ensureWesternTreatedJpArtistCache } from '@/lib/western-treated-jp-artists';
 import { AdminSongMasterDeletePanel } from '@/components/admin/AdminSongMasterDeletePanel';
 import { AdminSongMusic8RefreshPanel } from '@/components/admin/AdminSongMusic8RefreshPanel';
-import { AdminSongMusic8JsonImportPanel } from '@/components/admin/AdminSongMusic8JsonImportPanel';
 import { AdminSongSpotifyEnrichPanel } from '@/components/admin/AdminSongSpotifyEnrichPanel';
 import { AdminSongBasicInfoEditPanel } from '@/components/admin/AdminSongBasicInfoEditPanel';
 import { AdminYoutubePlayerWithVolume } from '@/components/admin/AdminYoutubePlayerWithVolume';
@@ -14,7 +13,7 @@ import {
   AdminSongCreditsPanel,
   type AdminSongCreditRow,
 } from '@/components/admin/AdminSongCreditsPanel';
-import { music8SongJsonUrl, resolveMusic8SongsBaseUrl } from '@/lib/music8-data-urls';
+import { music8SongJsonUrl } from '@/lib/music8-data-urls';
 import { createAdminClient } from '@/lib/supabase/admin';
 
 interface SongDetailPageProps {
@@ -511,6 +510,26 @@ export default async function SongDetailPage({ params, searchParams }: SongDetai
               {song.style || '(未設定)'}
             </p>
             <p>
+              <span className="text-gray-500">catalog_scope：</span>
+              {song.catalog_scope || 'unknown'}
+            </p>
+            {song.artist_id ? (
+              <p className="flex flex-wrap gap-x-3 gap-y-1">
+                <Link
+                  href={`/admin/library/artist?name=${encodeURIComponent((song.main_artist ?? '').trim())}`}
+                  className="text-sky-400 hover:underline"
+                >
+                  アーティスト詳細
+                </Link>
+                <Link
+                  href={`/admin/domestic-artist-register/${song.artist_id}`}
+                  className="text-emerald-400 hover:underline"
+                >
+                  アーティストを編集
+                </Link>
+              </p>
+            ) : null}
+            <p>
               <span className="text-gray-500">play_count：</span>
               {song.play_count ?? 0}
             </p>
@@ -520,7 +539,9 @@ export default async function SongDetailPage({ params, searchParams }: SongDetai
             </p>
             {song.music8_song_data && typeof song.music8_song_data === 'object' ? (
               <details className="rounded border border-gray-800 bg-gray-950/80 p-2">
-                <summary className="cursor-pointer text-gray-400">music8_song_data（Music8 スナップショット）</summary>
+                <summary className="cursor-pointer text-gray-400">
+                  music8_song_data（公開 JSON 向けキャッシュ。正本は上の列）
+                </summary>
                 <pre className="mt-2 max-h-96 overflow-auto whitespace-pre-wrap break-all text-[11px] text-gray-300">
                   {JSON.stringify(song.music8_song_data, null, 2)}
                 </pre>
@@ -562,9 +583,9 @@ export default async function SongDetailPage({ params, searchParams }: SongDetai
           ) : null}
         </div>
 
-        {/* Music8 詳細メタ */}
+        {/* カタログ詳細（DB 列） */}
         <div className="rounded border border-gray-800 bg-gray-950/40 p-3">
-          <p className="mb-2 text-xs font-semibold text-gray-400">Music8 詳細メタ</p>
+          <p className="mb-2 text-xs font-semibold text-gray-400">カタログ詳細（songs）</p>
           <div className="grid grid-cols-1 gap-x-6 gap-y-1.5 sm:grid-cols-2 text-xs">
             <MetaRow label="music8_song_id" value={song.music8_song_id != null ? String(song.music8_song_id) : null} />
             <MetaRow label="music8_artist_slug" value={song.music8_artist_slug ?? null} mono />
@@ -605,7 +626,7 @@ export default async function SongDetailPage({ params, searchParams }: SongDetai
           ) : null}
           {song.music8_artist_slug && song.music8_song_slug ? (
             <p className="mt-2 text-[11px] text-gray-500">
-              Music8 JSON URL:{' '}
+              公開 JSON（参照のみ・取込しない）:{' '}
               <a
                 href={music8SongJsonUrl(song.music8_artist_slug, song.music8_song_slug)}
                 target="_blank"
@@ -625,12 +646,6 @@ export default async function SongDetailPage({ params, searchParams }: SongDetai
         />
 
         <AdminSongMusic8RefreshPanel songId={song.id} />
-        <AdminSongMusic8JsonImportPanel
-          songId={song.id}
-          music8ArtistSlug={song.music8_artist_slug ?? null}
-          music8SongSlug={song.music8_song_slug ?? null}
-          music8SongsBaseUrl={resolveMusic8SongsBaseUrl()}
-        />
         <AdminSongBasicInfoEditPanel
           songId={song.id}
           initialDisplayTitle={song.display_title ?? null}
@@ -639,6 +654,9 @@ export default async function SongDetailPage({ params, searchParams }: SongDetai
           initialSongTitleJa={song.song_title_ja ?? null}
           initialStyle={song.style ?? null}
           initialOriginalReleaseDate={song.original_release_date ?? null}
+          initialCatalogScope={song.catalog_scope ?? null}
+          initialVocal={song.vocal ?? null}
+          initialGenres={Array.isArray(song.genres) ? song.genres : null}
           highlightStyle={fromYoutubePlaylistImport}
         />
         <AdminSongCreditsPanel

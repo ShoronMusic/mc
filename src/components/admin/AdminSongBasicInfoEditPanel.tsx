@@ -3,6 +3,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { SONG_STYLE_OPTIONS } from '@/lib/song-styles';
+import { SONG_CATALOG_SCOPES, type SongCatalogScope } from '@/lib/song-catalog-scope';
+
+const VOCAL_OPTIONS = ['F', 'M', 'F,M'] as const;
 
 type Props = {
   songId: string;
@@ -12,6 +15,9 @@ type Props = {
   initialSongTitleJa: string | null;
   initialStyle: string | null;
   initialOriginalReleaseDate: string | null;
+  initialCatalogScope?: string | null;
+  initialVocal?: string | null;
+  initialGenres?: string[] | null;
   highlightStyle?: boolean;
 };
 
@@ -23,6 +29,9 @@ export function AdminSongBasicInfoEditPanel({
   initialSongTitleJa,
   initialStyle,
   initialOriginalReleaseDate,
+  initialCatalogScope = null,
+  initialVocal = null,
+  initialGenres = null,
   highlightStyle = false,
 }: Props) {
   const router = useRouter();
@@ -32,6 +41,11 @@ export function AdminSongBasicInfoEditPanel({
   const [songTitleJa, setSongTitleJa] = useState(initialSongTitleJa ?? '');
   const [style, setStyle] = useState(initialStyle ?? '');
   const [originalReleaseDate, setOriginalReleaseDate] = useState(initialOriginalReleaseDate ?? '');
+  const [catalogScope, setCatalogScope] = useState<SongCatalogScope>(
+    initialCatalogScope === 'western' || initialCatalogScope === 'domestic' ? initialCatalogScope : 'unknown',
+  );
+  const [vocal, setVocal] = useState(initialVocal ?? '');
+  const [genresText, setGenresText] = useState((initialGenres ?? []).join(', '));
   const [busy, setBusy] = useState(false);
   const [mbBusy, setMbBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -44,6 +58,14 @@ export function AdminSongBasicInfoEditPanel({
     return [...SONG_STYLE_OPTIONS];
   }, [style]);
 
+  const vocalSelectOptions = useMemo(() => {
+    const current = vocal.trim();
+    if (current && !(VOCAL_OPTIONS as readonly string[]).includes(current)) {
+      return [current, ...VOCAL_OPTIONS];
+    }
+    return [...VOCAL_OPTIONS];
+  }, [vocal]);
+
   useEffect(() => {
     setDisplayTitle(initialDisplayTitle ?? '');
     setMainArtist(initialMainArtist ?? '');
@@ -51,6 +73,11 @@ export function AdminSongBasicInfoEditPanel({
     setSongTitleJa(initialSongTitleJa ?? '');
     setStyle(initialStyle ?? '');
     setOriginalReleaseDate(initialOriginalReleaseDate ?? '');
+    setCatalogScope(
+      initialCatalogScope === 'western' || initialCatalogScope === 'domestic' ? initialCatalogScope : 'unknown',
+    );
+    setVocal(initialVocal ?? '');
+    setGenresText((initialGenres ?? []).join(', '));
   }, [
     initialDisplayTitle,
     initialMainArtist,
@@ -58,6 +85,9 @@ export function AdminSongBasicInfoEditPanel({
     initialSongTitleJa,
     initialStyle,
     initialOriginalReleaseDate,
+    initialCatalogScope,
+    initialVocal,
+    initialGenres,
   ]);
 
   async function handleMbLookup() {
@@ -167,6 +197,9 @@ export function AdminSongBasicInfoEditPanel({
           songTitleJa,
           style,
           originalReleaseDate,
+          catalogScope,
+          vocal,
+          genres: genresText,
         }),
       });
       const data = (await res.json().catch(() => ({}))) as { error?: string };
@@ -199,8 +232,8 @@ export function AdminSongBasicInfoEditPanel({
         </p>
       ) : null}
       <p className="mt-2 text-xs text-gray-400">
-        display_title / メインアーティスト / 曲タイトル / 日本語読み（song_title_ja） / スタイル /
-        original_release_date（原盤）を更新します。
+        正本は <code className="text-gray-500">songs</code> です。公開 Music8 JSON
+        から取り込む必要はありません。スタイル・年代・ボーカルはここが優先されます。
       </p>
 
       <div className="mt-3 grid gap-2 sm:grid-cols-2">
@@ -259,6 +292,46 @@ export function AdminSongBasicInfoEditPanel({
               </option>
             ))}
           </select>
+        </label>
+        <label className="block text-xs text-gray-400">
+          catalog_scope
+          <select
+            value={catalogScope}
+            onChange={(e) => setCatalogScope(e.target.value as SongCatalogScope)}
+            className="mt-1 w-full rounded border border-gray-700 bg-gray-950 px-2 py-1.5 text-sm text-white focus:border-emerald-700 focus:outline-none"
+          >
+            {SONG_CATALOG_SCOPES.map((s) => (
+              <option key={s} value={s}>
+                {s === 'western' ? 'western（洋楽）' : s === 'domestic' ? 'domestic（邦楽）' : 'unknown'}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block text-xs text-gray-400">
+          ボーカル
+          <select
+            value={vocal}
+            onChange={(e) => setVocal(e.target.value)}
+            className="mt-1 w-full rounded border border-gray-700 bg-gray-950 px-2 py-1.5 text-sm text-white focus:border-emerald-700 focus:outline-none"
+          >
+            <option value="">（未設定）</option>
+            {vocalSelectOptions.map((s) => (
+              <option key={s} value={s}>
+                {s}
+                {!(VOCAL_OPTIONS as readonly string[]).includes(s) ? '（既存）' : ''}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block text-xs text-gray-400">
+          ジャンル（カンマ区切り）
+          <input
+            type="text"
+            value={genresText}
+            onChange={(e) => setGenresText(e.target.value)}
+            placeholder="例: New Wave, Pop"
+            className="mt-1 w-full rounded border border-gray-700 bg-gray-950 px-2 py-1.5 text-sm text-white focus:border-emerald-700 focus:outline-none"
+          />
         </label>
         <label className="block text-xs text-gray-400 sm:col-span-2">
           original_release_date（原盤）

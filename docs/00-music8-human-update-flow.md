@@ -76,6 +76,7 @@ npx tsx scripts/export-music8-json-from-supabase.ts --full
 - WP 管理画面への曲登録（逆同期しない）
 - 1曲ごとに全件 export スクリプトを回すこと
 - 1曲ごとに catalog import を回すこと（登録 API が style を載せる）
+- 管理画面の **Music8 JSON 直接取り込み**（公開 JSON はキャッシュ。正本は Supabase。手修正を上書きする）
 
 ## 次の UI 改善（カタログ初回投入のあと）
 

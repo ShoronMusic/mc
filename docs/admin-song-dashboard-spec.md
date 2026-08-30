@@ -29,8 +29,8 @@ Supabase 上の `songs` / `song_videos` / `song_commentary` / `song_tidbits` / `
 
 #### 1. 曲メイン情報（`songs`）
 
-- **Music8 スナップショット再取得**: `POST /api/admin/song-music8-refresh`（`STYLE_ADMIN` + Service Role）。comment-pack と同じ `resolveMusic8ContextForCommentPack`（`song_videos` の代表 `video_id` ＋メインアーティスト／曲名）→ `attachMusic8SongDataIfFetched`。UI は `AdminSongMusic8RefreshPanel`。
-- **Music8 JSON URL 直接インポート**: `POST /api/admin/song-music8-json-import`（`STYLE_ADMIN` + Service Role）。リクエストボディ `{ songId, jsonUrl }` で JSON URL を指定して取得・保存。`music8_artist_slug` / `music8_song_slug` があれば自動補完される。UI は `AdminSongMusic8JsonImportPanel`（`src/components/admin/AdminSongMusic8JsonImportPanel.tsx`）。成功後は `router.refresh()` で詳細ページを再描画。
+- **Music8 スナップショット再取得**: `POST /api/admin/song-music8-refresh`（`STYLE_ADMIN` + Service Role）。空の `music8_song_data` を埋める緊急用。正本は `songs` の列。公開 JSON から戻すと手修正を上書きすることがある。
+- **Music8 JSON URL 直接インポート**: **使わない。** 正本切替後は公開 JSON はキャッシュ。日常の修正は「基本情報の修正」。API `POST /api/admin/song-music8-json-import` は残しているが管理 UI からは外した。
 - **削除**: 誤マスタ（アーティスト／タイトルのテレコ等）向けに、確認入力付きで `POST /api/admin/song-master-delete`（`STYLE_ADMIN` + `SUPABASE_SERVICE_ROLE_KEY`）。確認文は `normalizeSongDeleteConfirmText` で大文字小文字・スマート引用符等を正規化して照合。詳細は `src/lib/admin-delete-song-master.ts`。
 - `display_title`（例: Culture Club - Karma Chameleon）
 - `main_artist`
@@ -40,9 +40,9 @@ Supabase 上の `songs` / `song_videos` / `song_commentary` / `song_tidbits` / `
 - `original_release_date`（原盤リリース日・任意。視聴履歴 POST で Music8 から埋まることがある）
 - `music8_song_data`（Music8 メインアーティスト／曲の軽量 JSON・任意。アコーディオン表示）
 
-##### 1-A. Music8 詳細メタ（`songs` 拡張列・基本情報の直下に表示）
+##### 1-A. カタログ詳細（`songs` 拡張列・基本情報の直下に表示）
 
-Music8 JSON インポート後に表示される追加メタ。各フィールドは `MetaRow` ヘルパーコンポーネントで「ラベル：値」形式（一部はリンク付き）で整形表示する。
+DB 正本の追加メタ。Music8 JSON からの個別取込はしない。各フィールドは `MetaRow` ヘルパーコンポーネントで「ラベル：値」形式（一部はリンク付き）で整形表示する。
 
 | フィールド | 表示名 | 備考 |
 |---|---|---|

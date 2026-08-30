@@ -1,5 +1,10 @@
 'use client';
 
+/**
+ * 管理 UI からは外した（正本は artists。公開 JSON の個別取込は手修正を上書きする）。
+ * API `POST /api/admin/artist-master-import-json` は緊急用に残している。
+ */
+
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { music8ArtistJsonUrl } from '@/lib/music8-data-urls';
