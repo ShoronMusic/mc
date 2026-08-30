@@ -95,6 +95,7 @@ import type { SongQuizPayload } from '@/lib/song-quiz-types';
 import {
   getSongQuizRevealFastMs,
 } from '@/lib/song-quiz-result-announcement';
+import { resolveAiChatClientErrorMessage } from '@/lib/ai-chat-client-error';
 import { shouldShortCircuitSongRequestForAtPrompt } from '@/lib/ai-question-about-detail-heuristic';
 import {
   buildTurnOrderClarificationReply,
@@ -102,7 +103,12 @@ import {
 } from '@/lib/ai-turn-order-clarification';
 import { resolveAiQuestionMusicRelated } from '@/lib/client-ai-question-guard-resolve';
 import { isDevMinimalSongAi } from '@/lib/dev-minimal-song-ai';
-import { scheduleNextSongRecommendAfterCommentary } from '@/lib/schedule-next-song-recommend-client';
+import { startPostCommentaryFollowups } from '@/lib/schedule-post-commentary-followups-client';
+import {
+  POST_COMMENTARY_QUIZ_GAP_MS,
+  readRemainingPlaybackMsFromPlayer,
+  resolvePostCommentaryPace,
+} from '@/lib/post-commentary-followup-timing';
 import {
   extractFirstNextSongRecommendSearchQuery,
   isPasteNextSongFromRecommendIntent,
@@ -497,8 +503,6 @@ interface CandidateSong {
 const SEC_AFTER_END_BEFORE_PROMPT = 30;
 const DEFAULT_DURATION_WHEN_UNKNOWN_SEC = 240;
 const FIVE_MIN_MS = 5 * 60 * 1000;
-/** comment-pack 自由コメントの小出し間隔（各コメントは最低30秒以上空ける） */
-const COMMENT_PACK_FREE_STAGGER_MS = 30_000;
 
 interface RoomWithSyncProps {
   displayName?: string;
@@ -2617,6 +2621,11 @@ export default function RoomWithSync({
         if (prev.some((m) => m.id === data.id)) return prev;
         if (!isChatMessageVisibleToClient(data, myClientId ?? '')) return prev;
         const p = data as ChatMessagePayload & { clientId?: string };
+        if (p.systemKind === 'song_quiz') {
+          const qVid = typeof p.videoId === 'string' ? p.videoId.trim() : '';
+          const cur = typeof videoIdRef.current === 'string' ? videoIdRef.current.trim() : '';
+          if (qVid && cur && qVid !== cur) return prev;
+        }
         return [
           ...prev,
           {
@@ -4358,6 +4367,7 @@ export default function RoomWithSync({
 
   const addSongQuizMessage = useCallback(
     (quiz: SongQuizPayload, videoIdForQuiz: string) => {
+      if (videoIdRef.current !== videoIdForQuiz) return;
       const id = createMessageId();
       const body = `${SONG_QUIZ_UI_LABEL} 三択クイズ（曲解説の内容のみを根拠に自動生成）`;
       const payload: ChatMessagePayload = {
@@ -5154,6 +5164,17 @@ export default function RoomWithSync({
       freeCommentTimeoutsRef.current.forEach((t) => clearTimeout(t));
       freeCommentTimeoutsRef.current = [];
     }
+    // 前曲の「あとで見るおすすめ」／準備中カード／曲クイズを残さない
+    setMessages((prev) =>
+      prev.filter(
+        (m) =>
+          !(
+            (m.aiSource === 'next_song_recommend' &&
+              (m.deferToPanel === true || m.nextSongRecommendPending === true)) ||
+            m.systemKind === 'song_quiz'
+          ),
+      ),
+    );
     clearPendingSongQuizRoundState();
     suppressTidbitRef.current = false;
     commentPackVideoIdRef.current = null;
@@ -5479,84 +5500,51 @@ export default function RoomWithSync({
             if (freeIdxSorted.length === 0) {
               suppressTidbitRef.current = equivalentBaseOnlySlots(commentPackSlotsRef.current);
               const baseOnlyCtx = baseBodyPhase;
-              const delayBaseOnly = 3500;
-              scheduleAiCharacterPickReasonAfterCommentary(vid, delayBaseOnly);
               const skipQuizRecommendIntroOnly = Boolean(pack.songIntroOnlyDiscography);
               const shouldGateRecommendByQuiz =
                 ownerSongQuizEnabledRef.current &&
                 userRoomAiSongQuizEnabledRef.current &&
                 baseOnlyCtx.length >= 60 &&
                 !skipQuizRecommendIntroOnly;
-              // 曲解説・comment-pack は選曲したクライアントのみが fetch する。クイズも同じクライアントでスケジュールする
-              //（「最古入室者のみ」にすると、選曲者が最古でないときクイズが永遠に出ない）。
-              if (shouldGateRecommendByQuiz && !skipQuizRecommendForTheme) {
-                const timer = setTimeout(() => {
-                  if (videoIdRef.current !== vid) return;
-                  if (
-                    ownerNextSongRecommendEnabledRef.current &&
-                    userRoomAiRecommendEnabledRef.current
-                  ) {
-                    scheduleNextSongRecommendAfterCommentary({
-                      videoId: vid,
-                      roomId,
-                      songQuizDelayMs: 0,
-                      preferFastAfterQuiz: true,
-                      isGuest,
-                      aiMode: selectionAiMode,
-                      videoIdRef,
-                      registerTimer: (t) => {
-                        freeCommentTimeoutsRef.current.push(t);
-                      },
-                      addAiMessage,
-                      buildAddAiMessageExtras: () => buildNextSongRecommendExtras(vid),
-                      allowAfterVideoChange: true,
-                      createPendingCard: () => createPendingNextSongRecommendCard(vid),
-                      clearPendingCard: clearPendingNextSongRecommendCard,
-                    });
-                  }
-                  void fetch('/api/ai/song-quiz', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      videoId: vid,
-                      roomId,
-                      aiMode: selectionAiMode,
-                      isGuest,
-                      commentaryContext: baseOnlyCtx,
-                    }),
-                  })
-                    .then((r) => (r.ok ? r.json() : null))
-                    .then((res) => {
-                      if (videoIdRef.current !== vid || !res?.quiz) return;
-                      addSongQuizMessage(res.quiz as SongQuizPayload, vid);
-                    });
-                }, delayBaseOnly);
-                freeCommentTimeoutsRef.current.push(timer);
-              }
-              if (
+              const recommendEnabled =
                 ownerNextSongRecommendEnabledRef.current &&
                 userRoomAiRecommendEnabledRef.current &&
-                !shouldGateRecommendByQuiz &&
                 !skipQuizRecommendForTheme &&
-                !skipQuizRecommendIntroOnly
-              ) {
-                scheduleNextSongRecommendAfterCommentary({
-                  videoId: vid,
-                  roomId,
-                  songQuizDelayMs: delayBaseOnly,
-                  isGuest,
-                  aiMode: selectionAiMode,
-                  videoIdRef,
-                  registerTimer: (t) => {
-                    freeCommentTimeoutsRef.current.push(t);
-                  },
-                  addAiMessage,
-                  buildAddAiMessageExtras: () => buildNextSongRecommendExtras(vid),
-                  allowAfterVideoChange: true,
-                  createPendingCard: () => createPendingNextSongRecommendCard(vid),
-                  clearPendingCard: clearPendingNextSongRecommendCard,
-                });
-              }
+                !skipQuizRecommendIntroOnly;
+              const paceBaseOnly = resolvePostCommentaryPace({
+                remainingPlaybackMs: readRemainingPlaybackMsFromPlayer(playerRef.current),
+                freeSlotCount: 0,
+                quizEnabled: shouldGateRecommendByQuiz && !skipQuizRecommendForTheme,
+                recommendEnabled,
+                aiAgentParticipating: ownerAiCharacterJoinEnabledRef.current,
+              });
+              const delayBaseOnly = Math.max(
+                POST_COMMENTARY_QUIZ_GAP_MS,
+                paceBaseOnly.quizDisplayDelayMs,
+              );
+              scheduleAiCharacterPickReasonAfterCommentary(vid, delayBaseOnly);
+              // 曲解説・comment-pack は選曲したクライアントのみが fetch する。クイズも同じクライアントでスケジュールする
+              //（「最古入室者のみ」にすると、選曲者が最古でないときクイズが永遠に出ない）。
+              startPostCommentaryFollowups({
+                videoId: vid,
+                roomId,
+                commentaryContext: baseOnlyCtx,
+                freeSlotCount: 0,
+                staggerMs: paceBaseOnly.freeStaggerMs,
+                quizEnabled: shouldGateRecommendByQuiz && !skipQuizRecommendForTheme,
+                recommendEnabled,
+                isGuest,
+                aiMode: selectionAiMode,
+                videoIdRef,
+                registerTimer: (t) => {
+                  freeCommentTimeoutsRef.current.push(t);
+                },
+                addAiMessage,
+                buildRecommendExtras: () => buildNextSongRecommendExtras(vid),
+                createPendingRecommendCard: () => createPendingNextSongRecommendCard(vid),
+                clearPendingRecommendCard: clearPendingNextSongRecommendCard,
+                onShowQuiz: (quiz) => addSongQuizMessage(quiz, vid),
+              });
               scheduleThemePlaylistRoomBlurbAfterPack({
                 videoId: vid,
                 roomId,
@@ -5573,6 +5561,26 @@ export default function RoomWithSync({
               });
               return null;
             }
+
+            const skipQuizRecommendIntroOnlyFrees = Boolean(pack.songIntroOnlyDiscography);
+            const recommendEnabledFrees =
+              ownerNextSongRecommendEnabledRef.current &&
+              userRoomAiRecommendEnabledRef.current &&
+              !skipQuizRecommendForTheme &&
+              !skipQuizRecommendIntroOnlyFrees;
+            const quizLikelyFrees =
+              ownerSongQuizEnabledRef.current &&
+              userRoomAiSongQuizEnabledRef.current &&
+              !skipQuizRecommendForTheme &&
+              !skipQuizRecommendIntroOnlyFrees;
+            const paceFrees = resolvePostCommentaryPace({
+              remainingPlaybackMs: readRemainingPlaybackMsFromPlayer(playerRef.current),
+              freeSlotCount: freeIdxSorted.length,
+              quizEnabled: quizLikelyFrees,
+              recommendEnabled: recommendEnabledFrees,
+              aiAgentParticipating: ownerAiCharacterJoinEnabledRef.current,
+            });
+            const freeStaggerMs = paceFrees.freeStaggerMs;
 
             const filledForSlot: string[] = Array.from(
               { length: COMMENT_PACK_MAX_FREE_COMMENTS },
@@ -5623,7 +5631,7 @@ export default function RoomWithSync({
                   continue;
                 }
                 scheduledForSlot[i] = true;
-                const delayMs = (shownIdx2 + 1) * COMMENT_PACK_FREE_STAGGER_MS;
+                const delayMs = (shownIdx2 + 1) * freeStaggerMs;
                 // オーナー設定のスロット番号と一致させる（slot0..3 => ラベル02..05）
                 const labelNoForThisMessage = i + 2;
                 shownIdx2 += 1;
@@ -5720,83 +5728,34 @@ export default function RoomWithSync({
                     ]
                       .filter(Boolean)
                       .join('\n\n---\n\n');
-                    const delayMs =
-                      freeIdxSorted.length * COMMENT_PACK_FREE_STAGGER_MS + 3500;
+                    const delayMs = freeIdxSorted.length * freeStaggerMs + POST_COMMENTARY_QUIZ_GAP_MS;
                     scheduleAiCharacterPickReasonAfterCommentary(vid, delayMs);
-                    const skipQuizRecommendIntroOnly = Boolean(pack.songIntroOnlyDiscography);
+                    const skipQuizRecommendIntroOnly = skipQuizRecommendIntroOnlyFrees;
                     const shouldGateRecommendByQuiz =
                       ownerSongQuizEnabledRef.current &&
                       userRoomAiSongQuizEnabledRef.current &&
                       commentaryContext.length >= 60 &&
                       !skipQuizRecommendIntroOnly;
-                    if (shouldGateRecommendByQuiz && !skipQuizRecommendForTheme) {
-                      const timer = setTimeout(() => {
-                        if (videoIdRef.current !== vid) return;
-                        if (
-                          ownerNextSongRecommendEnabledRef.current &&
-                          userRoomAiRecommendEnabledRef.current
-                        ) {
-                          scheduleNextSongRecommendAfterCommentary({
-                            videoId: vid,
-                            roomId,
-                            songQuizDelayMs: 0,
-                            preferFastAfterQuiz: true,
-                            isGuest,
-                            aiMode: selectionAiMode,
-                            videoIdRef,
-                            registerTimer: (t) => {
-                              freeCommentTimeoutsRef.current.push(t);
-                            },
-                            addAiMessage,
-                            buildAddAiMessageExtras: () => buildNextSongRecommendExtras(vid),
-                            allowAfterVideoChange: true,
-                            createPendingCard: () => createPendingNextSongRecommendCard(vid),
-                            clearPendingCard: clearPendingNextSongRecommendCard,
-                          });
-                        }
-                        void fetch('/api/ai/song-quiz', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({
-                            videoId: vid,
-                            roomId,
-                            aiMode: selectionAiMode,
-                            isGuest,
-                            commentaryContext,
-                          }),
-                        })
-                          .then((r) => (r.ok ? r.json() : null))
-                          .then((res) => {
-                            if (videoIdRef.current !== vid || !res?.quiz) return;
-                            addSongQuizMessage(res.quiz as SongQuizPayload, vid);
-                          });
-                      }, delayMs);
-                      freeCommentTimeoutsRef.current.push(timer);
-                    }
-                    if (
-                      ownerNextSongRecommendEnabledRef.current &&
-                      userRoomAiRecommendEnabledRef.current &&
-                      !shouldGateRecommendByQuiz &&
-                      !skipQuizRecommendForTheme &&
-                      !skipQuizRecommendIntroOnly
-                    ) {
-                      scheduleNextSongRecommendAfterCommentary({
-                        videoId: vid,
-                        roomId,
-                        songQuizDelayMs: delayMs,
-                        isGuest,
-                        aiMode: selectionAiMode,
-                        videoIdRef,
-                        registerTimer: (t) => {
-                          freeCommentTimeoutsRef.current.push(t);
-                        },
-                        addAiMessage,
-                        buildAddAiMessageExtras: () => buildNextSongRecommendExtras(vid),
-                        allowAfterVideoChange: true,
-                        createPendingCard: () => createPendingNextSongRecommendCard(vid),
-                        clearPendingCard: clearPendingNextSongRecommendCard,
-                      });
-                    }
+                    startPostCommentaryFollowups({
+                      videoId: vid,
+                      roomId,
+                      commentaryContext,
+                      freeSlotCount: freeIdxSorted.length,
+                      staggerMs: freeStaggerMs,
+                      quizEnabled: shouldGateRecommendByQuiz && !skipQuizRecommendForTheme,
+                      recommendEnabled: recommendEnabledFrees,
+                      isGuest,
+                      aiMode: selectionAiMode,
+                      videoIdRef,
+                      registerTimer: (t) => {
+                        freeCommentTimeoutsRef.current.push(t);
+                      },
+                      addAiMessage,
+                      buildRecommendExtras: () => buildNextSongRecommendExtras(vid),
+                      createPendingRecommendCard: () => createPendingNextSongRecommendCard(vid),
+                      clearPendingRecommendCard: clearPendingNextSongRecommendCard,
+                      onShowQuiz: (quiz) => addSongQuizMessage(quiz, vid),
+                    });
                     scheduleThemePlaylistRoomBlurbAfterPack({
                       videoId: vid,
                       roomId,
@@ -5863,11 +5822,32 @@ export default function RoomWithSync({
             suppressTidbitRef.current =
               equivalentBaseOnlySlots(commentPackSlotsRef.current) || pendingFreeBodies.length > 0;
 
+            const skipQuizRecommendIntroOnlySingle = Boolean(pack.songIntroOnlyDiscography);
+            const recommendEnabledSingle =
+              ownerNextSongRecommendEnabledRef.current &&
+              userRoomAiRecommendEnabledRef.current &&
+              !skipQuizRecommendForTheme &&
+              !skipQuizRecommendIntroOnlySingle;
+            const freeCountSingle = pendingFreeBodies.length;
+            const quizLikelySingle =
+              ownerSongQuizEnabledRef.current &&
+              userRoomAiSongQuizEnabledRef.current &&
+              !skipQuizRecommendForTheme &&
+              !skipQuizRecommendIntroOnlySingle;
+            const paceSingle = resolvePostCommentaryPace({
+              remainingPlaybackMs: readRemainingPlaybackMsFromPlayer(playerRef.current),
+              freeSlotCount: freeCountSingle,
+              quizEnabled: quizLikelySingle,
+              recommendEnabled: recommendEnabledSingle,
+              aiAgentParticipating: ownerAiCharacterJoinEnabledRef.current,
+            });
+            const freeStaggerMsSingle = paceSingle.freeStaggerMs;
+
             let shownIdx = 0;
             for (let i = 0; i < COMMENT_PACK_MAX_FREE_COMMENTS; i++) {
               const c = freeArr[i]?.trim() ?? '';
               if (!c) continue;
-              const delayMs = (shownIdx + 1) * COMMENT_PACK_FREE_STAGGER_MS;
+              const delayMs = (shownIdx + 1) * freeStaggerMsSingle;
               // オーナー設定のスロット番号と一致させる（i=0..3 => ラベル02..05）
               const labelNoForThisMessage = i + 2;
               shownIdx += 1;
@@ -5893,82 +5873,34 @@ export default function RoomWithSync({
             const commentaryContextSingle = [baseStr, ...freeArr.map((c) => c.trim()).filter(Boolean)]
               .filter(Boolean)
               .join('\n\n---\n\n');
-            const delayMsSingle = shownIdx * COMMENT_PACK_FREE_STAGGER_MS + 3500;
+            const delayMsSingle = shownIdx * freeStaggerMsSingle + POST_COMMENTARY_QUIZ_GAP_MS;
             scheduleAiCharacterPickReasonAfterCommentary(vid, delayMsSingle);
-            const skipQuizRecommendIntroOnly = Boolean(pack.songIntroOnlyDiscography);
+            const skipQuizRecommendIntroOnly = skipQuizRecommendIntroOnlySingle;
             const shouldGateRecommendByQuiz =
               ownerSongQuizEnabledRef.current &&
               userRoomAiSongQuizEnabledRef.current &&
               commentaryContextSingle.length >= 60 &&
               !skipQuizRecommendIntroOnly;
-            if (shouldGateRecommendByQuiz && !skipQuizRecommendForTheme) {
-              const timer = setTimeout(() => {
-                if (videoIdRef.current !== vid) return;
-                if (
-                  ownerNextSongRecommendEnabledRef.current &&
-                  userRoomAiRecommendEnabledRef.current
-                ) {
-                  scheduleNextSongRecommendAfterCommentary({
-                    videoId: vid,
-                    roomId,
-                    songQuizDelayMs: 0,
-                    preferFastAfterQuiz: true,
-                    isGuest,
-                    aiMode: selectionAiMode,
-                    videoIdRef,
-                    registerTimer: (t) => {
-                      freeCommentTimeoutsRef.current.push(t);
-                    },
-                    addAiMessage,
-                    buildAddAiMessageExtras: () => buildNextSongRecommendExtras(vid),
-                    allowAfterVideoChange: true,
-                    createPendingCard: () => createPendingNextSongRecommendCard(vid),
-                    clearPendingCard: clearPendingNextSongRecommendCard,
-                  });
-                }
-                void fetch('/api/ai/song-quiz', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    videoId: vid,
-                    roomId,
-                    aiMode: selectionAiMode,
-                    isGuest,
-                    commentaryContext: commentaryContextSingle,
-                  }),
-                })
-                  .then((r) => (r.ok ? r.json() : null))
-                  .then((res) => {
-                    if (videoIdRef.current !== vid || !res?.quiz) return;
-                    addSongQuizMessage(res.quiz as SongQuizPayload, vid);
-                  });
-              }, delayMsSingle);
-              freeCommentTimeoutsRef.current.push(timer);
-            }
-            if (
-              ownerNextSongRecommendEnabledRef.current &&
-              userRoomAiRecommendEnabledRef.current &&
-              !shouldGateRecommendByQuiz &&
-              !skipQuizRecommendForTheme &&
-              !skipQuizRecommendIntroOnly
-            ) {
-              scheduleNextSongRecommendAfterCommentary({
-                videoId: vid,
-                roomId,
-                songQuizDelayMs: delayMsSingle,
-                isGuest,
-                aiMode: selectionAiMode,
-                videoIdRef,
-                registerTimer: (t) => {
-                  freeCommentTimeoutsRef.current.push(t);
-                },
-                addAiMessage,
-                buildAddAiMessageExtras: () => buildNextSongRecommendExtras(vid),
-                allowAfterVideoChange: true,
-                createPendingCard: () => createPendingNextSongRecommendCard(vid),
-                clearPendingCard: clearPendingNextSongRecommendCard,
-              });
-            }
+            startPostCommentaryFollowups({
+              videoId: vid,
+              roomId,
+              commentaryContext: commentaryContextSingle,
+              freeSlotCount: shownIdx,
+              staggerMs: freeStaggerMsSingle,
+              quizEnabled: shouldGateRecommendByQuiz && !skipQuizRecommendForTheme,
+              recommendEnabled: recommendEnabledSingle,
+              isGuest,
+              aiMode: selectionAiMode,
+              videoIdRef,
+              registerTimer: (t) => {
+                freeCommentTimeoutsRef.current.push(t);
+              },
+              addAiMessage,
+              buildRecommendExtras: () => buildNextSongRecommendExtras(vid),
+              createPendingRecommendCard: () => createPendingNextSongRecommendCard(vid),
+              clearPendingRecommendCard: clearPendingNextSongRecommendCard,
+              onShowQuiz: (quiz) => addSongQuizMessage(quiz, vid),
+            });
             scheduleThemePlaylistRoomBlurbAfterPack({
               videoId: vid,
               roomId,
@@ -6028,82 +5960,49 @@ export default function RoomWithSync({
                   });
                   touchActivity();
                   const commentarySingle = `${prefix}${data.text}`.trim();
-                  const delayCommentary = 4000;
-                  scheduleAiCharacterPickReasonAfterCommentary(vid, delayCommentary);
                   const skipQuizRecommendIntroOnly = Boolean(data?.songIntroOnlyDiscography);
                   const shouldGateRecommendByQuiz =
                     ownerSongQuizEnabledRef.current &&
                     userRoomAiSongQuizEnabledRef.current &&
                     commentarySingle.length >= 60 &&
                     !skipQuizRecommendIntroOnly;
-                  if (shouldGateRecommendByQuiz && !skipQuizRecommendForTheme) {
-                    const timer = setTimeout(() => {
-                      if (videoIdRef.current !== vid) return;
-                      if (
-                        ownerNextSongRecommendEnabledRef.current &&
-                        userRoomAiRecommendEnabledRef.current
-                      ) {
-                        scheduleNextSongRecommendAfterCommentary({
-                          videoId: vid,
-                          roomId,
-                          songQuizDelayMs: 0,
-                          preferFastAfterQuiz: true,
-                          isGuest,
-                          aiMode: selectionAiMode,
-                          videoIdRef,
-                          registerTimer: (t) => {
-                            freeCommentTimeoutsRef.current.push(t);
-                          },
-                          addAiMessage,
-                          buildAddAiMessageExtras: () => buildNextSongRecommendExtras(vid),
-                          allowAfterVideoChange: true,
-                          createPendingCard: () => createPendingNextSongRecommendCard(vid),
-                          clearPendingCard: clearPendingNextSongRecommendCard,
-                        });
-                      }
-                      void fetch('/api/ai/song-quiz', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                          videoId: vid,
-                          roomId,
-                          aiMode: selectionAiMode,
-                          isGuest,
-                          commentaryContext: commentarySingle,
-                        }),
-                      })
-                        .then((r) => (r.ok ? r.json() : null))
-                        .then((res) => {
-                          if (videoIdRef.current !== vid || !res?.quiz) return;
-                          addSongQuizMessage(res.quiz as SongQuizPayload, vid);
-                        });
-                    }, delayCommentary);
-                    freeCommentTimeoutsRef.current.push(timer);
-                  }
-                  if (
+                  const recommendEnabledFallback =
                     ownerNextSongRecommendEnabledRef.current &&
                     userRoomAiRecommendEnabledRef.current &&
-                    !shouldGateRecommendByQuiz &&
                     !skipQuizRecommendForTheme &&
-                    !skipQuizRecommendIntroOnly
-                  ) {
-                    scheduleNextSongRecommendAfterCommentary({
-                      videoId: vid,
-                      roomId,
-                      songQuizDelayMs: delayCommentary,
-                      isGuest,
-                      aiMode: selectionAiMode,
-                      videoIdRef,
-                      registerTimer: (t) => {
-                        freeCommentTimeoutsRef.current.push(t);
-                      },
-                      addAiMessage,
-                      buildAddAiMessageExtras: () => buildNextSongRecommendExtras(vid),
-                      allowAfterVideoChange: true,
-                      createPendingCard: () => createPendingNextSongRecommendCard(vid),
-                      clearPendingCard: clearPendingNextSongRecommendCard,
-                    });
-                  }
+                    !skipQuizRecommendIntroOnly;
+                  const paceFallback = resolvePostCommentaryPace({
+                    remainingPlaybackMs: readRemainingPlaybackMsFromPlayer(playerRef.current),
+                    freeSlotCount: 0,
+                    quizEnabled: shouldGateRecommendByQuiz && !skipQuizRecommendForTheme,
+                    recommendEnabled: recommendEnabledFallback,
+                    aiAgentParticipating: ownerAiCharacterJoinEnabledRef.current,
+                  });
+                  const delayCommentary = Math.max(
+                    4000,
+                    paceFallback.quizDisplayDelayMs,
+                  );
+                  scheduleAiCharacterPickReasonAfterCommentary(vid, delayCommentary);
+                  startPostCommentaryFollowups({
+                    videoId: vid,
+                    roomId,
+                    commentaryContext: commentarySingle,
+                    freeSlotCount: 0,
+                    staggerMs: paceFallback.freeStaggerMs,
+                    quizEnabled: shouldGateRecommendByQuiz && !skipQuizRecommendForTheme,
+                    recommendEnabled: recommendEnabledFallback,
+                    isGuest,
+                    aiMode: selectionAiMode,
+                    videoIdRef,
+                    registerTimer: (t) => {
+                      freeCommentTimeoutsRef.current.push(t);
+                    },
+                    addAiMessage,
+                    buildRecommendExtras: () => buildNextSongRecommendExtras(vid),
+                    createPendingRecommendCard: () => createPendingNextSongRecommendCard(vid),
+                    clearPendingRecommendCard: clearPendingNextSongRecommendCard,
+                    onShowQuiz: (quiz) => addSongQuizMessage(quiz, vid),
+                  });
                   scheduleThemePlaylistRoomBlurbAfterPack({
                     videoId: vid,
                     roomId,
@@ -8206,8 +8105,6 @@ export default function RoomWithSync({
           body: m.body,
           messageType: m.messageType,
         }));
-        const aiErrorMessage =
-          'AI が応答できませんでした。.env.local に GEMINI_API_KEY を設定し、開発サーバーを再起動してください。';
         fetch('/api/ai/character-chat', {
           method: 'POST',
           credentials: 'include',
@@ -8239,7 +8136,7 @@ export default function RoomWithSync({
               return;
             }
             if (!r.ok) {
-              addSystemMessage(aiErrorMessage);
+              addSystemMessage(resolveAiChatClientErrorMessage(data, r.status));
               return;
             }
             if (data?.text) {
@@ -8255,9 +8152,9 @@ export default function RoomWithSync({
             if (data?.skipped === true) {
               return;
             }
-            addSystemMessage(aiErrorMessage);
+            addSystemMessage(resolveAiChatClientErrorMessage(data, r.status));
           })
-          .catch(() => addSystemMessage(aiErrorMessage));
+          .catch(() => addSystemMessage(resolveAiChatClientErrorMessage(null)));
       };
 
       const doCharacterPasteFromNextRecommendQuery = (searchQuery: string) => {
@@ -8609,8 +8506,6 @@ export default function RoomWithSync({
           body: m.body,
           messageType: m.messageType,
         }));
-        const aiErrorMessage =
-          'AI が応答できませんでした。.env.local に GEMINI_API_KEY を設定し、開発サーバーを再起動してください。';
         fetch('/api/ai/chat', {
           method: 'POST',
           credentials: 'include',
@@ -8662,7 +8557,7 @@ export default function RoomWithSync({
               return;
             }
             if (!r.ok) {
-              addSystemMessage(aiErrorMessage);
+              addSystemMessage(resolveAiChatClientErrorMessage(data, r.status));
               return;
             }
             if (data?.text) {
@@ -8675,10 +8570,10 @@ export default function RoomWithSync({
             } else if (data?.skipped === true) {
               // 雑談時はサーバー側で意図的に無応答（エラー表示しない）
             } else {
-              addSystemMessage(aiErrorMessage);
+              addSystemMessage(resolveAiChatClientErrorMessage(data, r.status));
             }
           })
-          .catch(() => addSystemMessage(aiErrorMessage));
+          .catch(() => addSystemMessage(resolveAiChatClientErrorMessage(null)));
       };
 
       if (pendingSongQueryRef.current && isShortConfirmation(text)) {

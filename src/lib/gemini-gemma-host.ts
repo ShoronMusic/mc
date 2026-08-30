@@ -3,13 +3,14 @@
  */
 
 import type { ModelParams } from '@google/generative-ai';
+import { isEnglishInstructionOrPlanningLeak } from '@/lib/ai-output-policy';
 
 function countJpChars(s: string): number {
   return (s.match(/[\u3040-\u30FF\u4E00-\u9FFF]/g) ?? []).length;
 }
 
 const GEMMA_COT_STRONG_MARKERS =
-  /\*\s*Role:\s*Assistant|Assistant moderator for|\*\s*Task:|\*\s*Constraints?:|Final Draft:|Final\s+selection\s*:|Final\s+text\s*:|Constraint\s+Check|Sentence\s+\d\s*\*?\s*:|Final\s+Text\s+Construction|Final\s+Polish|Final\s+check\s*:|Revised\s+Draft|Basic\s+info:|the\s+prompt\s+says|Total:\s*\d+\s*characters?|->\s*\d+\s*characters?|Length:\s*~?\s*\d+\s*characters?|Length\s*\?|Length\s+is\s+(?:around|about)|Fits\s+the\s+\d{2,3}\s*[-–]\s*\d{2,3}\s+range|Does it put|Is it\s+\d{2,3}\s*[-–]\s*\d{2,3}\s*chars|Current year:|No chart rankings|Correct labels:|terminology for album|No detailed sound|First sentence:|Genre\/Position:|Theme\/Mood:|\bare safe\b|My draft starts|\*Self-Correction|Let\'s check the first comment|\bOne detail:|\bJust the Japanese text\b|\bno meta-?notes\b|\*Final Version\*|^\s*\*Final Version\*|Final\s+Version\s*:|Final\s+Version\s+Selection|Attempt\s+\d+\s*\*?\s*:|Character\s+Count\s+Check|\*{1,3}\s+\*{1,3}\s*Final\s+Text|\*{1,3}\s+\*{1,3}\s*Final\s+Polish|\*{1,3}\s+\*{1,3}\s*Final\s+Version\s+Selection|\*{1,3}\s+\*{1,3}\s*Refined|\*{1,3}\s+\*{1,3}\s*Draft|\*{1,3}\s+\*{1,3}\s*Sentence\s+\d|\*{1,3}\s+\*{1,3}\s*Constraint\s+Check|\*\s*Final\s+Polish\s*:|Actually,\s+I'?ll\s+go\s+with|\(\d+\s*chars?\)\s*-\s*\*|\bRelease year\s*:|\bToo generic\b|\bMatches all criteria\b|\bCharacter count:\s*approx|\bCheck constraints\s*:|\bDesu\/masu\b|\bI need to mention\b|\*\s*Refining\s*:|\*\s*Draft\s+\d+\s*:/i;
+  /\*\s*Role:\s*Assistant|Assistant moderator for|\*\s*Task:|\*\s*Constraints?:|Final Draft:|Final\s+selection\s*:|Final\s+text\s*:|Constraint\s+Check|Sentence\s+\d\s*\*?\s*:|Final\s+Text\s+Construction|Final\s+Polish|Final\s+check\s*:|Revised\s+Draft|Basic\s+info:|the\s+prompt\s+says|Total:\s*\d+\s*characters?|->\s*\d+\s*characters?|Length:\s*~?\s*\d+\s*characters?|Length\s*\?|Length\s+is\s+(?:around|about)|Fits\s+the\s+\d{2,3}\s*[-–]\s*\d{2,3}\s+range|Does it put|Is it\s+\d{2,3}\s*[-–]\s*\d{2,3}\s*chars|Current year:|No chart rankings|Correct labels:|terminology for album|No detailed sound|First sentence:|Genre\/Position:|Theme\/Mood:|\bare safe\b|My draft starts|\*Self-Correction|Let\'s check the first comment|\bOne detail:|\bJust the Japanese text\b|\bno meta-?notes\b|\*Final Version\*|^\s*\*Final Version\*|Final\s+Version\s*:|Final\s+Version\s+Selection|Attempt\s+\d+\s*\*?\s*:|Character\s+Count\s+Check|\*{1,3}\s+\*{1,3}\s*Final\s+Text|\*{1,3}\s+\*{1,3}\s*Final\s+Polish|\*{1,3}\s+\*{1,3}\s*Final\s+Version\s+Selection|\*{1,3}\s+\*{1,3}\s*Refined|\*{1,3}\s+\*{1,3}\s*Draft|\*{1,3}\s+\*{1,3}\s*Sentence\s+\d|\*{1,3}\s+\*{1,3}\s*Constraint\s+Check|\*\s*Final\s+Polish\s*:|Actually,\s+I'?ll\s+go\s+with|\(\d+\s*chars?\)\s*-\s*\*|\bRelease year\s*:|\bToo generic\b|\bMatches all criteria\b|\bCharacter count:\s*approx|\bCheck constraints\s*:|\bDesu\/masu\b|\bI need to mention\b|\*\s*Refining\s*:|\*\s*Draft\s+\d+\s*:|Priority for talking points|talking points\s*\(while song is playing\)|No irrelevant artists|no specific chart numbers|no fake info|Use rotating intros|Natural conversation\s*\(|\*\s*Priority\s*:|Priority:\s*User'?s topic|Search Block|Intro phrase rotation|Tone:\s*Friendly/i;
 
 const GEMMA_LINE_META =
   /^\s*(\*\s*)?(Role|Task|Constraints?)\s*:/i;
@@ -721,6 +722,32 @@ function extractLongestJapaneseLineRun(text: string): string {
   return best.trim();
 }
 
+function isGemmaTrailingSelfCheckLine(tr: string): boolean {
+  if (!tr) return false;
+  if (
+    /^\*?\s*Check\s+(?:length|priorit(?:y|ies)|prohibited|constraints?|labels?|tone|album|song)\b/i.test(
+      tr,
+    )
+  ) {
+    return true;
+  }
+  if (/^\*?\s*Search\s+block\s*\*?/i.test(tr)) return true;
+  if (/draft|character|selection|sentence|constraint|length\s+check|moderator|positioning|atmosphere/i.test(tr)) {
+    return true;
+  }
+  if (/^\*\s*(Does it|Is it|Did I|Have I|Do I|Genre|Theme|Release year)\b/i.test(tr)) return true;
+  if (/\?\s*(?:Yes|No|None|Correct|Good)\.?\s*$/i.test(tr)) return true;
+  if (/\b\d{2,3}\s*[-–]\s*\d{2,3}\s*chars?/i.test(tr)) return true;
+  if (
+    /(?:chart rankings|lyric analysis|instrument details|correct labels|within\s+\d{2,3}|characters?\.\s*Good)/i.test(
+      tr,
+    )
+  ) {
+    return true;
+  }
+  return false;
+}
+
 function stripTrailingGemmaEnglishLines(text: string): string {
   const lines = text.replace(/\r\n/g, '\n').split('\n');
   while (lines.length > 0) {
@@ -730,26 +757,23 @@ function stripTrailingGemmaEnglishLines(text: string): string {
       continue;
     }
     const jp = countJpChars(tr);
-    if (jp >= 8) break;
-      if (
-      jp < 8 &&
-      (/draft|character|selection|sentence|constraint|length\s+check|moderator|positioning|atmosphere/i.test(
-        tr,
-      ) ||
-        /^\*\s*(Does it|Is it|Did I|Have I|Do I|Genre|Theme|Release year)\b/i.test(tr) ||
-        /\?\s*(?:Yes|No|None)\.?\s*$/i.test(tr) ||
-        /\b\d{2,3}\s*[-–]\s*\d{2,3}\s*chars?/i.test(tr) ||
-        /(?:chart rankings|lyric analysis|instrument details|correct labels|within\s+\d{2,3})/i.test(
-          tr,
-        ))
-    ) {
+    /** 和文のあとに英語セルフチェックだけが続く行 */
+    if (jp >= 8) {
+      const m = /([。．])\s*\*?\s*(?:Check\s+(?:length|priorit|prohibited)|Search\s+block)\b/i.exec(tr);
+      if (m && typeof m.index === 'number' && m.index > 0) {
+        lines[lines.length - 1] = tr.slice(0, m.index + 1).trim();
+        continue;
+      }
+      break;
+    }
+    if (jp < 8 && isGemmaTrailingSelfCheckLine(tr)) {
       lines.pop();
     } else break;
   }
   return lines.join('\n').trim();
 }
 
-/** `。* Does it put the artist in 『』? No.` / `* Is it 60-140 chars? Yes.` */
+/** `。* Does it put the artist in 『』? No.` / `* Is it 60-140 chars? Yes.` / 末尾 `Check length*:` */
 function stripGemmaConstraintSelfCheck(text: string): string {
   let t = text.replace(/\r\n/g, '\n');
   t = t.replace(/^\s*\*\s*"\s*/u, '');
@@ -770,6 +794,20 @@ function stripGemmaConstraintSelfCheck(text: string): string {
       '',
     );
     t = t.replace(/^Current\s+year\s*:\s*\d{4}\.?\s*/i, '');
+    /**
+     * chat_reply 等: `名曲だと思います。Check length*: ~160…` 以降の英語セルフチェック塊。
+     * Search block / Check priorities / prohibited words もまとめて落とす。
+     */
+    t = t.replace(
+      /([。．])\s*\*?\s*Check\s+(?:length|priorit(?:y|ies)|prohibited|constraints?|labels?)\s*\*?\s*:[\s\S]*$/i,
+      '$1',
+    );
+    t = t.replace(
+      /\n[ \t]*\*?[ \t]*Check\s+(?:length|priorit(?:y|ies)|prohibited|constraints?|labels?)\s*\*?\s*:[^\n]*/gi,
+      '',
+    );
+    t = t.replace(/\n[ \t]*\*?[ \t]*Search\s+block\s*\*?\s*:[\s\S]*$/i, '');
+    t = t.replace(/([。．])\s*\*?\s*Search\s+block\s*\*?\s*:[\s\S]*$/i, '$1');
     /** `です。No chart rankings? None.` 以降の制約チェックを末尾まで落とす */
     t = t.replace(
       /([。．])\s*(?:\*\s*)?(?:No chart rankings|No detailed lyric analysis|No instrument details|No detailed sound analysis|Correct labels)\b[\s\S]*$/i,
@@ -790,7 +828,7 @@ function stripGemmaConstraintSelfCheck(text: string): string {
     );
     if (t === before) break;
   }
-  return t.trim();
+  return stripTrailingGemmaEnglishLines(t.trim());
 }
 
 /**
@@ -1117,7 +1155,7 @@ export function polishGemmaModelVisibleText(raw: string): string {
   /** 文字数メタは dedupe の句点補完より先に落とす（`(136文字)` → `(136文字)。` 化を防ぐ） */
   const withoutCharMeta = stripTrailingSelfReportedCharCount(collapsed);
   const deduped = dedupeRoughJapaneseSentences(stripGemmaTrailingCharEnumeratorRun(withoutCharMeta));
-  return keepLastTitledJapaneseCommentary(
+  const polished = keepLastTitledJapaneseCommentary(
     stripTrailingSelfReportedCharCount(
       stripGemmaStrayClosingQuoteBeforePeriod(
         stripGemmaConstraintSelfCheck(
@@ -1126,4 +1164,11 @@ export function polishGemmaModelVisibleText(raw: string): string {
       ),
     ),
   ).trim();
+  if (!polished) return '';
+  if (isEnglishInstructionOrPlanningLeak(polished)) return '';
+  const jp = countJpChars(polished);
+  const latin = (polished.match(/[A-Za-z]/g) ?? []).length;
+  /** 指示文・英語だけの漏れはチャットに出さない */
+  if (jp < 12 && (GEMMA_COT_STRONG_MARKERS.test(polished) || latin > jp * 2)) return '';
+  return polished;
 }

@@ -9,6 +9,7 @@ import { shuffleQuizChoicesDeterministic } from '@/lib/song-quiz-choice-shuffle'
 import {
   isValidSongQuizPayload,
   isValidSongQuizTheme,
+  songQuizPayloadLooksJapanese,
   type SongQuizPayload,
   type SongQuizTheme,
 } from '@/lib/song-quiz-types';
@@ -131,7 +132,8 @@ ${priorityHuman}
 ・正解・誤答の根拠はすべて【曲解説テキスト】の**中に明示または強く示唆されている**ものに限定する。テキストに無い事実・数値・固有名は出さない。
 ・誤答肢は、テキストと**明らかに矛盾する**か、**別の曲っぽい聴き方**になるようにし、当て推量で細かい数値を作らない。
 ・チャート順位・売上・受賞の具体数字は出さない。
-・問題文は 120 文字以内、各選択肢は 70 文字以内。日本語、です・ます調。
+・問題文・選択肢・解説は**すべて日本語（です・ます調）のみ**。英語の問題文・選択肢・解説は禁止（固有名詞の英語表記は可）。
+・問題文は 120 文字以内、各選択肢は 70 文字以内。
 ・**正解が常に 1 番目の選択肢になるような並べ方は避ける**こと。正解肢は 3 つのうちどの位置にも置きうる想定で、**correctIndex は 0・1・2 を偏りなく**選ぶ（連続した出題で同じ位置ばかりにしない）。
 
 【問題文のトーン（厳守・プレイヤー向け）】
@@ -171,11 +173,13 @@ ${ctx}`;
   );
   const theme = parsed.theme !== undefined && isValidSongQuizTheme(parsed.theme) ? parsed.theme : undefined;
 
-  return {
+  const quiz: SongQuizPayload = {
     question: parsed.question.trim(),
     choices,
     correctIndex,
     explanation: parsed.explanation.trim(),
     ...(theme ? { theme } : {}),
   };
+  if (!songQuizPayloadLooksJapanese(quiz)) return null;
+  return quiz;
 }

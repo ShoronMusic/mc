@@ -76,6 +76,7 @@ import {
 } from '@/lib/chat-system-copy';
 import type { SongQuizPayload } from '@/lib/song-quiz-types';
 import { getSongQuizRevealDelayMs } from '@/lib/song-quiz-result-announcement';
+import { resolveAiChatClientErrorMessage } from '@/lib/ai-chat-client-error';
 import { shouldShortCircuitSongRequestForAtPrompt } from '@/lib/ai-question-about-detail-heuristic';
 import { resolveAiQuestionMusicRelated } from '@/lib/client-ai-question-guard-resolve';
 import { isAiUnlimitedTrialStatus } from '@/lib/ai-trial-status';
@@ -125,7 +126,12 @@ import {
 import { scheduleAiCharacterTtsPlayback } from '@/lib/ai-character-tts-client';
 import { isAiCharacterTtsEnabledClient } from '@/lib/ai-character-tts-config';
 import { useAiCharacterTtsErrorNotice } from '@/hooks/useAiCharacterTtsErrorNotice';
-import { scheduleNextSongRecommendAfterCommentary } from '@/lib/schedule-next-song-recommend-client';
+import { startPostCommentaryFollowups } from '@/lib/schedule-post-commentary-followups-client';
+import {
+  POST_COMMENTARY_QUIZ_GAP_MS,
+  readRemainingPlaybackMsFromPlayer,
+  resolvePostCommentaryPace,
+} from '@/lib/post-commentary-followup-timing';
 import { scheduleThemePlaylistRoomBlurbAfterPack } from '@/lib/schedule-theme-playlist-room-blurb';
 import type { ChatMessage, SystemMessageOptions } from '@/types/chat';
 import { useIsLgViewport } from '@/hooks/useLgViewport';
@@ -1162,6 +1168,20 @@ export default function RoomWithoutSync({
     }
     songQuizLocalMetaByIdRef.current.clear();
     songQuizLocalAnswersByIdRef.current.clear();
+    if (nextSongRecommendTimeoutRef.current) {
+      clearTimeout(nextSongRecommendTimeoutRef.current);
+      nextSongRecommendTimeoutRef.current = null;
+    }
+    setMessages((prev) =>
+      prev.filter(
+        (m) =>
+          !(
+            (m.aiSource === 'next_song_recommend' &&
+              (m.deferToPanel === true || m.nextSongRecommendPending === true)) ||
+            m.systemKind === 'song_quiz'
+          ),
+      ),
+    );
   }, [videoId]);
 
   const fetchAnnounceAndPublish = useCallback(
@@ -1346,97 +1366,67 @@ export default function RoomWithoutSync({
                 commentaryCtx.length >= 60 &&
                 userRoomAiSongQuizEnabledRef.current &&
                 !skipQuizRecommendIntroOnly;
-              if (shouldGateRecommendByQuiz && !skipQuizRecommendForTheme) {
-                if (songQuizFetchTimeoutRef.current) clearTimeout(songQuizFetchTimeoutRef.current);
-                songQuizFetchTimeoutRef.current = setTimeout(() => {
-                  songQuizFetchTimeoutRef.current = null;
-                  if (videoIdRef.current !== vid) return;
-                  if (userRoomAiRecommendEnabledRef.current) {
-                    scheduleNextSongRecommendAfterCommentary({
-                      videoId: vid,
-                      roomId,
-                      songQuizDelayMs: 0,
-                      preferFastAfterQuiz: true,
-                      isGuest,
-                      aiMode: selectionAiMode,
-                      videoIdRef,
-                      registerTimer: (t) => {
-                        if (nextSongRecommendTimeoutRef.current) {
-                          clearTimeout(nextSongRecommendTimeoutRef.current);
-                        }
-                        nextSongRecommendTimeoutRef.current = t;
-                      },
-                      addAiMessage,
-                      buildAddAiMessageExtras: () => buildNextSongRecommendExtras(vid),
-                      allowAfterVideoChange: true,
-                        createPendingCard: () => createPendingNextSongRecommendCard(vid),
-                        clearPendingCard: clearPendingNextSongRecommendCard,
-                    });
-                  }
-                  void fetch('/api/ai/song-quiz', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      videoId: vid,
-                      roomId,
-                      aiMode: selectionAiMode,
-                      isGuest,
-                      commentaryContext: commentaryCtx,
-                    }),
-                  })
-                    .then((r) => (r.ok ? r.json() : null))
-                    .then((res) => {
-                      if (videoIdRef.current !== vid || !res?.quiz) return;
-                      const q = res.quiz as SongQuizPayload;
-                      const id = createMessageId();
-                      setMessages((prev) => [
-                        ...prev,
-                        {
-                          id,
-                          body: `${SONG_QUIZ_UI_LABEL} 三択クイズ（曲解説の内容のみを根拠に自動生成）`,
-                          displayName: '曲クイズ',
-                          messageType: 'system',
-                          createdAt: new Date().toISOString(),
-                          videoId: vid,
-                          systemKind: 'song_quiz',
-                          songQuiz: q,
-                        },
-                      ]);
-                      scheduleLocalSongQuizReveal(id, q, vid);
-                    });
-                }, 3500);
-              }
-              tidbitPreferMainArtistLeftRef.current = 2;
-              if (
+              const recommendEnabled =
                 userRoomAiRecommendEnabledRef.current &&
-                !shouldGateRecommendByQuiz &&
                 !skipQuizRecommendForTheme &&
-                !skipQuizRecommendIntroOnly
-              ) {
-                scheduleNextSongRecommendAfterCommentary({
-                  videoId: vid,
-                  roomId,
-                  songQuizDelayMs: 3500,
-                  isGuest,
-                  videoIdRef,
-                  registerTimer: (t) => {
-                    if (nextSongRecommendTimeoutRef.current) {
-                      clearTimeout(nextSongRecommendTimeoutRef.current);
-                    }
-                    nextSongRecommendTimeoutRef.current = t;
-                  },
-                  addAiMessage,
-                  buildAddAiMessageExtras: () => buildNextSongRecommendExtras(vid),
-                  allowAfterVideoChange: true,
-                  createPendingCard: () => createPendingNextSongRecommendCard(vid),
-                  clearPendingCard: clearPendingNextSongRecommendCard,
-                });
-              }
+                !skipQuizRecommendIntroOnly;
+              const pace = resolvePostCommentaryPace({
+                remainingPlaybackMs: readRemainingPlaybackMsFromPlayer(playerRef.current),
+                freeSlotCount: 0,
+                quizEnabled: shouldGateRecommendByQuiz && !skipQuizRecommendForTheme,
+                recommendEnabled,
+                aiAgentParticipating: false,
+              });
+              const packEndDelayMs = Math.max(
+                POST_COMMENTARY_QUIZ_GAP_MS,
+                pace.quizDisplayDelayMs,
+              );
+              startPostCommentaryFollowups({
+                videoId: vid,
+                roomId,
+                commentaryContext: commentaryCtx,
+                freeSlotCount: 0,
+                staggerMs: pace.freeStaggerMs,
+                quizEnabled: shouldGateRecommendByQuiz && !skipQuizRecommendForTheme,
+                recommendEnabled,
+                isGuest,
+                aiMode: selectionAiMode,
+                videoIdRef,
+                registerTimer: (t) => {
+                  if (nextSongRecommendTimeoutRef.current) {
+                    clearTimeout(nextSongRecommendTimeoutRef.current);
+                  }
+                  nextSongRecommendTimeoutRef.current = t;
+                },
+                addAiMessage,
+                buildRecommendExtras: () => buildNextSongRecommendExtras(vid),
+                createPendingRecommendCard: () => createPendingNextSongRecommendCard(vid),
+                clearPendingRecommendCard: clearPendingNextSongRecommendCard,
+                onShowQuiz: (q) => {
+                  if (videoIdRef.current !== vid) return;
+                  const id = createMessageId();
+                  setMessages((prev) => [
+                    ...prev,
+                    {
+                      id,
+                      body: `${SONG_QUIZ_UI_LABEL} 三択クイズ（曲解説の内容のみを根拠に自動生成）`,
+                      displayName: '曲クイズ',
+                      messageType: 'system',
+                      createdAt: new Date().toISOString(),
+                      videoId: vid,
+                      systemKind: 'song_quiz',
+                      songQuiz: q,
+                    },
+                  ]);
+                  scheduleLocalSongQuizReveal(id, q, vid);
+                },
+              });
+              tidbitPreferMainArtistLeftRef.current = 2;
               scheduleThemePlaylistRoomBlurbAfterPack({
                 videoId: vid,
                 roomId,
                 selectorDisplayName: displayNameProp,
-                packEndDelayMs: 3500,
+                packEndDelayMs,
                 commentaryContext: commentaryCtx,
                 isGuest,
                 pendingRef: pendingThemePlaylistBlurbRef,
@@ -1517,94 +1507,63 @@ export default function RoomWithoutSync({
               commentarySingle.length >= 60 &&
               userRoomAiSongQuizEnabledRef.current &&
               !skipQuizRecommendIntroOnly;
-            if (shouldGateRecommendByQuiz && !skipQuizRecommendForTheme) {
-              if (songQuizFetchTimeoutRef.current) clearTimeout(songQuizFetchTimeoutRef.current);
-              songQuizFetchTimeoutRef.current = setTimeout(() => {
-                songQuizFetchTimeoutRef.current = null;
-                if (videoIdRef.current !== vid) return;
-                if (userRoomAiRecommendEnabledRef.current) {
-                  scheduleNextSongRecommendAfterCommentary({
-                    videoId: vid,
-                    roomId,
-                    songQuizDelayMs: 0,
-                    preferFastAfterQuiz: true,
-                    isGuest,
-                    videoIdRef,
-                    registerTimer: (t) => {
-                      if (nextSongRecommendTimeoutRef.current) {
-                        clearTimeout(nextSongRecommendTimeoutRef.current);
-                      }
-                      nextSongRecommendTimeoutRef.current = t;
-                    },
-                    addAiMessage,
-                    buildAddAiMessageExtras: () => buildNextSongRecommendExtras(vid),
-                    allowAfterVideoChange: true,
-                      createPendingCard: () => createPendingNextSongRecommendCard(vid),
-                      clearPendingCard: clearPendingNextSongRecommendCard,
-                  });
-                }
-                void fetch('/api/ai/song-quiz', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    videoId: vid,
-                    roomId,
-                    commentaryContext: commentarySingle,
-                  }),
-                })
-                  .then((r) => (r.ok ? r.json() : null))
-                  .then((res) => {
-                    if (videoIdRef.current !== vid || !res?.quiz) return;
-                    const q = res.quiz as SongQuizPayload;
-                    const id = createMessageId();
-                    setMessages((prev) => [
-                      ...prev,
-                      {
-                        id,
-                        body: `${SONG_QUIZ_UI_LABEL} 三択クイズ（曲解説の内容のみを根拠に自動生成）`,
-                        displayName: '曲クイズ',
-                        messageType: 'system',
-                        createdAt: new Date().toISOString(),
-                        videoId: vid,
-                        systemKind: 'song_quiz',
-                        songQuiz: q,
-                      },
-                    ]);
-                    scheduleLocalSongQuizReveal(id, q, vid);
-                  });
-              }, 4000);
-            }
-            tidbitPreferMainArtistLeftRef.current = 2;
-            if (
+            const recommendEnabled =
               userRoomAiRecommendEnabledRef.current &&
-              !shouldGateRecommendByQuiz &&
               !skipQuizRecommendForTheme &&
-              !skipQuizRecommendIntroOnly
-            ) {
-              scheduleNextSongRecommendAfterCommentary({
-                videoId: vid,
-                roomId,
-                songQuizDelayMs: 4000,
-                isGuest,
-                videoIdRef,
-                registerTimer: (t) => {
-                  if (nextSongRecommendTimeoutRef.current) {
-                    clearTimeout(nextSongRecommendTimeoutRef.current);
-                  }
-                  nextSongRecommendTimeoutRef.current = t;
-                },
-                addAiMessage,
-                buildAddAiMessageExtras: () => buildNextSongRecommendExtras(vid),
-                allowAfterVideoChange: true,
-                createPendingCard: () => createPendingNextSongRecommendCard(vid),
-                clearPendingCard: clearPendingNextSongRecommendCard,
-              });
-            }
+              !skipQuizRecommendIntroOnly;
+            const pace = resolvePostCommentaryPace({
+              remainingPlaybackMs: readRemainingPlaybackMsFromPlayer(playerRef.current),
+              freeSlotCount: 0,
+              quizEnabled: shouldGateRecommendByQuiz && !skipQuizRecommendForTheme,
+              recommendEnabled,
+              aiAgentParticipating: false,
+            });
+            const packEndDelayMs = Math.max(4000, pace.quizDisplayDelayMs);
+            startPostCommentaryFollowups({
+              videoId: vid,
+              roomId,
+              commentaryContext: commentarySingle,
+              freeSlotCount: 0,
+              staggerMs: pace.freeStaggerMs,
+              quizEnabled: shouldGateRecommendByQuiz && !skipQuizRecommendForTheme,
+              recommendEnabled,
+              isGuest,
+              videoIdRef,
+              registerTimer: (t) => {
+                if (nextSongRecommendTimeoutRef.current) {
+                  clearTimeout(nextSongRecommendTimeoutRef.current);
+                }
+                nextSongRecommendTimeoutRef.current = t;
+              },
+              addAiMessage,
+              buildRecommendExtras: () => buildNextSongRecommendExtras(vid),
+              createPendingRecommendCard: () => createPendingNextSongRecommendCard(vid),
+              clearPendingRecommendCard: clearPendingNextSongRecommendCard,
+              onShowQuiz: (q) => {
+                if (videoIdRef.current !== vid) return;
+                const id = createMessageId();
+                setMessages((prev) => [
+                  ...prev,
+                  {
+                    id,
+                    body: `${SONG_QUIZ_UI_LABEL} 三択クイズ（曲解説の内容のみを根拠に自動生成）`,
+                    displayName: '曲クイズ',
+                    messageType: 'system',
+                    createdAt: new Date().toISOString(),
+                    videoId: vid,
+                    systemKind: 'song_quiz',
+                    songQuiz: q,
+                  },
+                ]);
+                scheduleLocalSongQuizReveal(id, q, vid);
+              },
+            });
+            tidbitPreferMainArtistLeftRef.current = 2;
             scheduleThemePlaylistRoomBlurbAfterPack({
               videoId: vid,
               roomId,
               selectorDisplayName: displayNameProp,
-              packEndDelayMs: 4000,
+              packEndDelayMs,
               commentaryContext: commentarySingle,
               isGuest,
               pendingRef: pendingThemePlaylistBlurbRef,
@@ -2348,8 +2307,6 @@ export default function RoomWithoutSync({
           body: m.body,
           messageType: m.messageType,
         }));
-        const aiErrorMessage =
-          'AI が応答できませんでした。.env.local に GEMINI_API_KEY を設定し、開発サーバーを再起動してください。';
         fetch('/api/ai/character-chat', {
           method: 'POST',
           credentials: 'include',
@@ -2380,7 +2337,7 @@ export default function RoomWithoutSync({
               return;
             }
             if (!r.ok) {
-              addSystemMessage(aiErrorMessage);
+              addSystemMessage(resolveAiChatClientErrorMessage(data, r.status));
               return;
             }
             if (data?.text) {
@@ -2396,9 +2353,9 @@ export default function RoomWithoutSync({
             if (data?.skipped === true) {
               return;
             }
-            addSystemMessage(aiErrorMessage);
+            addSystemMessage(resolveAiChatClientErrorMessage(data, r.status));
           })
-          .catch(() => addSystemMessage(aiErrorMessage));
+          .catch(() => addSystemMessage(resolveAiChatClientErrorMessage(null)));
       };
 
       const doCharacterSongPick = () => {
@@ -2540,8 +2497,6 @@ export default function RoomWithoutSync({
           body: m.body,
           messageType: m.messageType,
         }));
-        const aiErrorMessage =
-          'AI が応答できませんでした。.env.local に GEMINI_API_KEY を設定し、開発サーバーを再起動してください。';
         fetch('/api/ai/chat', {
           method: 'POST',
           credentials: 'include',
@@ -2593,7 +2548,7 @@ export default function RoomWithoutSync({
               return;
             }
             if (!r.ok) {
-              addSystemMessage(aiErrorMessage);
+              addSystemMessage(resolveAiChatClientErrorMessage(data, r.status));
               return;
             }
             if (data?.text) {
@@ -2606,10 +2561,10 @@ export default function RoomWithoutSync({
             } else if (data?.skipped === true) {
               // 雑談時はサーバー側で意図的に無応答（エラー表示しない）
             } else {
-              addSystemMessage(aiErrorMessage);
+              addSystemMessage(resolveAiChatClientErrorMessage(data, r.status));
             }
           })
-          .catch(() => addSystemMessage(aiErrorMessage));
+          .catch(() => addSystemMessage(resolveAiChatClientErrorMessage(null)));
       };
 
       if (pendingSongQueryRef.current && isShortConfirmation(text)) {

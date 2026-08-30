@@ -90,4 +90,23 @@ const withInlineAliases = parseMusicBrainzRecordingMetadataFromSearch({
 assert(withInlineAliases?.songTitleJa === 'レモン', 'inline aliases in search parse');
 assert(withInlineAliases?.recordingId === 'rec-1', 'recording id');
 
+const preferStudio = parseMusicBrainzRecordingMetadataFromSearch({
+  recordings: [
+    {
+      score: 90,
+      title: 'Tears In Heaven (live)',
+      'first-release-date': '2018-01-01',
+      'artist-credit': [{ name: 'Eric Clapton' }],
+    },
+    {
+      score: 95,
+      title: 'Tears In Heaven',
+      'first-release-date': '1992-01-08',
+      'artist-credit': [{ name: 'Eric Clapton' }],
+      genres: [{ name: 'soft rock', count: 5 }],
+    },
+  ],
+});
+assert(preferStudio?.originalReleaseDate === '1992-01-08', 'prefer studio first-release over live');
+
 console.log('musicbrainz-recording-metadata.unit-test.ts: ok');

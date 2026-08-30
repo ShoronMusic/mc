@@ -952,8 +952,25 @@ export default function Chat({
   const [themeMissionModalOpen, setThemeMissionModalOpen] = useState(false);
   /** 三択クイズ: メッセージ id → 選んだ選択肢 index */
   const [songQuizPickedIndex, setSongQuizPickedIndex] = useState<Record<string, number>>({});
-  const deferredNextSongRecommendMessages = messages.filter(isDeferredNextSongRecommendMessage);
-  const visibleMessages = messages.filter((m) => !isDeferredNextSongRecommendMessage(m));
+  const deferredNextSongRecommendMessages = messages.filter((m) => {
+    if (!isDeferredNextSongRecommendMessage(m)) return false;
+    const cur =
+      typeof currentVideoId === 'string' && currentVideoId.trim() ? currentVideoId.trim() : '';
+    if (!cur) return true;
+    const msgVid = typeof m.videoId === 'string' && m.videoId.trim() ? m.videoId.trim() : '';
+    return msgVid === cur;
+  });
+  const visibleMessages = messages.filter((m) => {
+    if (isDeferredNextSongRecommendMessage(m)) return false;
+    if (m.systemKind === 'song_quiz') {
+      const cur =
+        typeof currentVideoId === 'string' && currentVideoId.trim() ? currentVideoId.trim() : '';
+      if (!cur) return true;
+      const msgVid = typeof m.videoId === 'string' && m.videoId.trim() ? m.videoId.trim() : '';
+      return !msgVid || msgVid === cur;
+    }
+    return true;
+  });
   const scrollToLatest = useCallback(() => {
     const bottom = bottomRef.current;
     if (!bottom) return;
@@ -2307,7 +2324,7 @@ export default function Chat({
         )}
         {deferredNextSongRecommendMessages.length > 0 ? (
           <details className="mt-3 rounded-md border border-violet-700/55 bg-violet-950/15 p-2">
-            <summary className="cursor-pointer list-none text-xs font-semibold text-violet-200">
+            <summary className="cursor-pointer text-xs font-semibold text-violet-200">
               あとで見るおすすめ曲 ({deferredNextSongRecommendMessages.length})
             </summary>
             <ul className="mt-2 flex flex-col gap-2">

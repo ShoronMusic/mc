@@ -11,6 +11,8 @@ export type ResolveYoutubeQueryForPasteInput = {
   excludeUserSongPicks?: UserSongPickExclude[];
   excludeAiSongPicks?: UserSongPickExclude[];
   excludeArtists?: string[];
+  /** エージェント選曲: 公式 PV 優先・邦楽／編集動画は採用しない */
+  preferOfficialPv?: boolean;
 };
 
 export type ResolveYoutubeQueryForPasteOk = {
@@ -34,24 +36,32 @@ export async function resolveYoutubeQueryForPaste(
 ): Promise<ResolveYoutubeQueryForPasteResult> {
   const q = input.query.trim();
   if (!q) return { ok: false, reason: 'no_hit' };
-  const fallbackQueries = [q, `${q} official`, `${q} music`];
+  const preferOfficialPv = input.preferOfficialPv === true;
+  const qHasOfficial = /\bofficial\b/i.test(q);
+  const fallbackQueries = preferOfficialPv
+    ? qHasOfficial
+      ? [q, `${q} music`]
+      : [`${q} official video`, `${q} official`, q]
+    : [q, `${q} official`, `${q} music`];
+  const searchOptions = {
+    excludeVideoIds: input.excludeVideoIds,
+    excludeUserSongPicks: input.excludeUserSongPicks,
+    excludeAiSongPicks: input.excludeAiSongPicks,
+    excludeArtists: input.excludeArtists,
+    ...(preferOfficialPv ? { preferOfficialPv: true } : {}),
+  };
+  const hasExclude =
+    (input.excludeVideoIds?.length ?? 0) > 0 ||
+    (input.excludeUserSongPicks?.length ?? 0) > 0 ||
+    (input.excludeAiSongPicks?.length ?? 0) > 0 ||
+    (input.excludeArtists?.length ?? 0) > 0;
   const hit = await searchYouTubeWithFallback(
     fallbackQueries,
     {
       roomId: input.roomId,
       source: input.apiSource,
     },
-    input.excludeVideoIds?.length ||
-      input.excludeUserSongPicks?.length ||
-      input.excludeAiSongPicks?.length ||
-      input.excludeArtists?.length
-      ? {
-          excludeVideoIds: input.excludeVideoIds,
-          excludeUserSongPicks: input.excludeUserSongPicks,
-          excludeAiSongPicks: input.excludeAiSongPicks,
-          excludeArtists: input.excludeArtists,
-        }
-      : undefined,
+    preferOfficialPv || hasExclude ? searchOptions : undefined,
   );
   if (!hit) return { ok: false, reason: 'no_hit' };
   const artistTitle = formatArtistTitle(hit.title, hit.channelTitle);

@@ -28,6 +28,8 @@ import { guardAiTrialSongSelection } from '@/lib/user-ai-trial-server';
 import { isAiUnlimitedUserId } from '@/lib/ai-unlimited-user-ids';
 
 export const dynamic = 'force-dynamic';
+/** Gemini + カタログ照合。Hobby 10s だと生成が切れやすい */
+export const maxDuration = 60;
 
 type OkDisabled = { enabled: false; reason?: string };
 type OkEnabled = { enabled: true; picks: import('@/lib/next-song-recommend-generate').NextSongPick[] };

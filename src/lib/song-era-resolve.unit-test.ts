@@ -51,8 +51,30 @@ test('resolveAssignedSongEra: original release beats YouTube upload and cache', 
       originalReleaseDate: '',
       cachedEra: 'Other',
       youtubePublishedAt: '2018-05-01T00:00:00.000Z',
+      aiEra: '90s',
+    }),
+    '90s',
+  );
+  assert.equal(
+    resolveAssignedSongEra({
+      originalReleaseDate: '',
+      cachedEra: 'Other',
+      youtubePublishedAt: '2018-05-01T00:00:00.000Z',
+      aiEra: 'Other',
     }),
     '10s',
+  );
+});
+
+test('resolveAssignedSongEra: AI beats YouTube PV year', () => {
+  assert.equal(
+    resolveAssignedSongEra({
+      originalReleaseDate: null,
+      cachedEra: null,
+      youtubePublishedAt: '2018-01-01T00:00:00.000Z',
+      aiEra: '90s',
+    }),
+    '90s',
   );
 });
 

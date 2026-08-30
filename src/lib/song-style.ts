@@ -4,8 +4,9 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { lookupMusicBrainzReleaseDate } from '@/lib/admin-songs-batch-musicbrainz-dates';
 import { getSongStyle, type SongStyle } from '@/lib/gemini';
-import { trySongStyleFromMusic8 } from '@/lib/music8-style-to-app';
+import { mapGenreTextsToSongStyle, trySongStyleFromMusic8 } from '@/lib/music8-style-to-app';
 import { parseUsableSongStyle, shouldCacheAssignedSongStyle } from '@/lib/song-styles';
 import { createAdminClient } from '@/lib/supabase/admin';
 
@@ -135,7 +136,8 @@ export async function setStyleInDb(
  * 1. 曲マスタ `songs.style`（管理画面で入れた値）
  * 2. song_style キャッシュ（過去の判定。Other は未確定として無視）
  * 3. Music8 の曲データ（style / genre がアプリの SongStyle に正規化できるとき）
- * 4. Gemini（毎回ブレうるため最後）
+ * 4. MusicBrainz の genres / tags
+ * 5. Gemini（毎回ブレうるため最後）
  *
  * @param title AI 判定用の曲名（短いほうがよい）
  * @param fullVideoTitleForMusic8 YouTube 動画タイトル全文（Music8 検索用。省略時は title を使う）
@@ -146,7 +148,13 @@ export async function getOrAssignStyle(
   title: string,
   artistName?: string | null,
   fullVideoTitleForMusic8?: string | null,
-  usageMeta?: { roomId?: string | null; videoId?: string | null; songId?: string | null }
+  usageMeta?: {
+    roomId?: string | null;
+    videoId?: string | null;
+    songId?: string | null;
+    /** 呼び出し側で MB を既に引いているとき（二重リクエスト回避） */
+    musicBrainzGenres?: string[] | null;
+  }
 ): Promise<SongStyle> {
   const fromSong = await getStyleFromSongsMaster(supabase, videoId, usageMeta?.songId);
   if (fromSong) {
@@ -168,6 +176,28 @@ export async function getOrAssignStyle(
       await setStyleInDb(supabase, videoId, music8Result.style);
     }
     return music8Result.style;
+  }
+
+  const artist = (artistName ?? '').trim();
+  const songTitle = (title ?? '').trim();
+  let mbGenres = Array.isArray(usageMeta?.musicBrainzGenres)
+    ? usageMeta!.musicBrainzGenres!
+    : null;
+  if ((!mbGenres || mbGenres.length === 0) && artist && songTitle) {
+    try {
+      const mb = await lookupMusicBrainzReleaseDate(artist, songTitle);
+      mbGenres = mb?.genres ?? null;
+    } catch (e) {
+      console.warn(
+        '[song-style] MusicBrainz genre lookup failed',
+        e instanceof Error ? e.message : e,
+      );
+    }
+  }
+  const fromMb = mapGenreTextsToSongStyle(mbGenres ?? []);
+  if (fromMb && shouldCacheAssignedSongStyle(fromMb)) {
+    await setStyleInDb(supabase, videoId, fromMb);
+    return fromMb;
   }
 
   const style = await getSongStyle(title, artistName ?? undefined, usageMeta);

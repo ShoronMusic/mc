@@ -57,6 +57,13 @@ function normalizeFromMusic8Texts(texts: string[]): SongStyle | null {
   return null;
 }
 
+/**
+ * Music8 / MusicBrainz の style・genre 文字列からアプリの SongStyle に寄せる。
+ */
+export function mapGenreTextsToSongStyle(texts: string[]): SongStyle | null {
+  return normalizeFromMusic8Texts(texts);
+}
+
 function normalizeFromMusic8StyleIds(ids: number[]): SongStyle | null {
   for (const id of ids) {
     const mapped = STYLE_ID_TO_APP[id];

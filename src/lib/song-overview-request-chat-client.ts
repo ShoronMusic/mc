@@ -1,4 +1,5 @@
 import { SONG_OVERVIEW_REQUEST_PROMPT } from '@/lib/song-overview-request';
+import { resolveAiChatClientErrorMessage } from '@/lib/ai-chat-client-error';
 
 export type SongOverviewChatMessage = {
   displayName?: string;
@@ -9,10 +10,6 @@ export type SongOverviewChatMessage = {
 export type RequestSongOverviewChatResult =
   | { ok: true; text: string }
   | { ok: false; message: string };
-
-const DEFAULT_ERROR =
-  'AI が応答できませんでした。.env.local に GEMINI_API_KEY を設定し、開発サーバーを再起動してください。';
-
 /**
  * エージェント選曲アナウンスの「概要を聞く」から /api/ai/chat を呼ぶ（@1回・クレジット消費）。
  * ユーザーの発言はチャットに載せず、API 用の文脈だけにプロンプトを足す。
@@ -93,7 +90,7 @@ export async function requestSongOverviewChat(params: {
   }
 
   if (!res.ok) {
-    return { ok: false, message: DEFAULT_ERROR };
+    return { ok: false, message: resolveAiChatClientErrorMessage(data, res.status) };
   }
 
   if (data?.text && typeof data.text === 'string' && data.text.trim()) {
@@ -104,5 +101,5 @@ export async function requestSongOverviewChat(params: {
     return { ok: false, message: 'AI が応答しませんでした。' };
   }
 
-  return { ok: false, message: DEFAULT_ERROR };
+  return { ok: false, message: resolveAiChatClientErrorMessage(data, res.status) };
 }

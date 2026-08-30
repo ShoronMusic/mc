@@ -8,6 +8,7 @@ import {
   containsUnreliableCommentaryDiscographyClaim,
   hasFabricatedStyleChartRankNumber,
   hasSuspiciousUkUsIdenticalChartPeak,
+  isEnglishInstructionOrPlanningLeak,
   isRejectedChatOrTidbitOutput,
   mentionsMediaPlacementWithoutWorkTitle,
   stripMediaPlacementSentencesWithoutWorkTitle,
@@ -38,6 +39,23 @@ assert.equal(
 );
 assert.equal(
   isRejectedChatOrTidbitOutput('Wikipedia によればチャート上位に入ったとされています。'),
+  false,
+);
+
+const oasisPlanningLeak = `Natural conversation (2-5 sentences, 120-450 characters).
+ * Priority: User's topic (Oasis) over the playing song (Mariah Carey).
+ * Avoid specific chart numbers (use "big hit", "representative song").
+ * Handle "Canon progression" correctly.
+ * Avoid repeating info from previous messages.
+ * Include "Search Block" (YouTube style) for songs/albums mentioned.
+ * Intro phrase rotation: "洋楽の話ですが", "知ってます？", "ところで".
+ * Tone: Friendly music buddy.`;
+assert.equal(isEnglishInstructionOrPlanningLeak(oasisPlanningLeak), true);
+assert.equal(isRejectedChatOrTidbitOutput(oasisPlanningLeak), true);
+assert.equal(
+  isEnglishInstructionOrPlanningLeak(
+    'ところで、Oasisだと「Wonderwall」がカノン進行っぽい響きで語られることが多いですね。\nシングル： Oasis - Wonderwall',
+  ),
   false,
 );
 

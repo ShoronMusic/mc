@@ -46,6 +46,34 @@ export function isValidSongQuizPayload(x: unknown): x is SongQuizPayload {
   return true;
 }
 
+function countSongQuizJpChars(s: string): number {
+  return (s.match(/[\u3040-\u30FF\u4E00-\u9FFF]/g) ?? []).length;
+}
+
+function countSongQuizLatinLetters(s: string): number {
+  return (s.match(/[A-Za-z]/g) ?? []).length;
+}
+
+/**
+ * 出題本文が日本語として成立するか（英語オンリーの問題を棄却）。
+ * 固有名詞のラテン文字は許容するが、各フィールドに十分な日本語が必要。
+ */
+export function songQuizPayloadLooksJapanese(quiz: SongQuizPayload): boolean {
+  const fields = [quiz.question, quiz.choices[0], quiz.choices[1], quiz.choices[2], quiz.explanation];
+  for (const raw of fields) {
+    const t = String(raw ?? '').trim();
+    if (!t) return false;
+    const jp = countSongQuizJpChars(t);
+    const latin = countSongQuizLatinLetters(t);
+    if (jp < 4) return false;
+    if (latin >= 24 && jp < Math.max(8, Math.floor(latin * 0.35))) return false;
+  }
+  const qJp = countSongQuizJpChars(quiz.question);
+  const qLatin = countSongQuizLatinLetters(quiz.question);
+  if (qLatin > qJp * 2 && qJp < 10) return false;
+  return true;
+}
+
 const SONG_QUIZ_FEEDBACK_BODY_MAX = 12000;
 
 /** comment-feedback 等に渡す出題本文（問題・選択肢・正解・解説） */

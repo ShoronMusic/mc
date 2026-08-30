@@ -16,6 +16,7 @@ export type MusicBrainzReleaseDateLookup = {
   mbArtist: string | null;
   mbSongTitle: string | null;
   recordingScore: number | null;
+  genres: string[];
 };
 
 export async function lookupMusicBrainzReleaseDate(
@@ -26,7 +27,7 @@ export async function lookupMusicBrainzReleaseDate(
   let meta = await fetchMusicBrainzRecordingMetadata(artistName, usedTitle);
 
   const simplified = simplifySongTitleForMusicBrainzLookup(usedTitle);
-  if ((!meta?.originalReleaseDate || !meta?.songTitleJa) && simplified) {
+  if ((!meta?.originalReleaseDate || !meta?.songTitleJa || meta.genres.length === 0) && simplified) {
     const retry = await fetchMusicBrainzRecordingMetadata(artistName, simplified);
     if (retry) {
       if (!meta) {
@@ -53,6 +54,7 @@ export async function lookupMusicBrainzReleaseDate(
     mbArtist: meta.mainArtist,
     mbSongTitle: meta.songTitle,
     recordingScore: meta.recordingScore,
+    genres: meta.genres,
   };
 }
 

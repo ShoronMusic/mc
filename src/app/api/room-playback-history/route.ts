@@ -18,6 +18,7 @@ import { resolveArtistSongForPackAsync } from '@/lib/youtube-artist-song-for-pac
 import { fetchMusic8SongDataForPlaybackRow } from '@/lib/music8-song-lookup';
 import { extractMusic8SongFields, music8ReleaseYearMonthToPostgresDate } from '@/lib/music8-song-fields';
 import { buildPersistableMusic8SongSnapshot } from '@/lib/music8-song-persist';
+import { lookupMusicBrainzReleaseDate } from '@/lib/admin-songs-batch-musicbrainz-dates';
 import { getVideoSnippet } from '@/lib/youtube-search';
 import { resolveJapaneseDomesticWithMusicBrainz } from '@/lib/resolve-japanese-economy';
 import { isJpDomesticOfficialChannelAiException } from '@/lib/jp-official-channel-exception';
@@ -528,6 +529,20 @@ export async function POST(request: Request) {
         (title ?? videoId));
 
   let style: string | null = null;
+  let mbLookup: Awaited<ReturnType<typeof lookupMusicBrainzReleaseDate>> = null;
+  const mbArtist = (artist ?? '').trim();
+  const mbSong = (song ?? '').trim();
+  if (mbArtist && mbSong) {
+    try {
+      mbLookup = await lookupMusicBrainzReleaseDate(mbArtist, mbSong);
+    } catch (e) {
+      console.warn(
+        '[room-playback-history] MusicBrainz lookup',
+        e instanceof Error ? e.message : e,
+      );
+    }
+  }
+
   try {
     style = await getOrAssignStyle(
       supabase,
@@ -535,7 +550,12 @@ export async function POST(request: Request) {
       song ?? title ?? videoId,
       artist,
       title,
-      { roomId, videoId, songId }
+      {
+        roomId,
+        videoId,
+        songId,
+        musicBrainzGenres: mbLookup?.genres ?? null,
+      }
     );
     if (style && songId) {
       await updateSongStyleIfEmpty(supabase, songId, style);
@@ -551,7 +571,11 @@ export async function POST(request: Request) {
       oembedTitle: title,
       description: snippetDescription,
       publishedAtIso: snippet?.publishedAt ?? null,
-      originalReleaseDate: librarySong?.originalReleaseDate || originalReleaseDateIso,
+      originalReleaseDate:
+        librarySong?.originalReleaseDate ||
+        originalReleaseDateIso ||
+        mbLookup?.originalReleaseDate ||
+        null,
       songId,
     }, { roomId, videoId });
   } catch (e) {

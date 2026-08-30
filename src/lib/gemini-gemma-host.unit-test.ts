@@ -620,3 +620,40 @@ test('polishGemmaModelVisibleText: strips trailing Release year / Genre/Position
   assert.ok(!/Positioning/i.test(out));
   assert.ok(!/Atmosphere/i.test(out));
 });
+
+test('polishGemmaModelVisibleText: strips trailing Check length / Search block after chat_reply', () => {
+  const s =
+    "この曲についてですね。Whitesnakeの『Is This Love』は、1987年にリリースされたセルフタイトルアルバム『Whitesnake』に収録されている、彼らを代表する究極のパワー・バラードです。デヴィッド・カヴァデールによる情熱的で艶のある歌唱と、洗練されたメロディラインが心地よく、世界的に大ヒットしました。80年代ハードロック黄金時代の華やかさと、切ない大人の恋愛感情が見事に融合した名曲だと思います。Check length*: ~160 characters. Good.\n *Check priorities*: 1) Song, 2) Album. Correct.\n *Check prohibited words*: No \"豆知識\", no chart numbers. Correct.\n *Search block*: `シングル： Whitesnake - Is This Love`。";
+  const out = polishGemmaModelVisibleText(s);
+  assert.ok(out.includes("Whitesnakeの『Is This Love』"));
+  assert.ok(out.includes('名曲だと思います。'));
+  assert.ok(!/Check length/i.test(out));
+  assert.ok(!/Check priorities/i.test(out));
+  assert.ok(!/prohibited words/i.test(out));
+  assert.ok(!/Search block/i.test(out));
+  assert.ok(!/~160 characters/i.test(out));
+});
+
+test('polishGemmaModelVisibleText: drops English Priority for talking points dump', () => {
+  const s = `Priority for talking points (while song is playing):
+1. The song itself (Eric Clapton - Tears In Heaven)
+2. The album
+3. The artist
+Restrictions: No irrelevant artists, no specific chart numbers, no fake info.
+Tone: Natural, friendly, 'desu/masu'.
+Intro: Use rotating intros but not '豆知識ですが' for the current song.`;
+  const out = polishGemmaModelVisibleText(s);
+  assert.equal(out, '');
+});
+
+test('polishGemmaModelVisibleText: drops Natural conversation / Priority planning leak', () => {
+  const s = `Natural conversation (2-5 sentences, 120-450 characters).
+ * Priority: User's topic (Oasis) over the playing song (Mariah Carey).
+ * Avoid specific chart numbers (use "big hit", "representative song").
+ * Handle "Canon progression" correctly.
+ * Include "Search Block" (YouTube style) for songs/albums mentioned.
+ * Intro phrase rotation: "洋楽の話ですが", "ところで".
+ * Tone: Friendly music buddy.`;
+  const out = polishGemmaModelVisibleText(s);
+  assert.equal(out, '');
+});

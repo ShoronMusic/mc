@@ -92,6 +92,7 @@ export async function POST(request: Request) {
       excludeUserSongPicks,
       excludeAiSongPicks,
       excludeArtists,
+      preferOfficialPv: pasteIntent.startsWith('ai_character'),
     });
     if (!resolved.ok) {
       console.log('[paste-by-query] no hit for query:', query);

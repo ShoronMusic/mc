@@ -56,7 +56,7 @@
 ## 6. クライアント
 
 - **ゲスト**ではリクエストを送らない。  
-- 曲解説が表示された **同一フロー**で、三択クイズより **後から**発火するよう遅延を多めに取り、Gemini の同時多発を避ける（遅延値は `schedule-next-song-recommend-client.ts` にコメント）。  
+- 曲解説テキストが揃った時点で **クイズ生成・おすすめ生成を並行開始**する。表示だけ `解説 → クイズ → おすすめ`（タイミングは `post-commentary-followup-timing.ts`）。  
 - `RoomWithSync` / `RoomWithoutSync` の両方で、曲解説成功パスにフック。
 
 ## 7. 既知の制限（試験版）
@@ -79,7 +79,7 @@
 | レート制限 | `src/lib/next-song-recommend-rate-limit.ts` |
 | Gemini 生成 | `src/lib/next-song-recommend-generate.ts` |
 | API | `src/app/api/ai/next-song-recommend/route.ts` |
-| クライアント遅延実行 | `src/lib/schedule-next-song-recommend-client.ts` |
+| クライアント遅延実行 | `src/lib/schedule-next-song-recommend-client.ts`・`src/lib/schedule-post-commentary-followups-client.ts` |
 | 部屋 UI | `RoomWithSync.tsx` / `RoomWithoutSync.tsx` |
 
 ## 9. DB 追加（今回必要）

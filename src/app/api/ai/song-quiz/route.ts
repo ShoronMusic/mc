@@ -16,6 +16,7 @@ import { aiCostRateLimitResponse } from '@/lib/ai-cost-rate-limit-response';
 import { isAiUnlimitedUserId } from '@/lib/ai-unlimited-user-ids';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
 
 const MIN_COMMENTARY_CONTEXT = 60;
 

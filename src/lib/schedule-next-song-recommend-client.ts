@@ -1,24 +1,21 @@
 /**
- * 曲解説表示後に「次に聴くなら」を POST し、有効時だけ AI 発言を追加する。
- * 三択クイズの API と重なりにくいよう、曲解説からの遅延はクイズより長めに取る。
+ * 「次に聴くなら」を POST し、有効時だけ AI 発言を追加する。
+ * 生成は即開始し、表示は displayAfterMs に合わせる（曲解説・クイズと並行生成）。
  * @see docs/next-song-recommend-beta-spec.md
  */
 
 import type { NextSongPick } from '@/lib/next-song-recommend-generate';
 import { buildNextRecommendUiLabel } from '@/lib/chat-message-ui-labels';
 
-/** クイズ fetch 遅延より後ろにずらすオフセット（ミリ秒） */
-const AFTER_COMMENTARY_EXTRA_MS = 4500;
-/** クイズ出題後におすすめを素早く出す短縮オフセット（ミリ秒） */
-const AFTER_QUIZ_FAST_EXTRA_MS = 0;
 /** おすすめ3件の表示を段階的に出す間隔（ミリ秒） */
 const NEXT_SONG_RECOMMEND_STAGGER_MS = 900;
 
+/** @deprecated 生成開始遅延は使わない。表示遅延は displayAfterMs。 */
 export function getNextSongRecommendScheduleDelayMs(
-  songQuizDelayMs: number,
-  preferFastAfterQuiz?: boolean,
+  _songQuizDelayMs: number,
+  _preferFastAfterQuiz?: boolean,
 ): number {
-  return songQuizDelayMs + (preferFastAfterQuiz ? AFTER_QUIZ_FAST_EXTRA_MS : AFTER_COMMENTARY_EXTRA_MS);
+  return 0;
 }
 
 function formatPickMessage(pick: NextSongPick, index: number, total: number): string {
@@ -36,10 +33,21 @@ function formatPickMessage(pick: NextSongPick, index: number, total: number): st
   return sub ? `${head}\n　${sub}` : head;
 }
 
+function isValidPick(p: NextSongPick): boolean {
+  return Boolean(
+    p &&
+      typeof p.artist === 'string' &&
+      typeof p.title === 'string' &&
+      typeof p.reason === 'string' &&
+      typeof p.youtubeSearchQuery === 'string',
+  );
+}
+
 type AddAiMessageFn = (body: string, opts?: Record<string, unknown>) => void;
 
 /**
- * @param songQuizDelayMs 当該フローでの三択クイズ用 setTimeout と同じ基準遅延（曲解説直後からの ms）
+ * @param songQuizDelayMs 互換のため残す（生成開始には使わない）
+ * @param displayAfterMs 生成完了後も、この時刻まで表示を遅らせる
  */
 export function scheduleNextSongRecommendAfterCommentary(options: {
   videoId: string;
@@ -49,109 +57,133 @@ export function scheduleNextSongRecommendAfterCommentary(options: {
   videoIdRef: { current: string | null };
   registerTimer: (timer: ReturnType<typeof setTimeout>) => void;
   addAiMessage: AddAiMessageFn;
-  /** 同期部屋では AI 発言停止中でも出すため true */
   addAiMessageExtras?: Record<string, unknown>;
-  /** 送信直前に追加オプションを決める（次曲案内後の遅延パネル送り判定など） */
   buildAddAiMessageExtras?: () => Record<string, unknown> | undefined;
-  /** 三択クイズ出題後は待ち時間を短縮しておすすめを出す */
   preferFastAfterQuiz?: boolean;
-  /** 曲が切り替わっても前曲のおすすめを遅延表示へ回して出す */
   allowAfterVideoChange?: boolean;
+  /** true のとき表示待ちタイマーは曲スキップで消さない */
+  persistDisplayTimer?: boolean;
   aiMode?: 'full' | 'none';
-  /** 生成中カードを表示して messageId を返す */
   createPendingCard?: () => string | null;
-  /** 生成中カードを消す */
   clearPendingCard?: (messageId: string) => void;
+  displayAfterMs?: number;
+  commentarySnippet?: string;
 }): void {
   if (options.isGuest) return;
   if (options.aiMode === 'none') return;
-  const pendingMessageId = options.createPendingCard?.() ?? null;
+
+  const displayAfterMs = Math.max(0, options.displayAfterMs ?? 0);
+  let pendingMessageId: string | null = null;
+  let displayGateOpen = displayAfterMs <= 0;
+  let fetchDone = false;
+  let picks: NextSongPick[] | null = null;
+  let emitted = false;
+
   const clearPending = () => {
     if (pendingMessageId) options.clearPendingCard?.(pendingMessageId);
+    pendingMessageId = null;
   };
 
-  const delayMs = getNextSongRecommendScheduleDelayMs(
-    options.songQuizDelayMs,
-    options.preferFastAfterQuiz,
-  );
-  const timer = setTimeout(() => {
-    if (!options.allowAfterVideoChange && options.videoIdRef.current !== options.videoId) return;
-    void fetch('/api/ai/next-song-recommend', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({
-        videoId: options.videoId,
-        roomId: options.roomId ?? '',
-        aiMode: options.aiMode ?? 'full',
-        isGuest: options.isGuest === true,
-      }),
-    })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data: { enabled?: unknown; picks?: unknown } | null) => {
-        if (!options.allowAfterVideoChange && options.videoIdRef.current !== options.videoId) {
-          clearPending();
-          return;
-        }
-        if (!data || data.enabled !== true || !Array.isArray(data.picks) || data.picks.length === 0) {
-          clearPending();
-          return;
-        }
-        const picks = data.picks as NextSongPick[];
-        const ok = picks.every(
-          (p) =>
-            p &&
-            typeof p.artist === 'string' &&
-            typeof p.title === 'string' &&
-            typeof p.reason === 'string' &&
-            typeof p.youtubeSearchQuery === 'string',
-        );
-        if (!ok) {
-          clearPending();
-          return;
-        }
-        clearPending();
-        picks.forEach((pick, idx) => {
-          const emit = () => {
-            if (!options.allowAfterVideoChange && options.videoIdRef.current !== options.videoId) return;
-            const dynamicExtras = options.buildAddAiMessageExtras?.() ?? {};
-            const catalog = pick.catalog;
-            options.addAiMessage(formatPickMessage(pick, idx, picks.length), {
-              videoId: options.videoId,
-              aiSource: 'next_song_recommend',
-              recommendationId:
-                typeof pick.recommendationId === 'string' && pick.recommendationId.trim()
-                  ? pick.recommendationId.trim()
-                  : null,
-              ...(catalog?.watchUrl && catalog.videoId
-                ? {
-                    nextSongRecommendCatalog: {
-                      inMcDb: Boolean(catalog.inMcDb),
-                      inMusic8: Boolean(catalog.inMusic8),
-                      songId: catalog.songId ?? null,
-                      videoId: catalog.videoId,
-                      watchUrl: catalog.watchUrl,
-                      dbMainArtist: catalog.dbMainArtist ?? null,
-                      dbSongTitle: catalog.dbSongTitle ?? null,
-                      dbDisplayTitle: catalog.dbDisplayTitle ?? null,
-                    },
-                  }
-                : {}),
-              ...(options.addAiMessageExtras ?? {}),
-              ...dynamicExtras,
-            });
-          };
-          if (idx === 0) {
-            emit();
-            return;
-          }
-          const staggerTimer = setTimeout(emit, idx * NEXT_SONG_RECOMMEND_STAGGER_MS);
-          options.registerTimer(staggerTimer);
+  const emitPicks = (ready: NextSongPick[]) => {
+    if (emitted) return;
+    emitted = true;
+    clearPending();
+    ready.forEach((pick, idx) => {
+      const emit = () => {
+        if (!options.allowAfterVideoChange && options.videoIdRef.current !== options.videoId) return;
+        const dynamicExtras = options.buildAddAiMessageExtras?.() ?? {};
+        const catalog = pick.catalog;
+        options.addAiMessage(formatPickMessage(pick, idx, ready.length), {
+          videoId: options.videoId,
+          aiSource: 'next_song_recommend',
+          recommendationId:
+            typeof pick.recommendationId === 'string' && pick.recommendationId.trim()
+              ? pick.recommendationId.trim()
+              : null,
+          ...(catalog?.watchUrl && catalog.videoId
+            ? {
+                nextSongRecommendCatalog: {
+                  inMcDb: Boolean(catalog.inMcDb),
+                  inMusic8: Boolean(catalog.inMusic8),
+                  songId: catalog.songId ?? null,
+                  videoId: catalog.videoId,
+                  watchUrl: catalog.watchUrl,
+                  dbMainArtist: catalog.dbMainArtist ?? null,
+                  dbSongTitle: catalog.dbSongTitle ?? null,
+                  dbDisplayTitle: catalog.dbDisplayTitle ?? null,
+                },
+              }
+            : {}),
+          ...(options.addAiMessageExtras ?? {}),
+          ...dynamicExtras,
         });
-      })
-      .catch(() => {
-        clearPending();
-      });
-  }, delayMs);
-  options.registerTimer(timer);
+      };
+      if (idx === 0) {
+        emit();
+        return;
+      }
+      const staggerTimer = setTimeout(emit, idx * NEXT_SONG_RECOMMEND_STAGGER_MS);
+      options.registerTimer(staggerTimer);
+    });
+  };
+
+  const tryFlush = () => {
+    if (
+      !options.allowAfterVideoChange &&
+      options.videoIdRef.current !== options.videoId
+    ) {
+      clearPending();
+      return;
+    }
+    if (!displayGateOpen) return;
+    if (!fetchDone) {
+      if (!pendingMessageId) pendingMessageId = options.createPendingCard?.() ?? null;
+      return;
+    }
+    if (!picks || picks.length === 0) {
+      clearPending();
+      return;
+    }
+    emitPicks(picks);
+  };
+
+  void fetch('/api/ai/next-song-recommend', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({
+      videoId: options.videoId,
+      roomId: options.roomId ?? '',
+      aiMode: options.aiMode ?? 'full',
+      isGuest: options.isGuest === true,
+      commentarySnippet: (options.commentarySnippet ?? '').slice(0, 2000),
+    }),
+  })
+    .then((r) => (r.ok ? r.json() : null))
+    .then((data: { enabled?: unknown; picks?: unknown } | null) => {
+      fetchDone = true;
+      if (!data || data.enabled !== true || !Array.isArray(data.picks) || data.picks.length === 0) {
+        picks = null;
+        tryFlush();
+        return;
+      }
+      const next = data.picks as NextSongPick[];
+      picks = next.every(isValidPick) ? next : null;
+      tryFlush();
+    })
+    .catch(() => {
+      fetchDone = true;
+      picks = null;
+      tryFlush();
+    });
+
+  if (displayAfterMs <= 0) {
+    tryFlush();
+    return;
+  }
+  const gateTimer = setTimeout(() => {
+    displayGateOpen = true;
+    tryFlush();
+  }, displayAfterMs);
+  if (!options.persistDisplayTimer) options.registerTimer(gateTimer);
 }

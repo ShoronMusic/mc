@@ -6,6 +6,7 @@
  * - 全体を 3.5 Flash-Lite 試用: `GEMINI_GENERATION_MODEL=gemini-3.5-flash-lite`
  * - 戻す: 行を削除または `GEMINI_GENERATION_MODEL=gemini-2.5-flash`
  * - 一部だけ: `GEMINI_MODEL_SECONDARY=gemini-3.5-flash-lite` + `GEMINI_USE_SECONDARY_FOR=comment_pack,chat_reply`
+ * - エージェント選曲は Gemma プライマリでも既定で Flash（`GEMINI_CHARACTER_SONG_PICK_MODEL` / `GEMINI_CHARACTER_SONG_PICK_USE_PRIMARY=1`）
  * 実モデルは `/api/ai/status` の `geminiGeneration` と `gemini_usage_logs.model` で確認。
  */
 
@@ -73,6 +74,73 @@ export function isCommentaryCopyeditUsageContext(usageContext: string): boolean 
   return usageContext.trim() === 'commentary_copyedit';
 }
 
+function resolveGenerationModelIdBase(usageContext: string): string {
+  if (shouldUseSecondaryForUsageContext(usageContext)) {
+    const sec = getSecondaryGenerationModelId();
+    if (sec) return sec;
+  }
+  return getPrimaryGenerationModelId();
+}
+
+export function isCharacterSongPickUsageContext(usageContext: string): boolean {
+  const c = usageContext.trim();
+  return c === 'character_song_pick' || c.startsWith('character_song_pick_');
+}
+
+export function isNextSongRecommendUsageContext(usageContext: string): boolean {
+  const c = usageContext.trim();
+  return c === 'next_song_recommend' || c.startsWith('next_song_recommend_');
+}
+
+export function isSongQuizUsageContext(usageContext: string): boolean {
+  const c = usageContext.trim();
+  return c === 'song_quiz' || c.startsWith('song_quiz_');
+}
+
+export function isChatReplyUsageContext(usageContext: string): boolean {
+  const c = usageContext.trim();
+  return c === 'chat_reply' || c.startsWith('chat_reply_');
+}
+
+/**
+ * @ チャット返答。Gemma は英語の指示復唱漏れが起きやすいので、プライマリが Gemma のときは Flash に寄せる。
+ * 上書き: `GEMINI_CHAT_REPLY_MODEL`。Gemma のまま: `GEMINI_CHAT_REPLY_USE_PRIMARY=1`。
+ */
+export function resolveChatReplyModelId(): string {
+  const override = process.env.GEMINI_CHAT_REPLY_MODEL?.trim();
+  if (override) return remapRetiredGeminiModelId(override);
+  const base = resolveGenerationModelIdBase('chat_reply');
+  if (process.env.GEMINI_CHAT_REPLY_USE_PRIMARY === '1') return base;
+  if (!/gemma/i.test(base)) return base;
+  return DEFAULT_GENERATION_MODEL;
+}
+
+/**
+ * 曲クイズ。Gemma は英語出題・指示文漏れが起きやすいので、プライマリが Gemma のときは Flash に寄せる。
+ * 上書き: `GEMINI_SONG_QUIZ_MODEL`。Gemma のまま: `GEMINI_SONG_QUIZ_USE_PRIMARY=1`。
+ */
+export function resolveSongQuizModelId(): string {
+  const override = process.env.GEMINI_SONG_QUIZ_MODEL?.trim();
+  if (override) return remapRetiredGeminiModelId(override);
+  const base = resolveGenerationModelIdBase('song_quiz');
+  if (process.env.GEMINI_SONG_QUIZ_USE_PRIMARY === '1') return base;
+  if (!/gemma/i.test(base)) return base;
+  return DEFAULT_GENERATION_MODEL;
+}
+
+/**
+ * エージェント選曲。Gemma は曲名・公式PVの判断が落ちやすいので、プライマリが Gemma のときは Flash に寄せる。
+ * 上書き: `GEMINI_CHARACTER_SONG_PICK_MODEL`。Gemma のままにする: `GEMINI_CHARACTER_SONG_PICK_USE_PRIMARY=1`。
+ */
+export function resolveCharacterSongPickModelId(): string {
+  const override = process.env.GEMINI_CHARACTER_SONG_PICK_MODEL?.trim();
+  if (override) return remapRetiredGeminiModelId(override);
+  const base = resolveGenerationModelIdBase('character_song_pick');
+  if (process.env.GEMINI_CHARACTER_SONG_PICK_USE_PRIMARY === '1') return base;
+  if (!/gemma/i.test(base)) return base;
+  return DEFAULT_GENERATION_MODEL;
+}
+
 /**
  * ログ・課金検証用: この API 呼び出しコンテキストで実際に使うモデル ID。
  * （`persistGeminiUsageLog` / `logGeminiUsage` の第1引数と同じキーを渡す）
@@ -81,11 +149,16 @@ export function resolveGenerationModelId(usageContext: string): string {
   if (isCommentaryCopyeditUsageContext(usageContext)) {
     return resolveSanitizeModelId();
   }
-  if (shouldUseSecondaryForUsageContext(usageContext)) {
-    const sec = getSecondaryGenerationModelId();
-    if (sec) return sec;
+  if (isCharacterSongPickUsageContext(usageContext) || isNextSongRecommendUsageContext(usageContext)) {
+    return resolveCharacterSongPickModelId();
   }
-  return getPrimaryGenerationModelId();
+  if (isSongQuizUsageContext(usageContext)) {
+    return resolveSongQuizModelId();
+  }
+  if (isChatReplyUsageContext(usageContext)) {
+    return resolveChatReplyModelId();
+  }
+  return resolveGenerationModelIdBase(usageContext);
 }
 
 /** `/api/ai/status` 用: 秘密情報なし */
@@ -93,10 +166,12 @@ export function getGeminiGenerationRoutingSummary(): {
   primaryModel: string;
   secondaryModel: string | null;
   useSecondaryFor: string | null;
+  characterSongPickModel: string;
 } {
   return {
     primaryModel: getPrimaryGenerationModelId(),
     secondaryModel: getSecondaryGenerationModelId(),
     useSecondaryFor: process.env.GEMINI_USE_SECONDARY_FOR?.trim() || null,
+    characterSongPickModel: resolveCharacterSongPickModelId(),
   };
 }

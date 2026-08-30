@@ -9,6 +9,7 @@ const EVIDENCE_PATTERN = /出典|ソース|Wikipedia|公式|根拠/i;
 export function isRejectedChatOrTidbitOutput(txt: string | null | undefined): boolean {
   const t = (txt ?? '').trim();
   if (!t) return false;
+  if (isEnglishInstructionOrPlanningLeak(t)) return true;
   if (EVIDENCE_PATTERN.test(t)) return false;
   const patterns = [
     /ブーム|バズ|巻き起こ|象徴的|影響力|拡散|瞬く間|世界中/,
@@ -23,6 +24,49 @@ export function isRejectedChatOrTidbitOutput(txt: string | null | undefined): bo
     /全ての工程|全工程|ミックスまで|録音では|レコーディングでは/i,
   ];
   return patterns.some((re) => re.test(t));
+}
+
+function countPolicyJpChars(s: string): number {
+  return (s.match(/[\u3040-\u30FF\u4E00-\u9FFF]/g) ?? []).length;
+}
+
+function countPolicyLatinLetters(s: string): number {
+  return (s.match(/[A-Za-z]/g) ?? []).length;
+}
+
+/**
+ * Gemma 等がプロンプト指示を英語で復唱・計画メモとして出したとき true。
+ * 引用された日本語フレーズが混ざっていても、英語計画が支配的なら拒否する。
+ */
+export function isEnglishInstructionOrPlanningLeak(txt: string | null | undefined): boolean {
+  const t = (txt ?? '').trim();
+  if (!t) return false;
+  const jp = countPolicyJpChars(t);
+  const latin = countPolicyLatinLetters(t);
+  if (latin < 72) return false;
+
+  const markers = [
+    /Natural conversation\s*\(/i,
+    /\*\s*Priority\s*:/i,
+    /Priority:\s*User'?s topic/i,
+    /Priority for talking points/i,
+    /Search Block/i,
+    /Include\s*"?Search Block"?/i,
+    /Avoid repeating info/i,
+    /Avoid specific chart numbers/i,
+    /Handle\s+"/i,
+    /Tone:\s*Friendly/i,
+    /Intro phrase rotation/i,
+    /120-450 characters/i,
+    /2-5 sentences/i,
+    /Use rotating intros/i,
+    /not applicable here/i,
+  ];
+  const hits = markers.reduce((n, re) => n + (re.test(t) ? 1 : 0), 0);
+  if (hits >= 2) return true;
+  if (hits >= 1 && latin > jp * 1.5) return true;
+  if (latin >= 180 && jp < 48 && latin > jp * 2.5) return true;
+  return false;
 }
 
 /**

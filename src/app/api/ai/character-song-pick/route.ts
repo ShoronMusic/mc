@@ -138,6 +138,7 @@ export async function POST(request: Request) {
           excludeUserSongPicks: excludeBundle.recentUserPicks,
           excludeAiSongPicks: excludeBundle.recentAiPicks,
           excludeArtists: excludeBundle.recentAiArtists,
+          preferOfficialPv: true,
         });
         if (
           resolved.ok &&

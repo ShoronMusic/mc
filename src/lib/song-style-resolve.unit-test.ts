@@ -71,4 +71,14 @@ test('pickSongStyleByPriority: songs.style beats Music8 and AI', () => {
     }),
     'Pop',
   );
+  assert.equal(
+    pickSongStyleByPriority({
+      songMasterStyle: null,
+      videoCacheStyle: null,
+      music8Style: null,
+      musicBrainzStyle: 'Alternative rock',
+      aiStyle: 'Other',
+    }),
+    'Alternative rock',
+  );
 });

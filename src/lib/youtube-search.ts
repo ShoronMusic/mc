@@ -7,10 +7,12 @@ import {
 } from '@/lib/format-song-display';
 import type { UserSongPickExclude } from '@/lib/character-song-pick-exclude';
 import {
+  isSameSongTitleForAiPick,
   matchesExcludedAiSongPick,
   matchesExcludedArtist,
   matchesExcludedUserSongPick,
 } from '@/lib/character-song-pick-exclude';
+import { looksLikeCoverOrKaraokeUpload, pickBestOfficialPvSearchHit } from '@/lib/youtube-official-pv-rank';
 import {
   isAiOperationsHaltedSync,
   touchAiMonthlyBudgetRefresh,
@@ -53,6 +55,11 @@ export type SearchYouTubeOptions = {
   excludeAiSongPicks?: readonly UserSongPickExclude[];
   /** AI 自身が直近かけたアーティスト */
   excludeArtists?: readonly string[];
+  /**
+   * エージェント選曲: 検索ヒットから公式 PV を優先し、邦楽扱い・編集メドレーは採用しない。
+   * 該当がなければこのクエリではヒットなし（フォールバックへ）。
+   */
+  preferOfficialPv?: boolean;
 };
 
 export async function searchYouTube(
@@ -140,18 +147,32 @@ export async function searchYouTube(
         .filter(Boolean),
     );
     const rawItems = Array.isArray(data.items) ? data.items : [];
+    const preferOfficialPv = options?.preferOfficialPv === true;
+    const eligible: YouTubeSearchResult[] = [];
     let result: YouTubeSearchResult | null = null;
     for (const item of rawItems) {
       const vid = item?.id?.videoId;
       const sn = item?.snippet;
       if (!vid || !sn) continue;
       if (exclude.has(vid)) continue;
+      if (preferOfficialPv && looksLikeCoverOrKaraokeUpload(sn.title ?? '', sn.channelTitle ?? '')) {
+        continue;
+      }
       if (options?.excludeUserSongPicks && options.excludeUserSongPicks.length > 0) {
         const parsed = getArtistAndSong(sn.title ?? '', sn.channelTitle ?? null);
         const artist = (parsed.artist ?? '').trim();
         const song = (parsed.song ?? '').trim();
         if (artist || song) {
           if (matchesExcludedUserSongPick(artist, song, options.excludeUserSongPicks)) continue;
+        }
+        if (preferOfficialPv) {
+          const rawTitle = (sn.title ?? '').trim();
+          const titleHit = options.excludeUserSongPicks.some(
+            (p) =>
+              isSameSongTitleForAiPick(p.song, song) ||
+              isSameSongTitleForAiPick(p.song, rawTitle),
+          );
+          if (titleHit) continue;
         }
       }
       if (options?.excludeAiSongPicks && options.excludeAiSongPicks.length > 0) {
@@ -170,14 +191,21 @@ export async function searchYouTube(
       const thumbs = sn.thumbnails;
       const thumbUrl =
         thumbs?.medium?.url || thumbs?.high?.url || thumbs?.default?.url || undefined;
-      result = {
+      const mapped: YouTubeSearchResult = {
         videoId: vid,
         title: sn.title ?? '',
         channelTitle: sn.channelTitle ?? '',
         publishedAt: sn.publishedAt,
         thumbnailUrl: thumbUrl,
       };
-      break;
+      if (!preferOfficialPv) {
+        result = mapped;
+        break;
+      }
+      eligible.push(mapped);
+    }
+    if (preferOfficialPv) {
+      result = pickBestOfficialPvSearchHit(eligible);
     }
     if (!result) {
       console.log('[youtube-search] no eligible items for q=', q.slice(0, 40));
@@ -345,9 +373,15 @@ export async function searchYouTubeWithFallback(
   meta?: YouTubeApiLogMeta,
   options?: SearchYouTubeOptions
 ): Promise<YouTubeSearchResult | null> {
+  const maxResults = options?.preferOfficialPv ? 10 : 5;
   for (const q of queries) {
     if (!q.trim()) continue;
-    const hit = await searchYouTube(q.trim(), 5, { ...meta, source: meta?.source ?? 'searchYouTubeWithFallback' }, options);
+    const hit = await searchYouTube(
+      q.trim(),
+      maxResults,
+      { ...meta, source: meta?.source ?? 'searchYouTubeWithFallback' },
+      options,
+    );
     if (hit) return hit;
   }
   return null;

@@ -48,6 +48,10 @@ export function renderAiStatusHtmlPage(snapshot: AiStatusSnapshot, pageUrl: stri
       value: esc(snapshot.geminiGeneration.primaryModel ?? '—'),
     },
     {
+      label: 'エージェント選曲モデル',
+      value: esc(snapshot.geminiGeneration.characterSongPickModel ?? '—'),
+    },
+    {
       label: '月次リミッター',
       value: ops.monthlyBudgetEnabled ? '有効' : '無効',
     },

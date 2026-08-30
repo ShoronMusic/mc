@@ -28,6 +28,7 @@ import {
   buildKnownCoverOriginalHint,
   factsBlockHasCoverOriginalSignal,
 } from '@/lib/cover-original-hints';
+import { looksLikeUnusableAgentSongQuery } from '@/lib/youtube-official-pv-rank';
 
 export {
   getGeminiGenerationRoutingSummary,
@@ -250,6 +251,7 @@ export async function generateChatReply(
 
   const atMentionBlock = forceReply
     ? `・ユーザーは「@」であなたに直接話しかけています。外部の音楽アシスタントに近い**自然なキャッチボール**を心がけてください（**おおよそ2〜5文・120〜450字程度**まで）。感謝や誉め言葉には**必ず先に一言応じてから**補足や豆知識を続けてください。
+・**返答本文は必ず日本語のみ**。英語の計画メモ・チェックリスト・指示の復唱（例: Natural conversation / Priority: / Search Block / Tone:）は一切出力しないこと。考えは内部で済ませ、ユーザーに見えるのは日本語の完成文だけにする。
 ・代表アルバム名・シングルとアルバムの関係・和訳タイトルが広く定着している場合の括弧書き・有名な楽器パートの話など、**広く知られたディスコグラフィー**は積極的に含めてよいです。各国チャートの**順位の数字**だけは手元で検証できないため避け、「大ヒット」「代表曲」程度に留めてください。
 ・「どのアルバムに入っているか」などの質問には、一般的なスタジオアルバム名を挙げて答えてよいです。自信がないときだけ控えめにしてください。
 ・（最優先）ユーザーが会話でアーティスト名・曲名を出しているときは、その話題に答えることを、下記の「再生中の曲のジャンルと無関係なアーティストは出さない」より優先してください。
@@ -331,7 +333,7 @@ ${lines || '(まだ発言なし)'}
       prompt2 =
         prompt +
         (forceReply
-          ? '（追加指示）会話の流れと感謝への応答を維持し、チャートの具体順位の数字だけ削る。ユーザーが指定した年代から外れてデビュー話に戻さない。直前の自分の発言と同じアルバム・代表曲の説明は繰り返さない。同意だけのときは検索用ブロックを省略してよい。冒頭だけ「そう思います」にしない。'
+          ? '（追加指示）**日本語の完成文だけ**を出力すること。英語の計画・Priority / Search Block / Tone などの復唱は禁止。会話の流れと感謝への応答を維持し、チャートの具体順位の数字だけ削る。ユーザーが指定した年代から外れてデビュー話に戻さない。直前の自分の発言と同じアルバム・代表曲の説明は繰り返さない。同意だけのときは検索用ブロックを省略してよい。冒頭だけ「そう思います」にしない。'
           : '（追加指示）根拠がない断定、アルバム名・収録作・チャート順位の断定的な記述を避け、歌詞テーマの要点とサウンドの特徴（印象）だけで短く書いてください。');
     }
     return null;
@@ -506,24 +508,15 @@ ${recentUserHint}${recentAiSongHint}${recentAiArtistHint}
 3行目: 選曲理由（日本語で1文、20〜55文字、やさしい言葉。他曲名や別候補には触れない）
 ・会話から雰囲気が読みにくい場合でも、**必ず1曲を選んで3行で出力**する（nullは禁止）。
 ・迷ったら【現在の曲】やその周辺ジャンルに近い、定番の洋楽1曲を選ぶ。
-・70年代〜現在の洋楽から選ぶ。
+・70年代〜現在の**洋楽のみ**から選ぶ。邦楽・J-Pop・日本のアーティストは禁止。
+・実在する洋楽アーティストの**原曲1曲**だけ。カバー・歌ってみた・トリビュート・作業用BGM・著作権フリー・シネマティックBGM集・メドレー・編集動画は禁止。
+・【現在の曲】と同じ曲名・そのカバー版は選ばない。別の原曲の公式PVにする。
+・YouTube検索クエリは公式PVがヒットしやすい「Artist Song」にする（メドレー・ベスト盤・作業用BGM・ハッシュタグ付き編集動画の題名は出さない）。
 ・難しい専門用語は使わない。`;
 
   try {
     const buildFallbackPick = (): CharacterSongPick => {
-      const cur = (currentSong ?? '').trim();
-      const m = /^(.+?)\s*-\s*(.+)$/.exec(cur);
-      if (m) {
-        const artist = m[1].trim();
-        const song = m[2].trim();
-        if (artist && song) {
-          return {
-            query: `${artist} ${song}`,
-            confirmationText: `${artist} - ${song}`,
-            reason: '流れを切らさないよう、この路線でつなげます。',
-          };
-        }
-      }
+      /** 再生中と同じ曲名で検索すると、原曲 videoId 除外後にカバーが残る */
       return {
         query: 'Earth Wind & Fire September',
         confirmationText: 'Earth, Wind & Fire - September',
@@ -548,23 +541,13 @@ ${recentUserHint}${recentAiSongHint}${recentAiArtistHint}
     }
     if (!out || out.toLowerCase() === 'null' || !query) return buildFallbackPick();
     const confirmationText = outLines[1] ?? query.replace(/^(\S+)\s+(.+)$/, '$1 - $2');
+    if (looksLikeUnusableAgentSongQuery(query) || looksLikeUnusableAgentSongQuery(confirmationText)) {
+      return buildFallbackPick();
+    }
     const reason = (outLines[2] ?? 'この流れに合う一曲だと思います。').slice(0, 80);
     return { query, confirmationText, reason };
   } catch (e) {
     console.error('[gemini] generateCharacterSongPick:', e);
-    const cur = (currentSong ?? '').trim();
-    const m = /^(.+?)\s*-\s*(.+)$/.exec(cur);
-    if (m) {
-      const artist = m[1].trim();
-      const song = m[2].trim();
-      if (artist && song) {
-        return {
-          query: `${artist} ${song}`,
-          confirmationText: `${artist} - ${song}`,
-          reason: '流れを切らさないよう、この路線でつなげます。',
-        };
-      }
-    }
     return {
       query: 'Earth Wind & Fire September',
       confirmationText: 'Earth, Wind & Fire - September',
@@ -941,14 +924,16 @@ export async function getSongEra(
   const input = parts.join('\n');
 
   const eraList = SONG_ERA_OPTIONS.join(' / ');
-  const prompt = `以下の曲について、主に録音またはヒットしたと思われる年代（十年単位）を、次のリストのいずれか1つをそのままの表記で答えてください。分からない場合は Other。
+  const prompt = `以下の曲について、**オリジナル楽曲のリリース／初ヒットの年代**（十年単位）を、次のリストのいずれか1つをそのままの表記で答えてください。分からない場合は Other。
 年代一覧: ${eraList}
 
 ${input}
 
 ・Pre-50s = 1950年以前、50s = 1950年代、…、20s = 2020年代
-上記以外のラベルは使わないこと。
-・**出力はリストのラベル1語（例: 10s）のみ**。説明文・前置き・箇条書きは禁止。`;
+・**YouTube の PV・公式動画のアップロード年は使わない**。原盤のリリース年・シングル初出・アルバム収録の初出年を基準にする。
+・タイトルに Live / ライブ / Official Video / Remaster 等が付いていても、可能なら**スタジオ原盤の年代**を答える。ライブ音源のみで原盤が分からないときだけ、そのライブの年代でよい。
+・上記以外のラベルは使わないこと。
+・**出力はリストのラベル1語（例: 90s）のみ**。説明文・前置き・箇条書きは禁止。`;
 
   try {
     const result = await model.generateContent(prompt);

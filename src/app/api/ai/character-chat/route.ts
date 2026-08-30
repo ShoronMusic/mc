@@ -10,6 +10,9 @@ import { aiCostRateLimitResponse } from '@/lib/ai-cost-rate-limit-response';
 import { gateRoomCostRouteAccess } from '@/lib/room-cost-route-access';
 import { fetchUserTasteContextForChat } from '@/lib/user-ai-taste-context';
 import { isAiUnlimitedUserId } from '@/lib/ai-unlimited-user-ids';
+import { isAiOperationsHaltedSync } from '@/lib/ai-monthly-budget';
+import { isGeminiConfigured } from '@/lib/gemini';
+import { isMcGeminiDisabled } from '@/lib/product-mode';
 
 export const dynamic = 'force-dynamic';
 
@@ -147,8 +150,42 @@ export async function POST(request: Request) {
         characterSelfDisplayName: aiCharacterDisplayName || null,
       },
     );
-    if (text == null) {
-      return NextResponse.json({ error: 'AI is not configured or failed to generate a reply.' }, { status: 503 });
+    if (text == null || !String(text).trim()) {
+      if (isMcGeminiDisabled()) {
+        return NextResponse.json(
+          {
+            error: 'gemini_disabled_for_product',
+            message: 'このプロダクトでは AI 応答を利用できません。',
+          },
+          { status: 503 },
+        );
+      }
+      if (!isGeminiConfigured()) {
+        return NextResponse.json(
+          {
+            error: 'gemini_not_configured',
+            message:
+              'AI が応答できませんでした。.env.local に GEMINI_API_KEY を設定し、開発サーバーを再起動してください。',
+          },
+          { status: 503 },
+        );
+      }
+      if (isAiOperationsHaltedSync()) {
+        return NextResponse.json(
+          {
+            error: 'ai_budget_halted',
+            message: 'AI の月次予算上限に達したため、一時停止しています。',
+          },
+          { status: 503 },
+        );
+      }
+      return NextResponse.json(
+        {
+          error: 'generation_failed',
+          message: 'AI の応答生成に失敗しました。時間をおいて再度お試しください。',
+        },
+        { status: 503 },
+      );
     }
 
     return NextResponse.json({ text });

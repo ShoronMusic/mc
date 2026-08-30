@@ -179,14 +179,21 @@ function extractReleaseDates(rec: MbRecording): string[] {
   return dates;
 }
 
-/** 原盤公開日: 検索ヒット複数の first-release-date / 公式 release 日付から最古を採用 */
+/** 原盤公開日: スタジオ盤を優先し、無ければ全ヒットの最古日（ライブのみのとき） */
 function pickOriginalReleaseDateFromRecordings(recordings: MbRecording[]): string | null {
-  const dates: string[] = [];
+  const studioDates: string[] = [];
+  const allDates: string[] = [];
   for (const rec of recordings) {
     if (!recordingMeetsMinScore(rec)) continue;
-    dates.push(...extractReleaseDates(rec));
+    const dates = extractReleaseDates(rec);
+    if (dates.length === 0) continue;
+    allDates.push(...dates);
+    const title = typeof rec.title === 'string' ? rec.title : '';
+    if (!/\b(live|ライヴ|ライブ|bootleg|demo|karaoke|instrumental)\b/i.test(title)) {
+      studioDates.push(...dates);
+    }
   }
-  return pickEarliestReleaseDateIso(dates);
+  return pickEarliestReleaseDateIso(studioDates.length > 0 ? studioDates : allDates);
 }
 
 export function parseMusicBrainzRecordingMetadataFromSearch(

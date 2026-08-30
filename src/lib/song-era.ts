@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { lookupMusicBrainzReleaseDate } from '@/lib/admin-songs-batch-musicbrainz-dates';
 import { getSongEra } from '@/lib/gemini';
 import { SONG_ERA_OPTIONS, type SongEraOption } from '@/lib/song-era-options';
 
@@ -53,7 +54,8 @@ export function songEraFromYoutubePublishedAt(iso: string | null | undefined): S
 }
 
 /**
- * 公開年（原盤）があればそれを最優先。無ければキャッシュ → YouTube 公開年 → AI。
+ * 公開年（原盤）があればそれを最優先。無ければキャッシュ → AI → YouTube 公開年（最終手段）。
+ * ※ YouTube PV のアップロード年は原盤年代とズレやすいので AI より後。
  */
 export function resolveAssignedSongEra(opts: {
   originalReleaseDate?: string | null;
@@ -65,10 +67,9 @@ export function resolveAssignedSongEra(opts: {
   if (fromOriginal) return fromOriginal;
   const cached = normalizeEra(opts.cachedEra);
   if (cached && cached !== 'Other') return cached;
-  const fromYt = songEraFromYoutubePublishedAt(opts.youtubePublishedAt);
-  if (cached === 'Other' && fromYt) return fromYt;
   const ai = normalizeEra(opts.aiEra);
   if (ai && ai !== 'Other') return ai;
+  const fromYt = songEraFromYoutubePublishedAt(opts.youtubePublishedAt);
   if (fromYt) return fromYt;
   return ai ?? cached;
 }
@@ -227,13 +228,27 @@ export async function getOrAssignEra(
     return fromOriginal;
   }
 
-  const fromPublished = songEraFromYoutubePublishedAt(input.publishedAtIso);
+  /** MusicBrainz: 原盤 first-release（ライブ表記は曲名正規化してスタジオ盤を優先） */
+  const artist = (input.artistName ?? '').trim();
+  const songTitle = (input.songTitle ?? '').trim() || (input.oembedTitle ?? '').trim();
+  if (artist && songTitle) {
+    try {
+      const mb = await lookupMusicBrainzReleaseDate(artist, songTitle);
+      const fromMb = songEraFromOriginalReleaseDate(mb?.originalReleaseDate);
+      if (fromMb) {
+        if (supabase) await setEraInDb(supabase, videoId, fromMb);
+        return fromMb;
+      }
+    } catch (e) {
+      console.warn(
+        '[song-era] MusicBrainz lookup failed',
+        e instanceof Error ? e.message : e,
+      );
+    }
+  }
+
   const cached = await getEraFromDb(supabase, videoId);
   if (cached && cached !== 'Other') return cached;
-  if (cached === 'Other' && fromPublished && fromPublished !== 'Other') {
-    if (supabase) await setEraInDb(supabase, videoId, fromPublished);
-    return fromPublished;
-  }
 
   const title = input.songTitle?.trim() || input.oembedTitle?.trim() || videoId.trim() || 'Unknown';
   const eraLabel = await getSongEra(
