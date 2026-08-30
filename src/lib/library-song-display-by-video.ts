@@ -5,7 +5,10 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { PlaybackDisplayOverrideRow } from '@/lib/video-playback-display-override';
-import { looksLikeProseOrBloatedDisplayTitle } from '@/lib/format-song-display';
+import {
+  looksLikeCollaboratorRosterStuckAsSongTitle,
+  looksLikeProseOrBloatedDisplayTitle,
+} from '@/lib/format-song-display';
 
 export type LibrarySongDisplay = {
   songId: string;
@@ -21,10 +24,12 @@ export function buildLibrarySongAnnounceTitle(row: LibrarySongDisplay): string {
   const a = (row.mainArtist ?? '').trim();
   const s = (row.songTitle ?? '').trim();
   const dt = row.displayTitle.trim();
-  /** 概要文が display_title に残っているときは main_artist / song_title を優先 */
+  /** 概要文・共演名の曲名誤登録は捨て、呼び出し側で YouTube タイトル再解決する */
   if (dt && !looksLikeProseOrBloatedDisplayTitle(dt)) return dt;
-  if (a && s) return `${a} - ${s}`;
-  if (dt) return dt;
+  if (a && s) {
+    if (looksLikeCollaboratorRosterStuckAsSongTitle(a, s)) return '';
+    return `${a} - ${s}`;
+  }
   return a || s || '';
 }
 

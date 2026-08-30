@@ -12,7 +12,9 @@ import {
   getArtistDisplayString,
   getMainArtist,
   isGarbageArtistSongParse,
+  looksLikeCollaboratorRosterStuckAsSongTitle,
   looksLikeGarbageArtistSongMetadataForCommentary,
+  looksLikeProseOrBloatedDisplayTitle,
   parsePerformingFromDescription,
   repairQuotedSongArtistPackInversion,
   storedCommentaryLooksLikeProductionCreditHallucination,
@@ -362,6 +364,18 @@ assert.equal(isSupergroupByManualHints('Traveling Wilburys'), true);
   assert.match(r.artistDisplay ?? '', /Bryan Adams/);
   assert.ok(r.song.includes('All For Love'));
 }
+
+assert.equal(
+  looksLikeCollaboratorRosterStuckAsSongTitle('Bryan Adams', 'Bryan Adams, Rod Stewart, Sting'),
+  true,
+);
+assert.equal(
+  looksLikeProseOrBloatedDisplayTitle('Bryan Adams - Bryan Adams, Rod Stewart, Sting'),
+  true,
+);
+assert.equal(looksLikeCollaboratorRosterStuckAsSongTitle('Earth, Wind & Fire', 'September'), false);
+assert.equal(looksLikeProseOrBloatedDisplayTitle('Earth, Wind & Fire - September'), false);
+
 {
   const desc = 'Music video by Maneater performing Daryl Hall & John Oates\n\nMore';
   const r = resolveArtistSongForPack('Daryl Hall & John Oates - Maneater (Official Video)', 'Unrelated', {

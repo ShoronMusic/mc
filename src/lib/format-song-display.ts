@@ -479,7 +479,27 @@ export function looksLikeProseOrBloatedDisplayTitle(text: string | null | undefi
   ) {
     return true;
   }
+  const packed = t.match(/^(.{2,80}?)\s+[-–—]\s+(.{2,120})$/);
+  if (packed && looksLikeCollaboratorRosterStuckAsSongTitle(packed[1], packed[2])) return true;
   return false;
+}
+
+/**
+ * 「Bryan Adams - Bryan Adams, Rod Stewart, Sting」のように、曲名欄が
+ * メインアーティスト名の再掲＋カンマ共演リストになっているとき true。
+ */
+export function looksLikeCollaboratorRosterStuckAsSongTitle(
+  artist: string | null | undefined,
+  song: string | null | undefined,
+): boolean {
+  const a = (artist ?? '').trim();
+  const s = (song ?? '').trim();
+  if (!a || !s) return false;
+  const aNorm = a.toLowerCase().replace(/\s+/g, ' ');
+  const sNorm = s.toLowerCase().replace(/\s+/g, ' ');
+  if (!sNorm.startsWith(aNorm)) return false;
+  const rest = s.slice(a.length);
+  return /,\s+[A-Za-z]/.test(rest);
 }
 
 /** 制作クレジット行を曲名と誤認したメタデータか（曲解説前のガード用） */

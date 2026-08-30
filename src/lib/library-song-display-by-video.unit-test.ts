@@ -57,4 +57,24 @@ assert.deepEqual(
   { title: 'Hint - Song', artist_name: 'Hint' },
 );
 
+{
+  const badRoster: LibrarySongDisplay = {
+    songId: 'all-for-love',
+    displayTitle: 'Bryan Adams - Bryan Adams, Rod Stewart, Sting',
+    mainArtist: 'Bryan Adams',
+    songTitle: 'Bryan Adams, Rod Stewart, Sting',
+    originalReleaseDate: '2005-01-01',
+  };
+  assert.equal(buildLibrarySongAnnounceTitle(badRoster), '');
+  assert.equal(librarySongToPlaybackDisplayOverride(badRoster), null);
+  assert.deepEqual(
+    preferPlaybackDisplaySources({
+      adminOverride: null,
+      library: badRoster,
+      hint: null,
+    }),
+    null,
+  );
+}
+
 console.log('library-song-display-by-video.unit-test: ok');

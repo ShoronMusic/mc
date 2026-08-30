@@ -185,7 +185,7 @@ export async function handleAnnounceSongPost(
       isJapaneseDomestic &&
       !suppressJpDomesticAnnounceTagForArtist({ artist, artistDisplay });
     const originalReleaseIso =
-      librarySong?.originalReleaseDate ??
+      (libraryAnnounceTitle ? librarySong?.originalReleaseDate : null) ??
       (musicaichatSong ? resolveOriginalReleaseDateFromMusic8Json(musicaichatSong) : null);
     const releaseYear = yearFromOriginalReleaseDate(originalReleaseIso);
     const artistTitleBaseWithYear = appendOriginalReleaseYearSuffix(artistTitleBase, releaseYear);
