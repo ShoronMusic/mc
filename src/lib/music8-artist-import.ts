@@ -10,7 +10,8 @@ import { stripLeadingArticleForSort } from '@/lib/admin-library-index';
 import {
   formatArtistDisplayName,
   formatMusic8ArtistDisplayLines,
-  getJapaneseDescription,
+  resolveYoutubeChannelHref,
+  splitMusic8ArtistDescription,
   type Music8ArtistJson,
 } from '@/lib/music8-artist-display';
 import { syncArtistMembersForArtist } from '@/lib/artist-members';
@@ -20,6 +21,100 @@ export type Music8ArtistDbPatch = Record<string, unknown>;
 function asObj(x: unknown): Record<string, unknown> | null {
   if (x && typeof x === 'object' && !Array.isArray(x)) return x as Record<string, unknown>;
   return null;
+}
+
+/** Music8 `artistborn` / `artistdied`（`1985/10/08` 等）→ DB 用 `YYYY-MM-DD` */
+export function parseMusic8DateFieldToIso(raw: string | null | undefined): string | null {
+  const t = (raw ?? '').trim();
+  if (!t) return null;
+  const digits = t.replace(/\D/g, '');
+  if (digits.length < 8) return null;
+  const y = digits.slice(0, 4);
+  const m = digits.slice(4, 6);
+  const d = digits.slice(6, 8);
+  const yi = Number(y);
+  const mi = Number(m);
+  const di = Number(d);
+  if (!Number.isFinite(yi) || mi < 1 || mi > 12 || di < 1 || di > 31) return null;
+  return `${y}-${m}-${d}`;
+}
+
+function getMergedArtistString(
+  src: Music8ArtistJson,
+  ...keys: string[]
+): string | null {
+  const raw = src as Record<string, unknown>;
+  const acf = asObj(raw.acf);
+  for (const key of keys) {
+    const top = raw[key];
+    if (typeof top === 'string' && top.trim()) return top.trim();
+    if (acf) {
+      const v = acf[key];
+      if (typeof v === 'string' && v.trim()) return v.trim();
+    }
+  }
+  return null;
+}
+
+/** ラテン表記の表示名があれば `name_en` 候補（日本語名のみの行は触れない） */
+export function suggestArtistNameEnFromMusic8Display(displayName: string): string | null {
+  const n = displayName.trim();
+  if (!n) return null;
+  if (/[\u3040-\u309f\u30a0-\u30ff\u4e00-\u9fff]/.test(n)) return null;
+  if (!/[A-Za-z]/.test(n)) return null;
+  return n;
+}
+
+/** Music8 Occupation → `artists.occupations`（label 優先、無ければ value） */
+export function extractMusic8OccupationLabels(src: Music8ArtistJson): string[] {
+  const raw = src as Record<string, unknown>;
+  const acf = asObj(raw.acf);
+  const candidates: unknown[] = [
+    raw.Occupation,
+    acf?.Occupation,
+    raw.occupation,
+    acf?.occupation,
+  ];
+  for (const c of candidates) {
+    if (!Array.isArray(c) || c.length === 0) continue;
+    const parts = c
+      .map((item) => {
+        if (!item || typeof item !== 'object') return '';
+        const o = item as { label?: unknown; value?: unknown };
+        const label = typeof o.label === 'string' ? o.label.trim() : '';
+        const value = typeof o.value === 'string' ? o.value.trim() : '';
+        return label || value;
+      })
+      .filter(Boolean);
+    if (parts.length > 0) return parts;
+  }
+  for (const c of candidates) {
+    if (typeof c !== 'string' || !c.trim()) continue;
+    const parts = c
+      .split(/[,、/]/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (parts.length > 0) return parts;
+  }
+  return [];
+}
+
+/** YouTube チャンネル ID（UC…）を raw / URL から抽出 */
+export function extractYoutubeChannelIdFromMusic8(raw: string | null | undefined): string | null {
+  const t = (raw ?? '').trim();
+  if (!t) return null;
+  if (/^UC[0-9A-Za-z_-]{20,}$/.test(t)) return t;
+  const fromUrl = t.match(/youtube\.com\/channel\/(UC[0-9A-Za-z_-]{20,})/i);
+  if (fromUrl?.[1]) return fromUrl[1];
+  return null;
+}
+
+/** origin → catalog_scope（未設定時の推定） */
+export function catalogScopeFromMusic8Origin(origin: string | null | undefined): 'domestic' | 'western' | null {
+  const o = (origin ?? '').trim().toUpperCase();
+  if (!o) return null;
+  if (o === 'JPN' || o === 'JP' || o === 'JAPAN') return 'domestic';
+  return 'western';
 }
 
 /** WP REST / GCS JSON を `Music8ArtistJson` に正規化（acf をトップにマージ） */
@@ -148,9 +243,10 @@ export function buildArtistPatchFromMusic8Json(
     (acf && typeof acf.spotify_artist_images === 'string' && acf.spotify_artist_images.trim()) ||
     null;
 
-  const descriptionEn = (src.description ?? '').trim() || null;
-  const descriptionJa = getJapaneseDescription(src.description) || null;
-  const profileText = descriptionJa || null;
+  // 計画どおり description は英日分割（全文を description_en に入れない）
+  const descParts = splitMusic8ArtistDescription(src.description);
+  const descriptionEn = descParts.en || null;
+  const profileText = descParts.ja || null;
 
   const activeYearStart = (src.artistactiveyearstart ??
     raw.artistActiveYearStart ??
@@ -164,6 +260,31 @@ export function buildArtistPatchFromMusic8Json(
     music8Members = memberRaw;
   }
 
+  const birthDate = parseMusic8DateFieldToIso(
+    getMergedArtistString(src, 'artistborn', 'artistBorn', 'artist_born'),
+  );
+  const deathDate = parseMusic8DateFieldToIso(
+    getMergedArtistString(src, 'artistdied', 'artistDied', 'artist_died'),
+  );
+  const wikipediaPage = getMergedArtistString(src, 'wikipedia_page', 'wikipediaPage');
+  const youtubeChannelRaw = getMergedArtistString(
+    src,
+    'youtube_channel',
+    'youtube_channel_id',
+    'youtubeChannel',
+  );
+  const youtubeChannelId = extractYoutubeChannelIdFromMusic8(youtubeChannelRaw);
+  const youtubeChannelUrl =
+    resolveYoutubeChannelHref(youtubeChannelRaw) ||
+    (fmt.youtubeChannelHref ?? '').trim() ||
+    null;
+  const occupations = extractMusic8OccupationLabels(src);
+  const kindFromOccupations = occupations.length > 0 ? occupations.join(', ') : null;
+
+  const originCountry = fmt.origin?.trim() || null;
+  const catalogScope = catalogScopeFromMusic8Origin(originCountry);
+  const nameEn = suggestArtistNameEnFromMusic8Display(displayName);
+
   const patch: Music8ArtistDbPatch = {
     name: displayName,
     name_base: nameBase || null,
@@ -172,15 +293,15 @@ export function buildArtistPatchFromMusic8Json(
     music8_artist_slug: slug,
     music8_artist_id: music8ArtistId,
     name_ja: nameJa,
-    kind: fmt.occupationDisplay?.trim() || null,
-    origin_country: fmt.origin?.trim() || null,
+    kind: kindFromOccupations || fmt.occupationDisplay?.trim() || null,
+    origin_country: originCountry,
     active_year_start: activeYearStartTrim || null,
     active_period: fmt.activeYears?.trim() || null,
     members: fmt.memberDisplay?.trim() || null,
-    youtube_channel_title: fmt.youtubeChannelHref
+    youtube_channel_title: youtubeChannelUrl
       ? `${fmt.nameDisplay || displayName} YouTube Channel`
       : null,
-    youtube_channel_url: fmt.youtubeChannelHref?.trim() || null,
+    youtube_channel_url: youtubeChannelUrl,
     image_url: fmt.imageUrl?.trim() || null,
     profile_text: profileText,
     description_en: descriptionEn,
@@ -189,6 +310,17 @@ export function buildArtistPatchFromMusic8Json(
     music8_members: music8Members,
     music8_synced_at: new Date().toISOString(),
   };
+
+  // 空で上書きしない（手動入力や別経路の値を守る）
+  if (birthDate) patch.birth_date = birthDate;
+  if (deathDate) patch.death_date = deathDate;
+  if (nameEn) patch.name_en = nameEn;
+  if (catalogScope) patch.catalog_scope = catalogScope;
+  if (wikipediaPage) patch.wikipedia_page = wikipediaPage;
+  if (youtubeChannelId) patch.youtube_channel_id = youtubeChannelId;
+  if (occupations.length > 0) patch.occupations = occupations;
+  // Spotify 画像を使うときはクレジットを揃える（Music8 公開ページと同様）
+  if (spotifyImages) patch.image_credit = 'Spotify';
 
   return patch;
 }

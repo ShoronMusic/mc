@@ -31,7 +31,9 @@ import {
 import { getVideoSnippet } from '@/lib/youtube-search';
 import type { VideoSnippet } from '@/lib/youtube-search';
 import {
+  containsGenericPopProductionFiller,
   containsUnreliableCommentPackClaim,
+  GENERIC_POP_PRODUCTION_FILLER_REGEN_HINT,
   MEDIA_PLACEMENT_WORK_TITLE_REGEN_HINT,
   mentionsMediaPlacementWithoutWorkTitle,
   stripMediaPlacementSentencesWithoutWorkTitle,
@@ -74,6 +76,10 @@ import {
 } from '@/lib/comment-pack-slots';
 import { buildSupergroupPromptBlock } from '@/lib/supergroup-artist';
 import { fetchMusicBrainzCommentaryFactsBlock } from '@/lib/musicbrainz-commentary-facts';
+import {
+  buildYoutubeMetadataFactsBlock,
+  COMMENTARY_ARTIST_KNOWLEDGE_RULES,
+} from '@/lib/commentary-youtube-facts';
 import {
   buildCommentPackSessionContextBlock,
   generateCommentPackSessionBridge,
@@ -970,7 +976,7 @@ export async function POST(request: Request) {
 ・Music8 参照があるときは、雰囲気や「大ヒット」「広く知られる」だけの一文で終わらせないこと。参照事実から**リリース年または収録アルバム名**と、**ジャンルまたはサウンドの具体**を少なくとも1つ本文に入れること。書き出しの「${artistLabel}の『${songLabel}』」は省略禁止。`
         : musicBrainzFactsSection.length > 0
           ? `・下記【MusicBrainz 参照事実】は照合済みの事実です。盤名・年号・シングル/アルバム区分はこの範囲のみで述べ、補完・推測しないこと。`
-          : `・本APIは Music8 等の外部楽曲DBを参照していません。根拠のない固有名・年号を作らないこと。`;
+          : `・本APIは Music8 等の外部楽曲DBを参照していません。チャート順位や未確認アルバム名は作らないこと。アーティストとして広く知られた国籍・バンド種別・音楽性は書いてよい。`;
 
     const metaLockBlock = `【メタデータの前提（厳守）】
 ${adminTitleHint}・YouTube 動画タイトル（原文）: ${rawYouTubeTitle}
@@ -987,11 +993,17 @@ ${knownCoverOriginalHint ? `・原曲ヒント: ${knownCoverOriginalHint}\n` : '
 ・アーティスト名と曲名を入れ替えたり、別の架空の曲として語らないこと。
 ・タイトル・チャンネル名と矛盾するリリース年・アルバム名・編成・未来の年号は書かない。不明・不確実ならその一句を省くか「〜として知られる」など弱い表現にとどめる。
 ${music8SourcePolicyLine}
+${COMMENTARY_ARTIST_KNOWLEDGE_RULES}
+${buildYoutubeMetadataFactsBlock({
+  description: snippet?.description ?? prepReuse?.description ?? null,
+  publishedAt: snippet?.publishedAt ?? prepReuse?.publishedAt ?? null,
+  channelTitle: snippet?.channelTitle ?? prepReuse?.channelTitle ?? null,
+})}
 ・【曲名】は既に (Official Video)・(Lyric Video) など**公式動画・配信向けの副題を除いた**表記です。本文では【曲名】の表記どおり使うこと。**Remix・Remaster が【曲名】に含まれるときは省略せず**そのまま書く（勝手に短くしない）。${music8FactsSection}${musicBrainzFactsSection}`;
 
     // 1. 基本コメント（/commentary と似た役割だが、このAPI専用に少し短めに生成）
     const basePromptTail = isNewRelease
-      ? `・YouTube上のこの動画は公開から約1ヶ月以内です。周辺情報が不十分な可能性があるため、断定を避け、分かる範囲の紹介にとどめてください（推測や詳細な背景説明は控えめに）。
+      ? `・YouTube上のこの動画は公開から約1ヶ月以内です。アルバム名・チャート順位は断定しない。アーティストとして広く知られた国籍・バンド種別・音楽性、および YouTube 概要に書かれた内容は使ってよい。汎用的なシンセ／ダンス描写で埋めないこと。
 ・この後に自由コメントは出しません。ここ1本で完結する基本紹介にしてください。`
       : devMinimalSongAi || equivalentBaseOnlySlots(slots)
         ? `・開発中モードのため、自由コメントは生成しません。ここ1本で完結する基本紹介にしてください。`
@@ -1028,16 +1040,16 @@ ${sessionPromptBlock}
 【基本情報に含めるもの（この順で簡潔に）】
 ・リリース年（分かる範囲）
 ・収録アルバム名（分かれば）
-・ジャンルや当時の位置づけを一言（例：ニューウェーブ全盛期の代表曲のひとつ、など）
+・ジャンルや当時の位置づけを一言（例：ニューウェーブ全盛期の代表曲のひとつ、など）。バラードと分かる曲は分類に関わらず「バラード」と一言入れる。
 ・クレジットが複数いる場合は、**同じ段落内で**メインと客演の**役割の違い**をそれぞれ一言（例：一方が歌、他方がラップ／フック）触れてください。
 ・曲のテーマや雰囲気を1文（解釈は深掘りしない。概要だけ）
 ${baseIncludeSupergroupLine}
 ${baseIncludeCoverLine}
 【事実優先ポリシー（必須）】
-・リリース年や収録アルバムが断定できない場合は、その不足を1フレーズで明示したうえで、確認できる事実（曲調・テーマ・クレジット上の役割など）を続けること。
-・不確実な固有名詞・年号・制作逸話は書かない（推測禁止）。
+・リリース年や収録アルバムが断定できない場合は、その不足を1フレーズで明示したうえで、アーティストとして広く知られた位置づけや YouTube 概要の内容を続けること。
+・不確実なチャート順位・未確認アルバム名・制作逸話は書かない（推測禁止）。
 ・映画・ドラマ等の起用に触れるときは作品名を『』または「」で書く。不確かなら触れない。
-・「名曲です」「人気曲です」だけの当たり障りない説明で終わらせず、最低1つは曲固有の観点を入れること。
+・「名曲です」「人気曲です」や汎用的なシンセ／ダンサブル描写だけで終わらせず、最低1つは曲・アーティスト固有の観点を入れること。
 
 【基本情報に含めないもの】
 ${baseExcludeChartsBlock}
@@ -1113,13 +1125,19 @@ ${basePromptTail}`;
           draftModelId: commentPackModelId,
           persistMeta: selectorGeminiLogMeta,
         });
-        if (!mentionsMediaPlacementWithoutWorkTitle(baseText)) break;
+        const filmBare = mentionsMediaPlacementWithoutWorkTitle(baseText);
+        const filler = containsGenericPopProductionFiller(baseText);
+        if (!filmBare && !filler) break;
         if (baseAttempt >= 2) {
-          const stripped = stripMediaPlacementSentencesWithoutWorkTitle(baseText);
-          if (stripped) baseText = stripped;
+          if (filmBare) {
+            const stripped = stripMediaPlacementSentencesWithoutWorkTitle(baseText);
+            if (stripped) baseText = stripped;
+          }
           break;
         }
-        basePromptUse = basePrompt + MEDIA_PLACEMENT_WORK_TITLE_REGEN_HINT;
+        basePromptUse =
+          basePrompt +
+          (filmBare ? MEDIA_PLACEMENT_WORK_TITLE_REGEN_HINT : GENERIC_POP_PRODUCTION_FILLER_REGEN_HINT);
       }
 
       const filteredEarlyBaseOnly = applySlotsToPackBodies(
@@ -1175,7 +1193,7 @@ ${basePromptTail}`;
       ? ([
           'スーパーグループの**主要メンバー紹介**（**氏名**を通称またはフルネームで**複数**必ず出し、それぞれに**世に知られる元所属バンド名・ソロ名・役割**を本文中で対応づける。結成経緯が分かれば1文に収めてよい。**チャート・売上・受賞・「大ヒット」「バズ」「反響」はこのスロットでも後続でも主題にしない**。不確実な人名・関係性は断定しない）',
           '歌詞テーマやメッセージ（共演・フィーチャリングでは**客演側のパートが担う役割**（例：ラップ対メインヴォーカル）を必ず含め、双方の対比を1〜2文で。パートの長い列挙は禁止）',
-          'サウンドの特徴（メロディ・リズム・アレンジの**うち1点**に絞って具体化。共演がある場合は**声質やパートの違いがサウンドに与える効果**を一言入れてよい。「耳に残るフック」など抽象語の積み重ねだけは禁止）',
+          'サウンドの特徴（メロディ・リズム・アレンジの**うち1点**に絞って具体化。このバンド固有の楽器・声を優先。シンセ／ダンサブル／フックの常套句で埋めない。共演がある場合は**声質やパートの違いがサウンドに与える効果**を一言入れてよい）',
           'アーティスト情報（当該曲リリース時点の文脈で、**メインアーティスト中心**に紹介。国籍・ソロ/バンド/グループ種別、当時のフェーズ（デビュー期/転換期/人気絶頂期/円熟期など）を優先。複数名義の場合は**最大3人まで具体名**、4人以上はメイン中心＋他メンバーは軽く触れる。コラボ曲なら、関係性・組み合わせの異色性・話題性・接点が分かる範囲で1文添える。断定困難な経歴は避ける）',
         ] as const)
       : ([
@@ -1187,7 +1205,7 @@ ${basePromptTail}`;
               ? 'カバー版の文脈解説（このスロット専用。**優先**：①原曲の概要（原曲アーティスト・時代感・代表的な位置づけを短く）②カバーアーティストの紹介（当時の活動フェーズ・編成・ゲスト等）③原曲との差分（アレンジ・テンポ・キー感・歌い方/声質の違い）④企画趣旨（カバーアルバム、トリビュート企画、番組/ライブ企画等）。**可能な範囲で西暦を入れる**。ただし、カバー版の方が原曲より圧倒的に定着・ヒットしたと判断できる場合は、**通常曲に近い扱いでカバー版を主軸に紹介**し、原曲紹介は短く添える程度でよい。固有情報が弱い場合は、無理に捏造せず「カバー版としての聴きどころ」中心に述べてよい。**禁止**：順位や週数の具体数字、チャート/受賞/売上/社会的反響を主題にすること、裏付けのない私人話・伝聞。原曲の歌詞メッセージの詳細読解は優先しない）'
             : '商業的成功と社会的な話題性（このスロット専用。**必ず**次のいずれかを含めること：①主要チャートでの**定性的**な成功（西暦の年を明記。**1位・9位・33位など順位の数字は書かない**。例：1983年頃に全英シングルチャートで大きなヒット、翌年には米ビルボードでもチャート入り）②グラミー等の主要ノミネート・受賞（分かる場合のみ。**Rap/Sung Collaboration 等、共演枠の賞がある場合はその性質に触れてよい**）③複数国で広く再生・話題となったことなど、年とともに触れられる事実。④**タイトル等からリミックス版と分かる曲**では、オリジナルよりこのミックスの方が後からヒット・定着した、といった文脈を**定性・年**で触れてよい（断定できないときは弱い表現）。**禁止**：○位・最高○位・第○位・「〜週1位」など順位や週数の具体数字、作詞者の私人話、伝聞だけの表現、歌詞の読み下し。マイナー曲はライブ定番やカバーの多さにとどめる）',
           '歌詞テーマやメッセージ（共演・フィーチャリングでは**客演側のパートが担う役割**（例：ラップ対メインヴォーカル）を必ず含め、双方の対比を1〜2文で。パートの長い列挙は禁止）',
-          'サウンドの特徴（メロディ・リズム・アレンジの**うち1点**に絞って具体化。共演がある場合は**声質やパートの違いがサウンドに与える効果**を一言入れてよい。「耳に残るフック」など抽象語の積み重ねだけは禁止）',
+          'サウンドの特徴（メロディ・リズム・アレンジの**うち1点**に絞って具体化。このバンド固有の楽器・声を優先。シンセ／ダンサブル／フックの常套句で埋めない。共演がある場合は**声質やパートの違いがサウンドに与える効果**を一言入れてよい）',
           'アーティスト情報（当該曲リリース時点の文脈で、**メインアーティスト中心**に紹介。国籍・ソロ/バンド/グループ種別、当時のフェーズ（デビュー期/転換期/人気絶頂期/円熟期など）を優先。複数名義の場合は**最大3人まで具体名**、4人以上はメイン中心＋他メンバーは軽く触れる。コラボ曲なら、関係性・組み合わせの異色性・話題性・接点が分かる範囲で1文添える。断定困難な経歴は避ける）',
         ] as const);
     if (topics.length !== COMMENT_PACK_MAX_FREE_COMMENTS) {

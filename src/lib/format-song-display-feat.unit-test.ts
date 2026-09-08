@@ -24,6 +24,11 @@ import { compoundArtistCanonicalIfKnown } from './artist-compound-names';
 import { getMusic8ArtistJsonUrl } from './music8-artist-display';
 import { isSupergroupByManualHints } from './supergroup-artist';
 import { resolveArtistSongForPack } from './youtube-artist-song-for-pack';
+import { resolveArtistNameForMusic8Lookup } from './music8-main-artist-lookup';
+import {
+  normalizeArtistAndTitleForRegistration,
+  splitArtistNameForM8Storage,
+} from './song-registration-normalize';
 
 assert.equal(compoundArtistCanonicalIfKnown('Hall & Oates'), 'Daryl Hall & John Oates');
 assert.equal(compoundArtistCanonicalIfKnown('Hall and Oates'), 'Daryl Hall & John Oates');
@@ -41,6 +46,25 @@ assert.equal(compoundArtistCanonicalIfKnown('Tyler, the Creator'), 'Tyler, The C
 assert.equal(getMainArtist('Tyler, The Creator'), 'Tyler, The Creator');
 assert.equal(getArtistDisplayString('Tyler, The Creator'), 'Tyler, The Creator');
 assert.equal(getArtistDisplayString('Tyler, the Creator'), 'Tyler, The Creator');
+
+assert.equal(compoundArtistCanonicalIfKnown('MILEY'), 'Miley Cyrus');
+assert.equal(getMainArtist('MILEY'), 'Miley Cyrus');
+assert.equal(getArtistDisplayString('MILEY'), 'Miley Cyrus');
+{
+  const r = getArtistAndSong('MILEY - Bass Persuades', 'Unrelated Channel');
+  assert.equal(r.artistDisplay, 'Miley Cyrus');
+  assert.equal(r.song, 'Bass Persuades');
+  const pack = resolveArtistSongForPack('MILEY - Bass Persuades', 'Unrelated Channel', null);
+  assert.equal(pack.artistDisplay, 'Miley Cyrus');
+  assert.equal(pack.song, 'Bass Persuades');
+  const registered = normalizeArtistAndTitleForRegistration('MILEY', 'Bass Persuades');
+  assert.equal(registered?.displayArtist, 'Miley Cyrus');
+  assert.equal(registered?.songTitle, 'Bass Persuades');
+  const split = splitArtistNameForM8Storage('MILEY');
+  assert.equal(split?.displayName, 'Miley Cyrus');
+  assert.equal(split?.slug, 'miley-cyrus');
+  assert.equal(resolveArtistNameForMusic8Lookup('MILEY'), 'Miley Cyrus');
+}
 
 assert.equal(getMainArtist('Die With A Smile'), 'Die With A Smile');
 assert.equal(getArtistDisplayString('Die With A Smile'), 'Die With A Smile');

@@ -67,6 +67,7 @@ import { LibrarySongCommentary } from '@/components/chat/LibrarySongCommentary';
 import { LibrarySongVocalRows } from '@/components/chat/LibrarySongVocalRows';
 import { LibraryArtistAutoplayConfirmModal } from '@/components/chat/LibraryArtistAutoplayConfirmModal';
 import { FeaturedPageModal } from '@/components/chat/FeaturedPageModal';
+import { SongCoverThumb } from '@/components/song/SongCoverThumb';
 import {
   LibrarySongArtistsDetail,
   useLibrarySongArtists,
@@ -148,6 +149,7 @@ type LibrarySongRow = {
   video_id: string | null;
   has_ai_commentary: boolean;
   spotify_track_id?: string | null;
+  spotify_images?: string | null;
 };
 
 type LibrarySongVideoRow = {
@@ -1441,6 +1443,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                 video_id: typeof r.video_id === 'string' ? r.video_id : null,
                 has_ai_commentary: r.has_ai_commentary === true,
                 spotify_track_id: typeof r.spotify_track_id === 'string' ? r.spotify_track_id : null,
+                spotify_images: typeof r.spotify_images === 'string' ? r.spotify_images : null,
               }))
           : [];
         setLibraryRows(rows);
@@ -1578,6 +1581,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                 video_id: typeof r.video_id === 'string' ? r.video_id : null,
                 has_ai_commentary: r.has_ai_commentary === true,
                 spotify_track_id: typeof r.spotify_track_id === 'string' ? r.spotify_track_id : null,
+                spotify_images: typeof r.spotify_images === 'string' ? r.spotify_images : null,
               }))
           : [];
         setLibraryRows(rows);
@@ -3837,46 +3841,56 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                             }}
                             className={librarySongRowBtnClass(active)}
                           >
-                            <div className="flex items-start justify-between gap-2">
-                              <p className={librarySongRowTitleClass()}>
-                                {librarySongListPrimaryTitle(row)}
-                              </p>
-                              <span className="mt-0.5 flex shrink-0 items-center gap-1">
-                                {row.has_ai_commentary ? (
-                                  <span
-                                    title="曲解説あり"
-                                    aria-label="曲解説あり"
-                                  >
-                                    <BookOpenIcon
-                                      className="h-4 w-4 text-sky-400/95"
-                                      aria-hidden
-                                    />
+                            <div className="flex items-start gap-2">
+                              <SongCoverThumb
+                                spotifyImages={row.spotify_images}
+                                videoId={row.video_id}
+                                alt=""
+                                className="mt-0.5 h-10 w-10"
+                              />
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-start justify-between gap-2">
+                                  <p className={librarySongRowTitleClass()}>
+                                    {librarySongListPrimaryTitle(row)}
+                                  </p>
+                                  <span className="mt-0.5 flex shrink-0 items-center gap-1">
+                                    {row.has_ai_commentary ? (
+                                      <span
+                                        title="曲解説あり"
+                                        aria-label="曲解説あり"
+                                      >
+                                        <BookOpenIcon
+                                          className="h-4 w-4 text-sky-400/95"
+                                          aria-hidden
+                                        />
+                                      </span>
+                                    ) : null}
+                                    {rowIsFavorited ? (
+                                      <span
+                                        title="お気に入り登録済み"
+                                        aria-label="お気に入り登録済み"
+                                      >
+                                        <HeartIconSolid
+                                          className={`h-4 w-4 ${favoriteHeartActiveTextClass}`}
+                                          aria-hidden
+                                        />
+                                      </span>
+                                    ) : null}
                                   </span>
-                                ) : null}
-                                {rowIsFavorited ? (
-                                  <span
-                                    title="お気に入り登録済み"
-                                    aria-label="お気に入り登録済み"
-                                  >
-                                    <HeartIconSolid
-                                      className={`h-4 w-4 ${favoriteHeartActiveTextClass}`}
-                                      aria-hidden
-                                    />
-                                  </span>
-                                ) : null}
-                              </span>
-                            </div>
-                            <p className={librarySongRowMetaClass()}>
-                              {releaseDot ? (
-                                <>
-                                  <span className="tabular-nums text-gray-300">{releaseDot}</span>
+                                </div>
+                                <p className={librarySongRowMetaClass()}>
+                                  {releaseDot ? (
+                                    <>
+                                      <span className="tabular-nums text-gray-300">{releaseDot}</span>
+                                      <span className="text-gray-600"> · </span>
+                                    </>
+                                  ) : null}
+                                  <span className="break-words">{metaMid}</span>
                                   <span className="text-gray-600"> · </span>
-                                </>
-                              ) : null}
-                              <span className="break-words">{metaMid}</span>
-                              <span className="text-gray-600"> · </span>
-                              <span className="tabular-nums text-gray-500">{playBits}</span>
-                            </p>
+                                  <span className="tabular-nums text-gray-500">{playBits}</span>
+                                </p>
+                              </div>
+                            </div>
                           </button>
                         </li>
                       );

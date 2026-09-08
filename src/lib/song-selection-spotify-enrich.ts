@@ -22,6 +22,7 @@ import {
 } from '@/lib/song-credits-sync';
 import { resolveArtistIdFromIndex } from '@/lib/song-credits-resolve';
 import { normalizeSongCatalogScope } from '@/lib/song-catalog-scope';
+import { planSongDisplayFromSpotifyArtists } from '@/lib/song-display-from-spotify-artists';
 
 export function isSongSelectionSpotifyEnrichEnabled(): boolean {
   const v = process.env.SONG_SELECTION_SPOTIFY_ENRICH?.trim();
@@ -216,6 +217,18 @@ export async function enrichSongFromSpotifySelection(
       track.spotifyPopularity != null ? Math.round(track.spotifyPopularity) : undefined,
   };
   if (track.spotifyImages) songUpdate.spotify_images = track.spotifyImages;
+
+  const displayPlan = planSongDisplayFromSpotifyArtists({
+    songTitle,
+    spotifyArtists: track.spotifyArtists,
+    trackArtistNames: track.artists.map((a) => a.name),
+    currentMainArtist: mainArtist,
+    currentDisplayTitle: displayTitle,
+  });
+  if (displayPlan) {
+    songUpdate.main_artist = displayPlan.mainArtist;
+    songUpdate.display_title = displayPlan.displayTitle;
+  }
 
   const { error: uErr } = await admin.from('songs').update(songUpdate).eq('id', songId);
   if (uErr) throw uErr;

@@ -276,8 +276,11 @@ export function filterMusicaichatFactsBoilerplateLines(lines: string[]): string[
   return lines.filter((l) => !isMusicaichatFactsBoilerplateLine(l));
 }
 
-function music8HtmlOrTextToPlain(raw: string): string {
+export function music8HtmlOrTextToPlain(raw: string): string {
   return (raw ?? '')
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<figure[\s\S]*?<\/figure>/gi, '')
+    .replace(/<img\b[^>]*>/gi, '')
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/(p|div|li|h[1-6])>/gi, '\n')
     .replace(/<[^>]+>/g, '')
@@ -287,6 +290,14 @@ function music8HtmlOrTextToPlain(raw: string): string {
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
+    .replace(/&#(\d+);/g, (_, n) => {
+      const code = Number(n);
+      return Number.isFinite(code) ? String.fromCharCode(code) : '';
+    })
+    .replace(/&#x([0-9a-f]+);/gi, (_, n) => {
+      const code = Number.parseInt(n, 16);
+      return Number.isFinite(code) ? String.fromCharCode(code) : '';
+    })
     .replace(/\r\n/g, '\n')
     .replace(/\n{2,}/g, '\n')
     .trim();
@@ -322,6 +333,112 @@ export function pickMusic8SongFullDescription(song: unknown): string {
     if (!facts || factsTruncated || content.length >= facts.length) return content;
   }
   return facts;
+}
+
+export const MUSIC8_INTRO_MIN_CHARS = 24;
+
+export function normalizeMusic8IntroPlain(text: string): string {
+  return (text ?? '')
+    .replace(/\u00a0/g, ' ')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/ *\n */g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+function compactIntroKey(s: string): string {
+  return s.toLowerCase().replace(/\s+/g, '');
+}
+
+function firstArtistNameFromWpSong(obj: Record<string, unknown> | null): string {
+  if (!obj) return '';
+  for (const key of ['artists', 'main_artists'] as const) {
+    const raw = obj[key];
+    if (Array.isArray(raw)) {
+      const first = raw[0];
+      if (first && typeof first === 'object' && !Array.isArray(first)) {
+        const n = (first as { name?: unknown }).name;
+        if (typeof n === 'string' && n.trim()) return n.trim();
+      }
+      if (typeof first === 'string' && first.trim()) return first.trim();
+    }
+    if (typeof raw === 'string' && raw.trim()) return raw.trim();
+  }
+  return '';
+}
+
+function songTitleFromWpSong(obj: Record<string, unknown> | null): string {
+  if (!obj) return '';
+  if (typeof obj.title === 'string' && obj.title.trim()) return obj.title.trim();
+  const rendered = asObj(obj.title)?.rendered;
+  return typeof rendered === 'string' ? rendered.trim() : '';
+}
+
+/** WP 本文が「Artist - Title」だけの行なら曲紹介ではない */
+export function isBareArtistTitleMusic8Intro(
+  plain: string,
+  artist?: string | null,
+  title?: string | null,
+): boolean {
+  const n = compactIntroKey(plain);
+  if (!n) return true;
+  const a = (artist ?? '').trim();
+  const t = (title ?? '').trim();
+  if (!a || !t) return false;
+  const credit = compactIntroKey(`${a} - ${t}`);
+  const creditEnDash = compactIntroKey(`${a} – ${t}`);
+  const creditEmDash = compactIntroKey(`${a} — ${t}`);
+  return n === credit || n === creditEnDash || n === creditEmDash;
+}
+
+/** 先頭のクレジット行（`Artist - Title`）を本文から外す */
+export function stripLeadingMusic8CreditLine(plain: string): string {
+  const parts = (plain ?? '').split('\n');
+  if (parts.length < 2) return (plain ?? '').trim();
+  const first = parts[0]!.trim();
+  const rest = parts.slice(1).join('\n').trim();
+  if (!rest) return first;
+  const firstLooksCredit =
+    /^.{1,180}\s[-–—]\s.{1,180}$/.test(first) ||
+    (!/[\u3040-\u30FF\u4E00-\u9FFF]/.test(first) &&
+      /[-–—]/.test(first) &&
+      !/[.!?]/.test(first) &&
+      first.length < 120);
+  if (firstLooksCredit && rest.length > 0) {
+    return rest;
+  }
+  return (plain ?? '').trim();
+}
+
+export function looksLikeCreditOnlyIntro(plain: string): boolean {
+  const one = plain.replace(/\n/g, ' ').trim();
+  if (!one) return true;
+  if (/[\u3040-\u30FF\u4E00-\u9FFF]/.test(one)) return false;
+  if (/[。]/.test(one)) return false;
+  if (one.length >= 160) return false;
+  if (!/\s/.test(one) && one.length < 140) return true;
+  if (/\b(?:ft|feat|featuring)\.?\b/i.test(one) && /[-–—]/.test(one) && one.length < 140) {
+    return true;
+  }
+  if (/^.+\s*[-–—]\s*.+$/.test(one) && one.length < 120) return true;
+  return false;
+}
+
+/**
+ * WP 曲 JSON の `content` から HTML を除いた曲紹介本文。
+ * `<p>` 等のタグ除去後が短すぎる／クレジット行のみなら空文字。
+ */
+export function plainMusic8IntroFromWpSongJson(song: unknown): string {
+  const obj = asObj(song);
+  const artist = firstArtistNameFromWpSong(obj);
+  const title = songTitleFromWpSong(obj);
+  const plain = stripLeadingMusic8CreditLine(
+    normalizeMusic8IntroPlain(pickMusic8SongFullDescription(song)),
+  );
+  if (plain.length < MUSIC8_INTRO_MIN_CHARS) return '';
+  if (isBareArtistTitleMusic8Intro(plain, artist, title)) return '';
+  if (looksLikeCreditOnlyIntro(plain)) return '';
+  return plain;
 }
 
 /** 抜粋（末尾 …）より全文を優先。どちらも全文なら長い方。 */

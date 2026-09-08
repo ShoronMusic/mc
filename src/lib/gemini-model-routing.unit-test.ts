@@ -58,6 +58,10 @@ test('character_song_pick: Gemma primary uses Flash unless USE_PRIMARY', () => {
     assert.equal(resolveGenerationModelId('next_song_recommend'), 'gemini-2.5-flash');
     assert.equal(resolveGenerationModelId('song_quiz'), 'gemini-2.5-flash');
     assert.equal(resolveGenerationModelId('chat_reply'), 'gemini-2.5-flash');
+    assert.equal(resolveGenerationModelId('get_song_style'), 'gemini-2.5-flash');
+    assert.equal(resolveGenerationModelId('get_song_era'), 'gemini-2.5-flash');
+    assert.equal(resolveGenerationModelId('music8_song_intro'), 'gemini-2.5-flash');
+    assert.equal(resolveGenerationModelId('admin_artist_profile_generate'), 'gemini-2.5-flash');
     assert.equal(resolveCharacterSongPickModelId(), 'gemini-2.5-flash');
     assert.equal(resolveGenerationModelId('commentary'), 'gemma-4-31b-it');
     process.env.GEMINI_CHARACTER_SONG_PICK_USE_PRIMARY = '1';
@@ -69,6 +73,17 @@ test('character_song_pick: Gemma primary uses Flash unless USE_PRIMARY', () => {
     process.env.GEMINI_CHAT_REPLY_USE_PRIMARY = '1';
     assert.equal(resolveGenerationModelId('chat_reply'), 'gemma-4-31b-it');
     delete process.env.GEMINI_CHAT_REPLY_USE_PRIMARY;
+    process.env.GEMINI_SONG_META_USE_PRIMARY = '1';
+    assert.equal(resolveGenerationModelId('get_song_style'), 'gemma-4-31b-it');
+    assert.equal(resolveGenerationModelId('music8_song_intro'), 'gemini-2.5-flash');
+    assert.equal(resolveGenerationModelId('admin_artist_profile_generate'), 'gemini-2.5-flash');
+    delete process.env.GEMINI_SONG_META_USE_PRIMARY;
+    process.env.GEMINI_MUSIC8_INTRO_USE_PRIMARY = '1';
+    assert.equal(resolveGenerationModelId('music8_song_intro'), 'gemma-4-31b-it');
+    delete process.env.GEMINI_MUSIC8_INTRO_USE_PRIMARY;
+    process.env.GEMINI_ADMIN_ARTIST_PROFILE_USE_PRIMARY = '1';
+    assert.equal(resolveGenerationModelId('admin_artist_profile_generate'), 'gemma-4-31b-it');
+    delete process.env.GEMINI_ADMIN_ARTIST_PROFILE_USE_PRIMARY;
     process.env.GEMINI_CHARACTER_SONG_PICK_MODEL = 'gemini-3.5-flash';
     assert.equal(resolveGenerationModelId('character_song_pick'), 'gemini-3.5-flash');
   } finally {
@@ -84,6 +99,11 @@ test('character_song_pick: Gemma primary uses Flash unless USE_PRIMARY', () => {
     else process.env.GEMINI_CHARACTER_SONG_PICK_USE_PRIMARY = prevUsePrimary;
     delete process.env.GEMINI_SONG_QUIZ_USE_PRIMARY;
     delete process.env.GEMINI_CHAT_REPLY_USE_PRIMARY;
+    delete process.env.GEMINI_SONG_META_USE_PRIMARY;
+    delete process.env.GEMINI_MUSIC8_INTRO_USE_PRIMARY;
+    delete process.env.GEMINI_MUSIC8_INTRO_MODEL;
+    delete process.env.GEMINI_ADMIN_ARTIST_PROFILE_USE_PRIMARY;
+    delete process.env.GEMINI_ADMIN_ARTIST_PROFILE_MODEL;
   }
 });
 

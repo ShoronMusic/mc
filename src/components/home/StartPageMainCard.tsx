@@ -10,7 +10,7 @@ import { MusicChatTitleBrand } from '@/components/home/MusicChatTitleLogo';
 import { getProductDisplayName, IS_MC_PRODUCT, MA_TITLE_LOGO_SRC } from '@/lib/product-branding';
 import { hasGuestRoomPersistence } from '@/lib/guest-room-persistence';
 import Image from 'next/image';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 function StartPageTitle() {
   const [firstReadOpen, setFirstReadOpen] = useState(false);
@@ -131,13 +131,26 @@ function StartPageGuestActionPanel() {
 /** ログイン前トップのメインカード。PC 幅では入室導線（左）と紹介（右）の 2 カラム。 */
 export function StartPageMainCard() {
   const isLoggedIn = useTopPageLoggedIn();
+  const [authWaitTimedOut, setAuthWaitTimedOut] = useState(false);
+
+  useEffect(() => {
+    if (isLoggedIn !== null) {
+      setAuthWaitTimedOut(false);
+      return;
+    }
+    const timer = window.setTimeout(() => setAuthWaitTimedOut(true), 2500);
+    return () => window.clearTimeout(timer);
+  }, [isLoggedIn]);
+
+  const resolvedLoggedIn: boolean | null =
+    isLoggedIn === true ? true : isLoggedIn === false || authWaitTimedOut ? false : null;
 
   // ログイン確定（またはセッション仮判定）後はすぐ主催者レイアウトへ（右が空のまま待たない）
-  if (isLoggedIn === true) {
+  if (resolvedLoggedIn === true) {
     return <StartPageLoggedInLayout />;
   }
 
-  if (isLoggedIn === false) {
+  if (resolvedLoggedIn === false) {
     // ゲスト参加確定後は紹介カラムを出さず、従来どおり単カラム
     if (hasGuestRoomPersistence()) {
       return (

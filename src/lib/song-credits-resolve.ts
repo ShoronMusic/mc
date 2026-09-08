@@ -3,6 +3,7 @@
  */
 
 import { stripLeadingArticleForSort } from '@/lib/admin-library-index';
+import { compoundArtistCanonicalIfKnown } from '@/lib/artist-compound-names';
 import { parseCollabArtistNamesFromMainArtist } from '@/lib/library-search-query';
 import { parseArtistTitleFromDisplayTitle } from '@/lib/spotify-search-track';
 
@@ -72,6 +73,8 @@ function aliasTarget(name: string): string | null {
   for (const [from, to] of Object.entries(CREDIT_ARTIST_ALIASES)) {
     if (compactAlpha(from) === compact) return to;
   }
+  const compound = compoundArtistCanonicalIfKnown(name);
+  if (compound && normName(compound) !== key) return compound;
   return null;
 }
 
@@ -87,6 +90,34 @@ function pickUniqueRow(hits: ArtistLookupRow[] | undefined): ArtistLookupRow | n
   if (!hits?.length) return null;
   if (hits.length === 1) return hits[0];
   return null;
+}
+
+/**
+ * 表記ゆれで複数ヒットしたとき、Music8 slug 付き（正本）を優先する。
+ * 「E-40」stub と name_en が E-40 の「E 40」が同時に当たると unique 判定で両方落ちるのを防ぐ。
+ */
+function pickBestRow(
+  hits: ArtistLookupRow[] | undefined,
+  queryName: string,
+): ArtistLookupRow | null {
+  const unique = pickUniqueRow(hits);
+  if (unique) return unique;
+  if (!hits?.length) return null;
+
+  const q = normName(queryName);
+  const scored = hits.map((h) => {
+    let score = 0;
+    if ((h.music8_artist_slug ?? '').trim()) score += 4;
+    if (normName(h.name) === q) score += 2;
+    if (h.name_en && normName(h.name_en) === q) score += 1;
+    return { h, score };
+  });
+  scored.sort((a, b) => b.score - a.score);
+  const top = scored[0];
+  const second = scored[1];
+  if (!top) return null;
+  if (second && top.score === second.score) return null;
+  return top.h;
 }
 
 /** Spotify が `artists[].name` を `, ` で連結した文字列を分解（名前内カンマは結合）
@@ -221,9 +252,9 @@ function lookupByNameVariants(
 
   for (const candidate of namesToTry) {
     const unique =
-      pickUniqueRow(index.byNormName.get(normName(candidate))) ??
-      pickUniqueRow(index.byMatchKey.get(matchKey(candidate))) ??
-      pickUniqueRow(index.byCompact.get(compactAlpha(candidate)));
+      pickBestRow(index.byNormName.get(normName(candidate)), candidate) ??
+      pickBestRow(index.byMatchKey.get(matchKey(candidate)), candidate) ??
+      pickBestRow(index.byCompact.get(compactAlpha(candidate)), candidate);
     if (unique) return unique.id;
 
     const hits = index.byNormName.get(normName(candidate));
@@ -313,10 +344,11 @@ export function resolveSongCreditsFromInput(
   unresolved: string[];
   source: SongCreditSource | null;
   skippedJapanese: boolean;
+  leadResolved: boolean;
 } {
   const extracted = extractCreditNamesFromSong(input);
   if (!extracted) {
-    return { credits: [], unresolved: [], source: null, skippedJapanese: false };
+    return { credits: [], unresolved: [], source: null, skippedJapanese: false, leadResolved: false };
   }
 
   const latinNames = filterNonJapaneseCreditNames(extracted.names);
@@ -326,6 +358,7 @@ export function resolveSongCreditsFromInput(
       unresolved: [],
       source: extracted.source,
       skippedJapanese: true,
+      leadResolved: false,
     };
   }
 
@@ -351,5 +384,11 @@ export function resolveSongCreditsFromInput(
     });
   });
 
-  return { credits, unresolved, source: extracted.source, skippedJapanese: false };
+  return {
+    credits,
+    unresolved,
+    source: extracted.source,
+    skippedJapanese: false,
+    leadResolved: credits.some((c) => c.displayOrder === 0),
+  };
 }

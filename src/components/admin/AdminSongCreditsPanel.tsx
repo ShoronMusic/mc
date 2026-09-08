@@ -1,26 +1,41 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { AdminArtistPhoto } from '@/components/admin/AdminArtistPhoto';
+import { AdminArtistProfileModal } from '@/components/admin/AdminArtistProfileModal';
+import { AdminNewArtistBadge } from '@/components/admin/AdminNewArtistBadge';
 
 export type AdminSongCreditRow = {
   artistId: string;
   artistName: string;
   role: string;
   displayOrder: number;
+  /** 選曲／曲登録由来で未整備 */
+  isNewArtist?: boolean;
 };
 
 type Props = {
   songId: string;
   mainArtist: string | null;
+  artistImageUrl?: string | null;
   initialCredits: AdminSongCreditRow[];
+  modalEmbed?: boolean;
 };
 
-export function AdminSongCreditsPanel({ songId, mainArtist, initialCredits }: Props) {
+export function AdminSongCreditsPanel({
+  songId,
+  mainArtist,
+  artistImageUrl = null,
+  initialCredits,
+  modalEmbed = false,
+}: Props) {
   const router = useRouter();
   const [featuredArtists, setFeaturedArtists] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [detailName, setDetailName] = useState<string | null>(null);
 
   async function handleSync() {
     setBusy(true);
@@ -44,12 +59,10 @@ export function AdminSongCreditsPanel({ songId, mainArtist, initialCredits }: Pr
         setMsg(data.error ?? '同期に失敗しました。');
         return;
       }
-      const unresolved =
-        Array.isArray(data.unresolved) && data.unresolved.length > 0
-          ? `（未解決: ${data.unresolved.join(', ')}）`
-          : '';
       setMsg(
-        `song_credits を更新しました（${data.creditCount ?? 0} 件）: ${(data.artists ?? []).join(', ')}${unresolved}`,
+        Array.isArray(data.unresolved) && data.unresolved.length > 0
+          ? `一部のみ反映しました（${data.creditCount ?? 0} 件）: ${(data.artists ?? []).join(', ')}。未解決: ${data.unresolved.join(', ')}`
+          : `song_credits を更新しました（${data.creditCount ?? 0} 件）: ${(data.artists ?? []).join(', ')}`,
       );
       setFeaturedArtists('');
       router.refresh();
@@ -66,17 +79,44 @@ export function AdminSongCreditsPanel({ songId, mainArtist, initialCredits }: Pr
     <div className="mt-4 rounded border border-violet-900/50 bg-violet-950/15 p-3">
       <h3 className="text-sm font-semibold text-violet-200">共演アーティスト（song_credits）</h3>
       <p className="mt-2 text-xs leading-relaxed text-gray-400">
-        メインは <strong className="text-gray-300">{main || '（未設定）'}</strong>{' '}
-        です。サブ／共演者をカンマ区切りで追加し、<code className="text-gray-500">song_credits</code>{' '}
-        を再構築します（artists マスタに無い名前は自動作成を試みます）。
+        表示上のメイン表記は{' '}
+        <span className="inline-flex items-center gap-1.5 align-middle">
+          <AdminArtistPhoto url={artistImageUrl} name={main} size={40} />
+          <strong className="text-gray-300">{main || '（未設定）'}</strong>
+        </span>{' '}
+        です。各クレジットから詳細・編集を開けます。サブ／共演者をカンマ区切りで追加し、
+        <code className="text-gray-500">song_credits</code> を再構築できます。反映の正本は上の番号リストです（display_title はメイン表記のままです）。
       </p>
 
       {initialCredits.length > 0 ? (
-        <ul className="mt-2 space-y-1 text-xs text-gray-300">
+        <ul className="mt-2 space-y-1.5 text-xs text-gray-300">
           {initialCredits.map((c) => (
-            <li key={`${c.artistId}-${c.displayOrder}`}>
-              <span className="text-gray-500">{c.displayOrder + 1}.</span> {c.artistName}
-              <span className="ml-2 text-gray-500">({c.role})</span>
+            <li
+              key={`${c.artistId}-${c.displayOrder}`}
+              className="flex flex-wrap items-baseline gap-x-3 gap-y-1"
+            >
+              <span>
+                <span className="text-gray-500">{c.displayOrder + 1}.</span> {c.artistName}
+                <span className="ml-2 text-gray-500">({c.role})</span>
+                {c.isNewArtist ? (
+                  <span className="ml-2 inline-block align-middle">
+                    <AdminNewArtistBadge />
+                  </span>
+                ) : null}
+              </span>
+              <button
+                type="button"
+                onClick={() => setDetailName(c.artistName)}
+                className="text-sky-400 hover:underline"
+              >
+                詳細
+              </button>
+              <Link
+                href={`/admin/domestic-artist-register/${c.artistId}`}
+                className="text-emerald-400 hover:underline"
+              >
+                編集
+              </Link>
             </li>
           ))}
         </ul>
@@ -105,7 +145,25 @@ export function AdminSongCreditsPanel({ songId, mainArtist, initialCredits }: Pr
           {busy ? '同期中…' : 'song_credits を更新'}
         </button>
       </div>
-      {msg ? <p className="mt-2 text-xs text-gray-300">{msg}</p> : null}
+      {msg ? (
+        <p
+          className={
+            msg.includes('未解決') || msg.includes('一部のみ')
+              ? 'mt-2 text-xs text-amber-300'
+              : 'mt-2 text-xs text-gray-300'
+          }
+        >
+          {msg}
+        </p>
+      ) : null}
+      {detailName ? (
+        <AdminArtistProfileModal
+          artistName={detailName}
+          currentSongId={songId}
+          modalEmbed={modalEmbed}
+          onClose={() => setDetailName(null)}
+        />
+      ) : null}
     </div>
   );
 }

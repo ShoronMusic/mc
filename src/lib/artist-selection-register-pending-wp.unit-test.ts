@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { isSelectionRegisteredArtistPendingWp } from '@/lib/artist-selection-register';
+import { isSelectionRegisteredArtistPendingWp } from '@/lib/artist-selection-registered-pending';
 
 assert.equal(
   isSelectionRegisteredArtistPendingWp({

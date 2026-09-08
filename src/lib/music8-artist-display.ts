@@ -264,13 +264,51 @@ export function getMusic8ArtistJapaneseName(artist: Music8ArtistJson): string | 
  * description から日本語部分のみ取得（\r\n\r\n の後を想定）
  */
 export function getJapaneseDescription(description?: string | null): string {
-  if (!description || !description.trim()) return '';
-  const parts = description.split(/\r\n\r\n|\n\n/);
+  return splitMusic8ArtistDescription(description).ja;
+}
+
+const CJK_RE = /[\u3000-\u303f\u3040-\u309f\u30a0-\u30ff\u4e00-\u9fff\uff00-\uffef]/;
+
+/** 連続する同一段落を除去（Music8 description の日本語二重貼り付け対策） */
+export function dedupeIdenticalBioParagraphs(text: string): string {
+  const raw = (text ?? '').trim();
+  if (!raw) return '';
+  const parts = raw.split(/\r\n\r\n|\n\n/).map((p) => p.trim()).filter(Boolean);
+  if (parts.length <= 1) return raw;
+  const out: string[] = [];
+  const seen = new Set<string>();
   for (const p of parts) {
-    const t = p.trim();
-    if (/[\u3000-\u303f\u3040-\u309f\u30a0-\u30ff\u4e00-\u9fff\uff00-\uffef]/.test(t)) return t;
+    const key = p.replace(/\s+/g, ' ').trim().toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(p);
   }
-  return description.trim();
+  return out.join('\n\n');
+}
+
+/** Music8 `description`（英日混在）を英語段落と日本語段落に分ける */
+export function splitMusic8ArtistDescription(description?: string | null): { en: string; ja: string } {
+  const raw = (description ?? '').trim();
+  if (!raw) return { en: '', ja: '' };
+  const parts = raw.split(/\r\n\r\n|\n\n/).map((p) => p.trim()).filter(Boolean);
+  if (parts.length >= 2) {
+    const ja = dedupeIdenticalBioParagraphs(
+      parts.filter((p) => CJK_RE.test(p)).join('\n\n'),
+    );
+    const en = dedupeIdenticalBioParagraphs(
+      parts.filter((p) => !CJK_RE.test(p)).join('\n\n'),
+    );
+    if (ja || en) return { en, ja };
+  }
+  const idx = raw.search(/[\u3040-\u309f\u30a0-\u30ff\u4e00-\u9fff]/);
+  if (idx > 0) {
+    return {
+      en: dedupeIdenticalBioParagraphs(raw.slice(0, idx).trim()),
+      ja: dedupeIdenticalBioParagraphs(raw.slice(idx).trim()),
+    };
+  }
+  if (idx === 0) return { en: '', ja: dedupeIdenticalBioParagraphs(raw) };
+  return { en: dedupeIdenticalBioParagraphs(raw), ja: '' };
 }
 
 /**

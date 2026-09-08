@@ -11,6 +11,14 @@ type ReqBody = {
   catalog?: unknown;
 };
 
+function parseCatalog(v: unknown): 'domestic' | 'western' | 'unknown' {
+  const t = typeof v === 'string' ? v.trim().toLowerCase() : '';
+  if (t === 'domestic') return 'domestic';
+  if (t === 'western') return 'western';
+  // 洋楽が主。未指定・unknown は英語版 Wikipedia を使う
+  return 'western';
+}
+
 export async function POST(request: Request) {
   const gate = await requireStyleAdminApi();
   if (!gate.ok) return gate.response;
@@ -27,10 +35,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'artistName が必要です。' }, { status: 400 });
   }
 
-  const catalog =
-    typeof body.catalog === 'string' && body.catalog.trim().toLowerCase() === 'western'
-      ? 'western'
-      : 'domestic';
+  const catalog = parseCatalog(body.catalog);
 
   const result = await searchWikipediaPageForArtist({
     artistName,

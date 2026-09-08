@@ -46,6 +46,7 @@ function run() {
       spotify_track_id: 'track',
       spotify_artists: 'The Police',
       primary_artist_name_ja: 'ポリス',
+      music8_intro: 'ポリスの代表曲が闇を切り裂く。',
     },
     videoIds: ['OMOGaugKpzs'],
     styleSlugs: ['rock'],
@@ -57,6 +58,7 @@ function run() {
   assert.equal(json.youtube.primary_id, 'OMOGaugKpzs');
   assert.ok(json.classification.includes('rock'));
   assert.equal(json.identifiers.music8_song_id, 48794);
+  assert.equal(json.facts_for_ai.opening_lines[0], 'ポリスの代表曲が闇を切り裂く。');
 
   const idx = youtubeIndexEntriesForSong(json);
   assert.equal(idx.OMOGaugKpzs.role, 'primary');

@@ -3,9 +3,19 @@
  */
 
 import { extractEnglishArtistNameFromDescription } from '@/lib/artist-english-name';
+import { formatArtistDisplayName } from '@/lib/music8-artist-display';
+import { splitArtistNameForM8Storage } from '@/lib/song-registration-normalize';
+
+/** Music8 / WP `thePrefix` 相当（Include "The" Prefix は `The`） */
+export type AdminArtistThePrefix = 'The' | 'A' | 'An';
 
 export type AdminArtistProfileDraft = {
+  /** 表示名（the_prefix + name_base の合成。API 検索・DB `name` 用） */
   name: string;
+  /** 冠詞なし本体（DB `name_base`） */
+  nameBase: string;
+  /** DB `the_prefix`。なしは null */
+  thePrefix: AdminArtistThePrefix | null;
   nameEn: string | null;
   nameJa: string | null;
   originCountry: string | null;
@@ -23,6 +33,62 @@ export type AdminArtistProfileDraft = {
   youtubeChannelTitle: string | null;
   wikipediaPage: string | null;
 };
+
+export function normalizeAdminArtistThePrefix(
+  raw: string | null | undefined,
+): AdminArtistThePrefix | null {
+  const t = (raw ?? '').trim();
+  if (!t) return null;
+  if (t === '1') return 'The';
+  const lower = t.toLowerCase();
+  if (lower === 'the') return 'The';
+  if (lower === 'a') return 'A';
+  if (lower === 'an') return 'An';
+  return null;
+}
+
+export function composeAdminArtistDisplayName(
+  nameBase: string,
+  thePrefix: AdminArtistThePrefix | null | undefined,
+): string {
+  const base = nameBase.trim();
+  if (!base) return '';
+  return formatArtistDisplayName(base, thePrefix ?? null) || base;
+}
+
+/** 入力文字列 → name_base / the_prefix / 表示名 */
+export function splitAdminArtistNameParts(raw: string): {
+  nameBase: string;
+  thePrefix: AdminArtistThePrefix | null;
+  name: string;
+} {
+  const trimmed = raw.trim();
+  if (!trimmed) return { nameBase: '', thePrefix: null, name: '' };
+  const split = splitArtistNameForM8Storage(trimmed);
+  if (!split) {
+    return { nameBase: trimmed, thePrefix: null, name: trimmed };
+  }
+  const thePrefix = normalizeAdminArtistThePrefix(split.thePrefix);
+  const nameBase = split.nameBase.trim() || trimmed;
+  return {
+    nameBase,
+    thePrefix,
+    name: composeAdminArtistDisplayName(nameBase, thePrefix),
+  };
+}
+
+export function withSyncedAdminArtistDisplayName(
+  draft: AdminArtistProfileDraft,
+): AdminArtistProfileDraft {
+  const nameBase = draft.nameBase.trim() || draft.name.trim();
+  const thePrefix = normalizeAdminArtistThePrefix(draft.thePrefix);
+  return {
+    ...draft,
+    nameBase,
+    thePrefix,
+    name: composeAdminArtistDisplayName(nameBase, thePrefix) || draft.name.trim(),
+  };
+}
 
 const GEMINI_KEYS = {
   body: '本文',
@@ -45,20 +111,92 @@ function normalizeDashField(v: string | null): string | null {
   return t;
 }
 
-export function extractJsonObjectFromGeminiText(raw: string): Record<string, unknown> | null {
-  const t = raw.trim();
-  const fence = /^```(?:json)?\s*([\s\S]*?)```$/im.exec(t);
-  const body = fence ? fence[1].trim() : t;
-  const start = body.indexOf('{');
-  const end = body.lastIndexOf('}');
-  if (start < 0 || end <= start) return null;
+/**
+ * 活動期間。活動中は Music8 同様 `1989 - `（「現在」「present」等は付けない）。
+ */
+export function normalizeAdminArtistActivePeriod(raw: string | null | undefined): string | null {
+  const base = normalizeDashField(typeof raw === 'string' ? raw : null);
+  if (!base) return null;
+  const stripped = base
+    .replace(/\s*[-–—ー−]\s*(?:現在|いま|今|present|now|current|ongoing|actuel)\s*$/i, ' - ')
+    .replace(/\s+/g, ' ')
+    .trimEnd();
+  return normalizeDashField(stripped) ?? stripped;
+}
+
+function tryParseJsonObject(slice: string): Record<string, unknown> | null {
   try {
-    const parsed = JSON.parse(body.slice(start, end + 1)) as unknown;
+    const parsed = JSON.parse(slice) as unknown;
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
     return parsed as Record<string, unknown>;
   } catch {
     return null;
   }
+}
+
+/** JSON 文字列リテラル内の未エスケープ改行・タブを \\n / \\t に直す */
+export function repairUnescapedControlsInJsonStrings(json: string): string {
+  let out = '';
+  let inString = false;
+  let escape = false;
+  for (let i = 0; i < json.length; i++) {
+    const c = json[i];
+    if (inString) {
+      if (escape) {
+        out += c;
+        escape = false;
+        continue;
+      }
+      if (c === '\\') {
+        out += c;
+        escape = true;
+        continue;
+      }
+      if (c === '"') {
+        inString = false;
+        out += c;
+        continue;
+      }
+      if (c === '\n') {
+        out += '\\n';
+        continue;
+      }
+      if (c === '\r') {
+        out += '\\r';
+        continue;
+      }
+      if (c === '\t') {
+        out += '\\t';
+        continue;
+      }
+      out += c;
+      continue;
+    }
+    if (c === '"') inString = true;
+    out += c;
+  }
+  return out;
+}
+
+export function extractJsonObjectFromGeminiText(raw: string): Record<string, unknown> | null {
+  const t = raw.trim();
+  if (!t) return null;
+  const fence = /```(?:json)?\s*([\s\S]*?)```/i.exec(t);
+  const body = (fence ? fence[1] : t).trim();
+  const start = body.indexOf('{');
+  const end = body.lastIndexOf('}');
+  if (start < 0 || end <= start) return null;
+  const slice = body.slice(start, end + 1);
+
+  const direct = tryParseJsonObject(slice);
+  if (direct) return direct;
+
+  const noTrailingComma = slice.replace(/,\s*([}\]])/g, '$1');
+  const afterComma = tryParseJsonObject(noTrailingComma);
+  if (afterComma) return afterComma;
+
+  const repaired = repairUnescapedControlsInJsonStrings(noTrailingComma);
+  return tryParseJsonObject(repaired);
 }
 
 function splitBodyText(body: string): { descriptionEn: string | null; profileText: string | null } {
@@ -94,12 +232,15 @@ export function parseGeminiArtistProfileFields(
 
   const occupations = parseOccupations(normalizeDashField(asTrimmedString(fields[GEMINI_KEYS.occupation])));
 
+  const parts = splitAdminArtistNameParts(artistName);
   return {
-    name: artistName.trim(),
+    name: parts.name,
+    nameBase: parts.nameBase,
+    thePrefix: parts.thePrefix,
     nameEn: extractEnglishArtistNameFromDescription(descriptionEn),
     nameJa: normalizeDashField(asTrimmedString(fields[GEMINI_KEYS.nameJa])),
     originCountry: normalizeDashField(asTrimmedString(fields[GEMINI_KEYS.origin])),
-    activePeriod: normalizeDashField(asTrimmedString(fields[GEMINI_KEYS.activePeriod])),
+    activePeriod: normalizeAdminArtistActivePeriod(asTrimmedString(fields[GEMINI_KEYS.activePeriod])),
     birthDate: normalizeDashField(asTrimmedString(fields[GEMINI_KEYS.birth])),
     deathDate: normalizeDashField(asTrimmedString(fields[GEMINI_KEYS.death])),
     occupations,
@@ -119,8 +260,11 @@ export function emptyAdminArtistProfileDraft(
   name: string,
   catalogScope: AdminArtistProfileDraft['catalogScope'] = 'domestic',
 ): AdminArtistProfileDraft {
+  const parts = splitAdminArtistNameParts(name);
   return {
-    name: name.trim(),
+    name: parts.name,
+    nameBase: parts.nameBase,
+    thePrefix: parts.thePrefix,
     nameEn: null,
     nameJa: null,
     originCountry: catalogScope === 'domestic' ? 'JPN' : null,

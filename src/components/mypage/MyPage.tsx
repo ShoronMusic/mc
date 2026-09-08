@@ -24,6 +24,7 @@ import {
   getMypageGuestSubtitle,
   showRoomStyleUi,
 } from '@/lib/product-branding';
+import { SongCoverThumb } from '@/components/song/SongCoverThumb';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -3453,10 +3454,17 @@ export default function MyPage({
                                               : 'rounded bg-gray-900/50 px-2 py-1.5 text-xs text-gray-300'
                                           }
                                         >
-                                          <p className={`font-medium ${IS_MC_PRODUCT ? 'text-gray-900' : 'text-gray-200'}`}>
-                                            {it.title?.trim() || it.video_id}
-                                            {it.artist?.trim() ? ` / ${it.artist.trim()}` : ''}
-                                          </p>
+                                          <div className="flex items-start gap-2">
+                                            <SongCoverThumb
+                                              videoId={it.video_id}
+                                              alt=""
+                                              className="mt-0.5 h-10 w-10"
+                                            />
+                                            <p className={`min-w-0 flex-1 font-medium ${IS_MC_PRODUCT ? 'text-gray-900' : 'text-gray-200'}`}>
+                                              {it.title?.trim() || it.video_id}
+                                              {it.artist?.trim() ? ` / ${it.artist.trim()}` : ''}
+                                            </p>
+                                          </div>
                                           <div className="mt-1 flex flex-wrap items-center gap-2">
                                             <a
                                               href={it.url}

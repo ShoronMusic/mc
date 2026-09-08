@@ -43,7 +43,8 @@ flowchart TB
 |----|----|----------|
 | 1 | 人間 | `E:\mc` で `npm run dev`。`http://localhost:3002` が動いていること |
 | 2 | 人間 | YouTube の曲ページで Chrome 拡張 **YT to M7**（yttowp は使わない） |
-| 3 | 人間 | `/admin/songs/new` で内容を確認して登録 |
+| 3 | 人間 | `/admin/songs/new` で内容を確認して登録（画面に YouTube 公開日が出る） |
+| — | 自動 | YouTube 公開日を取得し `song_videos.youtube_published_at` に保存。原盤日が空なら仮の公開日にも使う。正確な原盤日は曲詳細の MusicBrainz |
 | — | 自動 | Supabase に曲と動画が入る = MusicAiChat 曲DB 更新 |
 | — | 自動 | その曲の増分 JSON（`musicaichat/v1` の1ファイル + YouTube / アーティスト索引） |
 | 4 | 人間 | 公開サイトに載せるときだけ `E:\m8` から GCS rsync（または `MUSIC8_GCS_SYNC=1` の定期生成） |

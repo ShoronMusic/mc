@@ -10,6 +10,8 @@
 alter table public.songs add column if not exists is_liked boolean not null default false;
 alter table public.songs add column if not exists wp_post_modified timestamptz null;
 alter table public.songs add column if not exists catalog_published_at timestamptz null;
+-- WP 投稿本文（楽曲解説の要約）相当。管理曲詳細の Gemini ボタンが書く。
+alter table public.songs add column if not exists music8_intro text null;
 
 create index if not exists idx_songs_is_liked on public.songs (is_liked) where is_liked = true;
 
@@ -178,6 +180,7 @@ create table if not exists public.catalog_playlists (
   title text not null,
   description text null,
   wp_post_id bigint null,
+  cover_image_url text null,
   publish_year_type text null,
   publish_year_single text null,
   publish_year_range_start text null,
@@ -188,6 +191,10 @@ create table if not exists public.catalog_playlists (
   updated_at timestamptz not null default now(),
   constraint catalog_playlists_slug_unique unique (slug)
 );
+
+-- 既存 DB 向け（create 後に列が無い場合）
+alter table public.catalog_playlists
+  add column if not exists cover_image_url text null;
 
 create unique index if not exists idx_catalog_playlists_wp_post_id
   on public.catalog_playlists (wp_post_id)

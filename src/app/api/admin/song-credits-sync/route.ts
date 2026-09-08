@@ -6,7 +6,11 @@ import {
   buildExplicitCreditArtists,
   parseCreditArtistsInput,
 } from '@/lib/admin-domestic-artist-playlist';
-import { ensureDomesticArtistForSongRegistration } from '@/lib/artist-selection-register';
+import {
+  ensureArtistForSongRegistration,
+  ensureDomesticArtistForSongRegistration,
+} from '@/lib/artist-selection-register';
+import { creditNameHasJapaneseScript } from '@/lib/song-credits-resolve';
 import {
   clearArtistLookupIndexCache,
   loadArtistLookupIndex,
@@ -92,7 +96,11 @@ export async function POST(request: Request) {
   try {
     const index = await loadArtistLookupIndex(admin);
     for (const name of explicitNames) {
-      await ensureDomesticArtistForSongRegistration(admin, name, { index });
+      if (creditNameHasJapaneseScript(name)) {
+        await ensureDomesticArtistForSongRegistration(admin, name, { index });
+      } else {
+        await ensureArtistForSongRegistration(admin, name, index);
+      }
     }
     clearArtistLookupIndexCache();
     const freshIndex = await loadArtistLookupIndex(admin);

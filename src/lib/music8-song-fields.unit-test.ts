@@ -4,6 +4,9 @@ import {
   extractMusic8SongFieldsFromPersistedSnapshot,
   parseMusicaichatStructuredMetadataFromFactsText,
   pickMusic8SongFullDescription,
+  music8HtmlOrTextToPlain,
+  plainMusic8IntroFromWpSongJson,
+  stripLeadingMusic8CreditLine,
   resolveOriginalReleaseDateFromMusic8Json,
   resolveOriginalReleaseDateFromMusic8WpSongsFileJson,
   resolveSongStyleForOverwriteFromMusic8,
@@ -111,6 +114,72 @@ function run() {
     stable_key: { artist_slug: 'sting', song_slug: 'fortress-around-your-heart' },
   });
   assert.equal(fullFromWp, '短い全文。');
+  assert.equal(music8HtmlOrTextToPlain('<p>hello</p><p>world</p>'), 'hello\nworld');
+  assert.equal(music8HtmlOrTextToPlain('<p>一行<br />二行</p>'), '一行\n二行');
+  assert.equal(
+    stripLeadingMusic8CreditLine('2Pac - Dear Mama\n母親へ捧げたシングル。'),
+    '母親へ捧げたシングル。',
+  );
+  assert.equal(
+    plainMusic8IntroFromWpSongJson({
+      title: 'All My Demons Greeting Me As A Friend',
+      artists: [{ name: 'AURORA' }],
+      content: '<p>ノルウェー出身AURORAの代表作。闇を突き抜ける。</p>',
+    }),
+    'ノルウェー出身AURORAの代表作。闇を突き抜ける。',
+  );
+  assert.equal(
+    plainMusic8IntroFromWpSongJson({
+      title: 'Dear Mama',
+      artists: [{ name: '2Pac' }],
+      content:
+        '<p>2Pac - Dear Mama</p>\n<p>アメリカのラッパー2Pacが1995年2月21日、3rdアルバムからのリードシングルとして発表。</p>',
+    }),
+    'アメリカのラッパー2Pacが1995年2月21日、3rdアルバムからのリードシングルとして発表。',
+  );
+  assert.equal(
+    plainMusic8IntroFromWpSongJson({
+      title: 'Song',
+      artists: [{ name: 'Artist' }],
+      content: '<p>Artist - Song</p>',
+    }),
+    '',
+  );
+  assert.equal(
+    plainMusic8IntroFromWpSongJson({
+      title: 'Here For You',
+      artists: [{ name: 'Wilkinson' }],
+      content: '<p>Wilkinson&BeckyHill-HereForYou</p>',
+    }),
+    '',
+  );
+
+  assert.equal(
+    plainMusic8IntroFromWpSongJson({
+      title: "She's American",
+      artists: [{ name: 'The 1975' }],
+      content: "<p>The 1975 -She's American</p>",
+    }),
+    '',
+  );
+
+  assert.equal(
+    plainMusic8IntroFromWpSongJson({
+      title: 'Mood',
+      artists: [{ name: '24kGoldn' }],
+      content: '<p>24kGoldn-Moodft.ianndior</p>',
+    }),
+    '',
+  );
+
+  assert.equal(
+    plainMusic8IntroFromWpSongJson({
+      title: 'Kiss Me More',
+      artists: [{ name: 'Doja Cat' }],
+      content: '<p>Doja Cat -Kiss Me More ft. SZA</p>',
+    }),
+    '',
+  );
 
   console.log('music8-song-fields.unit-test: ok');
 }

@@ -84,6 +84,7 @@ type SongExportRow = {
   primary_artist_name_ja: string | null;
   catalog_published_at?: string | null;
   created_at?: string | null;
+  music8_intro?: string | null;
 };
 
 function classificationFromRow(
@@ -132,9 +133,12 @@ export function buildMusicaichatSongJson(params: {
   }
   const classification = classificationFromRow(row, styleSlugs, genreNames);
   const bullets = classification.map((c) => c);
-  const opening = credit
-    ? [`${credit}。`]
-    : [`${primaryArtist} の楽曲。`];
+  const intro = (row.music8_intro ?? '').trim();
+  const opening = intro
+    ? [intro]
+    : credit
+      ? [`${credit}。`]
+      : [`${primaryArtist} の楽曲。`];
 
   return {
     schema_version: MUSIC8_JSON_SCHEMA_VERSION,
@@ -246,6 +250,8 @@ export function buildStyleMonthly(
 }
 
 const SONG_SELECT =
+  'id, main_artist, song_title, display_title, original_release_date, genres, vocal, style, music8_artist_slug, music8_song_slug, music8_song_id, music8_video_id, spotify_track_id, spotify_artists, primary_artist_name_ja, catalog_published_at, created_at, music8_intro';
+const SONG_SELECT_NO_INTRO =
   'id, main_artist, song_title, display_title, original_release_date, genres, vocal, style, music8_artist_slug, music8_song_slug, music8_song_id, music8_video_id, spotify_track_id, spotify_artists, primary_artist_name_ja, catalog_published_at, created_at';
 
 export async function loadSongExportBundle(
@@ -256,9 +262,16 @@ export async function loadSongExportBundle(
   youtubeIndex: Record<string, YoutubeIndexEntry>;
   fileName: string;
 } | null> {
-  const { data: row, error } = await admin.from('songs').select(SONG_SELECT).eq('id', songId).maybeSingle();
-  if (error || !row) return null;
-  const song = row as SongExportRow;
+  const primary = await admin.from('songs').select(SONG_SELECT).eq('id', songId).maybeSingle();
+  let rawRow: unknown = primary.data;
+  let error = primary.error;
+  if (error?.code === '42703') {
+    const fallback = await admin.from('songs').select(SONG_SELECT_NO_INTRO).eq('id', songId).maybeSingle();
+    rawRow = fallback.data;
+    error = fallback.error;
+  }
+  if (error || !rawRow) return null;
+  const song = rawRow as SongExportRow;
 
   const { data: videos } = await admin.from('song_videos').select('video_id').eq('song_id', songId);
   const videoIds = ((videos ?? []) as { video_id?: string }[])

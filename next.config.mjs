@@ -16,6 +16,33 @@ const nextConfig = {
   async redirects() {
     return [{ source: '/favicon.ico', destination: '/musicAI_icon.png', permanent: false }];
   },
+  // 開発時にページチャンクが破棄→再コンパイル待ちで ChunkLoadError になるのを緩和
+  onDemandEntries: {
+    maxInactiveAge: 60 * 60 * 1000,
+    pagesBufferLength: 8,
+  },
+  webpack: (config, { dev, isServer }) => {
+    if (dev) {
+      config.watchOptions = {
+        ...config.watchOptions,
+        ignored: [
+          '**/node_modules/**',
+          '**/.git/**',
+          '**/wp/**',
+          '**/.next/**',
+          '**/.next-mc/**',
+          '**/_work/**',
+          '**/videosozai/**',
+        ],
+      };
+    }
+    if (dev && !isServer) {
+      // 既定 120s。Windows で初回コンパイルが遅いと app/layout.js が timeout する
+      config.output = config.output || {};
+      config.output.chunkLoadTimeout = 300000;
+    }
+    return config;
+  },
   // Supabase をサーバーバンドルから外し、vendor-chunks 欠落（Cannot find module './vendor-chunks/@supabase.js'）を防ぐ
   experimental: {
     serverComponentsExternalPackages: [

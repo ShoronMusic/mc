@@ -5,28 +5,58 @@ import { fetchVideoIdsWithAiCommentary } from '@/lib/library-ai-commentary-prese
 import { getStoredAiCommentaryForRead } from '@/lib/song-tidbits';
 import { getCommentaryByVideoId } from '@/lib/commentary-library';
 import { stripDbPrefixForChatDisplay } from '@/lib/ai-commentary-chat-display';
+import { usableLibraryMusic8Intro } from '@/lib/library-song-commentary-text';
 
 export const dynamic = 'force-dynamic';
 
 const MAX_PRESENCE_IDS = 80;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-function foundResponse(videoId: string, baseComment: string, freeComments: string[]) {
+function foundResponse(
+  videoId: string,
+  baseComment: string,
+  freeComments: string[],
+  music8Intro: string | null,
+) {
   return NextResponse.json({
     videoId,
     found: true as const,
     baseComment: stripDbPrefixForChatDisplay(baseComment),
     freeComments: freeComments.map((c) => stripDbPrefixForChatDisplay(c)),
+    music8Intro,
   });
 }
 
-function emptyResponse(videoId: string) {
+function emptyResponse(videoId: string, music8Intro: string | null) {
   return NextResponse.json({
     videoId,
     found: false as const,
     baseComment: null as string | null,
     freeComments: [] as string[],
+    music8Intro,
   });
+}
+
+async function fetchDbMusic8Intro(
+  admin: NonNullable<ReturnType<typeof createAdminClient>>,
+  songId: string,
+): Promise<string | null> {
+  const { data, error } = await admin
+    .from('songs')
+    .select('music8_intro')
+    .eq('id', songId)
+    .maybeSingle();
+  if (error) {
+    if (error.code !== '42703' && error.code !== '42P01') {
+      console.error('[api/library/ai-commentary] music8_intro', error);
+    }
+    return null;
+  }
+  const raw =
+    typeof (data as { music8_intro?: string | null } | null)?.music8_intro === 'string'
+      ? (data as { music8_intro: string }).music8_intro
+      : null;
+  return usableLibraryMusic8Intro(raw);
 }
 
 /**
@@ -74,10 +104,12 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'videoId または songId が必要です。' }, { status: 400 });
   }
 
+  const music8IntroPromise = songId ? fetchDbMusic8Intro(admin, songId) : Promise.resolve(null);
+
   if (videoId) {
     const stored = await getStoredAiCommentaryForRead(admin, videoId);
     if (stored?.baseComment) {
-      return foundResponse(videoId, stored.baseComment, stored.freeComments);
+      return foundResponse(videoId, stored.baseComment, stored.freeComments, await music8IntroPromise);
     }
   }
 
@@ -100,7 +132,7 @@ export async function GET(request: Request) {
           typeof (bySong as { video_id?: string | null }).video_id === 'string'
             ? (bySong as { video_id: string }).video_id
             : videoId;
-        return foundResponse(vid || videoId, body, []);
+        return foundResponse(vid || videoId, body, [], await music8IntroPromise);
       }
     }
   }
@@ -108,9 +140,9 @@ export async function GET(request: Request) {
   if (videoId) {
     const legacy = await getCommentaryByVideoId(admin, videoId);
     if (legacy?.body?.trim()) {
-      return foundResponse(videoId, legacy.body, []);
+      return foundResponse(videoId, legacy.body, [], await music8IntroPromise);
     }
   }
 
-  return emptyResponse(videoId);
+  return emptyResponse(videoId, await music8IntroPromise);
 }

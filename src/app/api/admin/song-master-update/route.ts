@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { requireStyleAdminApi } from '@/lib/admin-access';
+import { uniqueNormalizedGenreNames } from '@/lib/admin-song-artist-defaults';
 import { normalizeSongCatalogScope, type SongCatalogScope } from '@/lib/song-catalog-scope';
 
 export const dynamic = 'force-dynamic';
@@ -43,18 +44,12 @@ function parseVocal(v: unknown): string | null {
 
 function parseGenres(v: unknown): string[] | null {
   if (Array.isArray(v)) {
-    const parts = v
-      .filter((x): x is string => typeof x === 'string')
-      .map((x) => x.trim())
-      .filter(Boolean);
+    const parts = uniqueNormalizedGenreNames(v.filter((x): x is string => typeof x === 'string'));
     return parts.length > 0 ? parts : null;
   }
   const t = toNullableTrimmed(v);
   if (!t) return null;
-  const parts = t
-    .split(/[,、]/)
-    .map((x) => x.trim())
-    .filter(Boolean);
+  const parts = uniqueNormalizedGenreNames(t.split(/[,、]/));
   return parts.length > 0 ? parts : null;
 }
 

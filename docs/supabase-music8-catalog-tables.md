@@ -19,6 +19,7 @@ Music8 公開サイトと MusicAiChat で **曲マスタを 1 本化**するた�
 | WP | 行き先 |
 |-----|--------|
 | `post` | `songs`（既存）+ `song_videos` |
+| 投稿本文（楽曲解説の要約） | `songs.music8_intro`。WP/`E:\\m8` 曲 JSON の `content` を HTML 除去してバックフィル。新規は管理曲詳細の Gemini 取得。部屋ライブラリ曲詳細は保存直後からこの列を表示。Music8 公開 JSON は週次エクスポート後 |
 | `category`（アーティスト） | `artists` + `wp_term_id` |
 | `style` | `catalog_styles` + `song_styles` |
 | `genre` | `catalog_genres` + `song_genres`（`parent_genre` は style と不一致のまま保持） |
@@ -30,7 +31,8 @@ Music8 公開サイトと MusicAiChat で **曲マスタを 1 本化**するた�
 | ACF `member` | `artist_members` |
 | ACF `Occupation` | `artists.occupations` |
 | ACF `related_artists`（textarea） | `artists.related_artists_raw`（正規化は後続） |
-| CPT `playlist` + meta `playlist_songs` | `catalog_playlists` + `catalog_playlist_songs` |
+| CPT `playlist` + meta `playlist_songs` | `catalog_playlists` + `catalog_playlist_songs`（＋ `catalog_playlist_styles`。UI 名は Genre BEST。仕様: [`00-genre-best-spec.md`](./00-genre-best-spec.md)） |
+| playlist thumbnail | `catalog_playlists.cover_image_url`（パッチ: [`sql/catalog-playlists-cover-image.sql`](./sql/catalog-playlists-cover-image.sql)） |
 | CPT `sp_artist` | 特集（既存 `featured_pages`）。曲マスタではない |
 
 公開ナビのスタイル 9 種（Pop … others）が正。genre の `parent_genre` にある jazz / reggae はジャンル側に残す。
@@ -40,8 +42,11 @@ Music8 公開サイトと MusicAiChat で **曲マスタを 1 本化**するた�
 | コマンド | 役割 |
 |----------|------|
 | `npx tsx scripts/import-music8-wp-catalog.ts` | ローカル Music8 曲 JSON → 中間テーブル（`music8_song_id` で結合） |
+| `npx tsx scripts/import-music8-playlists-from-wp.ts` | WP REST プレイリスト → `catalog_playlists*`（既定 dry-run。`--apply`） |
+| `npx tsx scripts/backfill-music8-intro-from-wp-songs-json.ts` | 曲 JSON `content` → `songs.music8_intro`（`<p>` 除去。既定 dry-run） |
 | `npx tsx scripts/export-music8-json-from-supabase.ts` | Supabase → musicaichat/v1 + `styles_summary.json` |
 | 管理 `POST /api/admin/songs-register` | YouTube 1 曲登録 + 増分 JSON |
+| 管理 `/admin/genre-best`・`/api/admin/genre-best*` | Genre BEST 一覧・詳細・曲登録・WP 取込 |
 
 初回は既存の曲一括取り込み（`import-music8-songs-bulk.ts` / 週次同期）のあと、本インポートで style/genre を埋める。
 

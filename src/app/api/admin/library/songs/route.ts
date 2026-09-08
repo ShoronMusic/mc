@@ -25,6 +25,7 @@ export type AdminLibrarySongItem = {
   video_id: string | null;
   /** 曲に song_tidbits.ai_commentary があるか */
   has_ai_commentary: boolean;
+  spotify_images: string | null;
 };
 
 function parseSort(raw: string | null): 'release_new' | 'release_old' | 'spotify_popularity' {
@@ -55,7 +56,7 @@ export async function GET(request: Request) {
   const sort = parseSort(searchParams.get('sort'));
 
   const SONG_SELECT =
-    'id, display_title, main_artist, song_title, style, play_count, spotify_popularity, original_release_date, music8_song_data';
+    'id, display_title, main_artist, song_title, style, play_count, spotify_popularity, original_release_date, music8_song_data, spotify_images';
 
   let songRows: {
     id: string;
@@ -67,6 +68,7 @@ export async function GET(request: Request) {
     spotify_popularity: number | null;
     original_release_date: string | null;
     music8_song_data?: unknown;
+    spotify_images?: string | null;
   }[];
 
   try {
@@ -164,6 +166,10 @@ export async function GET(request: Request) {
       video_id: videoId,
       youtube_published_at: ytPublishedBySong.get(s.id) ?? null,
       has_ai_commentary: commentarySongIds.has(s.id),
+      spotify_images:
+        typeof s.spotify_images === 'string' && s.spotify_images.trim()
+          ? s.spotify_images.trim()
+          : null,
     };
   });
 

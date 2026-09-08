@@ -23,6 +23,7 @@ export type DomesticArtistRegisteredSongItem = {
   youtube_url: string | null;
   spotify_track_id: string | null;
   spotify_popularity: number | null;
+  spotify_images: string | null;
 };
 
 function rankVariant(variant: string | null | undefined): number {
@@ -58,9 +59,9 @@ export async function GET(request: Request) {
   await ensureWesternTreatedJpArtistCache(admin);
 
   const SONG_SELECT =
-    'id, display_title, main_artist, song_title, song_title_ja, original_release_date, catalog_scope, music8_artist_slug, primary_artist_name_ja, spotify_track_id, spotify_popularity';
+    'id, display_title, main_artist, song_title, song_title_ja, original_release_date, catalog_scope, music8_artist_slug, primary_artist_name_ja, spotify_track_id, spotify_popularity, spotify_images';
   const SONG_SELECT_FALLBACK =
-    'id, display_title, main_artist, song_title, original_release_date, catalog_scope, music8_artist_slug, primary_artist_name_ja, spotify_track_id, spotify_popularity';
+    'id, display_title, main_artist, song_title, original_release_date, catalog_scope, music8_artist_slug, primary_artist_name_ja, spotify_track_id, spotify_popularity, spotify_images';
 
   let songsRaw: Array<{
     id: string;
@@ -71,6 +72,7 @@ export async function GET(request: Request) {
     original_release_date: string | null;
     spotify_track_id?: string | null;
     spotify_popularity?: number | null;
+    spotify_images?: string | null;
   }>;
 
   try {
@@ -165,6 +167,10 @@ export async function GET(request: Request) {
           : null,
       spotify_popularity:
         pop != null && Number.isFinite(Number(pop)) ? Math.round(Number(pop)) : null,
+      spotify_images:
+        typeof s.spotify_images === 'string' && s.spotify_images.trim()
+          ? s.spotify_images.trim()
+          : null,
     };
   });
 

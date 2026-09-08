@@ -1,7 +1,5 @@
 import type { GenerationConfig } from '@google/generative-ai';
-import {
-  extractTextFromGenerateContentResponse,
-} from '@/lib/gemini-gemma-host';
+import { extractRawTextFromGenerateContentResponse } from '@/lib/gemini-gemma-host';
 import { logGeminiUsage, type GeminiUsageLogMeta } from '@/lib/gemini';
 import { persistGeminiUsageLog } from '@/lib/gemini-usage-log';
 import { getAdminGeminiModel } from '@/lib/gemini-admin';
@@ -40,11 +38,13 @@ export async function generateAdminArtistProfile(params: {
   const catalog = params.catalog ?? 'domestic';
   const prompt = buildAdminArtistProfilePrompt(artistName, catalog);
   const modelId = resolveGenerationModelId(USAGE_CONTEXT);
+  const isGemma = /gemma/i.test(modelId);
 
+  /** Gemma は application/json を拒否・無視することがあるため Flash 以外では付けない */
   const generationConfig: GenerationConfig = {
     temperature: 0.35,
     maxOutputTokens: 8192,
-    responseMimeType: 'application/json',
+    ...(isGemma ? {} : { responseMimeType: 'application/json' as const }),
   };
 
   const usageMeta: GeminiUsageLogMeta = { userId: params.userId ?? null };
@@ -59,13 +59,19 @@ export async function generateAdminArtistProfile(params: {
       userId: usageMeta.userId ?? null,
     });
 
-    const text = extractTextFromGenerateContentResponse(result.response, modelId);
+    // JSON パース用は Gemma 向け本文整形をかけない（プロフィール JSON を壊すため）
+    const text = extractRawTextFromGenerateContentResponse(result.response);
     if (!text.trim()) {
       return { ok: false, error: 'Gemini の応答が空でした。' };
     }
 
     const fields = extractJsonObjectFromGeminiText(text);
     if (!fields) {
+      console.warn(
+        '[admin-artist-profile-generate] JSON parse failed',
+        modelId,
+        text.slice(0, 400),
+      );
       return { ok: false, error: '生成結果を JSON として解釈できませんでした。' };
     }
 

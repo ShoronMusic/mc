@@ -15,6 +15,7 @@ import { rankLibraryVideoVariant } from '@/lib/library-video-variant-rank';
 import { extractMusic8SongFieldsFromPersistedSnapshot } from '@/lib/music8-song-fields';
 import { formatLibraryVocalDisplay } from '@/lib/library-vocal-display';
 import { songHasLibraryCommentaryIcon } from '@/lib/library-commentary-icon';
+import { usableLibraryMusic8Intro } from '@/lib/library-song-commentary-text';
 
 export const dynamic = 'force-dynamic';
 
@@ -36,6 +37,8 @@ export type LibrarySongByArtistItem = {
   /** 曲詳細に曲解説（AI または Music8 紹介）があるか */
   has_ai_commentary: boolean;
   spotify_track_id: string | null;
+  /** Spotify アルバムアート URL（無ければクライアントで YouTube サムネへフォールバック） */
+  spotify_images: string | null;
 };
 
 function parseSort(raw: string | null): 'release' | 'plays' | 'popularity' {
@@ -67,7 +70,9 @@ export async function GET(request: Request) {
   await ensureWesternTreatedJpArtistCache(admin);
 
   const SONG_SELECT =
-    'id, display_title, main_artist, song_title, style, genres, vocal, play_count, original_release_date, spotify_popularity, spotify_track_id, catalog_scope, music8_artist_slug, music8_song_slug, primary_artist_name_ja, music8_song_data';
+    'id, display_title, main_artist, song_title, style, genres, vocal, play_count, original_release_date, spotify_popularity, spotify_track_id, spotify_images, catalog_scope, music8_artist_slug, music8_song_slug, primary_artist_name_ja, music8_song_data, music8_intro';
+  const SONG_SELECT_FALLBACK =
+    'id, display_title, main_artist, song_title, style, genres, vocal, play_count, original_release_date, spotify_popularity, spotify_track_id, spotify_images, catalog_scope, music8_artist_slug, music8_song_slug, primary_artist_name_ja, music8_song_data';
 
   let songsRaw: {
     id: string;
@@ -82,16 +87,34 @@ export async function GET(request: Request) {
     spotify_popularity: number | null;
     music8_song_data?: unknown;
     spotify_track_id?: string | null;
+    spotify_images?: string | null;
     music8_artist_slug?: string | null;
     music8_song_slug?: string | null;
+    music8_intro?: string | null;
   }[];
 
   try {
     songsRaw = await fetchSongsForLibraryArtistSelection(admin, artist, SONG_SELECT, 500, 'indexed_pick');
   } catch (songErr) {
     const msg = songErr instanceof Error ? songErr.message : '曲一覧の取得に失敗しました。';
-    console.error('[api/library/songs-by-artist] songs', msg);
-    return NextResponse.json({ error: msg }, { status: 500 });
+    if (/music8_intro/i.test(msg)) {
+      try {
+        songsRaw = await fetchSongsForLibraryArtistSelection(
+          admin,
+          artist,
+          SONG_SELECT_FALLBACK,
+          500,
+          'indexed_pick',
+        );
+      } catch (retryErr) {
+        const retryMsg = retryErr instanceof Error ? retryErr.message : msg;
+        console.error('[api/library/songs-by-artist] songs', retryMsg);
+        return NextResponse.json({ error: retryMsg }, { status: 500 });
+      }
+    } else {
+      console.error('[api/library/songs-by-artist] songs', msg);
+      return NextResponse.json({ error: msg }, { status: 500 });
+    }
   }
 
   const songs = filterSongRowsByLibraryCatalog(songsRaw, catalog);
@@ -220,10 +243,15 @@ export async function GET(request: Request) {
         hasAiCommentary: commentarySongIds.has(s.id),
         music8ArtistSlug: s.music8_artist_slug,
         music8SongSlug: s.music8_song_slug,
+        hasDbMusic8Intro: Boolean(usableLibraryMusic8Intro(s.music8_intro)),
       }),
       spotify_track_id:
         typeof s.spotify_track_id === 'string' && s.spotify_track_id.trim()
           ? s.spotify_track_id.trim()
+          : null,
+      spotify_images:
+        typeof s.spotify_images === 'string' && s.spotify_images.trim()
+          ? s.spotify_images.trim()
           : null,
     };
   });

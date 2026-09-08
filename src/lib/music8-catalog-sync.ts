@@ -213,11 +213,8 @@ export async function patchArtistWpTermFromSongJson(
     const occupations = Array.isArray(occRaw)
       ? occRaw.filter((x): x is string => typeof x === 'string' && x.trim().length > 0)
       : [];
-    const related =
-      typeof acf?.related_artists === 'string' ? acf.related_artists.trim() : null;
     const payload: Record<string, unknown> = { wp_term_id: wpTermId };
     if (occupations.length) payload.occupations = occupations;
-    if (related) payload.related_artists_raw = related;
     const { error } = await admin.from('artists').update(payload).eq('music8_artist_slug', slug);
     if (isMissingTable(error)) return patched;
     if (!error) patched += 1;

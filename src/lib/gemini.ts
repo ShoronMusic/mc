@@ -4,12 +4,15 @@
 
 import { GoogleGenerativeAI, type GenerationConfig } from '@google/generative-ai';
 import {
+  containsGenericPopProductionFiller,
   containsUnreliableCommentaryDiscographyClaim,
+  GENERIC_POP_PRODUCTION_FILLER_REGEN_HINT,
   isRejectedChatOrTidbitOutput,
   MEDIA_PLACEMENT_WORK_TITLE_REGEN_HINT,
   mentionsMediaPlacementWithoutWorkTitle,
   stripMediaPlacementSentencesWithoutWorkTitle,
 } from '@/lib/ai-output-policy';
+import { COMMENTARY_ARTIST_KNOWLEDGE_RULES } from '@/lib/commentary-youtube-facts';
 import { buildSongIntroOnlyBaseComment } from '@/lib/commentary-song-intro-only-mode';
 import {
   buildGoogleGenerativeModelParams,
@@ -109,6 +112,8 @@ export type GeminiUsageLogMeta = {
   groundedFactsBlock?: string | null;
   /** musicaichat 曲 JSON の buildMusicaichatFactsForAiPromptBlock 出力 */
   music8FactsBlock?: string | null;
+  /** YouTube 概要・公開日・チャンネル（buildYoutubeMetadataFactsBlock） */
+  youtubeFactsBlock?: string | null;
   /** 参照データに年・出自が揃わないとき true。generateCommentary は定型の曲紹介のみ返す */
   songIntroOnlyDiscography?: boolean;
   /** スーパーグループ文脈（手動マスタ + 外部データ補完） */
@@ -675,6 +680,8 @@ export async function generateCommentary(
   const hasMbFacts = groundedFactsBlock.length > 0;
   const music8FactsRaw = usageMeta?.music8FactsBlock?.trim() ?? '';
   const hasMusic8Facts = music8FactsRaw.length > 0;
+  const youtubeFactsRaw = usageMeta?.youtubeFactsBlock?.trim() ?? '';
+  const hasYoutubeFacts = youtubeFactsRaw.length > 0;
   const hasReferenceFacts = hasMbFacts || hasMusic8Facts;
 
   const input =
@@ -701,6 +708,7 @@ export async function generateCommentary(
     ? `\n【MusicBrainz から取得した事実（この範囲だけアルバム名・年・シングル／アルバム区分を述べてよい）】\n${groundedFactsBlock}\n`
     : '';
   const music8FactsSection = hasMusic8Facts ? `\n${music8FactsRaw}\n` : '';
+  const youtubeFactsSection = hasYoutubeFacts ? `\n${youtubeFactsRaw}\n` : '';
   const knownCoverOriginalHint = buildKnownCoverOriginalHint({
     songTitle: title,
     artistName: authorName ?? null,
@@ -720,7 +728,7 @@ ${hasCoverOriginalSignal ? '・ただし、カバー版であることや原曲�
 `
     : `・リリース時期は**西暦1年だけ**書いてよいが、自信がなければ「1980年代」など幅のある表現にするか**年は省略**してよい。
 ・**検証済みディスコグラフィーがこのプロンプトに無い**ため、次を**禁止**：アルバム名（『○○』）の列挙、「デビューアルバム／セカンドアルバムに収録」、サントラ**盤**名を捏造した「サントラ『○○』に収録」、各国チャートの**具体順位**。取り違えで虚偽になりやすい。
-・代わりにジャンル上の位置づけ（ニューウェーブ等）、サウンドの印象、歌詞の雰囲気など**検証不要な観点**で書くこと。
+・代わりに、アーティストとして広く知られた国籍・バンド種別・音楽性（ハードロック等）と、YouTube 概要や曲名から読み取れるテーマを書くこと。どの曲にも使えるシンセ／ダンス／フックの常套句で埋めない。
 ・例外: 映画・ドラマ・アニメ・ゲームの主題歌・エンディングとして**広く知られ、作品名に自信がある**ときだけ、サントラ盤名ではなく**作品名**を書いてよい（例: 映画『レオン』のエンディングとしても知られています）。作品名が曖昧なら起用には触れない（「映画のエンディングとしても浸透」のような無名の言及は禁止）。
 `;
 
@@ -730,9 +738,9 @@ ${hasCoverOriginalSignal ? '・ただし、カバー版であることや原曲�
 ・もし「リリース年」または「収録アルバム／シングル情報」のどちらかが欠ける場合は、本文中で**不足している項目だけを1フレーズで明言**したうえで、確認できる事実（例: 参照事実にある年・盤名・曲の位置づけ・サウンド特徴）を続ける。
 ・「不明なので省略します」だけで終わらせない。確認できる事実を最低1点は必ず入れる。
 `
-    : `・最優先ポリシー: **事実に徹する**。検証できない固有名詞・年号・制作逸話は書かない。
-・リリース年や収録アルバムが断定できないときは、その不足を一言で明示してから、確認可能な要素（曲調・歌詞テーマ・クレジット上の役割）を具体的に述べる。
-・「名曲です」「人気曲です」など当たり障りのない一般論だけで終わらせない。少なくとも1つ、曲固有の観点を入れる。
+    : `・最優先ポリシー: **事実に徹する**。検証できないチャート順位・未確認アルバム名・制作逸話は書かない。
+・リリース年や収録アルバムが断定できないときは、その不足を一言で明示してから、アーティストとして広く知られた位置づけ（国籍・バンド/ソロ・ハードロック等）や、YouTube 概要・曲名から読み取れるテーマを述べる。
+・「名曲です」「人気曲です」や汎用的なシンセ／ダンサブル描写だけで終わらせない。少なくとも1つ、このアーティスト／曲固有の観点を入れる。
 ・映画・ドラマ等の起用に触れるなら作品名を『』で書く。不確かなら触れない。
 `;
 
@@ -740,13 +748,15 @@ ${hasCoverOriginalSignal ? '・ただし、カバー版であることや原曲�
 ${input}${metaLock}
 ${artistSongOrderLock}
 ${supergroupHint ? `${supergroupHint}\n` : ''}
-${mbFactsSection}${music8FactsSection}
+${mbFactsSection}${music8FactsSection}${youtubeFactsSection}
+${COMMENTARY_ARTIST_KNOWLEDGE_RULES}
 ・アーティスト名は必ず出すこと。
 ・アーティスト欄やタイトルに複数名（共演・feat. 等）が関わる場合は、**それぞれの役割や対比**（例：歌とラップの掛け合い）に一言触れてください。裏付けのない「出会いの経緯」は書かないこと。
 ${discographyRules}
 ${factFirstRules}
 ${coverOriginalRules}
 ・可能であれば、この曲のテーマや歌詞のメッセージを一言で要約して触れてよい（例：反戦歌、失恋ソング、社会問題を扱った曲など）。ただし歌詞全文の説明や長い意訳は避け、雰囲気が伝わる程度の短い説明にとどめること。
+・バラード（スローな情感曲・パワーバラード等）と分かる場合は、ハードロック／ポップ等の分類に関わらず「バラード」と一言入れる。分からないときは書かない。
 ・「80年代といえば」「〇〇といえば」など年代・ジャンルの一般的な話題は出さないこと。あくまでこの曲とアーティストの基本情報だけを書くこと。
 ・アーティストが有名バンドのメンバーまたは元メンバーの場合は、必ずバンド名に触れること。例：Glenn Frey → Eaglesのメンバー、Steve Perry → Journeyの元ボーカル、など。
 ・カバー曲とはっきり分かる場合は、必ずオリジナルやネタ元（原曲のアーティスト・曲名・リリース年など）に触れること。カバーであることを示したうえで、原曲の話を入れること。
@@ -778,7 +788,8 @@ ${coverOriginalRules}
       if (!text) return null;
       const filmBare = mentionsMediaPlacementWithoutWorkTitle(text);
       const discoOk = hasReferenceFacts || !containsUnreliableCommentaryDiscographyClaim(text);
-      if (discoOk && !filmBare) return text;
+      const filler = containsGenericPopProductionFiller(text);
+      if (discoOk && !filmBare && !filler) return text;
       if (attempt >= 2) {
         if (filmBare) {
           const stripped = stripMediaPlacementSentencesWithoutWorkTitle(text);
@@ -786,7 +797,13 @@ ${coverOriginalRules}
         }
         return text;
       }
-      promptUse = prompt + (filmBare ? MEDIA_PLACEMENT_WORK_TITLE_REGEN_HINT : regenHint);
+      promptUse =
+        prompt +
+        (filmBare
+          ? MEDIA_PLACEMENT_WORK_TITLE_REGEN_HINT
+          : filler
+            ? GENERIC_POP_PRODUCTION_FILLER_REGEN_HINT
+            : regenHint);
     }
     return null;
   } catch (e) {
@@ -855,20 +872,22 @@ export async function getSongStyle(
       : `曲名: ${title.trim()}`;
 
   const styleList = SONG_STYLES.join(' / ');
-  const prompt = `以下の曲が洋楽のどのスタイルに最も近いか、次のリストのいずれか1つをそのままの表記で答えてください。分からない場合は Other。
+  const prompt = `以下の曲が洋楽のどのスタイルに最も近いか、次のリストのいずれか1つをそのままの表記で答えてください。分からない場合のみ Other。
 スタイル一覧: ${styleList}
 
 ${input}
 
-・Pop = Pop, Folk, Country, Reggae
+・Pop = Pop, Folk, Country, Reggae, Adult contemporary, バラード主体のポップ（例: Adele, Céline Dion）
 ・Dance = Dance, Disco, Funk
 ・Electronica = House, Techno, Trance, D&B, Synthwave
-・R&B = R&B, Soul, Afrobeats
-・Metal = Metal, Hard rock
+・R&B = R&B, Soul, Neo-soul, Contemporary R&B, Hip-Hop Soul, Afrobeats（例: Mary J. Blige, Toni Braxton, Usher）
+・Hip-hop = Hip-hop, Rap, Trap
+・Metal = Metal, Hard rock, Glam metal, Arena rock, Stadium rock（例: Kissin' Dynamite。Pop にしない）
 ・Alternative rock = オルタナティブ・ロック、ポストグランジ、インディー・ロック（Foo Fighters, Nirvana, Radiohead, Coldplay など）
 ・Rock = Alternative rock と Metal 以外のロック
-上記以外のスタイルは使わないこと。リストの表記どおり出力（Alternative rock は2語で）。
-・**出力はリストのラベルのみ（例: Pop）**。説明文・前置き・箇条書きは禁止。`;
+・**明確に R&B / Soul 系のアーティスト・曲は R&B**。**明確にポップ／アダルトコンテポラリーのバラードは Pop**。ハードロック／グラムメタルは Metal。安易に Other にしないこと。
+上記以外のスタイルは使わないこと。リストの表記どおり出力（Alternative rock は2語で、R&B は R&B）。
+・**出力はリストのラベルのみ（例: R&B）**。説明文・前置き・箇条書き・英語の計画メモは禁止。`;
 
   try {
     const result = await model.generateContent(prompt);

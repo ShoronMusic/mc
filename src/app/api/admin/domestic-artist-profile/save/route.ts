@@ -3,6 +3,11 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { requireStyleAdminApi } from '@/lib/admin-access';
 import { saveAdminArtistProfile } from '@/lib/admin-artist-profile-save';
 import type { AdminArtistProfileDraft } from '@/lib/admin-artist-profile-parse';
+import {
+  normalizeAdminArtistThePrefix,
+  splitAdminArtistNameParts,
+  withSyncedAdminArtistDisplayName,
+} from '@/lib/admin-artist-profile-parse';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,8 +27,9 @@ function asNullableString(v: unknown): string | null {
 function parseDraft(raw: unknown): AdminArtistProfileDraft | null {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
   const o = raw as Record<string, unknown>;
-  const name = typeof o.name === 'string' ? o.name.trim() : '';
-  if (!name) return null;
+  const nameRaw = typeof o.name === 'string' ? o.name.trim() : '';
+  const nameBaseRaw = typeof o.nameBase === 'string' ? o.nameBase.trim() : '';
+  if (!nameRaw && !nameBaseRaw) return null;
 
   const catalogRaw = typeof o.catalogScope === 'string' ? o.catalogScope.trim().toLowerCase() : 'domestic';
   const catalogScope =
@@ -36,8 +42,26 @@ function parseDraft(raw: unknown): AdminArtistProfileDraft | null {
         .filter(Boolean)
     : [];
 
-  return {
-    name,
+  const hasNameBase = typeof o.nameBase === 'string';
+  const hasThePrefix = Object.prototype.hasOwnProperty.call(o, 'thePrefix');
+  let nameBase: string;
+  let thePrefix: ReturnType<typeof normalizeAdminArtistThePrefix>;
+  if (hasNameBase || hasThePrefix) {
+    const fromDisplay = splitAdminArtistNameParts(nameRaw || nameBaseRaw);
+    nameBase = nameBaseRaw || fromDisplay.nameBase;
+    thePrefix = hasThePrefix
+      ? normalizeAdminArtistThePrefix(typeof o.thePrefix === 'string' ? o.thePrefix : null)
+      : null;
+  } else {
+    const parts = splitAdminArtistNameParts(nameRaw);
+    nameBase = parts.nameBase;
+    thePrefix = parts.thePrefix;
+  }
+
+  return withSyncedAdminArtistDisplayName({
+    name: nameRaw || nameBase,
+    nameBase,
+    thePrefix,
     nameEn: asNullableString(o.nameEn),
     nameJa: asNullableString(o.nameJa),
     originCountry: asNullableString(o.originCountry),
@@ -57,7 +81,7 @@ function parseDraft(raw: unknown): AdminArtistProfileDraft | null {
     youtubeChannelId: asNullableString(o.youtubeChannelId),
     youtubeChannelTitle: asNullableString(o.youtubeChannelTitle),
     wikipediaPage: asNullableString(o.wikipediaPage),
-  };
+  });
 }
 
 export async function POST(request: Request) {

@@ -102,6 +102,52 @@ export function isChatReplyUsageContext(usageContext: string): boolean {
   return c === 'chat_reply' || c.startsWith('chat_reply_');
 }
 
+export function isGetSongStyleUsageContext(usageContext: string): boolean {
+  const c = usageContext.trim();
+  return c === 'get_song_style' || c.startsWith('get_song_style_');
+}
+
+export function isGetSongEraUsageContext(usageContext: string): boolean {
+  const c = usageContext.trim();
+  return c === 'get_song_era' || c.startsWith('get_song_era_');
+}
+
+export function isMusic8SongIntroUsageContext(usageContext: string): boolean {
+  const c = usageContext.trim();
+  return c === 'music8_song_intro' || c.startsWith('music8_song_intro_');
+}
+
+export function isAdminArtistProfileGenerateUsageContext(usageContext: string): boolean {
+  const c = usageContext.trim();
+  return c === 'admin_artist_profile_generate' || c.startsWith('admin_artist_profile_generate_');
+}
+
+/**
+ * Music8 曲紹介本文。Gemma は途中切れ・英語思考漏れが起きやすいので Flash に寄せる。
+ * 上書き: `GEMINI_MUSIC8_INTRO_MODEL`。Gemma のまま: `GEMINI_MUSIC8_INTRO_USE_PRIMARY=1`。
+ */
+export function resolveMusic8SongIntroModelId(): string {
+  const override = process.env.GEMINI_MUSIC8_INTRO_MODEL?.trim();
+  if (override) return remapRetiredGeminiModelId(override);
+  const base = resolveGenerationModelIdBase('music8_song_intro');
+  if (process.env.GEMINI_MUSIC8_INTRO_USE_PRIMARY === '1') return base;
+  if (!/gemma/i.test(base)) return base;
+  return DEFAULT_GENERATION_MODEL;
+}
+
+/**
+ * 管理のアーティスト AI 再生成（厳格 JSON）。Gemma は JSON 崩れ・整形破壊が起きやすいので Flash に寄せる。
+ * 上書き: `GEMINI_ADMIN_ARTIST_PROFILE_MODEL`。Gemma のまま: `GEMINI_ADMIN_ARTIST_PROFILE_USE_PRIMARY=1`。
+ */
+export function resolveAdminArtistProfileModelId(): string {
+  const override = process.env.GEMINI_ADMIN_ARTIST_PROFILE_MODEL?.trim();
+  if (override) return remapRetiredGeminiModelId(override);
+  const base = resolveGenerationModelIdBase('admin_artist_profile_generate');
+  if (process.env.GEMINI_ADMIN_ARTIST_PROFILE_USE_PRIMARY === '1') return base;
+  if (!/gemma/i.test(base)) return base;
+  return DEFAULT_GENERATION_MODEL;
+}
+
 /**
  * @ チャット返答。Gemma は英語の指示復唱漏れが起きやすいので、プライマリが Gemma のときは Flash に寄せる。
  * 上書き: `GEMINI_CHAT_REPLY_MODEL`。Gemma のまま: `GEMINI_CHAT_REPLY_USE_PRIMARY=1`。
@@ -111,6 +157,19 @@ export function resolveChatReplyModelId(): string {
   if (override) return remapRetiredGeminiModelId(override);
   const base = resolveGenerationModelIdBase('chat_reply');
   if (process.env.GEMINI_CHAT_REPLY_USE_PRIMARY === '1') return base;
+  if (!/gemma/i.test(base)) return base;
+  return DEFAULT_GENERATION_MODEL;
+}
+
+/**
+ * 視聴履歴のスタイル／年代ラベル。Gemma だと Other や英語漏れになりやすいので Flash に寄せる。
+ * 上書き: `GEMINI_SONG_META_MODEL`。Gemma のまま: `GEMINI_SONG_META_USE_PRIMARY=1`。
+ */
+export function resolveSongMetaLabelModelId(usageContext: string): string {
+  const override = process.env.GEMINI_SONG_META_MODEL?.trim();
+  if (override) return remapRetiredGeminiModelId(override);
+  const base = resolveGenerationModelIdBase(usageContext);
+  if (process.env.GEMINI_SONG_META_USE_PRIMARY === '1') return base;
   if (!/gemma/i.test(base)) return base;
   return DEFAULT_GENERATION_MODEL;
 }
@@ -157,6 +216,15 @@ export function resolveGenerationModelId(usageContext: string): string {
   }
   if (isChatReplyUsageContext(usageContext)) {
     return resolveChatReplyModelId();
+  }
+  if (isGetSongStyleUsageContext(usageContext) || isGetSongEraUsageContext(usageContext)) {
+    return resolveSongMetaLabelModelId(usageContext);
+  }
+  if (isMusic8SongIntroUsageContext(usageContext)) {
+    return resolveMusic8SongIntroModelId();
+  }
+  if (isAdminArtistProfileGenerateUsageContext(usageContext)) {
+    return resolveAdminArtistProfileModelId();
   }
   return resolveGenerationModelIdBase(usageContext);
 }

@@ -5,6 +5,7 @@ import { stripDbPrefixForChatDisplay } from '@/lib/ai-commentary-chat-display';
 import { stripGemma4CommentaryHeadPrefix } from '@/lib/commentary-model-head-tag';
 import { polishGemmaModelVisibleText } from '@/lib/gemini-gemma-host';
 import { fetchMusic8SongDescription } from '@/components/chat/LibraryMusic8SongComment';
+import { pickLibrarySongCommentaryText } from '@/lib/library-song-commentary-text';
 
 type LibrarySongCommentaryProps = {
   videoId: string | null;
@@ -23,10 +24,13 @@ function toDisplayBody(raw: string): string {
   return t.replace(/\r\n/g, '\n').replace(/\n{2,}/g, '\n').trim();
 }
 
-async function fetchAiCommentary(videoId: string | null, songId: string | null): Promise<string | null> {
+async function fetchStoredLibraryTexts(
+  videoId: string | null,
+  songId: string | null,
+): Promise<{ ai: string | null; dbIntro: string | null }> {
   const vid = (videoId ?? '').trim();
   const sid = (songId ?? '').trim();
-  if (!vid && !sid) return null;
+  if (!vid && !sid) return { ai: null, dbIntro: null };
   const params = new URLSearchParams();
   if (vid) params.set('videoId', vid);
   if (sid) params.set('songId', sid);
@@ -36,14 +40,18 @@ async function fetchAiCommentary(videoId: string | null, songId: string | null):
   const json = (await res.json().catch(() => ({}))) as {
     found?: boolean;
     baseComment?: string | null;
+    music8Intro?: string | null;
   };
   const body = typeof json.baseComment === 'string' ? toDisplayBody(json.baseComment) : '';
-  return json.found && body ? body : null;
+  return {
+    ai: json.found && body ? body : null,
+    dbIntro: typeof json.music8Intro === 'string' ? json.music8Intro.trim() || null : null,
+  };
 }
 
 /**
  * ライブラリ曲詳細の「曲解説」1枠。
- * Music8 曲紹介があればそれを優先し、無いときだけ保存済み AI 曲解説を出す。
+ * 管理で保存した Music8 曲紹介を優先し、無いときだけ GCS JSON、さらに保存済み AI 曲解説を出す。
  */
 export function LibrarySongCommentary({
   videoId,
@@ -60,8 +68,8 @@ export function LibrarySongCommentary({
     const artist = (artistName ?? '').trim();
     const title = (songTitle ?? '').trim();
     const canMusic8 = Boolean(vid || (artist && title));
-    const canAi = Boolean(vid || sid);
-    if (!canMusic8 && !canAi) {
+    const canStored = Boolean(vid || sid);
+    if (!canMusic8 && !canStored) {
       setText(null);
       setLoading(false);
       return;
@@ -73,12 +81,16 @@ export function LibrarySongCommentary({
 
     void (async () => {
       try {
-        const [music8, ai] = await Promise.all([
+        const [music8, stored] = await Promise.all([
           canMusic8 ? fetchMusic8SongDescription(vid || null, artist, title) : Promise.resolve(null),
-          canAi ? fetchAiCommentary(vid || null, sid || null) : Promise.resolve(null),
+          canStored ? fetchStoredLibraryTexts(vid || null, sid || null) : Promise.resolve({ ai: null, dbIntro: null }),
         ]);
         if (cancelled) return;
-        const chosen = music8 || ai || null;
+        const chosen = pickLibrarySongCommentaryText({
+          dbMusic8Intro: stored.dbIntro,
+          music8JsonDescription: music8,
+          aiCommentary: stored.ai,
+        });
         setText(chosen ? chosen.replace(/\r\n/g, '\n').replace(/\n{2,}/g, '\n').trim() : null);
       } catch {
         if (!cancelled) setText(null);

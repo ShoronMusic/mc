@@ -62,7 +62,14 @@
 | `active_period` | 整形文字列 | 表示用（例: `1998 -`） |
 | `members` | `member[].name` | 既存 |
 | `profile_text` | 和文抽出 | 既存（= `description_ja` 相当） |
-| `description_en` | `description` 英語部 | 新規 |
+| `description_en` | `description` 英語部のみ（英日分割） | 新規 |
+| `birth_date` / `death_date` | `artistborn` / `artistdied` | ISO `YYYY-MM-DD`（値があるときのみ上書き） |
+| `catalog_scope` | `artistorigin` から推定 | `JPN`→domestic、それ以外→western |
+| `name_en` | ラテン表記の表示名 | 日本語名のみの行は未設定のまま |
+| `occupations` | `Occupation[]` の label/value | text[]。`kind` はその連結 |
+| `wikipedia_page` | `wikipedia_page` | 値があるときのみ |
+| `youtube_channel_id` | `youtube_channel`（UC… / channel URL） | ハンドルのみのときは URL 側へ |
+| `image_credit` | Spotify 画像利用時 | `"Spotify"` |
 | `image_url` | `spotify_artist_images` | 代表画像 |
 | `spotify_artist_id` / `spotify_artist_images` | acf | 既存・import で必ず反映 |
 | `youtube_channel_url` / `youtube_channel_title` | `youtube_channel` | 既存 |

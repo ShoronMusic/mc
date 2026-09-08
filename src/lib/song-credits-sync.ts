@@ -11,6 +11,7 @@ import {
   type SongCreditInput,
 } from '@/lib/song-credits-resolve';
 import { fetchSpotifyTrackWithArtistsById } from '@/lib/spotify-search-track';
+import { applySongDisplayFromSpotifyArtists } from '@/lib/song-display-from-spotify-artists';
 
 export type SyncSongCreditsResult = {
   songId: string;
@@ -20,6 +21,10 @@ export type SyncSongCreditsResult = {
   source: string | null;
   primaryArtistId: string | null;
   skippedReason?: string;
+  /** spotify_artists 並びで main_artist / display_title を直したか */
+  displayAlignedFromSpotify?: boolean;
+  alignedMainArtist?: string;
+  alignedDisplayTitle?: string;
 };
 
 let cachedIndex: ArtistLookupIndex | null = null;
@@ -95,8 +100,9 @@ export function planSongCreditDbRows(
   source: string | null;
   primaryArtistId: string | null;
   skippedJapanese: boolean;
+  leadResolved: boolean;
 } {
-  const { credits, unresolved, source, skippedJapanese } = resolveSongCreditsFromInput(input, index);
+  const { credits, unresolved, source, skippedJapanese, leadResolved } = resolveSongCreditsFromInput(input, index);
   if (skippedJapanese) {
     return {
       rows: [],
@@ -105,10 +111,19 @@ export function planSongCreditDbRows(
       source,
       primaryArtistId: null,
       skippedJapanese: true,
+      leadResolved: false,
     };
   }
   if (credits.length === 0) {
-    return { rows: [], creditCount: 0, unresolved, source, primaryArtistId: null, skippedJapanese: false };
+    return {
+      rows: [],
+      creditCount: 0,
+      unresolved,
+      source,
+      primaryArtistId: null,
+      skippedJapanese: false,
+      leadResolved: false,
+    };
   }
   const seenArtist = new Set<string>();
   const deduped = credits.filter((c) => {
@@ -131,6 +146,7 @@ export function planSongCreditDbRows(
     source,
     primaryArtistId: deduped[0]?.artistId ?? null,
     skippedJapanese: false,
+    leadResolved,
   };
 }
 
@@ -173,7 +189,7 @@ export async function syncSongCreditsForSong(
   const { error: insErr } = await admin.from('song_credits').insert(planned.rows);
   if (insErr) throw insErr;
 
-  if (base.primaryArtistId) {
+  if (base.primaryArtistId && planned.leadResolved) {
     const { error: linkErr } = await admin
       .from('songs')
       .update({ artist_id: base.primaryArtistId })
@@ -224,5 +240,25 @@ export async function syncSongCreditsFromSongId(
     trackArtistNames,
   };
 
-  return syncSongCreditsForSong(admin, songId, input, idx, apply);
+  const result = await syncSongCreditsForSong(admin, songId, input, idx, apply);
+  if (!result) return null;
+
+  if (apply) {
+    try {
+      const aligned = await applySongDisplayFromSpotifyArtists(admin, songId);
+      if (aligned.updated) {
+        result.displayAlignedFromSpotify = true;
+        result.alignedMainArtist = aligned.mainArtist;
+        result.alignedDisplayTitle = aligned.displayTitle;
+      }
+    } catch (e) {
+      console.warn(
+        '[song-credits-sync] align display from spotify',
+        songId,
+        e instanceof Error ? e.message : e,
+      );
+    }
+  }
+
+  return result;
 }

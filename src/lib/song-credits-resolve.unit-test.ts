@@ -74,6 +74,12 @@ function run() {
   assert.equal(resolveArtistIdFromIndex(aliasIndex, 'mgk', null), 'mgk');
   assert.equal(resolveArtistIdFromIndex(aliasIndex, 'The Alan Parsons Project', null), 'app');
 
+  const mileyIndex = buildArtistLookupIndex([
+    { id: 'miley', name: 'Miley Cyrus', music8_artist_slug: 'miley-cyrus' },
+  ]);
+  assert.equal(resolveArtistIdFromIndex(mileyIndex, 'MILEY', null), 'miley');
+  assert.equal(resolveArtistIdFromIndex(mileyIndex, 'Miley', null), 'miley');
+
   const { skippedJapanese, credits: jpCredits } = resolveSongCreditsFromInput(
     {
       spotify_artists: 'テイラー・スウィフト',
@@ -109,6 +115,41 @@ function run() {
   );
   assert.equal(bcnrU.length, 0);
   assert.equal(bcnr.length, 1);
+
+  const dupIndex = buildArtistLookupIndex([
+    { id: 'e40-stub', name: 'E-40', music8_artist_slug: null },
+    { id: 'e40-m8', name: 'E 40', music8_artist_slug: 'e-40', name_en: 'E-40' },
+    { id: 'paak-stub', name: 'Anderson .Paak', music8_artist_slug: null },
+    {
+      id: 'paak-m8',
+      name: 'Anderson Paak',
+      music8_artist_slug: 'anderson-paak',
+      name_en: 'Anderson .Paak',
+    },
+    { id: 'sure', name: 'Al B. Sure!', music8_artist_slug: 'al-b-sure' },
+  ]);
+  assert.equal(resolveArtistIdFromIndex(dupIndex, 'E-40', null), 'e40-m8');
+  assert.equal(resolveArtistIdFromIndex(dupIndex, 'Anderson .Paak', null), 'paak-m8');
+  assert.equal(resolveArtistIdFromIndex(dupIndex, 'Al B. Sure!', null), 'sure');
+
+  const { credits: bayCredits, unresolved: bayU, leadResolved } = resolveSongCreditsFromInput(
+    {
+      explicitCreditArtists: ['E-40', 'Anderson .Paak', 'Al B. Sure!'],
+      main_artist: 'E-40',
+      spotify_artists: null,
+      music8_song_data: null,
+    },
+    dupIndex,
+  );
+  assert.equal(bayU.length, 0);
+  assert.equal(leadResolved, true);
+  assert.deepEqual(
+    bayCredits.map((c) => c.artistId),
+    ['e40-m8', 'paak-m8', 'sure'],
+  );
+  assert.equal(bayCredits[0]?.role, 'main');
+  assert.equal(bayCredits[1]?.role, 'featured');
+  assert.equal(bayCredits[2]?.role, 'featured');
 
   console.log('song-credits-resolve.unit-test: ok');
 }

@@ -206,6 +206,22 @@ export const ADMIN_SECTIONS: AdminSection[] = [
     activePathPrefix: '/admin/library/',
   },
   {
+    href: '/admin/songs/list',
+    title: '洋楽 1 曲登録',
+    description:
+      '登録曲一覧（WP 投稿一覧相当）。登録日・アーティスト・公開日でソート。1 曲登録・曲詳細へ。YouTube 公開日を取得し Music8 JSON を増分出力',
+    category: 'library',
+    activePathPrefix: '/admin/songs/new',
+  },
+  {
+    href: '/admin/genre-best',
+    title: 'Genre BEST',
+    description:
+      'WP プレイリスト相当のジャンルベスト。一覧・曲一覧・アーティスト曲からの登録。WP からの取込可',
+    category: 'library',
+    activePathPrefix: '/admin/genre-best',
+  },
+  {
     href: '/admin/featured-pages',
     title: '特集ページ',
     description:
@@ -276,13 +292,6 @@ export const ADMIN_SECTIONS: AdminSection[] = [
     category: 'library',
   },
   {
-    href: '/admin/songs/new',
-    title: '洋楽 1 曲登録',
-    description:
-      'YouTube から Supabase 曲マスタへ 1 曲登録し、Music8 公開 JSON を増分出力（YT to M7 の宛先）',
-    category: 'library',
-  },
-  {
     href: '/admin/songs',
     title: '曲ダッシュボード',
     description: '曲の検索、詳細ページ（動画・コメント・豆知識・フィードバック）',
@@ -311,9 +320,26 @@ export const ADMIN_SECTIONS: AdminSection[] = [
 ];
 
 export function isAdminSectionActive(pathname: string, section: AdminSection): boolean {
+  const matches = ADMIN_SECTIONS.filter((s) => sectionMatchesPath(pathname, s));
+  if (matches.length === 0) return false;
+  const best = matches.reduce((a, b) =>
+    adminSectionMatchScore(pathname, a) >= adminSectionMatchScore(pathname, b) ? a : b,
+  );
+  return best.href === section.href;
+}
+
+function sectionMatchesPath(pathname: string, section: AdminSection): boolean {
   if (pathname === section.href) return true;
   if (section.activePathPrefix && pathname.startsWith(section.activePathPrefix)) return true;
   return false;
+}
+
+function adminSectionMatchScore(pathname: string, section: AdminSection): number {
+  if (pathname === section.href) return 10_000 + section.href.length;
+  if (section.activePathPrefix && pathname.startsWith(section.activePathPrefix)) {
+    return section.activePathPrefix.length;
+  }
+  return 0;
 }
 
 export function getAdminCategoryMeta(id: AdminCategoryId): AdminCategory {

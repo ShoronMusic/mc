@@ -26,6 +26,9 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+# Music8 WP テーマ＋関連拡張のローカル参照コピー（コミット・リモート対象外）
+/wp/
+
 # local env files
 .env
 .env*.local

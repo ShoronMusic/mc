@@ -11,7 +11,8 @@ import { artistNameToMusic8Slug } from '@/lib/music8-artist-display';
 import { splitArtistNameForM8Storage } from '@/lib/song-registration-normalize';
 import { resolveArtistIdFromIndex, type ArtistLookupIndex } from '@/lib/song-credits-resolve';
 import { loadArtistLookupIndex, clearArtistLookupIndexCache } from '@/lib/song-credits-sync';
-import { resolveDomesticArtistRegistrationStatus } from '@/lib/admin-domestic-artist-registration-status';
+
+export { isSelectionRegisteredArtistPendingWp } from '@/lib/artist-selection-registered-pending';
 
 /** ローマ字 slug が無い邦楽アーティスト向けの決定的フォールバック */
 function fallbackDomesticArtistSlug(displayName: string): string {
@@ -238,35 +239,6 @@ export async function ensureArtistForSongRegistration(
     thePrefix: split.thePrefix,
     created: true,
   };
-}
-
-/** 管理画面：選曲由来で「まだ整備が必要」なアーティストか */
-export function isSelectionRegisteredArtistPendingWp(row: {
-  music8_artist_id?: number | null;
-  music8_synced_at?: string | null;
-  spotify_artist_id?: string | null;
-  profile_text?: string | null;
-  description_en?: string | null;
-  ai_profile_generated_at?: string | null;
-  name_ja?: string | null;
-  name_en?: string | null;
-  origin_country?: string | null;
-  youtube_channel_id?: string | null;
-  wikipedia_page?: string | null;
-  kind?: string | null;
-  occupations?: string[] | null;
-}): boolean {
-  const m8Id = row.music8_artist_id;
-  if (typeof m8Id === 'number' && m8Id > 0) return false;
-  if (row.music8_synced_at?.trim()) return false;
-  // Spotify / プロフィールが入っていれば邦楽登録等で整備済みとみなす
-  if (row.spotify_artist_id?.trim()) return false;
-  if ((row.profile_text ?? '').trim().length >= 40) return false;
-  if ((row.description_en ?? '').trim().length >= 40) return false;
-  if (row.ai_profile_generated_at?.trim()) return false;
-  const domestic = resolveDomesticArtistRegistrationStatus(row);
-  if (domestic.hasBasicInfo) return false;
-  return true;
 }
 
 export function artistRowSortKey(name: string): string {

@@ -318,6 +318,10 @@ export default function AdminSongsPage() {
           <Link href="/admin/songs/new" className="text-amber-300 hover:underline">
             洋楽 1 曲登録（YouTube → Supabase + JSON）
           </Link>
+          <span className="mx-2 text-gray-600">·</span>
+          <Link href="/admin/songs/list" className="text-amber-300 hover:underline">
+            登録曲一覧
+          </Link>
         </p>
       </div>
 

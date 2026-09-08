@@ -58,6 +58,7 @@ const COMMENTARY_CONTEXTS = new Set([
   'get_song_era',
   'next_song_recommend',
   'next_song_recomend',
+  'music8_song_intro',
 ]);
 
 const AT_QUESTION_CONTEXTS = new Set([

@@ -12,15 +12,30 @@ import {
   RegistrationStatusIcons,
 } from '@/components/admin/DomesticArtistRegisterParts';
 import {
+  ARTIST_OCCUPATION_OPTIONS,
+  canonicalizeArtistOccupations,
+  extraArtistOccupations,
+  isArtistOccupationSelected,
+  toggleArtistOccupation,
+} from '@/lib/artist-occupation-options';
+import {
   mergeArtistEnglishNameAfterSpotify,
   mergeArtistEnglishNameAfterWikipedia,
 } from '@/lib/artist-english-name';
-import type { AdminArtistProfileDraft } from '@/lib/admin-artist-profile-parse';
+import type { AdminArtistProfileDraft, AdminArtistThePrefix } from '@/lib/admin-artist-profile-parse';
+import {
+  composeAdminArtistDisplayName,
+  normalizeAdminArtistThePrefix,
+  splitAdminArtistNameParts,
+  withSyncedAdminArtistDisplayName,
+} from '@/lib/admin-artist-profile-parse';
+import { mergeExternalGeminiArtistClipboardIntoDraft } from '@/lib/admin-external-gemini-artist-import';
 import { resolveDomesticArtistRegistrationStatus } from '@/lib/admin-domestic-artist-registration-status';
 import {
   formatPlaylistArtistsField,
   parsePlaylistArtistsField,
 } from '@/lib/admin-domestic-playlist-artists-field';
+import { SongCoverThumb } from '@/components/song/SongCoverThumb';
 
 type GenerateResponse = {
   error?: string;
@@ -134,6 +149,7 @@ type RegisteredSongItem = {
   youtube_url: string | null;
   spotify_track_id?: string | null;
   spotify_popularity?: number | null;
+  spotify_images?: string | null;
 };
 
 type Props =
@@ -183,18 +199,24 @@ export function DomesticArtistEditor(props: Props) {
   const missingDateItems = registeredSongs.filter((s) => !s.original_release_date?.trim());
   const missingDateCount = missingDateItems.length;
 
-  const loadRegisteredSongs = useCallback(async (name: string) => {
+  const loadRegisteredSongs = useCallback(async (name: string, catalog?: string | null) => {
     const trimmed = name.trim();
     if (!trimmed) {
       setRegisteredSongs([]);
       setRegisteredSongsError(null);
       return;
     }
+    const catalogParam =
+      catalog === 'western' || catalog === 'domestic' || catalog === 'all' || catalog === 'unknown'
+        ? catalog === 'unknown'
+          ? 'all'
+          : catalog
+        : 'all';
     setLoadingRegisteredSongs(true);
     setRegisteredSongsError(null);
     try {
       const res = await fetch(
-        `/api/admin/domestic-artist-profile/songs?name=${encodeURIComponent(trimmed)}&catalog=domestic`,
+        `/api/admin/domestic-artist-profile/songs?name=${encodeURIComponent(trimmed)}&catalog=${encodeURIComponent(catalogParam)}`,
         { credentials: 'include' },
       );
       const data = (await res.json().catch(() => ({}))) as {
@@ -238,9 +260,19 @@ export function DomesticArtistEditor(props: Props) {
       const name = typeof data.artist.name === 'string' ? data.artist.name : '';
       setArtistId(data.artist.id);
       setArtistName(name);
-      setDraft(artistRowToDraft(data.artist, name));
+      const nextDraft = artistRowToDraft(data.artist, name);
+      setDraft({
+        ...nextDraft,
+        occupations: canonicalizeArtistOccupations(nextDraft.occupations),
+      });
       setMessage('アーティストを読み込みました。');
-      void loadRegisteredSongs(name);
+      const scope =
+        data.artist.catalog_scope === 'western' ||
+        data.artist.catalog_scope === 'domestic' ||
+        data.artist.catalog_scope === 'unknown'
+          ? (data.artist.catalog_scope as string)
+          : 'all';
+      void loadRegisteredSongs(nextDraft.name, scope);
     } catch {
       setError('アーティストの読み込みに失敗しました。');
     } finally {
@@ -274,9 +306,19 @@ export function DomesticArtistEditor(props: Props) {
       }
       if (data.artist && typeof data.artist.id === 'string') {
         setArtistId(data.artist.id);
-        setDraft(artistRowToDraft(data.artist, trimmed));
+        const nextDraft = artistRowToDraft(data.artist, trimmed);
+        setDraft({
+          ...nextDraft,
+          occupations: canonicalizeArtistOccupations(nextDraft.occupations),
+        });
         setMessage('既存 artists 行を読み込みました。');
-        void loadRegisteredSongs(trimmed);
+        const scope =
+          data.artist.catalog_scope === 'western' ||
+          data.artist.catalog_scope === 'domestic' ||
+          data.artist.catalog_scope === 'unknown'
+            ? (data.artist.catalog_scope as string)
+            : 'all';
+        void loadRegisteredSongs(nextDraft.name, scope);
       } else {
         setArtistId(null);
         setDraft(emptyDraft(trimmed));
@@ -300,7 +342,8 @@ export function DomesticArtistEditor(props: Props) {
   }, [mode, nameFromQuery, autoloadFromQuery, loadExistingByName]);
 
   async function runGenerate(): Promise<void> {
-    const name = (draft?.name ?? artistName).trim();
+    const synced = draft ? withSyncedAdminArtistDisplayName(draft) : null;
+    const name = (synced?.name ?? artistName).trim();
     if (!name) {
       setError('アーティスト名を入力してください。');
       return;
@@ -313,7 +356,10 @@ export function DomesticArtistEditor(props: Props) {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ artistName: name, catalog: 'domestic' }),
+        body: JSON.stringify({
+          artistName: name,
+          catalog: synced?.catalogScope === 'western' ? 'western' : 'domestic',
+        }),
       });
       const data = (await res.json().catch(() => ({}))) as GenerateResponse;
       if (!res.ok) {
@@ -321,7 +367,25 @@ export function DomesticArtistEditor(props: Props) {
         return;
       }
       if (data.draft) {
-        setDraft(data.draft);
+        setDraft((prev) => {
+          const generated = data.draft!;
+          const nameBase = (prev?.nameBase ?? '').trim() || generated.nameBase;
+          const thePrefix = prev?.thePrefix ?? generated.thePrefix;
+          return withSyncedAdminArtistDisplayName({
+            ...generated,
+            nameBase,
+            thePrefix,
+            // 再生成で外部 ID を消さない
+            spotifyArtistId: prev?.spotifyArtistId ?? generated.spotifyArtistId,
+            spotifyArtistImages: prev?.spotifyArtistImages ?? generated.spotifyArtistImages,
+            spotifyArtistPopularity:
+              prev?.spotifyArtistPopularity ?? generated.spotifyArtistPopularity,
+            youtubeChannelId: prev?.youtubeChannelId ?? generated.youtubeChannelId,
+            youtubeChannelTitle: prev?.youtubeChannelTitle ?? generated.youtubeChannelTitle,
+            wikipediaPage: prev?.wikipediaPage ?? generated.wikipediaPage,
+            catalogScope: prev?.catalogScope ?? generated.catalogScope,
+          });
+        });
         setAiModel(typeof data.model === 'string' ? data.model : null);
         setMessage(`Gemini で生成しました（${data.model ?? 'model'}）。内容を確認してから保存してください。`);
       }
@@ -329,6 +393,48 @@ export function DomesticArtistEditor(props: Props) {
       setError('AI 生成に失敗しました。');
     } finally {
       setGenerating(false);
+    }
+  }
+
+  async function runImportExternalGemini(): Promise<void> {
+    const baseDraft = draft
+      ? { ...draft }
+      : artistName.trim()
+        ? emptyDraft(artistName.trim())
+        : null;
+    if (!baseDraft) {
+      setError('先にアーティスト名を入力するか、既存を読み込んでください。');
+      return;
+    }
+    if (!navigator.clipboard?.readText) {
+      setError('このブラウザはクリップボード読み取りに非対応です。');
+      return;
+    }
+    setError(null);
+    setMessage(null);
+    try {
+      const text = await navigator.clipboard.readText();
+      const result = mergeExternalGeminiArtistClipboardIntoDraft(baseDraft, text);
+      if (!result.ok) {
+        setError(
+          result.preview
+            ? `${result.error}\n（先頭） ${result.preview}`
+            : result.error,
+        );
+        return;
+      }
+      setDraft({
+        ...result.draft,
+        occupations: canonicalizeArtistOccupations(result.draft.occupations),
+      });
+      setAiModel('external-gemini-clipboard');
+      setMessage(
+        `外部 Gemini から ${result.fieldCount} 項目を取り込みました。内容を確認してから保存してください。`,
+      );
+    } catch {
+      setError(
+        'クリップボードの読み取りに失敗しました。ブラウザで貼り付け許可後、Gemini で「アーティスト保存」直後に再実行してください。',
+      );
     }
   }
 
@@ -385,7 +491,8 @@ export function DomesticArtistEditor(props: Props) {
           artistName: name,
           nameJa: draft?.nameJa ?? null,
           descriptionEn: draft?.descriptionEn ?? null,
-          catalog: draft?.catalogScope ?? 'domestic',
+          // 洋楽主: domestic 以外は英語版 Wikipedia
+          catalog: draft?.catalogScope === 'domestic' ? 'domestic' : 'western',
         }),
       });
       const data = (await res.json().catch(() => ({}))) as WikipediaPageResponse;
@@ -567,7 +674,7 @@ export function DomesticArtistEditor(props: Props) {
           });
         }
         if ((s?.imported ?? 0) > 0 && name) {
-          void loadRegisteredSongs(name);
+          void loadRegisteredSongs(name, draft?.catalogScope ?? 'all');
         }
       }
     } catch {
@@ -649,7 +756,7 @@ export function DomesticArtistEditor(props: Props) {
       setSpotifyEnrichMsg(
         `Spotify を反映 ${applyData.summary?.updated ?? 0} 件、レビューキュー ${applyData.summary?.queuedReview ?? 0} 件。曖昧なものは /admin/spotify-review-queue で確認できます。`,
       );
-      void loadRegisteredSongs(name);
+      void loadRegisteredSongs(name, draft?.catalogScope ?? 'all');
     } catch {
       setSpotifyEnrichMsg('Spotify 一括取得に失敗しました。');
     } finally {
@@ -729,7 +836,7 @@ export function DomesticArtistEditor(props: Props) {
       setMbDateMsg(
         `原盤日を ${applyData.summary?.updated ?? updates.length} 件反映しました。`,
       );
-      void loadRegisteredSongs(name);
+      void loadRegisteredSongs(name, draft?.catalogScope ?? 'all');
     } catch {
       setMbDateMsg('MusicBrainz 原盤日の取得に失敗しました。');
     } finally {
@@ -785,10 +892,16 @@ export function DomesticArtistEditor(props: Props) {
   }
 
   async function runSave(dryRun: boolean): Promise<void> {
-    if (!draft?.name.trim()) {
+    if (!draft) {
       setError('保存するデータがありません。');
       return;
     }
+    const synced = withSyncedAdminArtistDisplayName(draft);
+    if (!synced.name.trim() && !synced.nameBase.trim()) {
+      setError('保存するデータがありません。');
+      return;
+    }
+    setDraft(synced);
     setSaving(true);
     setError(null);
     setMessage(null);
@@ -797,7 +910,7 @@ export function DomesticArtistEditor(props: Props) {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ draft, artistId, aiModel, dryRun }),
+        body: JSON.stringify({ draft: synced, artistId, aiModel, dryRun }),
       });
       const data = (await res.json().catch(() => ({}))) as SaveResponse;
       if (!res.ok) {
@@ -827,6 +940,35 @@ export function DomesticArtistEditor(props: Props) {
     setDraft((prev) => (prev ? { ...prev, ...partial } : prev));
   }
 
+  function patchNameParts(partial: {
+    nameBase?: string;
+    thePrefix?: AdminArtistThePrefix | null;
+  }): void {
+    setDraft((prev) => {
+      if (!prev) return prev;
+      const nameBase = partial.nameBase !== undefined ? partial.nameBase : prev.nameBase;
+      const thePrefix =
+        partial.thePrefix !== undefined ? partial.thePrefix : prev.thePrefix;
+      return withSyncedAdminArtistDisplayName({
+        ...prev,
+        nameBase,
+        thePrefix,
+      });
+    });
+  }
+
+  function onNameBaseBlur(): void {
+    if (!draft) return;
+    const parts = splitAdminArtistNameParts(draft.nameBase);
+    if (!parts.nameBase) return;
+    // 本体名に The を含めて打った場合は自動でプレフィックスへ分離
+    if (parts.thePrefix && parts.nameBase !== draft.nameBase.trim()) {
+      patchNameParts({ nameBase: parts.nameBase, thePrefix: parts.thePrefix });
+    } else {
+      patchNameParts({ nameBase: parts.nameBase });
+    }
+  }
+
   const occupationsText = draft?.occupations.join(', ') ?? '';
   const status = draft
     ? resolveDomesticArtistRegistrationStatus({
@@ -844,6 +986,15 @@ export function DomesticArtistEditor(props: Props) {
       })
     : null;
 
+  const pageTitle =
+    mode === 'edit'
+      ? draft?.catalogScope === 'western'
+        ? '洋楽アーティスト編集'
+        : draft?.catalogScope === 'domestic'
+          ? '邦楽アーティスト編集'
+          : 'アーティスト編集'
+      : 'アーティスト新規登録';
+
   return (
     <main className="mx-auto min-h-screen w-full max-w-4xl px-4 py-8 text-gray-100 sm:px-6">
       <AdminMenuBar />
@@ -854,21 +1005,24 @@ export function DomesticArtistEditor(props: Props) {
         ← 一覧に戻る
       </Link>
       <h1 className="mt-3 text-2xl font-semibold tracking-tight text-white sm:text-3xl">
-        {mode === 'edit' ? '邦楽アーティスト編集' : '邦楽アーティスト新規登録'}
+        {pageTitle}
       </h1>
       {mode === 'edit' && draft ? (
         <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-gray-400">
           <RegistrationStatusIcons status={status!} />
           <span>段階 {status!.stage}/5</span>
+          <span className="rounded border border-gray-700 px-1.5 py-0.5 text-[11px] text-gray-300">
+            catalog: {draft.catalogScope}
+          </span>
         </div>
       ) : (
         <p className="mt-2 text-sm text-gray-400">
-          名前入力 → 「① 既存を読込」（選曲でできた行など）または「② AI 生成」→ ③確認 → DB 保存。
-          選曲で insert された行は{' '}
+          邦楽・洋楽共通の artists 編集画面です。名前入力 → 「① 既存を読込」または「② AI 生成」→
+          ③確認 → DB 保存。選曲で insert された行は{' '}
           <Link href="/admin/artists-newly-registered" className="text-sky-300 hover:underline">
             選曲登録アーティスト（日別）
           </Link>
-          の「邦楽登録で編集」が最短です。
+          から編集できます。
         </p>
       )}
 
@@ -900,7 +1054,19 @@ export function DomesticArtistEditor(props: Props) {
             >
               {generating ? '生成中…' : '② AIで生成して反映（青）'}
             </button>
+            <button
+              type="button"
+              onClick={() => void runImportExternalGemini()}
+              disabled={!draft && !artistName.trim()}
+              title="Gemini タブで拡張「アーティスト保存」直後にクリック（クリップボード JSON）"
+              className="rounded border border-violet-600/80 bg-violet-950/40 px-4 py-2 text-sm font-medium text-violet-100 hover:bg-violet-900/50 disabled:opacity-40"
+            >
+              外部Gemini取り込み
+            </button>
           </div>
+          <p className="mt-2 text-[11px] text-gray-500">
+            API 再生成が使えないとき: 別タブ Gemini で生成 → 拡張「アーティスト保存」→「外部Gemini取り込み」
+          </p>
         </section>
       ) : null}
 
@@ -916,7 +1082,7 @@ export function DomesticArtistEditor(props: Props) {
             {mode === 'new' ? '③ 内容確認・編集' : '内容確認・編集'}
           </h2>
           {mode === 'edit' ? (
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
                 onClick={() => void runGenerate()}
@@ -925,22 +1091,83 @@ export function DomesticArtistEditor(props: Props) {
               >
                 {generating ? '生成中…' : 'AIで再生成（青）'}
               </button>
+              <button
+                type="button"
+                onClick={() => void runImportExternalGemini()}
+                title="Gemini タブで拡張「アーティスト保存」直後にクリック（クリップボード JSON）"
+                className="rounded border border-violet-600/80 bg-violet-950/40 px-4 py-2 text-sm font-medium text-violet-100 hover:bg-violet-900/50"
+              >
+                外部Gemini取り込み
+              </button>
+              <span className="text-[11px] text-gray-500">
+                API不可時: Gemini→拡張「アーティスト保存」→このボタン
+              </span>
             </div>
           ) : null}
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="表示名 (name)">
-              <input
-                className={inputClass}
-                value={draft.name}
-                onChange={(e) => patchDraft({ name: e.target.value })}
-              />
-            </Field>
+            <div className="sm:col-span-2 space-y-2">
+              <Field label="本体名 (name_base)">
+                <input
+                  className={inputClass}
+                  value={draft.nameBase}
+                  onChange={(e) => patchNameParts({ nameBase: e.target.value })}
+                  onBlur={() => onNameBaseBlur()}
+                  placeholder="冠詞なし（例: Sways / Strokes）"
+                />
+              </Field>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-200">
+                  <input
+                    type="checkbox"
+                    checked={draft.thePrefix === 'The'}
+                    onChange={(e) =>
+                      patchNameParts({
+                        thePrefix: e.target.checked
+                          ? 'The'
+                          : draft.thePrefix === 'The'
+                            ? null
+                            : draft.thePrefix,
+                      })
+                    }
+                    className="h-3.5 w-3.5 rounded border-gray-600 bg-gray-950 text-sky-500 focus:ring-sky-500/40"
+                  />
+                  <span>Include &quot;The&quot; Prefix（Music8 / WP と同様）</span>
+                </label>
+                <label className="flex items-center gap-2 text-xs text-gray-400">
+                  冠詞
+                  <select
+                    className="rounded border border-gray-700 bg-gray-950 px-2 py-1 text-sm text-white"
+                    value={draft.thePrefix ?? ''}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      patchNameParts({
+                        thePrefix: normalizeAdminArtistThePrefix(v || null),
+                      });
+                    }}
+                  >
+                    <option value="">なし</option>
+                    <option value="The">The</option>
+                    <option value="A">A</option>
+                    <option value="An">An</option>
+                  </select>
+                </label>
+              </div>
+              <p className="text-xs text-gray-500">
+                表示名 (name):{' '}
+                <span className="font-medium text-gray-300">
+                  {composeAdminArtistDisplayName(draft.nameBase, draft.thePrefix) || '（未入力）'}
+                </span>
+                <span className="ml-2 text-gray-600">
+                  — AI 再生成・Spotify 取得はこの表示名で検索します
+                </span>
+              </p>
+            </div>
             <Field label="英語名 (name_en)">
               <input
                 className={inputClass}
                 value={draft.nameEn ?? ''}
                 onChange={(e) => patchDraft({ nameEn: e.target.value || null })}
-                placeholder="Kenshi Yonezu"
+                placeholder="英語表記（例: Bruno Mars）"
               />
             </Field>
             <Field label="日本語読み (name_ja)">
@@ -980,20 +1207,43 @@ export function DomesticArtistEditor(props: Props) {
                 placeholder="YYYY.MM.DD"
               />
             </Field>
-            <Field label="Occupation（カンマ区切り）">
-              <input
-                className={inputClass}
-                value={occupationsText}
-                onChange={(e) =>
-                  patchDraft({
-                    occupations: e.target.value
-                      .split(/[,、/]/)
-                      .map((s) => s.trim())
-                      .filter(Boolean),
-                  })
-                }
-              />
-            </Field>
+            <div className="sm:col-span-2">
+              <Field label="Occupation（Music8 / WP と同項目）">
+                <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-1.5 sm:grid-cols-3 md:grid-cols-4">
+                  {ARTIST_OCCUPATION_OPTIONS.map((opt) => {
+                    const checked = isArtistOccupationSelected(draft.occupations, opt);
+                    return (
+                      <label
+                        key={opt.value}
+                        className="flex cursor-pointer items-center gap-2 text-sm text-gray-200"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() =>
+                            patchDraft({
+                              occupations: toggleArtistOccupation(draft.occupations, opt),
+                            })
+                          }
+                          className="h-3.5 w-3.5 rounded border-gray-600 bg-gray-950 text-sky-500 focus:ring-sky-500/40"
+                        />
+                        <span>{opt.label}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+                {extraArtistOccupations(draft.occupations).length > 0 ? (
+                  <p className="mt-2 text-xs text-amber-200/90">
+                    一覧外の値:{' '}
+                    {extraArtistOccupations(draft.occupations).join(', ')}
+                    （保存時はそのまま残します）
+                  </p>
+                ) : null}
+                <p className="mt-1 text-[11px] text-gray-500">
+                  選択中: {occupationsText || '（なし）'}
+                </p>
+              </Field>
+            </div>
             <Field label="catalog_scope">
               <select
                 className={inputClass}
@@ -1056,7 +1306,7 @@ export function DomesticArtistEditor(props: Props) {
                 </a>
               ) : null}
               {draft.spotifyArtistImages ? (
-                <div className="mt-2">
+                <div className="mt-3">
                   <a
                     href={draft.spotifyArtistImages}
                     target="_blank"
@@ -1068,7 +1318,7 @@ export function DomesticArtistEditor(props: Props) {
                     <img
                       src={draft.spotifyArtistImages}
                       alt=""
-                      className="h-16 w-16 rounded object-cover"
+                      className="h-56 w-56 rounded object-cover sm:h-64 sm:w-64"
                     />
                   </a>
                 </div>
@@ -1161,7 +1411,9 @@ export function DomesticArtistEditor(props: Props) {
                 <button
                   type="button"
                   disabled={loadingRegisteredSongs || !(draft?.name ?? artistName).trim()}
-                  onClick={() => void loadRegisteredSongs(draft?.name ?? artistName)}
+                  onClick={() =>
+                    void loadRegisteredSongs(draft?.name ?? artistName, draft?.catalogScope ?? 'all')
+                  }
                   className="rounded border border-emerald-700/70 px-2 py-1 text-xs text-emerald-100 hover:bg-emerald-900/40 disabled:opacity-40"
                 >
                   {loadingRegisteredSongs ? '更新中…' : '再読込'}
@@ -1240,6 +1492,7 @@ export function DomesticArtistEditor(props: Props) {
                   <thead className="sticky top-0 bg-gray-900 text-gray-400">
                     <tr>
                       <th className="px-2 py-1">#</th>
+                      <th className="px-2 py-1">カバー</th>
                       <th className="px-2 py-1">曲名</th>
                       <th className="px-2 py-1">ヨミ</th>
                       <th className="px-2 py-1">原盤日</th>
@@ -1252,6 +1505,14 @@ export function DomesticArtistEditor(props: Props) {
                     {registeredSongs.map((song, i) => (
                       <tr key={song.id} className="border-t border-gray-800/80">
                         <td className="px-2 py-1 tabular-nums text-gray-500">{i + 1}</td>
+                        <td className="px-2 py-1">
+                          <SongCoverThumb
+                            spotifyImages={song.spotify_images}
+                            videoId={song.video_id}
+                            alt=""
+                            className="h-10 w-10"
+                          />
+                        </td>
                         <td className="px-2 py-1 text-gray-200">
                           {song.song_title || song.display_title || '—'}
                         </td>

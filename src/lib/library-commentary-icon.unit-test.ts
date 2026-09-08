@@ -24,6 +24,15 @@ function run() {
     songHasLibraryCommentaryIcon({ hasAiCommentary: false, music8ArtistSlug: 'sting', music8SongSlug: null }),
     false,
   );
+  assert.equal(
+    songHasLibraryCommentaryIcon({
+      hasAiCommentary: false,
+      music8ArtistSlug: null,
+      music8SongSlug: null,
+      hasDbMusic8Intro: true,
+    }),
+    true,
+  );
   console.log('library-commentary-icon.unit-test: ok');
 }
 

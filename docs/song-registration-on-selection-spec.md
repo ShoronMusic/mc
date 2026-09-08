@@ -112,6 +112,12 @@ slug は `artistNameToMusic8Slug`（先頭 The/A/An を除いて生成）。
 | `song_title` | 2セグメント目以降 |
 | `display_title` | 正規化後の `"Artist - Song"` |
 
+**別 PV の追記（管理・最大5本）**: 既存曲に後から公式 MV／リリック等を足すときは `song_videos` に `video_id` を追加する（`songs` は増やさない）。同一曲判定は `compactMatchKey`（空白・記号除去）で「STARSET / parad0x1c」と「p a r a d 0 x 1 c」を同一視する。**部屋選曲では自動マージしない**（誤結合防止）。操作は曲詳細の「別バージョン PV を追記」。実装: `src/lib/song-alternate-pv-match.ts`・`POST /api/admin/song-alternate-pv`。
+
+**洋楽 1 曲登録（`/admin/songs/new`・YT to M7）での既存曲キャッチ**: フォームの artist/title（＋ YouTube snippet）で既存 `songs` を検索し、同一曲の確度が high/medium の候補を表示する。推奨操作は「この曲に別 PV として追記」（上記 alternate-pv API）。実装: `src/lib/admin-new-song-existing-match.ts`・`GET /api/admin/songs-register` の `existingMatches`。差別化は曲名末尾の `(Official Video)` ではなく `song_videos.variant`（`official` / `visualizer` / `lyric` 等）。追記時に新規 PV の variant を付け、既存 PV が空または雑な既定 `official` なら YouTube タイトルから自動補完する。
+
+**共演曲の表示名**: `main_artist` / `display_title` は **`spotify_artists`（または track API の artists[]）の並び**を正とする（例: `KAROL G, Bruno Mars - Still`）。Spotify 取得・クレジット同期時に揃え、曲詳細の「表示を Spotify 並び順に合わせる」でも実行可。実装: `src/lib/song-display-from-spotify-artists.ts`・`POST /api/admin/song-align-display-from-spotify`。
+
 ---
 
 ## 3. `upsertSongAndVideo` 後の自動 PATCH

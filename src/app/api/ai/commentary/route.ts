@@ -33,6 +33,7 @@ import { isJpDomesticOfficialChannelAiException } from '@/lib/jp-official-channe
 import { isRoomJpAiUnlockEnabled } from '@/lib/room-jp-ai-unlock-server';
 import { buildSupergroupPromptBlock } from '@/lib/supergroup-artist';
 import { fetchMusicBrainzCommentaryFactsBlock } from '@/lib/musicbrainz-commentary-facts';
+import { buildYoutubeMetadataFactsBlock } from '@/lib/commentary-youtube-facts';
 import {
   buildMusicaichatFactsForAiPromptBlock,
   resolveMusic8ContextForCommentPack,
@@ -380,6 +381,11 @@ export async function POST(request: Request) {
           supergroupHintText: supergroupHint || null,
           music8FactsBlock: music8FactsBlock.length > 0 ? music8FactsBlock : null,
           groundedFactsBlock: mbFactsBlock.length > 0 ? mbFactsBlock : null,
+          youtubeFactsBlock: buildYoutubeMetadataFactsBlock({
+            description: snippet?.description ?? null,
+            publishedAt: snippet?.publishedAt ?? null,
+            channelTitle: snippet?.channelTitle ?? null,
+          }) || null,
           songIntroOnlyDiscography,
         });
     if (!songIntroOnlyDiscography && text) {

@@ -4,12 +4,15 @@ import path from 'node:path';
 import {
   buildArtistNameMatchVariants,
   buildArtistPatchFromMusic8Json,
+  catalogScopeFromMusic8Origin,
   displayNameFromArtistRow,
   lowerNameKeyForArtistUnique,
   normalizeMusic8ArtistSource,
   parseArtistsListJson,
+  parseMusic8DateFieldToIso,
   parseMusic8ThePrefix,
   pickCanonicalArtistRow,
+  extractYoutubeChannelIdFromMusic8,
 } from '@/lib/music8-artist-import';
 
 function run() {
@@ -26,7 +29,8 @@ function run() {
   assert.equal(patch.music8_artist_slug, 'strokes');
   assert.equal(patch.music8_artist_id, 4834);
   assert.equal(patch.name_ja, 'ザ・ストロークス');
-  assert.equal(patch.kind, 'band');
+  assert.equal(patch.kind, 'Band');
+  assert.deepEqual(patch.occupations, ['Band']);
   assert.equal(patch.origin_country, 'US');
   assert.equal(patch.active_year_start, '1998');
   assert.equal(patch.active_period, '1998 -');
@@ -77,6 +81,52 @@ function run() {
     const fromFile = parseArtistsListJson(JSON.parse(fs.readFileSync(listFile, 'utf8')));
     assert.ok(fromFile.length > 6000, `artists.json entries: ${fromFile.length}`);
   }
+
+  const bruno = normalizeMusic8ArtistSource({
+    id: 999001,
+    name: 'Bruno Mars',
+    slug: 'bruno-mars',
+    description:
+      'Bruno Mars is an American singer, songwriter, and musician.\n\n米国ハワイ出身、21世紀のポップ・ミュージックを定義する世界的スーパースター。',
+    artistjpname: 'ブルーノ・マーズ',
+    artistactiveyearstart: '2004',
+    artistborn: '1985/10/08',
+    artistdied: '',
+    wikipedia_page: 'Bruno_Mars',
+    youtube_channel: 'UC1234567890123456789012',
+    occupation: [
+      { value: 'singer', label: 'Singer' },
+      { value: 'musician', label: 'Musician' },
+    ],
+    acf: {
+      artistorigin: 'US',
+      spotify_artist_id: '0du5cEVh5yTK9QJze8zA0C',
+      spotify_artist_images: 'https://i.scdn.co/image/example',
+    },
+  });
+  assert.ok(bruno);
+  const brunoPatch = buildArtistPatchFromMusic8Json(bruno!);
+  assert.equal(brunoPatch.description_en, 'Bruno Mars is an American singer, songwriter, and musician.');
+  assert.match(String(brunoPatch.profile_text), /米国ハワイ出身/);
+  assert.ok(!String(brunoPatch.description_en).includes('米国'));
+  assert.equal(brunoPatch.birth_date, '1985-10-08');
+  assert.equal(brunoPatch.name_en, 'Bruno Mars');
+  assert.equal(brunoPatch.catalog_scope, 'western');
+  assert.equal(brunoPatch.wikipedia_page, 'Bruno_Mars');
+  assert.deepEqual(brunoPatch.occupations, ['Singer', 'Musician']);
+  assert.equal(brunoPatch.kind, 'Singer, Musician');
+  assert.equal(brunoPatch.youtube_channel_id, 'UC1234567890123456789012');
+  assert.equal(brunoPatch.image_credit, 'Spotify');
+  assert.equal(brunoPatch.spotify_artist_images, 'https://i.scdn.co/image/example');
+  assert.equal(parseMusic8DateFieldToIso('1985/10/08'), '1985-10-08');
+  assert.equal(parseMusic8DateFieldToIso('19851008'), '1985-10-08');
+  assert.equal(parseMusic8DateFieldToIso(''), null);
+  assert.equal(catalogScopeFromMusic8Origin('US'), 'western');
+  assert.equal(catalogScopeFromMusic8Origin('JPN'), 'domestic');
+  assert.equal(
+    extractYoutubeChannelIdFromMusic8('https://www.youtube.com/channel/UCoUM-UJ7rirJYP8CQ0EIaHA'),
+    'UCoUM-UJ7rirJYP8CQ0EIaHA',
+  );
 
   console.log('music8-artist-import.unit-test: ok');
 }

@@ -5,16 +5,35 @@ import { AdminDomesticSongBadge } from '@/components/admin/AdminDomesticSongBadg
 import { isAdminSongJapaneseDomesticDisplay } from '@/lib/song-catalog-scope';
 import { ensureWesternTreatedJpArtistCache } from '@/lib/western-treated-jp-artists';
 import { AdminSongMasterDeletePanel } from '@/components/admin/AdminSongMasterDeletePanel';
-import { AdminSongMusic8RefreshPanel } from '@/components/admin/AdminSongMusic8RefreshPanel';
 import { AdminSongSpotifyEnrichPanel } from '@/components/admin/AdminSongSpotifyEnrichPanel';
 import { AdminSongBasicInfoEditPanel } from '@/components/admin/AdminSongBasicInfoEditPanel';
+import { AdminSongMusic8IntroPanel } from '@/components/admin/AdminSongMusic8IntroPanel';
+import { AdminSongDetailWorkflow } from '@/components/admin/AdminSongDetailWorkflow';
+import {
+  isAdminSongBasicInfoFilled,
+  isAdminSongIntroFilled,
+  isAdminSongSpotifyFilled,
+} from '@/lib/admin-song-detail-status';
 import { AdminYoutubePlayerWithVolume } from '@/components/admin/AdminYoutubePlayerWithVolume';
+import { GenreBestSongDetailActions } from '@/components/admin/GenreBestSongDetailActions';
 import {
   AdminSongCreditsPanel,
   type AdminSongCreditRow,
 } from '@/components/admin/AdminSongCreditsPanel';
 import { music8SongJsonUrl } from '@/lib/music8-data-urls';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { fetchArtistSongDefaultsForAdmin } from '@/lib/admin-song-artist-defaults';
+import { pickArtistPhotoUrl } from '@/lib/artist-photo-url';
+import { AdminArtistPhoto } from '@/components/admin/AdminArtistPhoto';
+import { AdminArtistConfirmedLinks } from '@/components/admin/AdminArtistConfirmedLinks';
+import { AdminNewArtistBadge } from '@/components/admin/AdminNewArtistBadge';
+import { AdminSongAlternatePvPanel } from '@/components/admin/AdminSongAlternatePvPanel';
+import { SongCoverThumb } from '@/components/song/SongCoverThumb';
+import { resolveSongCoverImage } from '@/lib/song-cover-image';
+import { applySongDisplayFromSpotifyArtists } from '@/lib/song-display-from-spotify-artists';
+import { buildSongDisplayTitle } from '@/lib/music8-canonical-artist-name';
+import { isSelectionRegisteredArtistPendingWp } from '@/lib/artist-selection-registered-pending';
+import { displayNameFromArtistRow } from '@/lib/music8-artist-import';
 
 interface SongDetailPageProps {
   params: { songId: string };
@@ -32,6 +51,7 @@ interface SongRow {
   catalog_scope?: string | null;
   original_release_date?: string | null;
   music8_song_data?: Record<string, unknown> | null;
+  music8_intro?: string | null;
   created_at: string;
   // Music8 詳細メタ
   genres?: string[] | null;
@@ -170,7 +190,7 @@ export default async function SongDetailPage({ params, searchParams }: SongDetai
   let { data, error } = await supabase
     .from('songs')
     .select(
-      'id, display_title, main_artist, song_title, song_title_ja, style, play_count, catalog_scope, original_release_date, music8_song_data, created_at,' +
+      'id, display_title, main_artist, song_title, song_title_ja, style, play_count, catalog_scope, original_release_date, music8_song_data, music8_intro, created_at,' +
         'genres, vocal, primary_artist_name_ja, structured_style,' +
         'music8_song_id, music8_artist_slug, music8_song_slug, music8_video_id,' +
         'spotify_track_id, spotify_release_date, spotify_name, spotify_artists, spotify_images, spotify_popularity,' +
@@ -219,7 +239,35 @@ export default async function SongDetailPage({ params, searchParams }: SongDetai
     );
   }
 
-  const song = data;
+  let song: SongRow = data;
+  let displayAlignedFromSpotify: string | null = null;
+  // Spotify 共演並びが正。main_artist / display_title がメインのみのときは開いた時点で揃える
+  if ((song.spotify_artists ?? '').trim() || (song.spotify_track_id ?? '').trim()) {
+    const adminForAlign = createAdminClient();
+    if (adminForAlign) {
+      try {
+        const aligned = await applySongDisplayFromSpotifyArtists(adminForAlign, song.id);
+        if (aligned.updated && aligned.mainArtist) {
+          const nextTitle =
+            aligned.displayTitle ??
+            buildSongDisplayTitle(aligned.mainArtist, (song.song_title ?? '').trim());
+          song = {
+            ...song,
+            main_artist: aligned.mainArtist,
+            display_title: nextTitle || song.display_title,
+          };
+          displayAlignedFromSpotify = nextTitle || aligned.mainArtist;
+        }
+      } catch (e) {
+        console.warn(
+          '[admin/songs/detail] align display from spotify',
+          song.id,
+          e instanceof Error ? e.message : e,
+        );
+      }
+    }
+  }
+
   await ensureWesternTreatedJpArtistCache();
   const isJapaneseDomestic = isAdminSongJapaneseDomesticDisplay({
     catalog_scope: song.catalog_scope ?? null,
@@ -229,12 +277,40 @@ export default async function SongDetailPage({ params, searchParams }: SongDetai
   });
 
   let songCredits: AdminSongCreditRow[] = [];
+  /** artist_id → 選曲登録の未整備（新規）か */
+  const artistIsNewById = new Map<string, boolean>();
   try {
     const admin = createAdminClient();
     if (admin) {
+      const artistPendingSelect =
+        'name, name_base, the_prefix, music8_artist_id, music8_synced_at, spotify_artist_id, profile_text, description_en, ai_profile_generated_at, name_ja, name_en, origin_country, youtube_channel_id, wikipedia_page, kind, occupations';
+
+      type ArtistJoinRow = {
+        name?: string | null;
+        name_base?: string | null;
+        the_prefix?: string | null;
+        music8_artist_id?: number | null;
+        music8_synced_at?: string | null;
+        spotify_artist_id?: string | null;
+        profile_text?: string | null;
+        description_en?: string | null;
+        ai_profile_generated_at?: string | null;
+        name_ja?: string | null;
+        name_en?: string | null;
+        origin_country?: string | null;
+        youtube_channel_id?: string | null;
+        wikipedia_page?: string | null;
+        kind?: string | null;
+        occupations?: string[] | null;
+      };
+
+      const markNew = (artistId: string, row: ArtistJoinRow) => {
+        artistIsNewById.set(artistId, isSelectionRegisteredArtistPendingWp(row));
+      };
+
       const { data: creditRows, error: creditErr } = await admin
         .from('song_credits')
-        .select('artist_id, role, display_order, artists(name)')
+        .select(`artist_id, role, display_order, artists(${artistPendingSelect})`)
         .eq('song_id', song.id)
         .order('display_order', { ascending: true });
       if (!creditErr && Array.isArray(creditRows)) {
@@ -244,27 +320,98 @@ export default async function SongDetailPage({ params, searchParams }: SongDetai
               artist_id?: string;
               role?: string;
               display_order?: number;
-              artists?: { name?: string } | { name?: string }[] | null;
+              artists?: ArtistJoinRow | ArtistJoinRow[] | null;
             };
             const artistId = r.artist_id?.trim() ?? '';
             const artistsJoin = r.artists;
-            const artistName = Array.isArray(artistsJoin)
-              ? artistsJoin[0]?.name?.trim()
-              : artistsJoin?.name?.trim();
+            const artistRow = Array.isArray(artistsJoin) ? artistsJoin[0] : artistsJoin;
+            const artistName =
+              displayNameFromArtistRow(artistRow ?? {})?.trim() ||
+              artistRow?.name?.trim() ||
+              '';
             if (!artistId || !artistName) return null;
+            if (artistRow) markNew(artistId, artistRow);
             return {
               artistId,
               artistName,
               role: r.role?.trim() || 'main',
               displayOrder:
                 typeof r.display_order === 'number' ? Math.floor(r.display_order) : 0,
+              isNewArtist: artistRow
+                ? isSelectionRegisteredArtistPendingWp(artistRow)
+                : false,
             };
           })
           .filter((r): r is AdminSongCreditRow => r != null);
       }
+
+      const primaryId = (song.artist_id ?? '').trim();
+      if (primaryId && !artistIsNewById.has(primaryId)) {
+        const { data: primaryArtist } = await admin
+          .from('artists')
+          .select(artistPendingSelect)
+          .eq('id', primaryId)
+          .maybeSingle();
+        if (primaryArtist) {
+          markNew(primaryId, primaryArtist as ArtistJoinRow);
+        }
+      }
     }
   } catch (e) {
     console.error('[admin/song-detail] song_credits', e);
+  }
+
+  let artistDefaults = {
+    suggestedVocal: null as string | null,
+    suggestedGenres: [] as { name: string; count: number }[],
+    allGenres: [] as string[],
+  };
+  let artistImageUrl: string | null = null;
+  const originalVocal = (song.vocal ?? '').trim();
+  try {
+    const adminForDefaults = createAdminClient();
+    if (adminForDefaults) {
+      artistDefaults = await fetchArtistSongDefaultsForAdmin(adminForDefaults, {
+        songId: song.id,
+        artistId: song.artist_id ?? null,
+        mainArtist: song.main_artist ?? null,
+        creditCount: songCredits.length,
+      });
+      if (!originalVocal && artistDefaults.suggestedVocal) {
+        const { error: vocalErr } = await adminForDefaults
+          .from('songs')
+          .update({ vocal: artistDefaults.suggestedVocal })
+          .eq('id', song.id);
+        if (!vocalErr) {
+          song.vocal = artistDefaults.suggestedVocal;
+        } else if (vocalErr.code !== '42703' && vocalErr.code !== '42P01') {
+          console.warn('[admin/song-detail] auto vocal', vocalErr.message);
+        }
+      }
+      if (song.artist_id) {
+        const { data: artistRow } = await adminForDefaults
+          .from('artists')
+          .select('image_url, spotify_artist_images')
+          .eq('id', song.artist_id)
+          .maybeSingle();
+        artistImageUrl = pickArtistPhotoUrl(
+          (artistRow ?? {}) as { image_url?: string | null; spotify_artist_images?: string | null },
+        );
+      }
+      if (!artistImageUrl && (song.main_artist ?? '').trim()) {
+        const { data: byName } = await adminForDefaults
+          .from('artists')
+          .select('image_url, spotify_artist_images')
+          .ilike('name', song.main_artist!.trim())
+          .limit(1)
+          .maybeSingle();
+        artistImageUrl = pickArtistPhotoUrl(
+          (byName ?? {}) as { image_url?: string | null; spotify_artist_images?: string | null },
+        );
+      }
+    }
+  } catch (e) {
+    console.error('[admin/song-detail] artist defaults', e);
   }
 
   // Spotify アーティスト ID を取得（優先順位: artists テーブル → music8_song_data スナップショット）
@@ -463,15 +610,37 @@ export default async function SongDetailPage({ params, searchParams }: SongDetai
             ← 曲ダッシュボード（検索）
           </Link>
         )}
+        <span className="mx-2 text-gray-600">·</span>
+        <Link href="/admin/songs/list" className="text-sm text-sky-300 hover:underline">
+          登録曲一覧
+        </Link>
       </p>
       <h1 className="mb-4 flex flex-wrap items-center gap-2 text-xl font-semibold">
         <span>管理者: 曲詳細</span>
         {isJapaneseDomestic ? <AdminDomesticSongBadge /> : null}
       </h1>
 
+      <AdminSongDetailWorkflow
+        initialBasicFilled={isAdminSongBasicInfoFilled({
+          style: song.style,
+          vocal: (song.vocal ?? '').trim() || artistDefaults.suggestedVocal,
+          originalReleaseDate: song.original_release_date,
+        })}
+        initialIntroFilled={isAdminSongIntroFilled(song.music8_intro)}
+        initialSpotifyFilled={isAdminSongSpotifyFilled({
+          hasTrackId: Boolean((song.spotify_track_id ?? '').trim()),
+          hasPopularity: song.spotify_popularity != null,
+        })}
+      >
       {/* 曲メイン情報 */}
       <section className="mb-4 space-y-3 rounded border border-gray-700 bg-gray-900 p-4 text-sm">
         <h2 className="text-sm font-semibold text-gray-200">基本情報（songs）</h2>
+        {displayAlignedFromSpotify ? (
+          <p className="rounded border border-green-800/60 bg-green-950/30 px-3 py-2 text-xs text-green-100">
+            Spotify の共演並び（spotify_artists）に合わせて display_title / main_artist を更新しました:{' '}
+            <span className="font-medium">{displayAlignedFromSpotify}</span>
+          </p>
+        ) : null}
         <div
           className={
             isModalEmbed
@@ -479,80 +648,117 @@ export default async function SongDetailPage({ params, searchParams }: SongDetai
               : 'grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(22rem,32rem)] lg:items-start'
           }
         >
-          <div className="min-w-0 space-y-2">
-            <p>
-              <span className="text-gray-500">ID：</span>
-              {song.id}
-            </p>
-            <p>
-              <span className="text-gray-500">display_title：</span>
-              {song.display_title || '(なし)'}
-              {isJapaneseDomestic ? (
-                <span className="ml-2 inline-block align-middle">
-                  <AdminDomesticSongBadge />
-                </span>
+          <div className="min-w-0 space-y-3">
+            {(() => {
+              const cover = resolveSongCoverImage({
+                spotifyImages: song.spotify_images,
+                videoId: primaryVideoId,
+              });
+              if (!cover.url) return null;
+              return (
+                <div className="flex items-end gap-3">
+                  <SongCoverThumb
+                    spotifyImages={song.spotify_images}
+                    videoId={primaryVideoId}
+                    alt={
+                      cover.source === 'spotify'
+                        ? 'Spotify album art'
+                        : 'YouTube thumbnail'
+                    }
+                    className="h-24 w-24 rounded border border-gray-700"
+                  />
+                  <p className="pb-1 text-[11px] text-gray-500">
+                    {cover.source === 'spotify'
+                      ? '曲ジャケット（Spotify）'
+                      : '曲サムネ（YouTube・Spotify 未取得）'}
+                  </p>
+                </div>
+              );
+            })()}
+            <dl className="grid grid-cols-[minmax(10.5rem,13rem)_minmax(0,1fr)] gap-x-3 gap-y-2">
+              <dt className="text-gray-500">ID</dt>
+              <dd className="min-w-0 break-all font-mono text-[13px] text-gray-100">{song.id}</dd>
+              <dt className="text-gray-500">display_title</dt>
+              <dd className="min-w-0 break-words text-gray-100">
+                {song.display_title || '(なし)'}
+                {isJapaneseDomestic ? (
+                  <span className="ml-2 inline-block align-middle">
+                    <AdminDomesticSongBadge />
+                  </span>
+                ) : null}
+              </dd>
+              <dt className="text-gray-500">メインアーティスト</dt>
+              <dd className="flex min-w-0 flex-wrap items-center gap-2 text-gray-100">
+                <AdminArtistPhoto url={artistImageUrl} name={song.main_artist ?? ''} size={40} />
+                <span className="min-w-0 break-words">{song.main_artist || '(なし)'}</span>
+                {song.artist_id && artistIsNewById.get(song.artist_id) ? (
+                  <AdminNewArtistBadge />
+                ) : null}
+              </dd>
+              {songCredits.filter((c) => c.displayOrder > 0).length > 0 ? (
+                <>
+                  <dt className="text-gray-500">共演（song_credits）</dt>
+                  <dd className="min-w-0 break-words text-violet-200">
+                    {songCredits
+                      .filter((c) => c.displayOrder > 0)
+                      .map((c) => c.artistName)
+                      .join(', ')}
+                  </dd>
+                </>
               ) : null}
-            </p>
-            <p>
-              <span className="text-gray-500">メインアーティスト：</span>
-              {song.main_artist || '(なし)'}
-            </p>
-            <p>
-              <span className="text-gray-500">曲タイトル：</span>
-              {song.song_title || '(なし)'}
-            </p>
-            <p>
-              <span className="text-gray-500">日本語読み（song_title_ja）：</span>
-              {song.song_title_ja || '—'}
-            </p>
-            <p>
-              <span className="text-gray-500">スタイル：</span>
-              {song.style || '(未設定)'}
-            </p>
-            <p>
-              <span className="text-gray-500">catalog_scope：</span>
-              {song.catalog_scope || 'unknown'}
-            </p>
-            {song.artist_id ? (
-              <p className="flex flex-wrap gap-x-3 gap-y-1">
-                <Link
-                  href={`/admin/library/artist?name=${encodeURIComponent((song.main_artist ?? '').trim())}`}
-                  className="text-sky-400 hover:underline"
-                >
-                  アーティスト詳細
-                </Link>
-                <Link
-                  href={`/admin/domestic-artist-register/${song.artist_id}`}
-                  className="text-emerald-400 hover:underline"
-                >
-                  アーティストを編集
-                </Link>
-              </p>
-            ) : null}
-            <p>
-              <span className="text-gray-500">play_count：</span>
-              {song.play_count ?? 0}
-            </p>
-            <p>
-              <span className="text-gray-500">original_release_date（原盤）：</span>
-              {song.original_release_date ?? '—'}
-            </p>
-            {song.music8_song_data && typeof song.music8_song_data === 'object' ? (
-              <details className="rounded border border-gray-800 bg-gray-950/80 p-2">
-                <summary className="cursor-pointer text-gray-400">
-                  music8_song_data（公開 JSON 向けキャッシュ。正本は上の列）
-                </summary>
-                <pre className="mt-2 max-h-96 overflow-auto whitespace-pre-wrap break-all text-[11px] text-gray-300">
-                  {JSON.stringify(song.music8_song_data, null, 2)}
-                </pre>
-              </details>
-            ) : (
-              <p>
-                <span className="text-gray-500">music8_song_data：</span>
-                <span className="text-gray-400">—</span>
-              </p>
-            )}
-
+              <dt className="text-gray-500">曲タイトル</dt>
+              <dd className="min-w-0 break-words text-gray-100">{song.song_title || '(なし)'}</dd>
+              <dt className="text-gray-500">日本語読み（song_title_ja）</dt>
+              <dd className="min-w-0 break-words text-gray-100">{song.song_title_ja || '—'}</dd>
+              <dt className="text-gray-500">スタイル</dt>
+              <dd className="min-w-0 text-gray-100">{song.style || '(未設定)'}</dd>
+              <dt className="text-gray-500">catalog_scope</dt>
+              <dd className="min-w-0 text-gray-100">{song.catalog_scope || 'unknown'}</dd>
+              <dt className="text-gray-500">play_count</dt>
+              <dd className="min-w-0 text-gray-100">{song.play_count ?? 0}</dd>
+              <dt className="text-gray-500">original_release_date（原盤）</dt>
+              <dd className="min-w-0 text-gray-100">{song.original_release_date ?? '—'}</dd>
+              <dt className="text-gray-500">music8_song_data</dt>
+              <dd className="min-w-0 text-gray-400">
+                {song.music8_song_data && typeof song.music8_song_data === 'object' ? (
+                  <details className="rounded border border-gray-800 bg-gray-950/80 p-2">
+                    <summary className="cursor-pointer text-gray-400">
+                      公開 JSON 向けキャッシュ（正本は上の列）
+                    </summary>
+                    <pre className="mt-2 max-h-96 overflow-auto whitespace-pre-wrap break-all text-[11px] text-gray-300">
+                      {JSON.stringify(song.music8_song_data, null, 2)}
+                    </pre>
+                  </details>
+                ) : (
+                  '—'
+                )}
+              </dd>
+            </dl>
+            {(() => {
+              const linkArtists =
+                songCredits.length > 0
+                  ? songCredits.map((c) => ({
+                      id: c.artistId,
+                      name: c.artistName,
+                      isNewArtist: artistIsNewById.get(c.artistId) === true,
+                    }))
+                  : song.artist_id
+                    ? [
+                        {
+                          id: song.artist_id,
+                          name: (song.main_artist ?? '').trim() || '（無名）',
+                          isNewArtist: artistIsNewById.get(song.artist_id) === true,
+                        },
+                      ]
+                    : [];
+              return linkArtists.length > 0 ? (
+                <AdminArtistConfirmedLinks
+                  artists={linkArtists}
+                  currentSongId={song.id}
+                  modalEmbed={isModalEmbed}
+                />
+              ) : null;
+            })()}
             {primaryVideoId ? (
               <p>
                 <a
@@ -579,73 +785,18 @@ export default async function SongDetailPage({ params, searchParams }: SongDetai
                   紐づく YouTube 動画がありません
                 </div>
               )}
-            </div>
-          ) : null}
-        </div>
-
-        {/* カタログ詳細（DB 列） */}
-        <div className="rounded border border-gray-800 bg-gray-950/40 p-3">
-          <p className="mb-2 text-xs font-semibold text-gray-400">カタログ詳細（songs）</p>
-          <div className="grid grid-cols-1 gap-x-6 gap-y-1.5 sm:grid-cols-2 text-xs">
-            <MetaRow label="music8_song_id" value={song.music8_song_id != null ? String(song.music8_song_id) : null} />
-            <MetaRow label="music8_artist_slug" value={song.music8_artist_slug ?? null} mono />
-            <MetaRow label="music8_song_slug" value={song.music8_song_slug ?? null} mono />
-            <MetaRow label="music8_video_id (canonical)" value={song.music8_video_id ?? null} mono />
-            <MetaRow label="genres" value={Array.isArray(song.genres) && song.genres.length > 0 ? song.genres.join(', ') : null} />
-            <MetaRow label="vocal" value={song.vocal ?? null} />
-            <MetaRow label="primary_artist_name_ja" value={song.primary_artist_name_ja ?? null} />
-            <MetaRow label="structured_style" value={song.structured_style ?? null} />
-            <MetaRow
-              label="spotify_track_id"
-              value={song.spotify_track_id ?? null}
-              mono
-              href={song.spotify_track_id ? `https://open.spotify.com/track/${song.spotify_track_id}` : null}
-            />
-            <MetaRow
-              label="spotify_artists01_id"
-              value={spotifyArtistId}
-              mono
-              href={spotifyArtistId ? `https://open.spotify.com/artist/${spotifyArtistId}` : null}
-            />
-            <MetaRow label="spotify_release_date" value={song.spotify_release_date ?? null} />
-            <MetaRow label="spotify_name" value={song.spotify_name ?? null} />
-            <MetaRow label="spotify_artists" value={song.spotify_artists ?? null} />
-            <MetaRow label="spotify_popularity" value={song.spotify_popularity != null ? String(song.spotify_popularity) : null} />
-          </div>
-          {(song.spotify_images ?? '').trim() ? (
-            <div className="mt-2 flex items-start gap-3">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={song.spotify_images as string}
-                alt="Spotify album art"
-                className="h-14 w-14 rounded object-cover"
-                loading="lazy"
+              <GenreBestSongDetailActions
+                songId={song.id}
+                songLabel={
+                  (song.display_title ?? '').trim() ||
+                  [song.main_artist, song.song_title].filter(Boolean).join(' - ') ||
+                  undefined
+                }
               />
-              <p className="break-all text-[11px] text-gray-500">{song.spotify_images}</p>
             </div>
-          ) : null}
-          {song.music8_artist_slug && song.music8_song_slug ? (
-            <p className="mt-2 text-[11px] text-gray-500">
-              公開 JSON（参照のみ・取込しない）:{' '}
-              <a
-                href={music8SongJsonUrl(song.music8_artist_slug, song.music8_song_slug)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-sky-400 hover:underline"
-              >
-                {`/data/songs/${song.music8_artist_slug}_${song.music8_song_slug}.json`}
-              </a>
-            </p>
           ) : null}
         </div>
 
-        <AdminSongSpotifyEnrichPanel
-          songId={song.id}
-          hasTrackId={Boolean((song.spotify_track_id ?? '').trim())}
-          hasPopularity={song.spotify_popularity != null}
-        />
-
-        <AdminSongMusic8RefreshPanel songId={song.id} />
         <AdminSongBasicInfoEditPanel
           songId={song.id}
           initialDisplayTitle={song.display_title ?? null}
@@ -655,14 +806,28 @@ export default async function SongDetailPage({ params, searchParams }: SongDetai
           initialStyle={song.style ?? null}
           initialOriginalReleaseDate={song.original_release_date ?? null}
           initialCatalogScope={song.catalog_scope ?? null}
-          initialVocal={song.vocal ?? null}
+          initialVocal={(song.vocal ?? '').trim() || artistDefaults.suggestedVocal}
           initialGenres={Array.isArray(song.genres) ? song.genres : null}
+          suggestedGenres={artistDefaults.suggestedGenres}
+          allGenres={artistDefaults.allGenres}
+          artistImageUrl={artistImageUrl}
+          vocalFromArtistHistory={!originalVocal && Boolean(artistDefaults.suggestedVocal)}
+          vocalNoArtistHistory={!originalVocal && !artistDefaults.suggestedVocal}
           highlightStyle={fromYoutubePlaylistImport}
+        />
+        <AdminSongMusic8IntroPanel songId={song.id} initialIntro={song.music8_intro ?? null} />
+        <AdminSongSpotifyEnrichPanel
+          songId={song.id}
+          hasTrackId={Boolean((song.spotify_track_id ?? '').trim())}
+          hasPopularity={song.spotify_popularity != null}
+          hasSpotifyArtists={Boolean((song.spotify_artists ?? '').trim())}
         />
         <AdminSongCreditsPanel
           songId={song.id}
           mainArtist={song.main_artist ?? null}
+          artistImageUrl={artistImageUrl}
           initialCredits={songCredits}
+          modalEmbed={isModalEmbed}
         />
         <p>
           <span className="text-gray-500">作成日時：</span>
@@ -673,6 +838,7 @@ export default async function SongDetailPage({ params, searchParams }: SongDetai
           confirmLabel={(song.display_title ?? '').trim() || song.id}
         />
       </section>
+      </AdminSongDetailWorkflow>
 
       {/* song_videos 一覧 */}
       <section className="mb-4 rounded border border-gray-700 bg-gray-900 p-4 text-sm">
@@ -735,6 +901,7 @@ export default async function SongDetailPage({ params, searchParams }: SongDetai
             </table>
           </div>
         )}
+        <AdminSongAlternatePvPanel songId={song.id} currentCount={videos.length} />
       </section>
 
       {/* song_tidbits 一覧（豆知識） */}
@@ -929,6 +1096,71 @@ export default async function SongDetailPage({ params, searchParams }: SongDetai
         {userPickCountTruncated ? (
           <p className="mt-2 text-[11px] text-amber-300">
             件数が多いため上限までで集計しています（最大 12,000 履歴行）。
+          </p>
+        ) : null}
+      </section>
+
+      {/* カタログ詳細（DB 列） */}
+      <section className="mb-4 rounded border border-gray-700 bg-gray-900 p-4 text-sm">
+        <h2 className="mb-2 text-sm font-semibold text-gray-200">カタログ詳細（songs）</h2>
+        <div className="grid grid-cols-1 gap-x-6 gap-y-1.5 sm:grid-cols-2 text-xs">
+          <MetaRow label="music8_song_id" value={song.music8_song_id != null ? String(song.music8_song_id) : null} />
+          <MetaRow label="music8_artist_slug" value={song.music8_artist_slug ?? null} mono />
+          <MetaRow label="music8_song_slug" value={song.music8_song_slug ?? null} mono />
+          <MetaRow label="music8_video_id (canonical)" value={song.music8_video_id ?? null} mono />
+          <MetaRow label="genres" value={Array.isArray(song.genres) && song.genres.length > 0 ? song.genres.join(', ') : null} />
+          <MetaRow label="vocal" value={song.vocal ?? null} />
+          <MetaRow label="primary_artist_name_ja" value={song.primary_artist_name_ja ?? null} />
+          <MetaRow label="structured_style" value={song.structured_style ?? null} />
+          <MetaRow
+            label="spotify_track_id"
+            value={song.spotify_track_id ?? null}
+            mono
+            href={song.spotify_track_id ? `https://open.spotify.com/track/${song.spotify_track_id}` : null}
+          />
+          <MetaRow
+            label="spotify_artists01_id"
+            value={spotifyArtistId}
+            mono
+            href={spotifyArtistId ? `https://open.spotify.com/artist/${spotifyArtistId}` : null}
+          />
+          <MetaRow label="spotify_release_date" value={song.spotify_release_date ?? null} />
+          <MetaRow label="spotify_name" value={song.spotify_name ?? null} />
+          <MetaRow label="spotify_artists" value={song.spotify_artists ?? null} />
+          <MetaRow label="spotify_popularity" value={song.spotify_popularity != null ? String(song.spotify_popularity) : null} />
+        </div>
+        {(() => {
+          const cover = resolveSongCoverImage({
+            spotifyImages: song.spotify_images,
+            videoId: primaryVideoId,
+          });
+          if (!cover.url) return null;
+          return (
+            <div className="mt-2 flex items-start gap-3">
+              <SongCoverThumb
+                spotifyImages={song.spotify_images}
+                videoId={primaryVideoId}
+                alt={cover.source === 'youtube' ? 'YouTube thumbnail' : 'Spotify album art'}
+                className="h-14 w-14"
+              />
+              <p className="break-all text-[11px] text-gray-500">
+                {cover.source === 'youtube' ? 'YouTube サムネ（Spotify ジャケットなし）: ' : ''}
+                {cover.url}
+              </p>
+            </div>
+          );
+        })()}
+        {song.music8_artist_slug && song.music8_song_slug ? (
+          <p className="mt-2 text-[11px] text-gray-500">
+            公開 JSON（参照のみ・取込しない）:{' '}
+            <a
+              href={music8SongJsonUrl(song.music8_artist_slug, song.music8_song_slug)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sky-400 hover:underline"
+            >
+              {`/data/songs/${song.music8_artist_slug}_${song.music8_song_slug}.json`}
+            </a>
           </p>
         ) : null}
       </section>

@@ -31,6 +31,10 @@ import {
   ensureWesternTreatedJpArtistCache,
   librarySongRowMatchesWesternTreatedJpArtist,
 } from '@/lib/western-treated-jp-artists';
+import {
+  applySongDisplayFromSpotifyArtists,
+  planSongDisplayFromSpotifyArtists,
+} from '@/lib/song-display-from-spotify-artists';
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -245,6 +249,23 @@ function buildEmptyFillPayload(
   if (emptyStr(row.spotify_images) && meta.spotifyImages?.trim()) {
     payload.spotify_images = meta.spotifyImages.trim();
   }
+
+  const effectiveArtists =
+    (typeof payload.spotify_artists === 'string' && payload.spotify_artists.trim()) ||
+    meta.spotifyArtists?.trim() ||
+    row.spotify_artists?.trim() ||
+    '';
+  const displayPlan = planSongDisplayFromSpotifyArtists({
+    songTitle: row.song_title,
+    spotifyArtists: effectiveArtists,
+    currentMainArtist: row.main_artist,
+    currentDisplayTitle: row.display_title,
+  });
+  if (displayPlan) {
+    payload.main_artist = displayPlan.mainArtist;
+    payload.display_title = displayPlan.displayTitle;
+  }
+
   return payload;
 }
 
@@ -386,6 +407,20 @@ async function processOneSong(
         spotifyImages: meta.spotifyImages,
       });
       if (Object.keys(payload).length === 0) {
+        if (!dryRun) {
+          const aligned = await applySongDisplayFromSpotifyArtists(admin, row.id);
+          await syncSongCreditsFromSongId(admin, row.id, true);
+          if (aligned.updated) {
+            return {
+              ...base,
+              status: 'updated',
+              reason: 'display_from_spotify',
+              spotifyTrackId: existingId,
+              mainArtist: aligned.mainArtist ?? row.main_artist,
+              displayTitle: aligned.displayTitle ?? row.display_title,
+            };
+          }
+        }
         return { ...base, status: 'skipped_complete', spotifyTrackId: existingId };
       }
       if (dryRun) {
@@ -402,6 +437,8 @@ async function processOneSong(
       }
       const { error } = await admin.from('songs').update(payload).eq('id', row.id);
       if (error) throw error;
+      clearArtistLookupIndexCache();
+      await syncSongCreditsFromSongId(admin, row.id, true);
       return {
         ...base,
         status: 'updated',
@@ -411,6 +448,10 @@ async function processOneSong(
           typeof payload.spotify_popularity === 'number'
             ? payload.spotify_popularity
             : row.spotify_popularity ?? null,
+        mainArtist:
+          typeof payload.main_artist === 'string' ? payload.main_artist : row.main_artist,
+        displayTitle:
+          typeof payload.display_title === 'string' ? payload.display_title : row.display_title,
       };
     }
 
@@ -573,6 +614,20 @@ async function processOneSong(
     });
 
     if (Object.keys(payload).length === 0) {
+      if (!dryRun) {
+        const aligned = await applySongDisplayFromSpotifyArtists(admin, row.id);
+        await syncSongCreditsFromSongId(admin, row.id, true);
+        if (aligned.updated) {
+          return {
+            ...base,
+            status: 'updated',
+            reason: 'display_from_spotify',
+            spotifyTrackId: track.spotifyTrackId,
+            mainArtist: aligned.mainArtist ?? row.main_artist,
+            displayTitle: aligned.displayTitle ?? row.display_title,
+          };
+        }
+      }
       return { ...base, status: 'skipped_complete', spotifyTrackId: track.spotifyTrackId };
     }
 
@@ -696,9 +751,28 @@ export async function runDomesticSongsSpotifyEnrich(
         mainArtist: row.main_artist,
         songTitle: row.song_title,
         status: skip,
+        spotifyTrackId: row.spotify_track_id,
       };
+      if (!dryRun && skip === 'skipped_complete' && (row.spotify_artists || row.spotify_track_id)) {
+        try {
+          const aligned = await applySongDisplayFromSpotifyArtists(admin, row.id);
+          await syncSongCreditsFromSongId(admin, row.id, true);
+          if (aligned.updated) {
+            r.status = 'updated';
+            r.reason = 'display_from_spotify';
+            r.mainArtist = aligned.mainArtist ?? row.main_artist;
+            r.displayTitle = aligned.displayTitle ?? row.display_title;
+          }
+        } catch (e) {
+          console.warn(
+            '[admin-domestic-spotify-enrich] align display',
+            row.id,
+            e instanceof Error ? e.message : e,
+          );
+        }
+      }
       results.push(r);
-      bumpSummary(summary, skip);
+      bumpSummary(summary, r.status);
     }
   }
 

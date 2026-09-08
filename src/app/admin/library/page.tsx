@@ -9,6 +9,7 @@ import type { AdminLibraryArtistItem } from '@/app/api/admin/library/artists/rou
 import type { AdminLibrarySongItem } from '@/app/api/admin/library/songs/route';
 import { libraryEffectiveReleaseDateForSort } from '@/lib/library-release-sort-date';
 import { shouldShowArtistMembersLine } from '@/lib/artist-members';
+import { SongCoverThumb } from '@/components/song/SongCoverThumb';
 
 type SortMode = 'release_new' | 'release_old' | 'spotify_popularity';
 type AdminLibraryArtistInfo = {
@@ -416,6 +417,7 @@ export default function AdminLibraryPage() {
                 <table className="min-w-full border-collapse text-left text-xs text-gray-200">
                   <thead className="border-b border-gray-700 text-gray-500">
                     <tr>
+                      <th className="py-2 pr-3 font-medium">カバー</th>
                       <th className="py-2 pr-3 font-medium">公開日</th>
                       <th className="py-2 pr-3 font-medium">アーティスト</th>
                       <th className="py-2 pr-3 font-medium">タイトル</th>
@@ -443,6 +445,14 @@ export default function AdminLibraryPage() {
                         : null;
                       return (
                         <tr key={s.id} className="border-t border-gray-800/90">
+                          <td className="py-2 pr-3 align-top">
+                            <SongCoverThumb
+                              spotifyImages={s.spotify_images}
+                              videoId={s.video_id}
+                              alt=""
+                              className="h-10 w-10"
+                            />
+                          </td>
                           <td
                             className="py-2 pr-3 align-top tabular-nums text-gray-400"
                             title={

@@ -45,6 +45,12 @@
 - [x] import 完了後の件数確認（2026-08-30）  
       song_styles=21845 / song_genres=39181 / song_vocals=22795 / song_tags=0 / liked=15554 / artists_with_wp_term=6619  
       タグ 0 は曲 JSON（`generate-latest-songs-json.js`）に `post_tag` が載っていないため。取り込み失敗ではない。
+- [x] WP 投稿本文 → `songs.music8_intro`（HTML `<p>` 除去。クレジット行のみはスキップ）  
+      2026-09-04 apply: JSON 22,369 / 本文 3,077 / DB 一致して書き込み **2,949** / `music8_song_id` なし 128 / 失敗 0。  
+      クレジット行の誤書き込み 3 件は `--purge-credit-only --apply` で null に戻した。  
+      未一致 128 の補完（2026-09-04）: video_id で既存曲へ **43**、既に intro あり **43**、DB 未登録を新規 **42**（失敗 0）。  
+      `npx tsx scripts/backfill-music8-intro-from-wp-songs-json.ts --songs-dir=E:/m8/public/data/songs --apply`  
+      未一致分: `--complete-unmatched --apply`
 
 ### 2. 並行期の運用（切替まで）
 
@@ -96,7 +102,7 @@
 その他 CPT:
 
 - [ ] チャート 6 枠 → `catalog_charts` + `song_chart_entries`
-- [ ] CPT プレイリスト → `catalog_playlists`
+- [x] CPT プレイリスト → `catalog_playlists`（Genre BEST。仕様: `docs/00-genre-best-spec.md`。取込: `scripts/import-music8-playlists-from-wp.ts` / 管理 `/admin/genre-best`）
 
 ### 6. JSON 正本の切替（Music8 公開）
 

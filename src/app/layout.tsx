@@ -8,6 +8,37 @@ import { McUiAccentThemeSync } from '@/components/mc/McUiAccentThemeSync';
 import { MA_ICON_LOGO_SRC, MUSICCHAT_ICON_LOGO_SRC } from '@/lib/product-branding';
 import { getProductId, getProductTheme, isMcProduct } from '@/lib/product-mode';
 
+/**
+ * webpack のチャンク timeout（app/layout.js 等）は再読み込みで直ることが多い。
+ * layout のクライアントチャンク自体が失敗しても動くよう、HTML 直書きにする。
+ */
+const CHUNK_LOAD_RETRY_SCRIPT = `
+(function(){
+  try {
+    var key = 'mc_chunkload_reload';
+    function shouldReload(msg) {
+      if (!msg) return false;
+      return /ChunkLoadError|Loading chunk .+ failed/i.test(String(msg));
+    }
+    function reloadOnce() {
+      try {
+        if (sessionStorage.getItem(key) === '1') return;
+        sessionStorage.setItem(key, '1');
+        location.reload();
+      } catch (e) {}
+    }
+    window.addEventListener('error', function(ev) {
+      if (shouldReload(ev && ev.message) || shouldReload(ev && ev.error && ev.error.message)) reloadOnce();
+    });
+    window.addEventListener('unhandledrejection', function(ev) {
+      var r = ev && ev.reason;
+      var msg = r && (r.message || String(r));
+      if (shouldReload(msg)) reloadOnce();
+    });
+  } catch (e) {}
+})();
+`.trim();
+
 /** OAuth 戻りが Site URL 直下に ?code= で付いたとき、React・同意ゲートより先に /auth/callback へ送る */
 const OAUTH_STRAY_CODE_SCRIPT = `
 (function(){
@@ -102,6 +133,10 @@ export default function RootLayout({
         <script
           id="oauth-stray-code-fix"
           dangerouslySetInnerHTML={{ __html: OAUTH_STRAY_CODE_SCRIPT }}
+        />
+        <script
+          id="chunk-load-retry"
+          dangerouslySetInnerHTML={{ __html: CHUNK_LOAD_RETRY_SCRIPT }}
         />
         <Suspense fallback={null}>
           <GoogleAnalytics measurementId={gaMeasurementId} />

@@ -4,25 +4,39 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { AdminMenuBar } from '@/components/admin/AdminMenuBar';
 import { AdminArtistDeletePanel } from '@/components/admin/AdminArtistDeletePanel';
 import { WesternArtistPlaylistImportPanel } from '@/components/admin/WesternArtistPlaylistImportPanel';
-import { artistNameToMusic8Slug } from '@/lib/music8-artist-display';
+import { GenreBestArtistSongList } from '@/components/admin/GenreBestArtistSongList';
+import { artistNameToMusic8Slug, formatArtistBorn, formatArtistDied } from '@/lib/music8-artist-display';
 import { loadArtistMemberGraph, type ArtistMemberLink } from '@/lib/artist-members';
+import { rankLibraryVideoVariant } from '@/lib/library-video-variant-rank';
+import { pickArtistPhotoUrl } from '@/lib/artist-photo-url';
+import { buildLibraryArtistExternalLinks } from '@/lib/library-artist-public-display';
 
 type ArtistRow = {
   id: string;
   name: string;
   name_ja: string | null;
+  name_en?: string | null;
   music8_artist_slug: string | null;
+  music8_artist_id?: number | null;
+  music8_synced_at?: string | null;
   kind?: string | null;
+  occupations?: string[] | null;
   origin_country?: string | null;
   catalog_scope?: string | null;
   active_period?: string | null;
+  birth_date?: string | null;
+  death_date?: string | null;
   members?: string | null;
   youtube_channel_id?: string | null;
   youtube_channel_title?: string | null;
   youtube_channel_url?: string | null;
+  spotify_artist_id?: string | null;
+  spotify_artist_images?: string | null;
+  wikipedia_page?: string | null;
   image_url?: string | null;
   image_credit?: string | null;
   profile_text?: string | null;
+  description_en?: string | null;
 };
 
 type SongRow = {
@@ -32,6 +46,8 @@ type SongRow = {
   style: string | null;
   play_count: number | null;
   original_release_date: string | null;
+  spotify_images: string | null;
+  video_id: string | null;
 };
 
 function normalizeArtistNameLoose(name: string): string {
@@ -44,10 +60,10 @@ function adminArtistHref(link: ArtistMemberLink): string {
   return `/admin/library/artist?name=${encodeURIComponent(link.name)}`;
 }
 
-function ArtistRelationDd({ links }: { links: ArtistMemberLink[] }) {
-  if (links.length === 0) return <dd className="inline">—</dd>;
+function ArtistRelationLinks({ links }: { links: ArtistMemberLink[] }) {
+  if (links.length === 0) return <span className="text-gray-500">—</span>;
   return (
-    <dd className="inline">
+    <span>
       {links.map((link, i) => (
         <span key={link.id}>
           {i > 0 ? '、' : null}
@@ -56,8 +72,18 @@ function ArtistRelationDd({ links }: { links: ArtistMemberLink[] }) {
           </Link>
         </span>
       ))}
-    </dd>
+    </span>
   );
+}
+
+function occupationLabel(artist: ArtistRow | null): string | null {
+  if (!artist) return null;
+  const occ = Array.isArray(artist.occupations)
+    ? artist.occupations.map((s) => s.trim()).filter(Boolean)
+    : [];
+  if (occ.length > 0) return occ.join(', ');
+  const kind = (artist.kind ?? '').trim();
+  return kind || null;
 }
 
 export default async function AdminLibraryArtistPage({
@@ -136,7 +162,19 @@ export default async function AdminLibraryArtistPage({
   }
 
   const displayName =
-    (artist?.name_ja?.trim() || artist?.name?.trim() || nameQuery || slugQuery).trim() || '—';
+    (artist?.name?.trim() || artist?.name_en?.trim() || artist?.name_ja?.trim() || nameQuery || slugQuery).trim() ||
+    '—';
+  const nameJa = (artist?.name_ja ?? '').trim();
+  const nameEn = (artist?.name_en ?? '').trim();
+  const origin = (artist?.origin_country ?? '').trim();
+  const occupation = occupationLabel(artist);
+  const photoUrl = artist ? pickArtistPhotoUrl(artist) : null;
+  const links = buildLibraryArtistExternalLinks({
+    youtube_channel_url: artist?.youtube_channel_url,
+    youtube_channel_id: artist?.youtube_channel_id,
+    spotify_artist_id: artist?.spotify_artist_id,
+    wikipedia_page: artist?.wikipedia_page,
+  });
   const songArtistKeys = Array.from(
     new Set(
       [artist?.name, artist?.name_ja, nameQuery]
@@ -149,14 +187,69 @@ export default async function AdminLibraryArtistPage({
   if (songArtistKeys.length > 0) {
     const { data: songsData } = await supabase
       .from('songs')
-      .select('id, song_title, display_title, style, play_count, original_release_date')
+      .select(
+        'id, song_title, display_title, style, play_count, original_release_date, spotify_images, music8_video_id',
+      )
       .in('main_artist', songArtistKeys)
       .order('play_count', { ascending: false, nullsFirst: false })
       .order('original_release_date', { ascending: false, nullsFirst: false });
-    songs = (songsData as SongRow[] | null) ?? [];
+    const rawSongs = (songsData as Array<{
+      id: string;
+      song_title: string | null;
+      display_title: string | null;
+      style: string | null;
+      play_count: number | null;
+      original_release_date: string | null;
+      spotify_images?: string | null;
+      music8_video_id?: string | null;
+    }> | null) ?? [];
+    const videoBySong = new Map<string, string>();
+    const ids = rawSongs.map((s) => s.id).filter(Boolean);
+    if (ids.length > 0) {
+      const { data: vidRows } = await supabase
+        .from('song_videos')
+        .select('song_id, video_id, variant')
+        .in('song_id', ids);
+      if (Array.isArray(vidRows)) {
+        const ranked = new Map<string, { videoId: string; rank: number }>();
+        for (const r of vidRows as { song_id?: string; video_id?: string; variant?: string | null }[]) {
+          if (!r.song_id || !r.video_id) continue;
+          const nextRank = rankLibraryVideoVariant(r.variant);
+          const cur = ranked.get(r.song_id);
+          if (!cur || nextRank < cur.rank) {
+            ranked.set(r.song_id, { videoId: r.video_id, rank: nextRank });
+          }
+        }
+        for (const [songId, picked] of ranked) {
+          videoBySong.set(songId, picked.videoId);
+        }
+      }
+    }
+    songs = rawSongs.map((s) => ({
+      id: s.id,
+      song_title: s.song_title,
+      display_title: s.display_title,
+      style: s.style,
+      play_count: s.play_count,
+      original_release_date: s.original_release_date,
+      spotify_images:
+        typeof s.spotify_images === 'string' && s.spotify_images.trim() ? s.spotify_images.trim() : null,
+      video_id:
+        (typeof s.music8_video_id === 'string' && s.music8_video_id.trim()) ||
+        videoBySong.get(s.id) ||
+        null,
+    }));
   }
 
-  const totalPlays = songs.reduce((sum, s) => sum + Math.max(0, s.play_count ?? 0), 0);
+  const birthDisplay = artist?.birth_date
+    ? formatArtistBorn(artist.birth_date, artist.death_date) || artist.birth_date
+    : null;
+  const deathDisplay = artist?.death_date
+    ? formatArtistDied(artist.death_date, artist.birth_date) || artist.death_date
+    : null;
+  const descriptionEn = (artist?.description_en ?? '').trim();
+  const profileText = (artist?.profile_text ?? '').trim();
+  const imageCredit = (artist?.image_credit ?? '').trim();
 
   return (
     <main className="mx-auto min-h-screen max-w-5xl bg-gray-950 p-4 text-gray-100 sm:p-6">
@@ -167,7 +260,7 @@ export default async function AdminLibraryArtistPage({
         </Link>
       </div>
       <h1 className="text-xl font-semibold text-white sm:text-2xl">アーティスト情報</h1>
-      <p className="mt-1 text-sm text-gray-300">{displayName}</p>
+
       <div className="mt-3 rounded-lg border border-amber-900/40 bg-amber-950/20 px-3 py-2 text-xs leading-relaxed text-gray-300">
         <p className="font-medium text-amber-200/90">正本は artists テーブルです</p>
         <p className="mt-1">
@@ -211,125 +304,140 @@ export default async function AdminLibraryArtistPage({
         </p>
       ) : null}
 
-      <section className="mt-6 rounded-lg border border-gray-800 bg-gray-900/40 p-4 text-sm">
-        <h2 className="text-sm font-semibold text-amber-200">基本</h2>
-        <dl className="mt-2 space-y-1 text-gray-300">
-          <div>
-            <dt className="inline text-gray-500">artists.id: </dt>
-            <dd className="inline font-mono text-xs">{artist?.id ?? '—'}</dd>
-          </div>
-          <div>
-            <dt className="inline text-gray-500">name: </dt>
-            <dd className="inline">{artist?.name ?? '—'}</dd>
-          </div>
-          <div>
-            <dt className="inline text-gray-500">name_ja: </dt>
-            <dd className="inline">{artist?.name_ja ?? '—'}</dd>
-          </div>
-          <div>
-            <dt className="inline text-gray-500">music8_artist_slug: </dt>
-            <dd className="inline font-mono text-xs">{artist?.music8_artist_slug ?? '—'}</dd>
-          </div>
-          <div>
-            <dt className="inline text-gray-500">kind: </dt>
-            <dd className="inline">{artist?.kind ?? '—'}</dd>
-          </div>
-          <div>
-            <dt className="inline text-gray-500">origin_country: </dt>
-            <dd className="inline">{artist?.origin_country ?? '—'}</dd>
-          </div>
-          <div>
-            <dt className="inline text-gray-500">catalog_scope: </dt>
-            <dd className="inline">{artist?.catalog_scope ?? '—'}</dd>
-          </div>
-          <div>
-            <dt className="inline text-gray-500">active_period: </dt>
-            <dd className="inline">{artist?.active_period ?? '—'}</dd>
-          </div>
-          <div>
-            <dt className="inline text-gray-500">所属バンド: </dt>
-            <ArtistRelationDd links={memberGraph.bands} />
-          </div>
-          <div>
-            <dt className="inline text-gray-500">members: </dt>
-            {memberGraph.members.length > 0 ? (
-              <ArtistRelationDd links={memberGraph.members} />
+      {/* Music8 公開ページに近いプロフィールカード */}
+      <section className="mt-6 overflow-hidden rounded-xl border border-gray-700 bg-gray-900 shadow-[0_12px_40px_-24px_rgba(0,0,0,0.9)]">
+        <div className="grid gap-0 md:grid-cols-[minmax(14rem,18rem)_minmax(0,1fr)]">
+          <div className="border-b border-gray-800 bg-black/40 md:border-b-0 md:border-r">
+            {photoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={photoUrl}
+                alt={displayName}
+                className="aspect-[3/4] w-full object-cover md:min-h-[22rem]"
+                loading="lazy"
+                referrerPolicy="no-referrer"
+              />
             ) : (
-              <dd className="inline">{artist?.members ?? '—'}</dd>
+              <div className="flex aspect-[3/4] min-h-[14rem] items-center justify-center bg-gray-950 text-xs text-gray-600 md:min-h-[22rem]">
+                画像なし
+              </div>
             )}
+            <p className="border-t border-gray-800 px-3 py-2 text-[11px] text-gray-500">
+              {imageCredit
+                ? imageCredit
+                : photoUrl
+                  ? 'Artist image（image_url / Spotify）'
+                  : '画像未設定'}
+            </p>
           </div>
-          <div>
-            <dt className="inline text-gray-500">youtube_channel_title: </dt>
-            <dd className="inline">{artist?.youtube_channel_title ?? '—'}</dd>
-          </div>
-          <div>
-            <dt className="inline text-gray-500">youtube_channel_url: </dt>
-            <dd className="inline break-all">
-              {artist?.youtube_channel_url ? (
-                <a
-                  href={artist.youtube_channel_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-sky-400 hover:underline"
-                >
-                  {artist.youtube_channel_url}
-                </a>
-              ) : (
-                '—'
-              )}
-            </dd>
-          </div>
-          <div>
-            <dt className="inline text-gray-500">image_url: </dt>
-            <dd className="inline break-all">
-              {artist?.image_url ? (
-                <a
-                  href={artist.image_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-sky-400 hover:underline"
-                >
-                  {artist.image_url}
-                </a>
-              ) : (
-                '—'
-              )}
-            </dd>
-          </div>
-          <div>
-            <dt className="inline text-gray-500">image_credit: </dt>
-            <dd className="inline">{artist?.image_credit ?? '—'}</dd>
-          </div>
-          <div>
-            <dt className="inline text-gray-500">登録曲数: </dt>
-            <dd className="inline tabular-nums">{songs.length}</dd>
-          </div>
-          <div>
-            <dt className="inline text-gray-500">累計選曲回数: </dt>
-            <dd className="inline tabular-nums">{totalPlays}</dd>
-          </div>
-        </dl>
-      </section>
 
-      <section className="mt-6 rounded-lg border border-gray-800 bg-gray-900/40 p-4 text-sm">
-        <h2 className="text-sm font-semibold text-amber-200">チャット読み込み用プロフィール</h2>
-        {artist?.image_url ? (
-          <div className="mt-3">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={artist.image_url}
-              alt={displayName}
-              className="max-h-64 w-auto rounded border border-gray-800 bg-gray-950"
-              loading="lazy"
-            />
-            {artist?.image_credit ? (
-              <p className="mt-1 text-xs text-gray-500">{artist.image_credit}</p>
-            ) : null}
+          <div className="flex min-w-0 flex-col gap-4 p-4 sm:p-5">
+            <div>
+              <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                <h2 className="text-2xl font-semibold tracking-tight text-white sm:text-3xl">
+                  {displayName}
+                </h2>
+                {origin ? (
+                  <span className="rounded border border-gray-600 bg-gray-950 px-1.5 py-0.5 text-[11px] font-medium text-gray-300">
+                    {origin}
+                  </span>
+                ) : null}
+              </div>
+              {nameJa && nameJa !== displayName ? (
+                <p className="mt-1 text-base text-gray-300">{nameJa}</p>
+              ) : null}
+              {nameEn && nameEn !== displayName && nameEn !== nameJa ? (
+                <p className="mt-0.5 text-sm text-gray-500">{nameEn}</p>
+              ) : null}
+            </div>
+
+            <div className="space-y-1 text-sm text-gray-300">
+              {occupation ? <p className="text-gray-200">{occupation}</p> : null}
+              {(artist?.active_period ?? '').trim() ? (
+                <p>
+                  <span className="text-gray-500">Active: </span>
+                  {(artist?.active_period ?? '').trim()}
+                </p>
+              ) : null}
+              {birthDisplay ? (
+                <p>
+                  <span className="text-gray-500">Born: </span>
+                  {birthDisplay}
+                </p>
+              ) : null}
+              {deathDisplay ? (
+                <p>
+                  <span className="text-gray-500">Died: </span>
+                  {deathDisplay}
+                </p>
+              ) : null}
+              {memberGraph.bands.length > 0 ? (
+                <p>
+                  <span className="text-gray-500">所属バンド: </span>
+                  <ArtistRelationLinks links={memberGraph.bands} />
+                </p>
+              ) : null}
+              {memberGraph.members.length > 0 ? (
+                <p>
+                  <span className="text-gray-500">Members: </span>
+                  <ArtistRelationLinks links={memberGraph.members} />
+                </p>
+              ) : (artist?.members ?? '').trim() ? (
+                <p>
+                  <span className="text-gray-500">Members: </span>
+                  {(artist?.members ?? '').trim()}
+                </p>
+              ) : null}
+            </div>
+
+            {(descriptionEn || profileText) && (
+              <div className="space-y-3 border-t border-gray-800 pt-3 text-sm leading-relaxed">
+                {descriptionEn ? (
+                  <p className="whitespace-pre-wrap text-gray-400">{descriptionEn}</p>
+                ) : null}
+                {profileText ? (
+                  <p className="whitespace-pre-wrap text-gray-200">{profileText}</p>
+                ) : null}
+              </div>
+            )}
+
+            <div className="mt-auto flex flex-wrap gap-2 border-t border-gray-800 pt-3">
+              {links.wikipedia ? (
+                <a
+                  href={links.wikipedia}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rounded border border-gray-600 bg-gray-950 px-2.5 py-1.5 text-xs text-sky-300 hover:border-sky-600"
+                >
+                  Wikipedia
+                </a>
+              ) : null}
+              {links.spotify ? (
+                <a
+                  href={links.spotify}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rounded border border-green-800/80 bg-green-950/40 px-2.5 py-1.5 text-xs text-green-200 hover:border-green-600"
+                >
+                  Spotify
+                </a>
+              ) : null}
+              {links.youtube ? (
+                <a
+                  href={links.youtube}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rounded border border-red-900/70 bg-red-950/30 px-2.5 py-1.5 text-xs text-red-200 hover:border-red-700"
+                >
+                  YouTube
+                </a>
+              ) : null}
+              {!links.wikipedia && !links.spotify && !links.youtube ? (
+                <span className="text-xs text-gray-600">外部リンク未設定</span>
+              ) : null}
+            </div>
           </div>
-        ) : null}
-        <p className="mt-2 whitespace-pre-wrap leading-relaxed text-gray-300">
-          {artist?.profile_text?.trim() || '—'}
-        </p>
+        </div>
       </section>
 
       <WesternArtistPlaylistImportPanel
@@ -349,50 +457,12 @@ export default async function AdminLibraryArtistPage({
       ) : null}
 
       <section className="mt-6 rounded-lg border border-gray-800 bg-gray-900/40 p-4 text-sm">
-        <h2 className="text-sm font-semibold text-amber-200">曲一覧</h2>
-        {songs.length === 0 ? (
-          <p className="mt-3 text-gray-500">このアーティストの曲はまだありません。</p>
-        ) : (
-          <div className="mt-3 overflow-x-auto">
-            <table className="min-w-full border-collapse text-xs text-gray-200">
-              <thead className="border-b border-gray-700 text-gray-500">
-                <tr>
-                  <th className="py-2 pr-3 text-left font-medium">公開年</th>
-                  <th className="py-2 pr-3 text-left font-medium">タイトル</th>
-                  <th className="py-2 pr-3 text-left font-medium">スタイル</th>
-                  <th className="py-2 pr-3 text-right font-medium">再生</th>
-                  <th className="py-2 pl-2 text-left font-medium">詳細</th>
-                </tr>
-              </thead>
-              <tbody>
-                {songs.map((s) => {
-                  const year =
-                    s.original_release_date && s.original_release_date.length >= 4
-                      ? s.original_release_date.slice(0, 4)
-                      : '—';
-                  const title = (s.song_title ?? s.display_title ?? '—').trim();
-                  return (
-                    <tr key={s.id} className="border-t border-gray-800/90">
-                      <td className="py-2 pr-3 align-top text-gray-400">{year}</td>
-                      <td className="py-2 pr-3 align-top">{title}</td>
-                      <td className="py-2 pr-3 align-top text-gray-400">{s.style ?? '—'}</td>
-                      <td className="py-2 pr-3 align-top text-right tabular-nums text-gray-400">
-                        {s.play_count ?? 0}
-                      </td>
-                      <td className="py-2 pl-2 align-top">
-                        <Link href={`/admin/songs/${s.id}`} className="text-amber-200/90 hover:underline">
-                          DB
-                        </Link>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <h2 className="text-sm font-semibold text-amber-200">
+          曲一覧
+          <span className="ml-2 font-normal text-gray-500">（{songs.length}）</span>
+        </h2>
+        <GenreBestArtistSongList songs={songs} />
       </section>
     </main>
   );
 }
-

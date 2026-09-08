@@ -1,27 +1,49 @@
 import assert from 'node:assert/strict';
-
-// wikiSlugFromUrl logic mirrored for test
-function wikiSlugFromUrl(wikiUrl: string): string | null {
-  const m = wikiUrl.match(/^https?:\/\/[^/]+\/wiki\/(.+)$/i);
-  if (!m?.[1]) return null;
-  try {
-    return decodeURIComponent(m[1].trim()) || null;
-  } catch {
-    return m[1].trim() || null;
-  }
-}
+import {
+  buildWikipediaSearchPlan,
+  wikiSlugFromUrl,
+} from '@/lib/wikipedia-page-search';
 
 assert.equal(wikiSlugFromUrl('https://en.wikipedia.org/wiki/Kenshi_Yonezu'), 'Kenshi_Yonezu');
-assert.equal(wikiSlugFromUrl('https://ja.wikipedia.org/wiki/%E7%B1%B3%E6%B4%A5%E7%8E%84%E5%B8%AB'), '米津玄師');
+assert.equal(
+  wikiSlugFromUrl('https://ja.wikipedia.org/wiki/%E7%B1%B3%E6%B4%A5%E7%8E%84%E5%B8%AB'),
+  '米津玄師',
+);
 
-function extractEnglishName(descriptionEn: string): string | null {
-  const m = descriptionEn.match(/^([A-Za-z][A-Za-z0-9\s.'-]{1,60}?)\s+is\b/i);
-  return m?.[1]?.trim() ?? null;
+{
+  const western = buildWikipediaSearchPlan({
+    artistName: 'Buffalo Traffic Jam',
+    catalog: 'western',
+  });
+  assert.ok(western.length >= 1);
+  assert.ok(western.every((q) => q.lang === 'en'));
+  assert.equal(western[0]?.q, 'Buffalo Traffic Jam');
 }
 
-assert.equal(
-  extractEnglishName('Kenshi Yonezu is a Japanese singer-songwriter.'),
-  'Kenshi Yonezu',
-);
+{
+  const unknown = buildWikipediaSearchPlan({
+    artistName: 'The Sways',
+    catalog: 'unknown',
+  });
+  assert.ok(unknown.every((q) => q.lang === 'en'), 'unknown（洋楽主）は英語版のみ');
+}
+
+{
+  const domestic = buildWikipediaSearchPlan({
+    artistName: '米津玄師',
+    catalog: 'domestic',
+  });
+  assert.equal(domestic[0]?.lang, 'ja');
+  assert.ok(domestic.some((q) => q.lang === 'en'));
+}
+
+{
+  const withEnBio = buildWikipediaSearchPlan({
+    artistName: 'Buffalo Traffic Jam',
+    catalog: 'western',
+    descriptionEn: 'Buffalo Traffic Jam is a US band.',
+  });
+  assert.ok(withEnBio.every((q) => q.lang === 'en'));
+}
 
 console.log('wikipedia-page-search.unit-test: ok');

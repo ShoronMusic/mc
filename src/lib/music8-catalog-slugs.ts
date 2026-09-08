@@ -17,6 +17,19 @@ export const MUSIC8_NAV_STYLE_SLUGS = [
 
 export type Music8NavStyleSlug = (typeof MUSIC8_NAV_STYLE_SLUGS)[number];
 
+/** 管理 UI など向けの表示名（値は slug のまま） */
+export const MUSIC8_NAV_STYLE_LABELS: Record<Music8NavStyleSlug, string> = {
+  pop: 'Pop',
+  dance: 'Dance',
+  alternative: 'Alternative',
+  electronica: 'Electronica',
+  rb: 'R&B',
+  'hip-hop': 'Hip-hop',
+  rock: 'Rock',
+  metal: 'Metal',
+  others: 'Others',
+};
+
 /** WP style term ID → 公開スラッグ */
 export const MUSIC8_STYLE_WP_ID_TO_SLUG: Record<number, Music8NavStyleSlug> = {
   2844: 'pop',

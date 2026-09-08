@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { fetchSongIdsWithAiCommentary } from '@/lib/library-ai-commentary-presence';
 import { fetchMyPlayCountByVideoIds } from '@/lib/library-my-play-count';
 import { songHasLibraryCommentaryIcon } from '@/lib/library-commentary-icon';
+import { usableLibraryMusic8Intro } from '@/lib/library-song-commentary-text';
 
 export const dynamic = 'force-dynamic';
 
@@ -112,30 +113,50 @@ export async function POST(request: Request) {
     return bySong;
   })();
 
-  const slugBySongId = new Map<string, { music8ArtistSlug: string | null; music8SongSlug: string | null }>();
+  const slugBySongId = new Map<
+    string,
+    { music8ArtistSlug: string | null; music8SongSlug: string | null; hasDbMusic8Intro: boolean }
+  >();
   const slugPromise = (async () => {
     for (let i = 0; i < songIds.length; i += SONG_ID_CHUNK) {
       const chunk = songIds.slice(i, i + SONG_ID_CHUNK);
-      const { data, error } = await admin
+      let data: unknown[] | null = null;
+      const primary = await admin
         .from('songs')
-        .select('id, music8_artist_slug, music8_song_slug')
+        .select('id, music8_artist_slug, music8_song_slug, music8_intro')
         .in('id', chunk);
-      if (error) {
-        if (error.code !== '42703' && error.code !== '42P01') {
-          console.error('[api/library/song-details] music8 slugs', error);
+      if (primary.error && (primary.error.code === '42703' || /music8_intro/i.test(primary.error.message))) {
+        const fallback = await admin
+          .from('songs')
+          .select('id, music8_artist_slug, music8_song_slug')
+          .in('id', chunk);
+        if (fallback.error) {
+          if (fallback.error.code !== '42703' && fallback.error.code !== '42P01') {
+            console.error('[api/library/song-details] music8 slugs', fallback.error);
+          }
+          break;
+        }
+        data = fallback.data ?? [];
+      } else if (primary.error) {
+        if (primary.error.code !== '42703' && primary.error.code !== '42P01') {
+          console.error('[api/library/song-details] music8 slugs', primary.error);
         }
         break;
+      } else {
+        data = primary.data ?? [];
       }
-      for (const row of (data ?? []) as {
+      for (const row of data as {
         id?: string;
         music8_artist_slug?: string | null;
         music8_song_slug?: string | null;
+        music8_intro?: string | null;
       }[]) {
         const id = row.id?.trim() ?? '';
         if (!id) continue;
         slugBySongId.set(id, {
           music8ArtistSlug: typeof row.music8_artist_slug === 'string' ? row.music8_artist_slug : null,
           music8SongSlug: typeof row.music8_song_slug === 'string' ? row.music8_song_slug : null,
+          hasDbMusic8Intro: Boolean(usableLibraryMusic8Intro(row.music8_intro)),
         });
       }
     }
@@ -156,6 +177,7 @@ export async function POST(request: Request) {
         hasAiCommentary: commentarySongIds.has(id),
         music8ArtistSlug: slugs?.music8ArtistSlug,
         music8SongSlug: slugs?.music8SongSlug,
+        hasDbMusic8Intro: slugs?.hasDbMusic8Intro,
       }),
     };
   });

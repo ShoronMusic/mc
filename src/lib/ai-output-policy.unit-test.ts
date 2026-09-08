@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import {
   containsUnreliableCommentPackClaim,
   containsUnreliableCommentaryDiscographyClaim,
+  containsGenericPopProductionFiller,
   hasFabricatedStyleChartRankNumber,
   hasSuspiciousUkUsIdenticalChartPeak,
   isEnglishInstructionOrPlanningLeak,
@@ -193,5 +194,21 @@ assert.equal(
   mentionsMediaPlacementWithoutWorkTitle('映画音楽のような壮大なアレンジが印象的です。'),
   false,
 );
+
+const kissinGeneric = `Kissin' Dynamiteが2026年9月2日にリリースした「Good In Goodbye」は、現代の人間関係における複雑な感情や、別れの中に見出す希望といった普遍的なテーマを内包する。本楽曲はPopジャンルに属し、男性ボーカルが情感豊かに歌い上げる。親しみやすいメロディラインと、洗練されたシンセサイザーの音色、そしてタイトでダンサブルなリズムセクションが融合した現代的なプロダクションが特徴。緻密なアレンジと耳に残るフックが、リスナーの心に深く響くサウンドスケープを構築する。`;
+assert.equal(containsGenericPopProductionFiller(kissinGeneric), true);
+assert.equal(
+  containsGenericPopProductionFiller(
+    'The Weekndの『Blinding Lights』は、シンセと四つ打ちが印象的なアップテンポの一曲です。',
+  ),
+  false,
+);
+assert.equal(
+  containsGenericPopProductionFiller(
+    'ドイツのスタジアムロックバンドKissin Dynamiteのハードロックで、歪んだギターリフが牽引します。',
+  ),
+  false,
+);
+assert.equal(containsUnreliableCommentPackClaim(kissinGeneric, false), true);
 
 console.log('ai-output-policy unit tests: OK');

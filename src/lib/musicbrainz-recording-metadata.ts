@@ -242,6 +242,28 @@ async function fetchRecordingAliases(
   return Array.isArray(data?.aliases) ? data.aliases : [];
 }
 
+/** 検索ヒットに genres が無いとき、recording lookup で genres+tags を補完 */
+async function fetchRecordingGenresAndTags(
+  recordingId: string,
+  ua: string,
+): Promise<string[]> {
+  const url = new URL(`https://musicbrainz.org/ws/2/recording/${encodeURIComponent(recordingId)}`);
+  url.searchParams.set('inc', 'genres+tags');
+  url.searchParams.set('fmt', 'json');
+
+  const data = await scheduleMusicBrainzRequest(async () => {
+    const res = await fetch(url.toString(), {
+      headers: { Accept: 'application/json', 'User-Agent': ua },
+      cache: 'no-store',
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as MbRecording;
+  });
+
+  if (!data) return [];
+  return pickGenresFromRecording(data);
+}
+
 /**
  * アーティスト名＋曲名で MB recording を検索。ヒット時は表記・日付・ジャンル・日本語読みを返す。
  */
@@ -276,8 +298,20 @@ export async function fetchMusicBrainzRecordingMetadata(
       return (await res.json()) as RecordingSearchJson;
     });
     if (!data?.recordings?.length) return null;
-    const meta = parseMusicBrainzRecordingMetadataFromSearch(data);
+    let meta = parseMusicBrainzRecordingMetadataFromSearch(data);
     if (!meta) return null;
+
+    if (meta.genres.length === 0 && meta.recordingId) {
+      try {
+        const genres = await fetchRecordingGenresAndTags(meta.recordingId, ua);
+        if (genres.length > 0) meta = { ...meta, genres };
+      } catch (e) {
+        console.warn(
+          '[musicbrainz-recording-metadata] genres fetch failed',
+          e instanceof Error ? e.message : e,
+        );
+      }
+    }
 
     if (!meta.songTitleJa && meta.recordingId) {
       try {

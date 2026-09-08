@@ -43,6 +43,8 @@ function run() {
   assert.equal(resolveArtistSearchNicknameCanonical('マイコー'), 'Michael Jackson');
   assert.equal(resolveArtistSearchNicknameCanonical('RHCP'), 'Red Hot Chili Peppers');
   assert.equal(resolveArtistSearchNicknameCanonical('QOTSA'), 'Queens of the Stone Age');
+  assert.equal(resolveArtistSearchNicknameCanonical('MILEY'), 'Miley Cyrus');
+  assert.equal(resolveArtistSearchNicknameCanonical('Miley'), 'Miley Cyrus');
 
   // クエリ全体一致のみ（部分一致しない）
   assert.equal(resolveArtistSearchNicknameCanonical('ドリカムの曲'), null);

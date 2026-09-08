@@ -93,6 +93,39 @@ export function containsUnreliableCommentaryDiscographyClaim(txt: string | null 
   return patterns.some((re) => re.test(t));
 }
 
+/**
+ * どの曲にも当てはまる汎用ポップ／シンセ作文（Kissin' Dynamite を Pop＋シンセにした類）。
+ * 本物のシンセポップ1点言及だけではヒットさせない。
+ */
+const GENERIC_POP_PRODUCTION_TROPES = [
+  /親しみやすいメロディ/,
+  /洗練された(?:シンセ|音色|プロダクション)/,
+  /タイトでダンサブル|ダンサブルなリズム/,
+  /耳に残るフック/,
+  /サウンドスケープ/,
+  /現代的なプロダクション/,
+  /緻密なアレンジ/,
+  /普遍的なテーマ/,
+  /本楽曲は\s*Pop(?:ジャンル)?に属/,
+  /Popジャンルに属/,
+];
+
+export function containsGenericPopProductionFiller(txt: string | null | undefined): boolean {
+  const t = (txt ?? '').trim();
+  if (!t) return false;
+  let n = 0;
+  for (const re of GENERIC_POP_PRODUCTION_TROPES) {
+    if (re.test(t)) n += 1;
+  }
+  if (n >= 3) return true;
+  const synthDance = /シンセ(?:サイザー)?/.test(t) && /ダンサブル|ダンスビート|四つ打ち/.test(t);
+  const rockSpecific = /ギター|リフ|メタル|ハードロック|スタジアム/.test(t);
+  return synthDance && !rockSpecific && n >= 1;
+}
+
+export const GENERIC_POP_PRODUCTION_FILLER_REGEN_HINT =
+  '\n（追加指示）前回はどの曲にも当てはまる汎用ポップ／シンセ／ダンサブルの描写でした。このアーティスト固有の国籍・バンド種別・代表的なサウンド（ギター、メタル、ロック等、知っていれば）と、動画概要や曲名から読み取れるテーマだけを書いてください。知らない楽器を足さないこと。';
+
 /** 映画・ドラマ等の起用に触れる文。作品名なしは再生成／削除対象 */
 const MEDIA_PLACEMENT_NEAR_RE =
   /(?:映画|ドラマ|アニメ|テレビ(?:ドラマ)?|TV(?:ドラマ)?|CM|ゲーム).{0,28}(?:エンディング(?:曲)?|主題歌|挿入歌|オープニング(?:曲)?|サントラ|サウンドトラック|タイアップ)/;
@@ -180,6 +213,7 @@ export function containsUnreliableCommentPackClaim(txt: string, allowChartAwards
     /若者文化/i,
   ];
   if (alwaysUnreliable.some((re) => re.test(txt))) return true;
+  if (containsGenericPopProductionFiller(txt)) return true;
 
   /** 根拠のないバズ煽り（栄誉スロットでも禁止） */
   if (/ブーム|バズ|巻き起こ|瞬く間/i.test(txt)) return true;

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireStyleAdminApi } from '@/lib/admin-access';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { isSelectionRegisteredArtistPendingWp } from '@/lib/artist-selection-register';
+import { isSelectionRegisteredArtistPendingWp } from '@/lib/artist-selection-registered-pending';
 import { displayNameFromArtistRow } from '@/lib/music8-artist-import';
 import {
   findHighConfidenceMergePairs,

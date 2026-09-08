@@ -13,6 +13,7 @@ import {
   librarySelectSongBtnClass,
   librarySortChipBtnClass,
 } from '@/lib/product-branding';
+import { SongCoverThumb } from '@/components/song/SongCoverThumb';
 
 type FeaturedListItem = {
   id: string;
@@ -49,6 +50,7 @@ type FeaturedSongItem = {
   original_release_date: string | null;
   youtube_published_at: string | null;
   spotify_popularity: number | null;
+  spotify_images: string | null;
 };
 
 type Props = {
@@ -231,6 +233,7 @@ export function FeaturedPageModal({
             typeof row.youtube_published_at === 'string' ? row.youtube_published_at : null,
           spotify_popularity:
             typeof row.spotify_popularity === 'number' ? row.spotify_popularity : null,
+          spotify_images: typeof row.spotify_images === 'string' ? row.spotify_images : null,
         };
         item.displayMeta = formatReleaseMeta(item);
         rows.push(item);
@@ -443,6 +446,12 @@ export function FeaturedPageModal({
                             <span className="w-7 shrink-0 text-right text-[10px] tabular-nums text-gray-600">
                               {index + 1}
                             </span>
+                            <SongCoverThumb
+                              spotifyImages={song.spotify_images}
+                              videoId={song.videoId}
+                              alt=""
+                              className="h-10 w-10"
+                            />
                             <span className="min-w-0 flex-1">
                               <span className="block truncate text-xs font-semibold text-gray-200">
                                 {song.title}

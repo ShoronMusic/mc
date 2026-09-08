@@ -2,6 +2,12 @@
 
 import type { ReactNode } from 'react';
 import type { AdminArtistProfileDraft } from '@/lib/admin-artist-profile-parse';
+import {
+  composeAdminArtistDisplayName,
+  normalizeAdminArtistActivePeriod,
+  normalizeAdminArtistThePrefix,
+  splitAdminArtistNameParts,
+} from '@/lib/admin-artist-profile-parse';
 
 export type RegisteredArtistRow = {
   id: string;
@@ -57,8 +63,11 @@ export function RegistrationStatusIcons({
 }
 
 export function emptyDraft(name: string): AdminArtistProfileDraft {
+  const parts = splitAdminArtistNameParts(name);
   return {
-    name,
+    name: parts.name,
+    nameBase: parts.nameBase,
+    thePrefix: parts.thePrefix,
     nameJa: null,
     nameEn: null,
     originCountry: 'JPN',
@@ -88,19 +97,50 @@ export function artistRowToDraft(
       ? row.kind.split(/[,、/]/).map((s) => s.trim()).filter(Boolean)
       : [];
 
+  const originCountry = typeof row.origin_country === 'string' ? row.origin_country : null;
+  const catalogScope: AdminArtistProfileDraft['catalogScope'] = (() => {
+    if (row.catalog_scope === 'western' || row.catalog_scope === 'domestic' || row.catalog_scope === 'unknown') {
+      return row.catalog_scope;
+    }
+    const o = (originCountry ?? '').trim().toUpperCase();
+    if (o === 'JPN' || o === 'JP' || o === 'JAPAN') return 'domestic';
+    if (o) return 'western';
+    return 'unknown';
+  })();
+
+  const rowName = typeof row.name === 'string' && row.name.trim() ? row.name.trim() : fallbackName;
+  const rowBase = typeof row.name_base === 'string' ? row.name_base.trim() : '';
+  const rowPrefix = normalizeAdminArtistThePrefix(
+    typeof row.the_prefix === 'string' ? row.the_prefix : null,
+  );
+  let nameBase: string;
+  let thePrefix = rowPrefix;
+  if (rowBase) {
+    nameBase = rowBase;
+  } else {
+    const parts = splitAdminArtistNameParts(rowName);
+    nameBase = parts.nameBase;
+    if (!thePrefix) thePrefix = parts.thePrefix;
+  }
+  const name = composeAdminArtistDisplayName(nameBase, thePrefix) || rowName;
+
   return {
-    name: typeof row.name === 'string' && row.name.trim() ? row.name.trim() : fallbackName,
+    name,
+    nameBase,
+    thePrefix,
     nameEn: typeof row.name_en === 'string' ? row.name_en : null,
     nameJa: typeof row.name_ja === 'string' ? row.name_ja : null,
-    originCountry: typeof row.origin_country === 'string' ? row.origin_country : null,
-    activePeriod: typeof row.active_period === 'string' ? row.active_period : null,
+    originCountry,
+    activePeriod:
+      typeof row.active_period === 'string'
+        ? normalizeAdminArtistActivePeriod(row.active_period)
+        : null,
     birthDate: typeof row.birth_date === 'string' ? row.birth_date : null,
     deathDate: typeof row.death_date === 'string' ? row.death_date : null,
     occupations,
     descriptionEn: typeof row.description_en === 'string' ? row.description_en : null,
     profileText: typeof row.profile_text === 'string' ? row.profile_text : null,
-    catalogScope:
-      row.catalog_scope === 'western' ? 'western' : row.catalog_scope === 'unknown' ? 'unknown' : 'domestic',
+    catalogScope,
     spotifyArtistId: typeof row.spotify_artist_id === 'string' ? row.spotify_artist_id : null,
     spotifyArtistImages:
       typeof row.spotify_artist_images === 'string'
