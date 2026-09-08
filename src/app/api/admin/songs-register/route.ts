@@ -203,24 +203,33 @@ export async function POST(request: Request) {
   const styleSlug = typeof body.style === 'string' ? body.style.trim().toLowerCase() : '';
   const skipExport = body.export_json === false || body.exportJson === false;
 
-  const result = await registerWesternSongFromYoutube(admin, {
-    youtubeId,
-    artist,
-    title,
-    styleSlug: styleSlug && (MUSIC8_NAV_STYLE_SLUGS as readonly string[]).includes(styleSlug) ? styleSlug : null,
-    catalogScope: 'western',
-    exportJson: !skipExport,
-  });
+  try {
+    const result = await registerWesternSongFromYoutube(admin, {
+      youtubeId,
+      artist,
+      title,
+      styleSlug: styleSlug && (MUSIC8_NAV_STYLE_SLUGS as readonly string[]).includes(styleSlug) ? styleSlug : null,
+      catalogScope: 'western',
+      exportJson: !skipExport,
+    });
 
-  if ('error' in result) {
-    return NextResponse.json({ error: result.error }, { status: 400 });
+    if ('error' in result) {
+      return NextResponse.json({ error: result.error }, { status: 400 });
+    }
+
+    return NextResponse.json({
+      songId: result.songId,
+      videoId: result.videoId,
+      exportPath: result.exportPath,
+      exportSkipped: result.exportSkipped,
+      youtubePublishedAt: result.youtubePublishedAt,
+    } satisfies AdminSongsRegisterResponse);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error('[admin/songs-register] POST', msg);
+    return NextResponse.json(
+      { error: `登録中にエラーが発生しました: ${msg.slice(0, 200)}` },
+      { status: 500 },
+    );
   }
-
-  return NextResponse.json({
-    songId: result.songId,
-    videoId: result.videoId,
-    exportPath: result.exportPath,
-    exportSkipped: result.exportSkipped,
-    youtubePublishedAt: result.youtubePublishedAt,
-  } satisfies AdminSongsRegisterResponse);
 }

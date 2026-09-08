@@ -118,11 +118,23 @@ export async function exportOneSongToDisk(
   songId: string,
   exportDir?: string | null,
 ): Promise<{ ok: true; songPath: string } | { ok: false; reason: string }> {
-  const bundle = await loadSongExportBundle(admin, songId);
-  if (!bundle) return { ok: false, reason: 'song_not_found' };
-  const dir = resolveMusic8JsonExportDir(exportDir);
-  const written = writeMusicaichatSongTree(dir, bundle.json, bundle.youtubeIndex);
-  return { ok: true, songPath: written.songPath };
+  const explicit =
+    (exportDir ?? '').trim() || (process.env.MUSIC8_JSON_EXPORT_DIR ?? '').trim();
+  // Vercel は読み取り専用 FS。増分 JSON は週次エクスポート等で別経路。未設定ならスキップ（DB 登録は成功扱い）。
+  if (!explicit && process.env.VERCEL === '1') {
+    return { ok: false, reason: 'vercel_skip_disk_export' };
+  }
+  try {
+    const bundle = await loadSongExportBundle(admin, songId);
+    if (!bundle) return { ok: false, reason: 'song_not_found' };
+    const dir = resolveMusic8JsonExportDir(exportDir);
+    const written = writeMusicaichatSongTree(dir, bundle.json, bundle.youtubeIndex);
+    return { ok: true, songPath: written.songPath };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.warn('[music8-catalog-json-write] exportOneSongToDisk', msg);
+    return { ok: false, reason: `write_failed:${msg.slice(0, 160)}` };
+  }
 }
 
 export async function rebuildStylesSummaryFromDb(

@@ -123,7 +123,7 @@ export function AdminNewSongForm() {
       });
       const data = (await res.json().catch(() => ({}))) as AdminSongsRegisterResponse;
       if (!res.ok) {
-        setMsg(data.error || '登録に失敗しました。');
+        setMsg(data.error || `登録に失敗しました。（HTTP ${res.status}）`);
         return;
       }
       const registeredId = typeof data.songId === 'string' ? data.songId : null;
@@ -143,8 +143,9 @@ export function AdminNewSongForm() {
         ? ` YouTube 公開日 ${data.youtubePublishedAt} を保存しました。`
         : ' YouTube 公開日は取得できませんでした。';
       setMsg(`登録しました。${dateNote}${extra}`);
-    } catch {
-      setMsg('登録に失敗しました。');
+    } catch (e) {
+      const detail = e instanceof Error && e.message ? e.message : '';
+      setMsg(detail ? `登録に失敗しました: ${detail}` : '登録に失敗しました。');
     } finally {
       setBusyMode(null);
     }
