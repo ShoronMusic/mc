@@ -314,35 +314,35 @@ export default async function SongDetailPage({ params, searchParams }: SongDetai
         .eq('song_id', song.id)
         .order('display_order', { ascending: true });
       if (!creditErr && Array.isArray(creditRows)) {
-        songCredits = creditRows
-          .map((row) => {
-            const r = row as {
-              artist_id?: string;
-              role?: string;
-              display_order?: number;
-              artists?: ArtistJoinRow | ArtistJoinRow[] | null;
-            };
-            const artistId = r.artist_id?.trim() ?? '';
-            const artistsJoin = r.artists;
-            const artistRow = Array.isArray(artistsJoin) ? artistsJoin[0] : artistsJoin;
-            const artistName =
-              displayNameFromArtistRow(artistRow ?? {})?.trim() ||
-              artistRow?.name?.trim() ||
-              '';
-            if (!artistId || !artistName) return null;
-            if (artistRow) markNew(artistId, artistRow);
-            return {
-              artistId,
-              artistName,
-              role: r.role?.trim() || 'main',
-              displayOrder:
-                typeof r.display_order === 'number' ? Math.floor(r.display_order) : 0,
-              isNewArtist: artistRow
-                ? isSelectionRegisteredArtistPendingWp(artistRow)
-                : false,
-            };
-          })
-          .filter((r): r is AdminSongCreditRow => r != null);
+        const nextCredits: AdminSongCreditRow[] = [];
+        for (const row of creditRows) {
+          const r = row as {
+            artist_id?: string;
+            role?: string;
+            display_order?: number;
+            artists?: ArtistJoinRow | ArtistJoinRow[] | null;
+          };
+          const artistId = r.artist_id?.trim() ?? '';
+          const artistsJoin = r.artists;
+          const artistRow = Array.isArray(artistsJoin) ? artistsJoin[0] : artistsJoin;
+          const artistName =
+            displayNameFromArtistRow(artistRow ?? {})?.trim() ||
+            artistRow?.name?.trim() ||
+            '';
+          if (!artistId || !artistName) continue;
+          if (artistRow) markNew(artistId, artistRow);
+          nextCredits.push({
+            artistId,
+            artistName,
+            role: r.role?.trim() || 'main',
+            displayOrder:
+              typeof r.display_order === 'number' ? Math.floor(r.display_order) : 0,
+            isNewArtist: artistRow
+              ? isSelectionRegisteredArtistPendingWp(artistRow)
+              : false,
+          });
+        }
+        songCredits = nextCredits;
       }
 
       const primaryId = (song.artist_id ?? '').trim();
