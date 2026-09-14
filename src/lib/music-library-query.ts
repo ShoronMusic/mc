@@ -247,7 +247,11 @@ export function toMusicLibrarySongCard(
     artistSlug,
     snapshotArtists: parseMusicLibrarySnapshotArtists(row.music8_song_data),
   });
-  const resolvedStyleSlug = styleSlug ?? music8NavStyleSlugFromName(row.style ?? '') ?? null;
+  const fromArg =
+    styleSlug && (MUSIC8_NAV_STYLE_SLUGS as readonly string[]).includes(styleSlug)
+      ? (styleSlug as Music8NavStyleSlug)
+      : null;
+  const resolvedStyleSlug = fromArg ?? music8NavStyleSlugFromName(row.style ?? '') ?? null;
   const styleLabel =
     (row.style ?? '').trim() ||
     (resolvedStyleSlug ? MUSIC8_NAV_STYLE_LABELS[resolvedStyleSlug] : '') ||
@@ -952,12 +956,12 @@ async function resolveArtistSlugsByNames(
           if (retry.error.code === '42P01' || retry.error.code === '42703') break;
           throw new Error(retry.error.message);
         }
-        for (const row of retry.data ?? []) remember(row);
+        for (const row of (retry.data ?? []) as Parameters<typeof remember>[0][]) remember(row);
         continue;
       }
       throw new Error(error.message);
     }
-    for (const row of data ?? []) remember(row);
+    for (const row of (data ?? []) as Parameters<typeof remember>[0][]) remember(row);
   }
   return out;
 }

@@ -133,7 +133,9 @@ export async function GET(request: Request) {
       )
       .eq('id', songId)
       .maybeSingle();
-    songRow = fallback.data;
+    songRow = fallback.data
+      ? { ...fallback.data, spotify_images: null }
+      : null;
     songErr = fallback.error;
   }
 

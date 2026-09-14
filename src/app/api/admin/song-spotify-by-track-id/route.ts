@@ -37,8 +37,7 @@ export async function POST(request: Request) {
 
   clearLibraryArtistIndexCache();
   return NextResponse.json({
-    ok: true,
-    message: `反映しました（track: ${result.spotifyTrackId} / 人気: ${result.spotifyPopularity ?? '—'}）。`,
     ...result,
+    message: `反映しました（track: ${result.spotifyTrackId} / 人気: ${result.spotifyPopularity ?? '—'}）。`,
   });
 }
