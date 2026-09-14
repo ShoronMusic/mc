@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { SongCoverThumb } from '@/components/song/SongCoverThumb';
 import { GenreBestRegisterModal } from '@/components/admin/GenreBestRegisterModal';
+import { GenreBestRegisteredLabelLinks } from '@/components/admin/GenreBestRegisteredLabels';
 import type { GenreBestSongLabel } from '@/lib/catalog-genre-best';
 
 export type GenreBestArtistSongRow = {
@@ -129,21 +130,7 @@ export function GenreBestArtistSongList({ songs }: Props) {
                         Genre BEST
                       </button>
                       {labels.length > 0 ? (
-                        <span className="flex flex-wrap items-center gap-1 text-[11px] text-gray-400">
-                          [
-                          {labels.map((lb, i) => (
-                            <span key={lb.slug}>
-                              {i > 0 ? <span className="text-gray-600">, </span> : null}
-                              <Link
-                                href={`/admin/genre-best/${encodeURIComponent(lb.slug)}`}
-                                className="text-sky-400 hover:underline"
-                              >
-                                {lb.title}
-                              </Link>
-                            </span>
-                          ))}
-                          ]
-                        </span>
+                        <GenreBestRegisteredLabelLinks labels={labels} />
                       ) : null}
                     </div>
                   </td>

@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { AdminMenuBar } from '@/components/admin/AdminMenuBar';
-import { getArtistDisplayString } from '@/lib/format-song-display';
+import { getArtistDisplayString, parseArtistTitle } from '@/lib/format-song-display';
+import { resolveAdminNewSongMetaFromYoutube } from '@/lib/admin-new-song-youtube-meta';
 import {
   MUSIC8_NAV_STYLE_LABELS,
   MUSIC8_NAV_STYLE_SLUGS,
@@ -33,10 +34,15 @@ export function AdminNewSongForm() {
   const initialArtist = getArtistDisplayString(initialArtistRaw) || initialArtistRaw;
   const initialTitle = params.get('title') ?? '';
   const fromYoutube = params.get('from') === 'youtube';
+  const slashParsed =
+    /(?:\/{2,}|\s\/\s)/.test(initialTitle) ? parseArtistTitle(initialTitle) : null;
+  const initialSplitArtist =
+    slashParsed?.artist ? getArtistDisplayString(slashParsed.artist) || slashParsed.artist : initialArtist;
+  const initialSplitTitle = slashParsed?.song || initialTitle;
 
   const [youtubeId, setYoutubeId] = useState(initialYoutube);
-  const [artist, setArtist] = useState(initialArtist);
-  const [title, setTitle] = useState(initialTitle);
+  const [artist, setArtist] = useState(initialSplitArtist);
+  const [title, setTitle] = useState(initialSplitTitle);
   const [style, setStyle] = useState('pop');
   const [ytPublishedAt, setYtPublishedAt] = useState<string | null>(null);
   const [suggestedVariant, setSuggestedVariant] = useState<string | null>(null);
@@ -48,11 +54,18 @@ export function AdminNewSongForm() {
   const [attachBusySongId, setAttachBusySongId] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [songId, setSongId] = useState<string | null>(null);
+  const [metaCorrectedNote, setMetaCorrectedNote] = useState<string | null>(null);
+  const youtubeMetaAppliedFor = useRef<string | null>(null);
   const busy = busyMode != null;
 
   const parsedVideoId = useMemo(() => youtubeVideoIdFromUnknown(youtubeId), [youtubeId]);
   const previewUrl = parsedVideoId ? `https://www.youtube.com/watch?v=${parsedVideoId}` : null;
   const hasStrongExisting = existingMatches.some((m) => m.match.level === 'high' || m.match.level === 'medium');
+
+  useEffect(() => {
+    youtubeMetaAppliedFor.current = null;
+    setMetaCorrectedNote(null);
+  }, [parsedVideoId]);
 
   useEffect(() => {
     if (!parsedVideoId && !artist.trim() && !title.trim()) {
@@ -79,6 +92,30 @@ export function AdminNewSongForm() {
             maxSongVideoVariants?: number;
           };
           if (cancelled) return;
+          const ytTitle = typeof data.youtubeTitle === 'string' ? data.youtubeTitle : null;
+          const ytChannel =
+            typeof data.youtubeChannelTitle === 'string' ? data.youtubeChannelTitle : null;
+          if (parsedVideoId && ytTitle && youtubeMetaAppliedFor.current !== parsedVideoId) {
+            youtubeMetaAppliedFor.current = parsedVideoId;
+            const resolved = resolveAdminNewSongMetaFromYoutube({
+              queryArtist: artist,
+              queryTitle: title,
+              youtubeTitle: ytTitle,
+              youtubeChannelTitle: ytChannel,
+            });
+            if (resolved.corrected) {
+              setArtist(resolved.artist);
+              setTitle(resolved.title);
+              setMetaCorrectedNote(
+                'YouTube の動画タイトルから曲名・アーティストを補正しました。',
+              );
+              setYtPublishedAt(typeof data.youtubePublishedAt === 'string' ? data.youtubePublishedAt : null);
+              const sugEarly = typeof data.suggestedVariant === 'string' ? data.suggestedVariant : null;
+              setSuggestedVariant(sugEarly);
+              if (sugEarly) setAttachVariant(sugEarly);
+              return;
+            }
+          }
           setYtPublishedAt(typeof data.youtubePublishedAt === 'string' ? data.youtubePublishedAt : null);
           const sug = typeof data.suggestedVariant === 'string' ? data.suggestedVariant : null;
           setSuggestedVariant(sug);
@@ -252,6 +289,7 @@ export function AdminNewSongForm() {
               required
             />
           </label>
+          {metaCorrectedNote ? <p className="text-xs text-amber-200/90">{metaCorrectedNote}</p> : null}
           <fieldset className="text-sm">
             <legend className="text-sm text-gray-100">スタイル（Music8 ナビ）</legend>
             <div className="mt-2 flex flex-wrap gap-x-3 gap-y-2">

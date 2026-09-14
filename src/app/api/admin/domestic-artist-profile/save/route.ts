@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { requireStyleAdminApi } from '@/lib/admin-access';
+import { uniqueArtistIds } from '@/lib/artist-members';
 import { saveAdminArtistProfile } from '@/lib/admin-artist-profile-save';
 import type { AdminArtistProfileDraft } from '@/lib/admin-artist-profile-parse';
 import {
@@ -16,6 +17,8 @@ type ReqBody = {
   artistId?: unknown;
   aiModel?: unknown;
   dryRun?: unknown;
+  memberIds?: unknown;
+  bandIds?: unknown;
 };
 
 function asNullableString(v: unknown): string | null {
@@ -108,6 +111,13 @@ export async function POST(request: Request) {
   const artistId = typeof body.artistId === 'string' ? body.artistId.trim() : null;
   const aiModel = typeof body.aiModel === 'string' ? body.aiModel.trim() : null;
   const dryRun = body.dryRun === true;
+  const memberGraph =
+    body.memberIds === undefined && body.bandIds === undefined
+      ? null
+      : {
+          memberIds: uniqueArtistIds(Array.isArray(body.memberIds) ? body.memberIds.map(String) : []),
+          bandIds: uniqueArtistIds(Array.isArray(body.bandIds) ? body.bandIds.map(String) : []),
+        };
 
   const result = await saveAdminArtistProfile({
     admin,
@@ -115,6 +125,7 @@ export async function POST(request: Request) {
     artistId,
     aiModel,
     dryRun,
+    memberGraph,
   });
 
   if (!result.ok) {

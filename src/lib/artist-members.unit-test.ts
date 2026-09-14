@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { directedMemberPair, memberHintsFromMusic8Members, shouldShowArtistMembersLine } from '@/lib/artist-members';
+import { directedMemberPair, guessHintLinkRole, memberHintsFromMusic8Members, shouldShowArtistMembersLine, splitMemberGraphIds, uniqueArtistIds } from '@/lib/artist-members';
 
 function run() {
   const hints = memberHintsFromMusic8Members([
@@ -53,6 +53,24 @@ function run() {
     }),
     true,
   );
+
+  assert.equal(guessHintLinkRole('singer, songwriter', 'band'), 'band');
+  assert.equal(guessHintLinkRole('band', 'singer, songwriter'), 'member');
+  assert.equal(guessHintLinkRole('singer', 'guitarist'), 'unknown');
+
+  const plant = '11111111-1111-1111-1111-111111111111';
+  const zep = '22222222-2222-2222-2222-222222222222';
+  const page = '33333333-3333-3333-3333-333333333333';
+  const split = splitMemberGraphIds({
+    selfId: plant,
+    memberIds: [page, plant, page, 'not-a-uuid'],
+    bandIds: [zep, page],
+  });
+  assert.deepEqual(split.overlap, [page]);
+  assert.deepEqual(split.memberIds, []);
+  assert.deepEqual(split.bandIds, [zep]);
+  assert.deepEqual(uniqueArtistIds([zep, zep, plant], plant), [zep]);
+
   console.log('artist-members.unit-test: ok');
 }
 

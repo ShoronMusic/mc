@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server';
 import { requireStyleAdminApi } from '@/lib/admin-access';
-import { searchSpotifyArtistByName } from '@/lib/spotify-search-track';
+import {
+  fetchSpotifyArtistsByIds,
+  getSpotifyAccessToken,
+  parseSpotifyArtistIdInput,
+  searchSpotifyArtistByName,
+} from '@/lib/spotify-search-track';
 
 export const dynamic = 'force-dynamic';
 
@@ -8,6 +13,7 @@ type ReqBody = {
   artistName?: unknown;
   nameJa?: unknown;
   descriptionEn?: unknown;
+  spotifyArtistId?: unknown;
 };
 
 export async function POST(request: Request) {
@@ -19,6 +25,34 @@ export async function POST(request: Request) {
     body = (await request.json()) as ReqBody;
   } catch {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
+  }
+
+  const idInput = typeof body.spotifyArtistId === 'string' ? body.spotifyArtistId : '';
+  const parsedId = parseSpotifyArtistIdInput(idInput);
+  if (parsedId) {
+    const token = await getSpotifyAccessToken();
+    if (!token) {
+      return NextResponse.json(
+        { error: 'SPOTIFY_CLIENT_ID / SECRET が未設定か無効です。' },
+        { status: 503 },
+      );
+    }
+    const metas = await fetchSpotifyArtistsByIds([parsedId]);
+    const selected = metas[0];
+    if (!selected) {
+      return NextResponse.json(
+        { error: 'Spotify でアーティストが見つかりませんでした。' },
+        { status: 404 },
+      );
+    }
+    return NextResponse.json({
+      ok: true,
+      query: parsedId,
+      selected: {
+        ...selected,
+        url: `https://open.spotify.com/artist/${selected.id}`,
+      },
+    });
   }
 
   const artistName = typeof body.artistName === 'string' ? body.artistName.trim() : '';

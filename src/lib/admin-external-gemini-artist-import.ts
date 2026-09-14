@@ -4,6 +4,7 @@
  */
 import { extractEnglishArtistNameFromDescription } from '@/lib/artist-english-name';
 import { canonicalizeArtistOccupations } from '@/lib/artist-occupation-options';
+import { normalizeYoutubeChannelRef } from '@/lib/music8-artist-display';
 import {
   type AdminArtistProfileDraft,
   normalizeAdminArtistActivePeriod,
@@ -311,14 +312,7 @@ function composeDisplayHint(draft: AdminArtistProfileDraft): string {
   return (draft.name ?? '').trim();
 }
 
-/** クライアント安全な YouTube channel ID 抽出（UC… / URL） */
+/** クライアント安全な YouTube channel ID / @ハンドル抽出（UC… / @name / URL） */
 export function extractYoutubeChannelIdClient(raw: string | null | undefined): string | null {
-  const t = (raw ?? '').trim();
-  if (!t) return null;
-  if (/^UC[\w-]{20,}$/.test(t)) return t;
-  const m = t.match(/(?:youtube\.com\/(?:channel\/|c\/|@)|youtu\.be\/)?(UC[\w-]{20,})/i);
-  if (m?.[1]) return m[1];
-  const at = t.match(/youtube\.com\/@([\w.-]+)/i);
-  if (at?.[1]) return `@${at[1]}`;
-  return null;
+  return normalizeYoutubeChannelRef(raw);
 }

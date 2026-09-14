@@ -1,0 +1,56 @@
+[
+  {
+    "slug": "alternative",
+    "name": "Alternative",
+    "totalSongs": 4748,
+    "updateDate": "2026-08-28"
+  },
+  {
+    "slug": "dance",
+    "name": "Dance",
+    "totalSongs": 1756,
+    "updateDate": "2026-08-29"
+  },
+  {
+    "slug": "electronica",
+    "name": "Electronica",
+    "totalSongs": 1775,
+    "updateDate": "2026-08-29"
+  },
+  {
+    "slug": "hip-hop",
+    "name": "Hip-Hop",
+    "totalSongs": 1412,
+    "updateDate": "2026-08-29"
+  },
+  {
+    "slug": "metal",
+    "name": "Metal",
+    "totalSongs": 827,
+    "updateDate": "2026-08-27"
+  },
+  {
+    "slug": "others",
+    "name": "Other",
+    "totalSongs": 77,
+    "updateDate": "2026-02-27"
+  },
+  {
+    "slug": "pop",
+    "name": "Pop",
+    "totalSongs": 7928,
+    "updateDate": "2026-08-29"
+  },
+  {
+    "slug": "rb",
+    "name": "R&B",
+    "totalSongs": 1986,
+    "updateDate": "2026-08-29"
+  },
+  {
+    "slug": "rock",
+    "name": "Rock",
+    "totalSongs": 1830,
+    "updateDate": "2026-08-26"
+  }
+]

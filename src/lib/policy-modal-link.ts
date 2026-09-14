@@ -14,6 +14,7 @@ export function withPolicyModalQuery(href: string, modal: boolean): string {
 export function shouldBreakOutOfPolicyModalIframe(href: string): boolean {
   const pathOnly = href.split(/[?#]/, 1)[0] ?? '';
   if (pathOnly === '/consent') return true;
+  if (pathOnly === '/music' || pathOnly.startsWith('/music/')) return true;
   return getSafeInternalReturnPath(pathOnly) != null;
 }
 

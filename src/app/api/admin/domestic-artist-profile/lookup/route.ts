@@ -2,11 +2,41 @@ import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { requireStyleAdminApi } from '@/lib/admin-access';
 import { artistNameToMusic8Slug } from '@/lib/music8-artist-display';
+import { loadAdminMemberHintStatuses, loadArtistMemberGraph } from '@/lib/artist-members';
 
 export const dynamic = 'force-dynamic';
 
 function normalizeArtistNameLoose(name: string): string {
   return name.replace(/^\s*(?:The|A|An)\s+/i, '').trim().toLowerCase();
+}
+
+async function withMemberGraph(
+  admin: NonNullable<ReturnType<typeof createAdminClient>>,
+  artist: Record<string, unknown> | null,
+) {
+  if (!artist || typeof artist.id !== 'string') {
+    return {
+      artist,
+      memberGraph: { members: [], bands: [] },
+      memberHints: [],
+    };
+  }
+  try {
+    const memberGraph = await loadArtistMemberGraph(admin, artist.id);
+    const memberHints = await loadAdminMemberHintStatuses(admin, {
+      sourceKind: typeof artist.kind === 'string' ? artist.kind : null,
+      music8Members: artist.music8_members,
+      graph: memberGraph,
+    });
+    return { artist, memberGraph, memberHints };
+  } catch (e) {
+    console.warn('[admin/domestic-artist-profile/lookup] artist_members', e);
+    return {
+      artist,
+      memberGraph: { members: [], bands: [] },
+      memberHints: [],
+    };
+  }
 }
 
 export async function GET(request: Request) {
@@ -22,13 +52,19 @@ export async function GET(request: Request) {
   const id = (url.searchParams.get('id') ?? '').trim();
   const name = (url.searchParams.get('name') ?? '').trim();
 
+  const includeMembers = url.searchParams.get('members') === '1';
+
   if (id) {
     const { data, error } = await admin.from('artists').select('*').eq('id', id).maybeSingle();
     if (error) {
       console.error('[admin/domestic-artist-profile/lookup]', error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
-    return NextResponse.json({ artist: data ?? null });
+    if (!includeMembers) {
+      return NextResponse.json({ artist: data ?? null });
+    }
+    const payload = await withMemberGraph(admin, (data ?? null) as Record<string, unknown> | null);
+    return NextResponse.json(payload);
   }
 
   if (!name) {
@@ -42,9 +78,9 @@ export async function GET(request: Request) {
   const append = (list: Record<string, unknown>[] | null | undefined) => {
     if (!Array.isArray(list)) return;
     for (const r of list) {
-      const id = typeof r.id === 'string' ? r.id : '';
-      if (!id || seen.has(id)) continue;
-      seen.add(id);
+      const rowId = typeof r.id === 'string' ? r.id : '';
+      if (!rowId || seen.has(rowId)) continue;
+      seen.add(rowId);
       rows.push(r);
     }
   };
@@ -64,5 +100,8 @@ export async function GET(request: Request) {
     rows[0] ??
     null;
 
-  return NextResponse.json({ artist: picked });
+  const payload = includeMembers
+    ? await withMemberGraph(admin, picked)
+    : { artist: picked, memberGraph: { members: [], bands: [] }, memberHints: [] };
+  return NextResponse.json(payload);
 }

@@ -60,6 +60,12 @@ export function StartPageFooter({ usePolicyModal = false }: StartPageFooterProps
         <span aria-hidden className="text-gray-600">
           |
         </span>
+        <Link href="/music" className="underline-offset-2 hover:text-gray-300 hover:underline">
+          Music Library
+        </Link>
+        <span aria-hidden className="text-gray-600">
+          |
+        </span>
         {usePolicyModal ? (
           <FooterLinkButton onClick={() => openSiteGuideModal('sitemap')}>サイトマップ</FooterLinkButton>
         ) : (

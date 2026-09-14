@@ -11,6 +11,7 @@ type Props = {
   hasTrackId?: boolean;
   hasPopularity?: boolean;
   hasSpotifyArtists?: boolean;
+  currentTrackId?: string | null;
 };
 
 type EnrichResult = {
@@ -28,12 +29,19 @@ export function AdminSongSpotifyEnrichPanel({
   hasTrackId = false,
   hasPopularity = false,
   hasSpotifyArtists = false,
+  currentTrackId = null,
 }: Props) {
   const router = useRouter();
   const workflow = useAdminSongDetailWorkflow();
   const [busy, setBusy] = useState(false);
+  const [manualBusy, setManualBusy] = useState(false);
   const [alignBusy, setAlignBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [manualTrackId, setManualTrackId] = useState((currentTrackId ?? '').trim());
+
+  useEffect(() => {
+    setManualTrackId((currentTrackId ?? '').trim());
+  }, [currentTrackId]);
 
   const alreadyComplete = hasTrackId && hasPopularity;
   const canAlignDisplay = hasTrackId || hasSpotifyArtists;
@@ -145,6 +153,60 @@ export function AdminSongSpotifyEnrichPanel({
     }
   }
 
+  async function runManualByTrackId(): Promise<boolean> {
+    const raw = manualTrackId.trim();
+    if (!raw) {
+      setMsg('Spotify の track ID または曲 URL を入力してください。');
+      return false;
+    }
+    const existing = (currentTrackId ?? '').trim();
+    if (existing && existing !== raw && !raw.includes(existing)) {
+      const ok = window.confirm(
+        `既存の track ID（${existing}）を、入力した ID で上書きして Spotify から再取得します。実行しますか？`,
+      );
+      if (!ok) return false;
+    }
+
+    setManualBusy(true);
+    setMsg(null);
+    try {
+      const res = await fetch('/api/admin/song-spotify-by-track-id', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ songId, spotifyTrackId: raw }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        message?: string;
+        spotifyTrackId?: string | null;
+        spotifyPopularity?: number | null;
+        displayTitle?: string | null;
+        artistsCreated?: number;
+        artistsPatched?: number;
+      };
+      if (!res.ok) {
+        setMsg(data.error ?? '指定 ID からの Spotify 取得に失敗しました。');
+        return false;
+      }
+      const extra =
+        (data.artistsCreated ?? 0) > 0 || (data.artistsPatched ?? 0) > 0
+          ? ` アーティスト新規 ${data.artistsCreated ?? 0} / 補完 ${data.artistsPatched ?? 0}。`
+          : '';
+      const displayNote = data.displayTitle ? ` 表示: ${data.displayTitle}` : '';
+      setMsg((data.message ?? '反映しました。') + displayNote + extra);
+      if (data.spotifyTrackId) setManualTrackId(data.spotifyTrackId);
+      workflow?.setFilled('spotify', true);
+      router.refresh();
+      return true;
+    } catch {
+      setMsg('指定 ID からの Spotify 取得に失敗しました。');
+      return false;
+    } finally {
+      setManualBusy(false);
+    }
+  }
+
   useEffect(() => {
     if (!workflow) return;
     workflow.registerAction('spotify', runEnrich);
@@ -163,7 +225,8 @@ export function AdminSongSpotifyEnrichPanel({
         </Link>
         へ。共演曲の <code className="text-gray-500">main_artist</code> /{' '}
         <code className="text-gray-500">display_title</code> は{' '}
-        <code className="text-gray-500">spotify_artists</code> の並び順を正とします。
+        <code className="text-gray-500">spotify_artists</code> の並び順を正とします。自動検索で
+        合わないときは、下に track ID を入れて再取得できます。
       </p>
       {alreadyComplete ? (
         <p className="mt-2 text-xs text-green-200">track ID / popularity は入っています。</p>
@@ -179,7 +242,7 @@ export function AdminSongSpotifyEnrichPanel({
         {workflow ? null : (
           <button
             type="button"
-            disabled={busy || alreadyComplete}
+            disabled={busy || alreadyComplete || manualBusy}
             onClick={() => void runEnrich()}
             className="rounded bg-green-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-800 disabled:cursor-not-allowed disabled:opacity-50"
           >
@@ -194,11 +257,38 @@ export function AdminSongSpotifyEnrichPanel({
         )}
         <button
           type="button"
-          disabled={alignBusy || busy || !canAlignDisplay}
+          disabled={alignBusy || busy || manualBusy || !canAlignDisplay}
           onClick={() => void runAlignDisplay()}
           className="rounded border border-green-800 bg-green-950/40 px-3 py-1.5 text-xs text-green-100 hover:bg-green-900/50 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {alignBusy ? '更新中…' : '表示を Spotify 並び順に合わせる'}
+        </button>
+      </div>
+      <div className="mt-3 rounded border border-green-900/40 bg-black/20 p-2.5">
+        <p className="text-xs font-medium text-green-100">track ID を指定して取得</p>
+        <p className="mt-1 text-[11px] leading-relaxed text-gray-500">
+          検索がずれたときに、Spotify 曲ページの URL または 22 文字の track ID を入れて取得します。曲の
+          popularity・アーティスト名、未登録なら artists の ID / 人気度 / 画像も補完します。既存の track ID
+          は上書きします。
+        </p>
+        <label className="mt-2 block text-[11px] text-gray-400">
+          Spotify track ID / URL
+          <input
+            value={manualTrackId}
+            onChange={(e) => setManualTrackId(e.target.value)}
+            placeholder="https://open.spotify.com/track/… または 22文字 ID"
+            className="mt-1 w-full rounded border border-gray-700 bg-gray-950 px-2 py-1.5 font-mono text-xs text-gray-100"
+            autoComplete="off"
+            spellCheck={false}
+          />
+        </label>
+        <button
+          type="button"
+          disabled={manualBusy || busy || !manualTrackId.trim()}
+          onClick={() => void runManualByTrackId()}
+          className="mt-2 rounded bg-green-800 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {manualBusy ? '取得中…' : 'この ID で Spotify から取得'}
         </button>
       </div>
     </div>

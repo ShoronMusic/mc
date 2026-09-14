@@ -5,6 +5,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { asRecord, MUSIC8_NAV_STYLE_SLUGS } from '@/lib/music8-catalog-slugs';
+import { songTitleToMusic8Slug } from '@/lib/music8-song-slug';
 
 export const MUSIC8_JSON_SCHEMA_VERSION = '1.0.0';
 
@@ -47,12 +48,11 @@ export function songJsonFileName(key: MusicaichatStableKey): string {
 }
 
 export function slugFromDisplayTitle(mainArtist: string, songTitle: string, fallback: string): string {
-  const raw = (songTitle || fallback).trim().toLowerCase();
-  const slug = raw
-    .replace(/&/g, 'and')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-  return slug || 'song';
+  const fromTitle = songTitleToMusic8Slug(songTitle);
+  if (fromTitle) return fromTitle;
+  const fromFallback = songTitleToMusic8Slug(fallback);
+  if (fromFallback) return fromFallback;
+  return 'song';
 }
 
 export function artistSlugFromName(name: string, fallback: string): string {
@@ -200,6 +200,14 @@ export type StylesSummaryItem = {
   count: number;
 };
 
+/** Music8 `/styles`（StyleBanner）が読む公開 JSON 形 */
+export type Music8PublicStylesSummaryItem = {
+  slug: string;
+  name: string;
+  totalSongs: number;
+  updateDate: string;
+};
+
 export function emptyStylesSummary(): StylesSummaryItem[] {
   const names: Record<string, string> = {
     pop: 'Pop',
@@ -207,15 +215,28 @@ export function emptyStylesSummary(): StylesSummaryItem[] {
     alternative: 'Alternative',
     electronica: 'Electronica',
     rb: 'R&B',
-    'hip-hop': 'Hip-hop',
+    'hip-hop': 'Hip-Hop',
     rock: 'Rock',
     metal: 'Metal',
-    others: 'Others',
+    others: 'Other',
   };
   return MUSIC8_NAV_STYLE_SLUGS.map((slug) => ({
     slug,
-    name: names[slug],
+    name: names[slug] ?? slug,
     count: 0,
+  }));
+}
+
+export function toMusic8PublicStylesSummary(
+  items: StylesSummaryItem[],
+  updateDate: string,
+): Music8PublicStylesSummaryItem[] {
+  const day = updateDate.trim().slice(0, 10);
+  return items.map((item) => ({
+    slug: item.slug,
+    name: item.name,
+    totalSongs: item.count,
+    updateDate: day,
   }));
 }
 

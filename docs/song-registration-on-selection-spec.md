@@ -116,6 +116,8 @@ slug は `artistNameToMusic8Slug`（先頭 The/A/An を除いて生成）。
 
 **洋楽 1 曲登録（`/admin/songs/new`・YT to M7）での既存曲キャッチ**: フォームの artist/title（＋ YouTube snippet）で既存 `songs` を検索し、同一曲の確度が high/medium の候補を表示する。推奨操作は「この曲に別 PV として追記」（上記 alternate-pv API）。実装: `src/lib/admin-new-song-existing-match.ts`・`GET /api/admin/songs-register` の `existingMatches`。差別化は曲名末尾の `(Official Video)` ではなく `song_videos.variant`（`official` / `visualizer` / `lyric` 等）。追記時に新規 PV の variant を付け、既存 PV が空または雑な既定 `official` なら YouTube タイトルから自動補完する。
 
+**Music8 slug**: 登録成功後に `ensureMusic8SlugsForSong` が空の `music8_artist_slug` / `music8_song_slug` だけ埋める（既存 WP slug は維持。曲 slug はタイトルのハイフン化。同一アーティストで衝突するときだけ `-2`）。未設定の既存洋楽は `scripts/backfill-music8-slugs-for-songs.ts`。
+
 **共演曲の表示名**: `main_artist` / `display_title` は **`spotify_artists`（または track API の artists[]）の並び**を正とする（例: `KAROL G, Bruno Mars - Still`）。Spotify 取得・クレジット同期時に揃え、曲詳細の「表示を Spotify 並び順に合わせる」でも実行可。実装: `src/lib/song-display-from-spotify-artists.ts`・`POST /api/admin/song-align-display-from-spotify`。
 
 ---

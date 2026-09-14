@@ -145,6 +145,7 @@ export async function GET(request: Request) {
   }
 
   let youtubeTitle: string | null = null;
+  let youtubeChannelTitle: string | null = null;
   let youtubePublishedAt: string | null = null;
   let description: string | null = null;
   let channelId: string | null = null;
@@ -155,6 +156,7 @@ export async function GET(request: Request) {
     const iso = typeof snippet?.publishedAt === 'string' ? snippet.publishedAt.trim() : '';
     youtubePublishedAt = dateOnlyFromYoutubePublishedAt(iso);
     youtubeTitle = typeof snippet?.title === 'string' ? snippet.title.trim() || null : null;
+    youtubeChannelTitle = typeof snippet?.channelTitle === 'string' ? snippet.channelTitle.trim() || null : null;
     description = typeof snippet?.description === 'string' ? snippet.description : null;
     channelId = typeof snippet?.channelId === 'string' ? snippet.channelId.trim() || null : null;
     suggestedVariant = inferSongVideoVariantFromTitle(youtubeTitle) || 'official';
@@ -174,6 +176,7 @@ export async function GET(request: Request) {
     videoId: videoId || undefined,
     youtubePublishedAt,
     youtubeTitle,
+    youtubeChannelTitle,
     suggestedVariant,
     existingMatches,
     videoAlreadyOnSongId,

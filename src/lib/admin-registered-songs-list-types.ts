@@ -4,6 +4,7 @@ export type AdminRegisteredSongListItem = {
   song_title: string | null;
   display_title: string | null;
   style: string | null;
+  genres: string[];
   vocal: string | null;
   created_at: string | null;
   original_release_date: string | null;

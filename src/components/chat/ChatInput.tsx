@@ -53,7 +53,11 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
 } from '@heroicons/react/24/outline';
-import { HeartIcon as HeartIconSolid } from '@heroicons/react/24/solid';
+import { HeartIcon as HeartIconSolid, PlayIcon } from '@heroicons/react/24/solid';
+import {
+  LibraryPreviewPlayerSlot,
+  type LibraryYoutubePreviewPlayerHandle,
+} from '@/components/chat/LibraryYoutubePreviewPlayer';
 import {
   favoriteHeartActiveBorderRingClass,
   favoriteHeartActiveTextClass,
@@ -1050,6 +1054,9 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
   const librarySongListScrollTopRef = useRef(0);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const libraryPreviewActiveRef = useRef(false);
+  const libraryPreviewPlayerRef = useRef<LibraryYoutubePreviewPlayerHandle | null>(null);
+  const libraryPendingPlayRef = useRef(false);
+  const [libraryPreviewPlayNonce, setLibraryPreviewPlayNonce] = useState(0);
   const aiQuestionExamples = [
     {
       question: '@アヴリル・ラヴィーンのデビュー曲は？',
@@ -1617,7 +1624,6 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
       const data = await res.json().catch(() => null);
       if (!res.ok) {
         setLibrarySongVideos([]);
-        setLibrarySelectedVideoId(null);
         setLibraryVideoError(
           typeof data?.error === 'string' ? data.error : '動画バージョンの取得に失敗しました。',
         );
@@ -1632,10 +1638,23 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
             }))
         : [];
       setLibrarySongVideos(rows);
-      setLibrarySelectedVideoId(rows[0]?.video_id ?? null);
+      setLibrarySelectedVideoId((current) => {
+        if (current && (rows.some((r) => r.video_id === current) || rows.length === 0)) {
+          return current;
+        }
+        return rows[0]?.video_id ?? current ?? null;
+      });
+      if (libraryPendingPlayRef.current) {
+        const nextId =
+          rows.find((r) => r.video_id)?.video_id ??
+          null;
+        if (nextId) {
+          libraryPendingPlayRef.current = false;
+          setLibraryPreviewPlayNonce((n) => n + 1);
+        }
+      }
     } catch {
       setLibrarySongVideos([]);
-      setLibrarySelectedVideoId(null);
       setLibraryVideoError('動画バージョンの取得に失敗しました。');
     } finally {
       setLibraryVideoLoading(false);
@@ -2552,6 +2571,53 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
     libraryMyListAddBusy,
   ]);
 
+  const startLibraryPreviewMute = useCallback(
+    (videoId: string) => {
+      if (libraryPreviewActiveRef.current) return;
+      libraryPreviewActiveRef.current = true;
+      onPreviewStart?.(videoId);
+    },
+    [onPreviewStart],
+  );
+
+  const stopLibraryPreviewMute = useCallback(() => {
+    if (!libraryPreviewActiveRef.current) return;
+    libraryPreviewActiveRef.current = false;
+    onPreviewStop?.();
+  }, [onPreviewStop]);
+
+  const requestLibraryPreviewPlay = useCallback(
+    (videoId: string) => {
+      const vid = videoId.trim();
+      if (!vid) return;
+      startLibraryPreviewMute(vid);
+      setLibraryPreviewPlayNonce((n) => n + 1);
+      libraryPreviewPlayerRef.current?.loadVideoById(vid);
+      libraryPreviewPlayerRef.current?.playVideo();
+    },
+    [startLibraryPreviewMute],
+  );
+
+  const selectLibrarySongRow = useCallback(
+    (row: LibrarySongRow, play: boolean) => {
+      setLibrarySelectedSongId(row.id);
+      setLibraryCopyState('idle');
+      const vid = row.video_id?.trim() ?? '';
+      setLibrarySelectedVideoId(vid || null);
+      if (play && vid) {
+        libraryPendingPlayRef.current = false;
+        requestLibraryPreviewPlay(vid);
+        return;
+      }
+      libraryPendingPlayRef.current = play && !vid;
+      if (!play) {
+        libraryPreviewPlayerRef.current?.pauseVideo();
+        stopLibraryPreviewMute();
+      }
+    },
+    [requestLibraryPreviewPlay, stopLibraryPreviewMute],
+  );
+
   const libraryDetailActionGridClass = 'mt-3 grid grid-cols-2 gap-2';
   const libraryDetailSelectSongBtnClass = `${librarySelectSongBtnClass()} col-span-2`;
 
@@ -2667,23 +2733,17 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
   }, [libraryCopyState]);
 
   useEffect(() => {
-    if (libraryOpen && librarySelectedVideoId && !libraryPreviewActiveRef.current) {
-      libraryPreviewActiveRef.current = true;
-      onPreviewStart?.(librarySelectedVideoId);
-      return;
+    if (!libraryOpen || !librarySelectedVideoId) {
+      stopLibraryPreviewMute();
     }
-    if ((!libraryOpen || !librarySelectedVideoId) && libraryPreviewActiveRef.current) {
-      libraryPreviewActiveRef.current = false;
-      onPreviewStop?.();
-    }
-  }, [libraryOpen, librarySelectedVideoId, onPreviewStart, onPreviewStop]);
+  }, [libraryOpen, librarySelectedVideoId, stopLibraryPreviewMute]);
 
   useEffect(() => {
-    if (!libraryOpen && libraryPreviewActiveRef.current) {
-      libraryPreviewActiveRef.current = false;
-      onPreviewStop?.();
+    if (!libraryOpen) {
+      libraryPendingPlayRef.current = false;
+      stopLibraryPreviewMute();
     }
-  }, [libraryOpen, onPreviewStop]);
+  }, [libraryOpen, stopLibraryPreviewMute]);
 
   return (
     <>
@@ -3833,65 +3893,78 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                         !isGuest && rowVideoId.length > 0 && libraryFavoritedVideoIdSet.has(rowVideoId);
                       return (
                         <li key={row.id}>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setLibrarySelectedSongId(row.id);
-                              setLibraryCopyState('idle');
-                            }}
-                            className={librarySongRowBtnClass(active)}
-                          >
-                            <div className="flex items-start gap-2">
+                          <div className={`flex items-start gap-2 ${librarySongRowBtnClass(active)}`}>
+                            <button
+                              type="button"
+                              onClick={() => selectLibrarySongRow(row, Boolean(rowVideoId))}
+                              disabled={!rowVideoId}
+                              className="relative mt-0.5 shrink-0 rounded disabled:cursor-not-allowed disabled:opacity-50"
+                              title={rowVideoId ? 'カバーをクリックしてプレビュー再生' : 'YouTube なし'}
+                              aria-label={
+                                rowVideoId
+                                  ? `${librarySongListPrimaryTitle(row)} をプレビュー再生`
+                                  : `${librarySongListPrimaryTitle(row)}（YouTube なし）`
+                              }
+                            >
                               <SongCoverThumb
                                 spotifyImages={row.spotify_images}
                                 videoId={row.video_id}
                                 alt=""
-                                className="mt-0.5 h-10 w-10"
+                                className="h-10 w-10"
                               />
-                              <div className="min-w-0 flex-1">
-                                <div className="flex items-start justify-between gap-2">
-                                  <p className={librarySongRowTitleClass()}>
-                                    {librarySongListPrimaryTitle(row)}
-                                  </p>
-                                  <span className="mt-0.5 flex shrink-0 items-center gap-1">
-                                    {row.has_ai_commentary ? (
-                                      <span
-                                        title="曲解説あり"
-                                        aria-label="曲解説あり"
-                                      >
-                                        <BookOpenIcon
-                                          className="h-4 w-4 text-sky-400/95"
-                                          aria-hidden
-                                        />
-                                      </span>
-                                    ) : null}
-                                    {rowIsFavorited ? (
-                                      <span
-                                        title="お気に入り登録済み"
-                                        aria-label="お気に入り登録済み"
-                                      >
-                                        <HeartIconSolid
-                                          className={`h-4 w-4 ${favoriteHeartActiveTextClass}`}
-                                          aria-hidden
-                                        />
-                                      </span>
-                                    ) : null}
-                                  </span>
-                                </div>
-                                <p className={librarySongRowMetaClass()}>
-                                  {releaseDot ? (
-                                    <>
-                                      <span className="tabular-nums text-gray-300">{releaseDot}</span>
-                                      <span className="text-gray-600"> · </span>
-                                    </>
-                                  ) : null}
-                                  <span className="break-words">{metaMid}</span>
-                                  <span className="text-gray-600"> · </span>
-                                  <span className="tabular-nums text-gray-500">{playBits}</span>
+                              {rowVideoId ? (
+                                <span className="pointer-events-none absolute inset-0 flex items-center justify-center rounded bg-black/35">
+                                  <PlayIcon className="h-4 w-4 text-white drop-shadow" aria-hidden />
+                                </span>
+                              ) : null}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => selectLibrarySongRow(row, false)}
+                              className="min-w-0 flex-1 text-left"
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <p className={librarySongRowTitleClass()}>
+                                  {librarySongListPrimaryTitle(row)}
                                 </p>
+                                <span className="mt-0.5 flex shrink-0 items-center gap-1">
+                                  {row.has_ai_commentary ? (
+                                    <span
+                                      title="曲解説あり"
+                                      aria-label="曲解説あり"
+                                    >
+                                      <BookOpenIcon
+                                        className="h-4 w-4 text-sky-400/95"
+                                        aria-hidden
+                                      />
+                                    </span>
+                                  ) : null}
+                                  {rowIsFavorited ? (
+                                    <span
+                                      title="お気に入り登録済み"
+                                      aria-label="お気に入り登録済み"
+                                    >
+                                      <HeartIconSolid
+                                        className={`h-4 w-4 ${favoriteHeartActiveTextClass}`}
+                                        aria-hidden
+                                      />
+                                    </span>
+                                  ) : null}
+                                </span>
                               </div>
-                            </div>
-                          </button>
+                              <p className={librarySongRowMetaClass()}>
+                                {releaseDot ? (
+                                  <>
+                                    <span className="tabular-nums text-gray-300">{releaseDot}</span>
+                                    <span className="text-gray-600"> · </span>
+                                  </>
+                                ) : null}
+                                <span className="break-words">{metaMid}</span>
+                                <span className="text-gray-600"> · </span>
+                                <span className="tabular-nums text-gray-500">{playBits}</span>
+                              </p>
+                            </button>
+                          </div>
                         </li>
                       );
                     })}
@@ -3946,25 +4019,19 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                       onSelectVideo={(videoId) => {
                         setLibrarySelectedVideoId(videoId);
                         setLibraryCopyState('idle');
+                        requestLibraryPreviewPlay(videoId);
                       }}
                     />
-                    {librarySelectedVideoId ? (
-                      <div className="aspect-video overflow-hidden rounded border border-gray-800 bg-black">
-                        <iframe
-                          title="Library landscape preview"
-                          src={`https://www.youtube.com/embed/${encodeURIComponent(
-                            librarySelectedVideoId,
-                          )}?autoplay=1&controls=1&modestbranding=1`}
-                          className="h-full w-full"
-                          allow="autoplay; encrypted-media"
-                          allowFullScreen
-                        />
-                      </div>
-                    ) : (
-                      <div className="flex aspect-video items-center justify-center rounded border border-gray-800 bg-black/50 text-xs text-gray-500">
-                        動画候補を選んでください
-                      </div>
-                    )}
+                    <LibraryPreviewPlayerSlot
+                      videoId={librarySelectedVideoId}
+                      playNonce={libraryPreviewPlayNonce}
+                      playerRef={libraryPreviewPlayerRef}
+                      iframeTitle="Library landscape preview"
+                      className="aspect-video"
+                      onPlaying={() => {
+                        if (librarySelectedVideoId) startLibraryPreviewMute(librarySelectedVideoId);
+                      }}
+                    />
                   </div>
                   <div className={`flex min-h-0 flex-col gap-2 ${libraryMobileDetailPanelClass()}`}>
                     <button
@@ -4027,8 +4094,8 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                     <LibrarySectionTabImage section="songDetail" active={libraryTabFActive} />
                     <p className="text-[11px] text-gray-400">
                       {libraryEntryIdle
-                        ? '曲を選ぶと、動画バージョン（公式優先）を選べます。'
-                        : 'E の曲一覧で選ぶと、動画バージョン（公式優先）を選べます。'}
+                        ? '曲名・カバーをクリック。カバーでプレビュー再生、動画バージョンは公式優先です。'
+                        : 'E の曲一覧で曲名を選ぶか、カバーをクリックしてプレビュー再生できます。'}
                     </p>
                   </div>
                 </div>
@@ -4055,25 +4122,19 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                         onSelectVideo={(videoId) => {
                           setLibrarySelectedVideoId(videoId);
                           setLibraryCopyState('idle');
+                          requestLibraryPreviewPlay(videoId);
                         }}
                       />
-                      {librarySelectedVideoId ? (
-                        <div className="aspect-video overflow-hidden rounded border border-gray-800 bg-black">
-                          <iframe
-                            title="Library preview"
-                            src={`https://www.youtube.com/embed/${encodeURIComponent(
-                              librarySelectedVideoId,
-                            )}?autoplay=1&controls=1&modestbranding=1`}
-                            className="h-full w-full"
-                            allow="autoplay; encrypted-media"
-                            allowFullScreen
-                          />
-                        </div>
-                      ) : (
-                        <div className="flex aspect-video items-center justify-center rounded border border-gray-800 bg-black/50 text-xs text-gray-500">
-                          動画候補を選んでください
-                        </div>
-                      )}
+                      <LibraryPreviewPlayerSlot
+                        videoId={librarySelectedVideoId}
+                        playNonce={libraryPreviewPlayNonce}
+                        playerRef={libraryPreviewPlayerRef}
+                        iframeTitle="Library preview"
+                        className="aspect-video"
+                        onPlaying={() => {
+                          if (librarySelectedVideoId) startLibraryPreviewMute(librarySelectedVideoId);
+                        }}
+                      />
                       <div className={libraryDetailActionGridClass}>
                         <button
                           type="button"
@@ -4223,25 +4284,19 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                       onSelectVideo={(videoId) => {
                         setLibrarySelectedVideoId(videoId);
                         setLibraryCopyState('idle');
+                        requestLibraryPreviewPlay(videoId);
                       }}
                     />
-                    {librarySelectedVideoId ? (
-                      <div className="aspect-video max-h-36 overflow-hidden rounded border border-gray-800 bg-black">
-                        <iframe
-                          title="Library preview"
-                          src={`https://www.youtube.com/embed/${encodeURIComponent(
-                            librarySelectedVideoId,
-                          )}?autoplay=1&controls=1&modestbranding=1`}
-                          className="h-full w-full"
-                          allow="autoplay; encrypted-media"
-                          allowFullScreen
-                        />
-                      </div>
-                    ) : (
-                      <div className="flex aspect-video max-h-36 items-center justify-center rounded border border-gray-800 bg-black/50 text-xs text-gray-500">
-                        動画候補を選んでください
-                      </div>
-                    )}
+                    <LibraryPreviewPlayerSlot
+                      videoId={librarySelectedVideoId}
+                      playNonce={libraryPreviewPlayNonce}
+                      playerRef={libraryPreviewPlayerRef}
+                      iframeTitle="Library preview"
+                      className="aspect-video max-h-36"
+                      onPlaying={() => {
+                        if (librarySelectedVideoId) startLibraryPreviewMute(librarySelectedVideoId);
+                      }}
+                    />
                     <div className={libraryDetailActionGridClass}>
                       <button
                         type="button"

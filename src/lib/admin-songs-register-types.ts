@@ -9,6 +9,7 @@ export type AdminSongsRegisterResponse = {
   exportSkipped?: boolean;
   youtubePublishedAt?: string | null;
   youtubeTitle?: string | null;
+  youtubeChannelTitle?: string | null;
   suggestedVariant?: string | null;
   /** 同一曲の可能性が高い既存曲（別 PV 追記候補） */
   existingMatches?: ExistingSongMatchCandidate[];

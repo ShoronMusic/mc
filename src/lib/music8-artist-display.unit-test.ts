@@ -4,6 +4,8 @@
 import assert from 'node:assert/strict';
 import {
   getJapaneseDescription,
+  normalizeYoutubeChannelRef,
+  resolveYoutubeChannelHref,
   splitMusic8ArtistDescription,
 } from '@/lib/music8-artist-display';
 
@@ -22,6 +24,30 @@ assert.match(mixed.ja, /日本出身/);
 
 assert.equal(splitMusic8ArtistDescription('Only English bio.').ja, '');
 assert.equal(splitMusic8ArtistDescription('日本語のみの紹介文。').en, '');
+
+assert.equal(normalizeYoutubeChannelRef('UCUCeZaZeJbEYAAzvMgrKOPQ'), 'UCUCeZaZeJbEYAAzvMgrKOPQ');
+assert.equal(normalizeYoutubeChannelRef('@ArtOfficialMusic'), '@ArtOfficialMusic');
+assert.equal(
+  normalizeYoutubeChannelRef('https://www.youtube.com/@ArtOfficialMusic'),
+  '@ArtOfficialMusic',
+);
+assert.equal(
+  normalizeYoutubeChannelRef('https://www.youtube.com/@ArtOfficialMusic?si=abc'),
+  '@ArtOfficialMusic',
+);
+assert.equal(
+  normalizeYoutubeChannelRef('https://www.youtube.com/channel/UCoUM-UJ7rirJYP8CQ0EIaHA'),
+  'UCoUM-UJ7rirJYP8CQ0EIaHA',
+);
+assert.equal(resolveYoutubeChannelHref('@ArtOfficialMusic'), 'https://www.youtube.com/@ArtOfficialMusic');
+assert.equal(
+  resolveYoutubeChannelHref('https://www.youtube.com/@ArtOfficialMusic'),
+  'https://www.youtube.com/@ArtOfficialMusic',
+);
+assert.equal(
+  resolveYoutubeChannelHref('UCUCeZaZeJbEYAAzvMgrKOPQ'),
+  'https://www.youtube.com/channel/UCUCeZaZeJbEYAAzvMgrKOPQ',
+);
 
 const dupJa = splitMusic8ArtistDescription(
   [

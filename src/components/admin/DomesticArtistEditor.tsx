@@ -11,6 +11,7 @@ import {
   inputClass,
   RegistrationStatusIcons,
 } from '@/components/admin/DomesticArtistRegisterParts';
+import { AdminArtistMemberRelationEditor } from '@/components/admin/AdminArtistMemberRelationEditor';
 import {
   ARTIST_OCCUPATION_OPTIONS,
   canonicalizeArtistOccupations,
@@ -22,7 +23,9 @@ import {
   mergeArtistEnglishNameAfterSpotify,
   mergeArtistEnglishNameAfterWikipedia,
 } from '@/lib/artist-english-name';
+import type { AdminMemberHintStatus, ArtistMemberLink } from '@/lib/artist-members';
 import type { AdminArtistProfileDraft, AdminArtistThePrefix } from '@/lib/admin-artist-profile-parse';
+import { resolveYoutubeChannelHref } from '@/lib/music8-artist-display';
 import {
   composeAdminArtistDisplayName,
   normalizeAdminArtistThePrefix,
@@ -36,6 +39,22 @@ import {
   parsePlaylistArtistsField,
 } from '@/lib/admin-domestic-playlist-artists-field';
 import { SongCoverThumb } from '@/components/song/SongCoverThumb';
+import {
+  GenreBestRegisteredLabelLinks,
+  useGenreBestLabelsBySongIds,
+} from '@/components/admin/GenreBestRegisteredLabels';
+
+type LookupResponse = {
+  error?: string;
+  artist?: Record<string, unknown> | null;
+  memberGraph?: { members?: ArtistMemberLink[]; bands?: ArtistMemberLink[] };
+  memberHints?: AdminMemberHintStatus[];
+};
+
+function asMemberLinks(raw: ArtistMemberLink[] | undefined): ArtistMemberLink[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((x) => x && typeof x.id === 'string' && typeof x.name === 'string');
+}
 
 type GenerateResponse = {
   error?: string;
@@ -167,6 +186,11 @@ export function DomesticArtistEditor(props: Props) {
   const [artistName, setArtistName] = useState(nameFromQuery);
   const [draft, setDraft] = useState<AdminArtistProfileDraft | null>(null);
   const [artistId, setArtistId] = useState<string | null>(artistIdParam);
+  const [memberBands, setMemberBands] = useState<ArtistMemberLink[]>([]);
+  const [memberPeople, setMemberPeople] = useState<ArtistMemberLink[]>([]);
+  const [memberHints, setMemberHints] = useState<AdminMemberHintStatus[]>([]);
+  const [membersFallback, setMembersFallback] = useState<string | null>(null);
+  const [memberGraphReady, setMemberGraphReady] = useState(mode === 'new');
   const [aiModel, setAiModel] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
   const [loading, setLoading] = useState(mode === 'edit');
@@ -184,6 +208,7 @@ export function DomesticArtistEditor(props: Props) {
   const [applyingPlaylist, setApplyingPlaylist] = useState(false);
   const [playlistForceAllow, setPlaylistForceAllow] = useState(false);
   const [registeredSongs, setRegisteredSongs] = useState<RegisteredSongItem[]>([]);
+  const genreBestLabelsBySong = useGenreBestLabelsBySongIds(registeredSongs.map((s) => s.id));
   const [loadingRegisteredSongs, setLoadingRegisteredSongs] = useState(false);
   const [registeredSongsError, setRegisteredSongsError] = useState<string | null>(null);
   const [spotifyEnrichBusy, setSpotifyEnrichBusy] = useState(false);
@@ -237,18 +262,32 @@ export function DomesticArtistEditor(props: Props) {
     }
   }, []);
 
+  const applyMemberGraphFromLookup = useCallback((data: LookupResponse, hasArtist: boolean) => {
+    if (!hasArtist) {
+      setMemberBands([]);
+      setMemberPeople([]);
+      setMemberHints([]);
+      setMembersFallback(null);
+      setMemberGraphReady(true);
+      return;
+    }
+    setMemberBands(asMemberLinks(data.memberGraph?.bands));
+    setMemberPeople(asMemberLinks(data.memberGraph?.members));
+    setMemberHints(Array.isArray(data.memberHints) ? data.memberHints : []);
+    const rawMembers = data.artist && typeof data.artist.members === 'string' ? data.artist.members.trim() : '';
+    setMembersFallback(rawMembers || null);
+    setMemberGraphReady(true);
+  }, []);
+
   const loadById = useCallback(async (id: string) => {
     setLoading(true);
     setError(null);
     try {
       const res = await fetch(
-        `/api/admin/domestic-artist-profile/lookup?id=${encodeURIComponent(id)}`,
+        `/api/admin/domestic-artist-profile/lookup?id=${encodeURIComponent(id)}&members=1`,
         { credentials: 'include' },
       );
-      const data = (await res.json().catch(() => ({}))) as {
-        error?: string;
-        artist?: Record<string, unknown> | null;
-      };
+      const data = (await res.json().catch(() => ({}))) as LookupResponse;
       if (!res.ok) {
         setError(data.error ?? 'アーティストの読み込みに失敗しました。');
         return;
@@ -265,6 +304,7 @@ export function DomesticArtistEditor(props: Props) {
         ...nextDraft,
         occupations: canonicalizeArtistOccupations(nextDraft.occupations),
       });
+      applyMemberGraphFromLookup(data, true);
       setMessage('アーティストを読み込みました。');
       const scope =
         data.artist.catalog_scope === 'western' ||
@@ -278,7 +318,7 @@ export function DomesticArtistEditor(props: Props) {
     } finally {
       setLoading(false);
     }
-  }, [loadRegisteredSongs]);
+  }, [applyMemberGraphFromLookup, loadRegisteredSongs]);
 
   useEffect(() => {
     if (mode === 'edit' && artistIdParam) {
@@ -293,13 +333,10 @@ export function DomesticArtistEditor(props: Props) {
     setError(null);
     try {
       const res = await fetch(
-        `/api/admin/domestic-artist-profile/lookup?name=${encodeURIComponent(trimmed)}`,
+        `/api/admin/domestic-artist-profile/lookup?name=${encodeURIComponent(trimmed)}&members=1`,
         { credentials: 'include' },
       );
-      const data = (await res.json().catch(() => ({}))) as {
-        error?: string;
-        artist?: Record<string, unknown> | null;
-      };
+      const data = (await res.json().catch(() => ({}))) as LookupResponse;
       if (!res.ok) {
         setError(data.error ?? '既存データの読み込みに失敗しました。');
         return;
@@ -311,6 +348,7 @@ export function DomesticArtistEditor(props: Props) {
           ...nextDraft,
           occupations: canonicalizeArtistOccupations(nextDraft.occupations),
         });
+        applyMemberGraphFromLookup(data, true);
         setMessage('既存 artists 行を読み込みました。');
         const scope =
           data.artist.catalog_scope === 'western' ||
@@ -323,6 +361,7 @@ export function DomesticArtistEditor(props: Props) {
         setArtistId(null);
         setDraft(emptyDraft(trimmed));
         setRegisteredSongs([]);
+        applyMemberGraphFromLookup(data, false);
         setMessage('新規アーティスト（未登録）です。');
       }
     } catch {
@@ -330,7 +369,7 @@ export function DomesticArtistEditor(props: Props) {
     } finally {
       setLoading(false);
     }
-  }, [loadRegisteredSongs]);
+  }, [applyMemberGraphFromLookup, loadRegisteredSongs]);
 
   useEffect(() => {
     if (mode !== 'new' || !nameFromQuery || queryBootstrapped.current) return;
@@ -518,6 +557,18 @@ export function DomesticArtistEditor(props: Props) {
     }
   }
 
+  function applySpotifyArtistSelection(data: SpotifyArtistResponse): void {
+    if (data.selected) {
+      patchDraft({
+        spotifyArtistId: data.selected.id,
+        spotifyArtistImages: data.selected.images,
+        spotifyArtistPopularity: data.selected.popularity,
+        nameEn: mergeArtistEnglishNameAfterSpotify(data.selected.name),
+      });
+      setMessage(`Spotify アーティストを取得しました: ${data.selected.name}`);
+    }
+  }
+
   async function runFetchSpotifyArtist(): Promise<void> {
     const name = (draft?.name ?? artistName).trim();
     if (!name) {
@@ -543,17 +594,38 @@ export function DomesticArtistEditor(props: Props) {
         setError(data.error ?? 'Spotify 取得に失敗しました。');
         return;
       }
-      if (data.selected) {
-        patchDraft({
-          spotifyArtistId: data.selected.id,
-          spotifyArtistImages: data.selected.images,
-          spotifyArtistPopularity: data.selected.popularity,
-          nameEn: mergeArtistEnglishNameAfterSpotify(data.selected.name),
-        });
-        setMessage(`Spotify アーティストを取得しました: ${data.selected.name}`);
-      }
+      applySpotifyArtistSelection(data);
     } catch {
       setError('Spotify 取得に失敗しました。');
+    } finally {
+      setFetchingSpotify(false);
+    }
+  }
+
+  async function runFetchSpotifyArtistById(): Promise<void> {
+    const raw = (draft?.spotifyArtistId ?? '').trim();
+    if (!raw) {
+      setError('Spotify の artist ID またはアーティスト URL を入力してください。');
+      return;
+    }
+    setFetchingSpotify(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const res = await fetch('/api/admin/domestic-artist-profile/spotify-artist', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ spotifyArtistId: raw }),
+      });
+      const data = (await res.json().catch(() => ({}))) as SpotifyArtistResponse;
+      if (!res.ok) {
+        setError(data.error ?? '指定 ID からの Spotify 取得に失敗しました。');
+        return;
+      }
+      applySpotifyArtistSelection(data);
+    } catch {
+      setError('指定 ID からの Spotify 取得に失敗しました。');
     } finally {
       setFetchingSpotify(false);
     }
@@ -910,7 +982,18 @@ export function DomesticArtistEditor(props: Props) {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ draft: synced, artistId, aiModel, dryRun }),
+        body: JSON.stringify({
+          draft: synced,
+          artistId,
+          aiModel,
+          dryRun,
+          ...(memberGraphReady
+            ? {
+                memberIds: memberPeople.map((m) => m.id),
+                bandIds: memberBands.map((b) => b.id),
+              }
+            : {}),
+        }),
       });
       const data = (await res.json().catch(() => ({}))) as SaveResponse;
       if (!res.ok) {
@@ -1244,6 +1327,19 @@ export function DomesticArtistEditor(props: Props) {
                 </p>
               </Field>
             </div>
+            <AdminArtistMemberRelationEditor
+              selfId={artistId}
+              bands={memberBands}
+              members={memberPeople}
+              membersFallback={membersFallback}
+              hints={memberHints}
+              disabled={saving}
+              onChange={(next) => {
+                setMemberBands(next.bands);
+                setMemberPeople(next.members);
+                setMemberGraphReady(true);
+              }}
+            />
             <Field label="catalog_scope">
               <select
                 className={inputClass}
@@ -1281,17 +1377,28 @@ export function DomesticArtistEditor(props: Props) {
                   className={`${inputClass} min-w-[12rem] flex-1`}
                   value={draft.spotifyArtistId ?? ''}
                   onChange={(e) => patchDraft({ spotifyArtistId: e.target.value || null })}
-                  placeholder="Spotify artist ID"
+                  placeholder="22文字 ID または https://open.spotify.com/artist/…"
                 />
+                <button
+                  type="button"
+                  onClick={() => void runFetchSpotifyArtistById()}
+                  disabled={fetchingSpotify}
+                  className="shrink-0 rounded border border-green-700/80 bg-green-950/40 px-3 py-2 text-xs font-medium text-green-100 hover:bg-green-900/50 disabled:opacity-40"
+                >
+                  {fetchingSpotify ? '取得中…' : 'このIDで取得'}
+                </button>
                 <button
                   type="button"
                   onClick={() => void runFetchSpotifyArtist()}
                   disabled={fetchingSpotify}
                   className="shrink-0 rounded border border-emerald-700/80 bg-emerald-950/30 px-3 py-2 text-xs font-medium text-emerald-100 hover:bg-emerald-900/40 disabled:opacity-40"
                 >
-                  {fetchingSpotify ? '取得中…' : 'Spotify取得'}
+                  {fetchingSpotify ? '取得中…' : '名前で検索'}
                 </button>
               </div>
+              <p className="mt-1 text-[11px] leading-relaxed text-gray-500">
+                ID / URL が分かっているときは「このIDで取得」。名前検索は右のボタン（下書きへの反映のみ。保存が必要です）。
+              </p>
               {draft.spotifyArtistPopularity != null ? (
                 <p className="mt-1 text-xs text-gray-400">人気度: {draft.spotifyArtistPopularity}</p>
               ) : null}
@@ -1330,7 +1437,7 @@ export function DomesticArtistEditor(props: Props) {
                   className={`${inputClass} min-w-[12rem] flex-1`}
                   value={draft.youtubeChannelId ?? ''}
                   onChange={(e) => patchDraft({ youtubeChannelId: e.target.value || null })}
-                  placeholder="UC…"
+                  placeholder="UC… または @ArtOfficialMusic"
                 />
                 <button
                   type="button"
@@ -1344,16 +1451,19 @@ export function DomesticArtistEditor(props: Props) {
               {draft.youtubeChannelTitle ? (
                 <p className="mt-1 text-xs text-gray-400">{draft.youtubeChannelTitle}</p>
               ) : null}
-              {draft.youtubeChannelId ? (
-                <a
-                  href={`https://www.youtube.com/channel/${draft.youtubeChannelId}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="mt-1 inline-block text-xs text-sky-300 hover:underline"
-                >
-                  YouTube で開く
-                </a>
-              ) : null}
+              {(() => {
+                const href = resolveYoutubeChannelHref(draft.youtubeChannelId);
+                return href ? (
+                  <a
+                    href={href}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-1 inline-block text-xs text-sky-300 hover:underline"
+                  >
+                    YouTube で開く
+                  </a>
+                ) : null;
+              })()}
             </Field>
             <Field label="wikipedia_page">
               <div className="flex flex-wrap gap-2">
@@ -1494,6 +1604,7 @@ export function DomesticArtistEditor(props: Props) {
                       <th className="px-2 py-1">#</th>
                       <th className="px-2 py-1">カバー</th>
                       <th className="px-2 py-1">曲名</th>
+                      <th className="px-2 py-1">Genre BEST</th>
                       <th className="px-2 py-1">ヨミ</th>
                       <th className="px-2 py-1">原盤日</th>
                       <th className="px-2 py-1 text-right">人気</th>
@@ -1515,6 +1626,9 @@ export function DomesticArtistEditor(props: Props) {
                         </td>
                         <td className="px-2 py-1 text-gray-200">
                           {song.song_title || song.display_title || '—'}
+                        </td>
+                        <td className="px-2 py-1">
+                          <GenreBestRegisteredLabelLinks labels={genreBestLabelsBySong[song.id]} />
                         </td>
                         <td className="px-2 py-1 text-gray-400">{song.song_title_ja ?? '—'}</td>
                         <td className="px-2 py-1 tabular-nums text-gray-400">

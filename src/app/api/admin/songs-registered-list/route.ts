@@ -26,9 +26,9 @@ const DEFAULT_PAGE_SIZE = 50;
 const MAX_PAGE_SIZE = 100;
 
 const SELECT_WITH_INTRO =
-  'id, main_artist, song_title, display_title, style, created_at, original_release_date, catalog_published_at, catalog_scope, music8_video_id, music8_song_id, music8_intro, vocal, spotify_images';
+  'id, main_artist, song_title, display_title, style, genres, created_at, original_release_date, catalog_published_at, catalog_scope, music8_video_id, music8_song_id, music8_intro, vocal, spotify_images';
 const SELECT_NO_INTRO =
-  'id, main_artist, song_title, display_title, style, created_at, original_release_date, catalog_published_at, catalog_scope, music8_video_id, music8_song_id, vocal, spotify_images';
+  'id, main_artist, song_title, display_title, style, genres, created_at, original_release_date, catalog_published_at, catalog_scope, music8_video_id, music8_song_id, vocal, spotify_images';
 
 function clampPage(raw: string | null): number {
   const n = Number.parseInt(raw ?? '', 10);
@@ -79,6 +79,22 @@ async function attachYoutubeIdsFromSongVideos(
   });
 }
 
+function parseGenres(raw: unknown): string[] {
+  if (Array.isArray(raw)) {
+    return raw
+      .filter((g): g is string => typeof g === 'string')
+      .map((g) => g.trim())
+      .filter(Boolean);
+  }
+  if (typeof raw === 'string' && raw.trim()) {
+    return raw
+      .split(',')
+      .map((g) => g.trim())
+      .filter(Boolean);
+  }
+  return [];
+}
+
 function mapRow(row: Record<string, unknown>): AdminRegisteredSongListItem {
   const intro = typeof row.music8_intro === 'string' ? row.music8_intro.trim() : '';
   return {
@@ -87,6 +103,7 @@ function mapRow(row: Record<string, unknown>): AdminRegisteredSongListItem {
     song_title: typeof row.song_title === 'string' ? row.song_title : null,
     display_title: typeof row.display_title === 'string' ? row.display_title : null,
     style: typeof row.style === 'string' ? row.style : null,
+    genres: parseGenres(row.genres),
     vocal: typeof row.vocal === 'string' ? row.vocal : null,
     created_at: typeof row.created_at === 'string' ? row.created_at : null,
     original_release_date: typeof row.original_release_date === 'string' ? row.original_release_date : null,

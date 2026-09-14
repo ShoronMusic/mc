@@ -5,8 +5,9 @@ import { parseAdminRegisteredSongsScope } from '@/lib/admin-registered-songs-sor
 import {
   buildAdminRegisteredSongsMonthlyDashboard,
   jstYearMonthFromIso,
+  originalReleaseDateYearBounds,
   parseAdminRegisteredSongsMonthlyYear,
-  registrationTimestampIso,
+  publicReleaseTimestampIso,
   type AdminRegisteredSongMonthlyRow,
   type AdminRegisteredSongsMonthlyDashboard,
 } from '@/lib/admin-registered-songs-monthly';
@@ -16,16 +17,39 @@ export const dynamic = 'force-dynamic';
 export type { AdminRegisteredSongsMonthlyDashboard };
 
 const PAGE_SIZE = 1000;
+const STYLE_BATCH = 1000;
+const DASH_CACHE_TTL_MS = 120_000;
+
+const dashCache = new Map<string, { expiresAt: number; body: AdminRegisteredSongsMonthlyDashboard }>();
+
+function dashCacheKey(year: number, scope: string): string {
+  return `${year}:${scope}`;
+}
+
+function getCachedDashboard(key: string): AdminRegisteredSongsMonthlyDashboard | null {
+  const hit = dashCache.get(key);
+  if (!hit) return null;
+  if (Date.now() > hit.expiresAt) {
+    dashCache.delete(key);
+    return null;
+  }
+  return hit.body;
+}
 
 async function fetchMonthlySongRows(
   admin: NonNullable<ReturnType<typeof createAdminClient>>,
   scope: 'all' | 'western' | 'domestic',
+  year: number,
 ): Promise<{ rows: AdminRegisteredSongMonthlyRow[]; error: string | null }> {
   const rows: AdminRegisteredSongMonthlyRow[] = [];
+  const bounds = originalReleaseDateYearBounds(year);
   for (let from = 0; ; from += PAGE_SIZE) {
     let query = admin
       .from('songs')
-      .select('id, style, created_at, catalog_published_at')
+      .select('id, style, original_release_date')
+      .not('original_release_date', 'is', null)
+      .gte('original_release_date', bounds.gte)
+      .lte('original_release_date', bounds.lte)
       .order('id', { ascending: true })
       .range(from, from + PAGE_SIZE - 1);
     if (scope === 'western') {
@@ -50,8 +74,8 @@ async function fetchCatalogStyleBySongId(
   songIds: string[],
 ): Promise<Map<string, string>> {
   const styleBySong = new Map<string, string>();
-  for (let i = 0; i < songIds.length; i += 200) {
-    const slice = songIds.slice(i, i + 200);
+  for (let i = 0; i < songIds.length; i += STYLE_BATCH) {
+    const slice = songIds.slice(i, i + STYLE_BATCH);
     const { data, error } = await admin
       .from('song_styles')
       .select('song_id, catalog_styles(slug)')
@@ -87,13 +111,20 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const year = parseAdminRegisteredSongsMonthlyYear(searchParams.get('year'));
   const scope = parseAdminRegisteredSongsScope(searchParams.get('scope') ?? 'western');
+  const cacheKey = dashCacheKey(year, scope);
+  const cached = getCachedDashboard(cacheKey);
+  if (cached) {
+    return NextResponse.json(cached, {
+      headers: { 'Cache-Control': 'private, max-age=60' },
+    });
+  }
 
-  const fetched = await fetchMonthlySongRows(admin, scope);
+  const fetched = await fetchMonthlySongRows(admin, scope, year);
   if (fetched.error) {
     return NextResponse.json({ error: fetched.error }, { status: 500 });
   }
 
-  const yearRows = fetched.rows.filter((row) => jstYearMonthFromIso(registrationTimestampIso(row))?.year === year);
+  const yearRows = fetched.rows.filter((row) => jstYearMonthFromIso(publicReleaseTimestampIso(row))?.year === year);
   const catalogStyleBySongId = await fetchCatalogStyleBySongId(
     admin,
     yearRows.map((r) => r.id),
@@ -103,5 +134,8 @@ export async function GET(request: Request) {
     songs: yearRows,
     catalogStyleBySongId,
   });
-  return NextResponse.json(body);
+  dashCache.set(cacheKey, { expiresAt: Date.now() + DASH_CACHE_TTL_MS, body });
+  return NextResponse.json(body, {
+    headers: { 'Cache-Control': 'private, max-age=60' },
+  });
 }

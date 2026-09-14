@@ -85,6 +85,9 @@ export function AdminRegisteredSongsMonthlyPanel({ scope }: { scope: Scope }) {
                 |
               </span>
               合計 <strong className="text-lg font-bold text-gray-100">{loading ? '…' : fmtCount(total)}</strong> 曲
+              <span className="mt-1 block text-xs text-gray-500">
+                一覧の公開日（リリース日）で集計。公開日が空の曲と、DB への登録日は含めません。
+              </span>
             </p>
           </div>
           <div className="flex items-center gap-1 text-sm">
@@ -126,7 +129,7 @@ export function AdminRegisteredSongsMonthlyPanel({ scope }: { scope: Scope }) {
 
       <div className="overflow-x-auto px-3 py-3 sm:px-4 sm:py-4" role="region" aria-label="スタイル別月間登録曲数テーブル">
         <table className="min-w-[920px] w-full border-collapse text-sm tabular-nums">
-          <caption className="sr-only">{year}年のスタイル別・月別登録曲数</caption>
+          <caption className="sr-only">{year}年のスタイル別・月別曲数（公開日＝リリース日）</caption>
           <thead>
             <tr className="bg-gray-800/80 text-gray-300">
               <th scope="col" className="border border-gray-700 px-3 py-2.5 text-left font-semibold">

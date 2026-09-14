@@ -38,6 +38,15 @@ assert.equal(compoundArtistCanonicalIfKnown('Kool & the Gang'), 'Kool & the Gang
 assert.equal(compoundArtistCanonicalIfKnown('Kool and the Gang'), 'Kool & the Gang');
 assert.equal(compoundArtistCanonicalIfKnown('Katrina & The Waves'), 'Katrina & The Waves');
 assert.equal(compoundArtistCanonicalIfKnown('Katrina and The Waves'), 'Katrina & The Waves');
+assert.equal(compoundArtistCanonicalIfKnown('Christine and the Queens'), 'Christine and the Queens');
+assert.equal(compoundArtistCanonicalIfKnown('Christine & the Queens'), 'Christine and the Queens');
+assert.equal(getMainArtist('Christine and the Queens'), 'Christine and the Queens');
+assert.equal(getArtistDisplayString('Christine and the Queens'), 'Christine and the Queens');
+{
+  const r = getArtistAndSong('Christine and the Queens - Tilted (Official Video)', null);
+  assert.equal(r.artistDisplay, 'Christine and the Queens');
+  assert.equal(r.song, 'Tilted');
+}
 assert.equal(compoundArtistCanonicalIfKnown('Angus & Julia Stone'), 'Angus & Julia Stone');
 assert.equal(compoundArtistCanonicalIfKnown('Simon and Garfunkel'), 'Simon & Garfunkel');
 assert.equal(compoundArtistCanonicalIfKnown('Sleeping With Sirens'), 'Sleeping With Sirens');
@@ -71,6 +80,15 @@ assert.equal(getArtistDisplayString('Die With A Smile'), 'Die With A Smile');
 
 assert.equal(getMainArtist('Be With You'), 'Be With You');
 
+{
+  const r = getArtistAndSong('Kalax - Stay With Me', 'Kalax');
+  assert.equal(r.artistDisplay, 'Kalax');
+  assert.equal(r.song, 'Stay With Me');
+  const official = getArtistAndSong('Kalax - Stay With Me (Official Video)', 'Kalax');
+  assert.equal(official.artistDisplay, 'Kalax');
+  assert.equal(official.song, 'Stay With Me');
+}
+
 assert.equal(getMainArtist('Drake ft. Rihanna'), 'Drake');
 assert.equal(getArtistDisplayString('Drake ft. Rihanna'), 'Drake, Rihanna');
 
@@ -94,6 +112,21 @@ assert.equal(getArtistDisplayString('Drake ft. Rihanna'), 'Drake, Rihanna');
   const pack = resolveArtistSongForPack('Passenger | It Was Gonna Be You', 'Passenger', null);
   assert.equal(pack.artistDisplay, 'Passenger');
   assert.equal(pack.song, 'It Was Gonna Be You');
+}
+
+// スラッシュ3本「Artist /// Song」は「Artist - Song」と同じ（Vulfpeck 公式 RWLteWkb3sE）
+{
+  const r = getArtistAndSong('VULFPECK /// The Beachcomber', 'Vulf');
+  assert.equal(r.artistDisplay, 'VULFPECK');
+  assert.equal(r.song, 'The Beachcomber');
+  assert.equal(
+    formatArtistTitle('VULFPECK /// The Beachcomber', 'Vulf'),
+    'VULFPECK - The Beachcomber',
+  );
+  assert.equal(formatArtistTitle('VULFPECK /// The Beachcomber'), 'VULFPECK - The Beachcomber');
+  const mangled = getArtistAndSong('VULFPECK / The Beachcomber', 'Vulf');
+  assert.equal(mangled.artistDisplay, 'VULFPECK');
+  assert.equal(mangled.song, 'The Beachcomber');
 }
 
 // パイプ末尾が番組タグのときは従来どおり落とす（COLORS）
@@ -151,6 +184,17 @@ assert.equal(getArtistDisplayString('Drake ft. Rihanna'), 'Drake, Rihanna');
 {
   assert.equal(getMainArtist('Queen Official'), 'Queen');
   assert.equal(getArtistDisplayString('Queen Official'), 'Queen');
+}
+// 名前の一部としての Official は切らない（YT to M7 → 洋楽1曲登録）
+{
+  assert.equal(getMainArtist('ArtOfficial'), 'ArtOfficial');
+  assert.equal(getArtistDisplayString('ArtOfficial'), 'ArtOfficial');
+  const r = getArtistAndSong('ArtOfficial - Black Birds', null);
+  assert.equal(r.artistDisplay, 'ArtOfficial');
+  assert.equal(r.song, 'Black Birds');
+  const registered = normalizeArtistAndTitleForRegistration('ArtOfficial', 'Black Birds');
+  assert.equal(registered?.displayArtist, 'ArtOfficial');
+  assert.equal(registered?.songTitle, 'Black Birds');
 }
 // 3セグメント「チャンネル名 - アーティスト - 曲名」は先頭だけ落として解釈する
 {

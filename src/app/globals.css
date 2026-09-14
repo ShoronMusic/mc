@@ -289,6 +289,65 @@ html.mc-prevent-pull-refresh .mc-room-viewport {
 .animate-now-playing-wave span:nth-child(4) { animation-delay: 0.3s; }
 .animate-now-playing-wave span:nth-child(5) { animation-delay: 0.4s; }
 
+/* Music Library: 停止中はスタイル色の下線のみ。再生中だけ光が走る */
+@keyframes music-library-now-playing-shine {
+  0% {
+    background-position: 0 0, -45% 0;
+  }
+  100% {
+    background-position: 0 0, 145% 0;
+  }
+}
+
+.music-library-now-playing {
+  position: relative;
+}
+
+.music-library-now-playing::after {
+  content: '';
+  position: absolute;
+  left: 0.75rem;
+  right: 0.75rem;
+  bottom: 3px;
+  height: 2px;
+  border-radius: 999px;
+  pointer-events: none;
+  background: var(--music-library-now-playing-color, #fff);
+}
+
+.music-library-now-playing.is-playing::after {
+  background-image:
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--music-library-now-playing-color, #fff) 34%, transparent),
+      color-mix(in srgb, var(--music-library-now-playing-color, #fff) 34%, transparent)
+    ),
+    linear-gradient(
+      90deg,
+      transparent 0%,
+      color-mix(in srgb, var(--music-library-now-playing-color, #fff) 50%, transparent) 26%,
+      color-mix(in srgb, var(--music-library-now-playing-color, #fff) 88%, white) 44%,
+      var(--music-library-now-playing-color, #fff) 52%,
+      color-mix(in srgb, var(--music-library-now-playing-color, #fff) 88%, white) 60%,
+      color-mix(in srgb, var(--music-library-now-playing-color, #fff) 50%, transparent) 74%,
+      transparent 100%
+    );
+  background-size: 100% 100%, 38% 100%;
+  background-repeat: no-repeat;
+  background-position: 0 0, -45% 0;
+  box-shadow: 0 0 10px 1px color-mix(in srgb, var(--music-library-now-playing-color, #fff) 58%, transparent);
+  animation: music-library-now-playing-shine 2.2s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .music-library-now-playing.is-playing::after {
+    animation: none;
+    background: var(--music-library-now-playing-color, #fff);
+    background-image: none;
+    box-shadow: none;
+  }
+}
+
 /* 検索結果モーダル等：オーバーレイ／高 DPI で細くなりがちなスクロールバーに最低幅を確保 */
 .mc-scrollbar-stable {
   scrollbar-gutter: stable;

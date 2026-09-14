@@ -51,6 +51,12 @@ assert.ok(draft.profileText?.includes('米津玄師'));
   assert.equal(patch.name, 'The Sways');
   assert.equal(patch.name_base, 'Sways');
   assert.equal(patch.the_prefix, 'The');
+
+  const withHandle = emptyAdminArtistProfileDraft('Art Official', 'western');
+  withHandle.youtubeChannelId = 'https://www.youtube.com/@ArtOfficialMusic';
+  const handlePatch = buildArtistDbPatchFromAdminDraft(withHandle);
+  assert.equal(handlePatch.youtube_channel_id, '@ArtOfficialMusic');
+  assert.equal(handlePatch.youtube_channel_url, 'https://www.youtube.com/@ArtOfficialMusic');
 }
 
 assert.equal(normalizeAdminArtistActivePeriod('1989 - 現在'), '1989 -');

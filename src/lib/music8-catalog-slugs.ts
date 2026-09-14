@@ -30,6 +30,19 @@ export const MUSIC8_NAV_STYLE_LABELS: Record<Music8NavStyleSlug, string> = {
   others: 'Others',
 };
 
+/** WP `$dashboard_style_colors` と同期 */
+export const MUSIC8_NAV_STYLE_COLORS: Record<Music8NavStyleSlug, string> = {
+  pop: '#f25042',
+  dance: '#f39800',
+  alternative: '#448aca',
+  electronica: '#ffd803',
+  rb: '#8c7851',
+  'hip-hop': '#078080',
+  rock: '#6246ea',
+  metal: '#9646ea',
+  others: '#BDBDBD',
+};
+
 /** WP style term ID → 公開スラッグ */
 export const MUSIC8_STYLE_WP_ID_TO_SLUG: Record<number, Music8NavStyleSlug> = {
   2844: 'pop',
@@ -76,6 +89,16 @@ export function music8NavStyleSlugFromName(name: string): Music8NavStyleSlug | n
   const key = name.trim().toLowerCase();
   if (!key) return null;
   return NAME_TO_SLUG[key] ?? null;
+}
+
+export function music8NavStyleColor(slugOrName: string | null | undefined): string | null {
+  const raw = (slugOrName ?? '').trim();
+  if (!raw) return null;
+  const lower = raw.toLowerCase();
+  const slug = (MUSIC8_NAV_STYLE_SLUGS as readonly string[]).includes(lower)
+    ? (lower as Music8NavStyleSlug)
+    : music8NavStyleSlugFromName(raw);
+  return slug ? MUSIC8_NAV_STYLE_COLORS[slug] : null;
 }
 
 export function music8NavStyleSlugFromStyleIds(ids: number[]): Music8NavStyleSlug | null {

@@ -27,6 +27,10 @@ import {
 import { pickArtistPhotoUrl } from '@/lib/artist-photo-url';
 import { isSelectionRegisteredArtistPendingWp } from '@/lib/artist-selection-registered-pending';
 import { AdminNewArtistBadge } from '@/components/admin/AdminNewArtistBadge';
+import {
+  GenreBestRegisteredLabelLinks,
+  useGenreBestLabelsBySongIds,
+} from '@/components/admin/GenreBestRegisteredLabels';
 
 type DbArtist = {
   id?: string;
@@ -319,6 +323,7 @@ export function AdminArtistProfileModal({
   const slug = (dbArtist?.music8_artist_slug ?? music8?.slug ?? '').trim() || null;
   const music8Page = music8PublicArtistUrl(slug);
   const grouped = useMemo(() => groupSongsByYear(songs), [songs]);
+  const genreBestLabelsBySong = useGenreBestLabelsBySongIds(songs.map((s) => s.id));
   const songHref = (id: string) =>
     modalEmbed ? `/admin/songs/${id}?modal=1` : `/admin/songs/${id}`;
   const highlightedId = playing?.id ?? currentSongId;
@@ -574,14 +579,28 @@ export function AdminArtistProfileModal({
                                     className="h-12 w-12"
                                   />
                                 </button>
-                                <Link href={songHref(s.id)} className="min-w-0 flex-1 hover:bg-gray-900/40">
-                                  <span className="block truncate text-sm text-gray-100">{title}</span>
-                                  <span className="block truncate text-[11px] text-gray-500">
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                                    <Link
+                                      href={songHref(s.id)}
+                                      className="min-w-0 truncate text-sm text-gray-100 hover:underline"
+                                    >
+                                      {title}
+                                    </Link>
+                                    <GenreBestRegisteredLabelLinks
+                                      labels={genreBestLabelsBySong[s.id]}
+                                      className="shrink-0 text-[11px] text-gray-400"
+                                    />
+                                  </div>
+                                  <Link
+                                    href={songHref(s.id)}
+                                    className="block truncate text-[11px] text-gray-500 hover:underline"
+                                  >
                                     {(s.main_artist ?? displayName).trim()}
                                     {month ? ` · ${month}` : ''}
                                     {genres ? ` (${genres})` : ''}
-                                  </span>
-                                </Link>
+                                  </Link>
+                                </div>
                               </div>
                             </li>
                           );

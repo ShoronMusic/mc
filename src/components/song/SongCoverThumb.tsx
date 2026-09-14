@@ -31,7 +31,7 @@ export function SongCoverThumb({
     setSrc(cover.url);
   }, [cover.url]);
 
-  const boxClass = `shrink-0 overflow-hidden rounded bg-gray-800 object-cover ${className}`;
+  const boxClass = `block shrink-0 overflow-hidden rounded bg-gray-800 object-cover ${className}`;
 
   if (!src) {
     return <span className={`${boxClass} block`} aria-hidden />;

@@ -56,7 +56,7 @@ function run() {
   assert.equal(credits[0].artistId, 'g1');
   assert.equal(credits[1].artistId, 'b1');
   assert.equal(credits[0].role, 'main');
-  assert.equal(credits[1].role, 'main');
+  assert.equal(credits[1].role, 'featured');
 
   assert.equal(
     resolveArtistIdFromIndex(index, 'Lady Gaga', { name: 'Lady Gaga', slug: 'lady-gaga' }),

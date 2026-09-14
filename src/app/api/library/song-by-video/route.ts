@@ -14,6 +14,7 @@ type LibrarySongDetail = {
   vocal: string | null;
   play_count: number | null;
   original_release_date: string | null;
+  spotify_images: string | null;
 };
 
 type LibrarySongVideoItem = {
@@ -91,6 +92,7 @@ export async function GET(request: Request) {
   }
 
   const videoId = (new URL(request.url).searchParams.get('videoId') ?? '').trim();
+  const coverOnly = (new URL(request.url).searchParams.get('coverOnly') ?? '').trim() === '1';
   if (!videoId) {
     return NextResponse.json({ error: 'videoId が必要です。' }, { status: 400 });
   }
@@ -115,17 +117,65 @@ export async function GET(request: Request) {
     });
   }
 
-  const { data: songRow, error: songErr } = await admin
+  let { data: songRow, error: songErr } = await admin
     .from('songs')
     .select(
-      'id, display_title, song_title, main_artist, style, genres, vocal, play_count, original_release_date',
+      'id, display_title, song_title, main_artist, style, genres, vocal, play_count, original_release_date, spotify_images',
     )
     .eq('id', songId)
     .maybeSingle();
 
+  if (songErr?.code === '42703') {
+    const fallback = await admin
+      .from('songs')
+      .select(
+        'id, display_title, song_title, main_artist, style, genres, vocal, play_count, original_release_date',
+      )
+      .eq('id', songId)
+      .maybeSingle();
+    songRow = fallback.data;
+    songErr = fallback.error;
+  }
+
   if (songErr && songErr.code !== '42P01') {
     console.error('[api/library/song-by-video] songs', songErr);
     return NextResponse.json({ error: '曲情報の取得に失敗しました。' }, { status: 500 });
+  }
+
+  const s = (songRow ?? null) as {
+    id?: string;
+    display_title?: string | null;
+    song_title?: string | null;
+    main_artist?: string | null;
+    style?: string | null;
+    genres?: string[] | string | null;
+    vocal?: string | null;
+    play_count?: number | null;
+    original_release_date?: string | null;
+    spotify_images?: string | null;
+  } | null;
+
+  const song: LibrarySongDetail | null = s
+    ? {
+        id: String(s.id ?? songId),
+        title: (s.display_title ?? s.song_title ?? '').trim() || videoId,
+        song_title: typeof s.song_title === 'string' ? s.song_title : null,
+        main_artist: typeof s.main_artist === 'string' ? s.main_artist : null,
+        style: typeof s.style === 'string' ? s.style : null,
+        genres: formatGenres(s.genres),
+        vocal: typeof s.vocal === 'string' ? s.vocal : null,
+        play_count: typeof s.play_count === 'number' ? s.play_count : null,
+        original_release_date:
+          typeof s.original_release_date === 'string' ? s.original_release_date : null,
+        spotify_images:
+          typeof s.spotify_images === 'string' && s.spotify_images.trim()
+            ? s.spotify_images.trim()
+            : null,
+      }
+    : null;
+
+  if (coverOnly) {
+    return NextResponse.json({ song, videos: [] as LibrarySongVideoItem[] });
   }
 
   const { data: videoRows, error: vidErr } = await admin
@@ -142,35 +192,6 @@ export async function GET(request: Request) {
   const videos = await buildVideoItems((videoRows ?? []) as { video_id?: string; variant?: string | null }[]);
   const safeVideos =
     videos.length > 0 ? videos : ([{ video_id: videoId, variant: null }] as LibrarySongVideoItem[]);
-
-  if (!songRow) {
-    return NextResponse.json({ song: null, videos: safeVideos });
-  }
-
-  const s = songRow as {
-    id?: string;
-    display_title?: string | null;
-    song_title?: string | null;
-    main_artist?: string | null;
-    style?: string | null;
-    genres?: string[] | string | null;
-    vocal?: string | null;
-    play_count?: number | null;
-    original_release_date?: string | null;
-  };
-
-  const song: LibrarySongDetail = {
-    id: String(s.id ?? songId),
-    title: (s.display_title ?? s.song_title ?? '').trim() || videoId,
-    song_title: typeof s.song_title === 'string' ? s.song_title : null,
-    main_artist: typeof s.main_artist === 'string' ? s.main_artist : null,
-    style: typeof s.style === 'string' ? s.style : null,
-    genres: formatGenres(s.genres),
-    vocal: typeof s.vocal === 'string' ? s.vocal : null,
-    play_count: typeof s.play_count === 'number' ? s.play_count : null,
-    original_release_date:
-      typeof s.original_release_date === 'string' ? s.original_release_date : null,
-  };
 
   return NextResponse.json({ song, videos: safeVideos });
 }

@@ -11,6 +11,7 @@ import {
   resolveOriginalReleaseDateFromMusic8WpSongsFileJson,
   resolveSongStyleForOverwriteFromMusic8,
   wordpressPublishDateToPostgresDate,
+  mergeMusic8SongExtracts,
 } from '@/lib/music8-song-fields';
 
 function run() {
@@ -71,6 +72,42 @@ function run() {
     vocals: [{ name: 'M', slug: 'male' }],
   });
   assert.equal(fromBothVocals.vocalLabel, 'F, M');
+
+  const fromVocalsObject = extractMusic8SongFields({
+    title: 'Synchronicity II',
+    vocals: { name: 'M', slug: 'male' },
+    styles: [2849],
+    genres: [{ name: 'New wave' }, { name: 'Rock' }],
+    thumbnail: 'https://example.com/thumb.jpg',
+    spotify_images: 'https://i.scdn.co/image/abc',
+    videoId: 'o5FPPoLqkCk',
+  });
+  assert.equal(fromVocalsObject.vocalLabel, 'M');
+  assert.equal(resolveSongStyleForOverwriteFromMusic8(fromVocalsObject), 'Rock');
+  assert.deepEqual(fromVocalsObject.genres, ['New wave', 'Rock']);
+  assert.equal(fromVocalsObject.thumbnailUrl, 'https://example.com/thumb.jpg');
+  assert.equal(fromVocalsObject.spotifyImages, 'https://i.scdn.co/image/abc');
+  assert.equal(fromVocalsObject.youtubeVideoId, 'o5FPPoLqkCk');
+
+  const classificationLeaksVocal = extractMusic8SongFields({
+    stable_key: { artist_slug: 'police', song_slug: 'synchronicity-ii' },
+    classification: ['New wave', 'Rock', 'M'],
+    facts_for_ai: {
+      bullets: ['ジャンル： New wave', 'ジャンル： Rock', 'ボーカル： M', 'スタイル： Rock'],
+    },
+  });
+  assert.deepEqual(classificationLeaksVocal.genres, ['New wave', 'Rock']);
+  assert.equal(resolveSongStyleForOverwriteFromMusic8(classificationLeaksVocal), 'Rock');
+  assert.ok(!classificationLeaksVocal.styleNames.includes('M'));
+
+  const mergedStylePrefersId = mergeMusic8SongExtracts([
+    classificationLeaksVocal,
+    fromVocalsObject,
+  ]);
+  assert.ok(mergedStylePrefersId);
+  assert.equal(resolveSongStyleForOverwriteFromMusic8(mergedStylePrefersId!), 'Rock');
+  assert.deepEqual(mergedStylePrefersId!.genres, ['New wave', 'Rock']);
+  assert.equal(mergedStylePrefersId!.spotifyImages, 'https://i.scdn.co/image/abc');
 
   assert.equal(wordpressPublishDateToPostgresDate('2012-11-01T15:43:00'), '2012-11-01');
   assert.equal(

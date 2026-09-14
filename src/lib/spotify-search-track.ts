@@ -334,6 +334,55 @@ async function spotifyFetchJson(url: string, token: string, retries = 3): Promis
   return null;
 }
 
+/** Spotify track ID（22 文字）。URL / URI / 生 ID を受け付ける */
+const SPOTIFY_TRACK_ID_RE = /^[0-9A-Za-z]{22}$/;
+
+export function parseSpotifyTrackIdInput(raw: string | null | undefined): string | null {
+  const s = (raw ?? '').trim();
+  if (!s) return null;
+  if (SPOTIFY_TRACK_ID_RE.test(s)) return s;
+
+  const uri = /^spotify:track:([0-9A-Za-z]{22})$/i.exec(s);
+  if (uri?.[1]) return uri[1];
+
+  try {
+    const u = new URL(s);
+    const fromPath = /\/track\/([0-9A-Za-z]{22})(?:\/|$)/i.exec(u.pathname);
+    if (fromPath?.[1]) return fromPath[1];
+  } catch {
+    /* 生テキストとして続行 */
+  }
+
+  const fromEmbed = /(?:open\.spotify\.com\/(?:intl-[a-z]+\/)?track\/|spotify:track:)([0-9A-Za-z]{22})/i.exec(
+    s,
+  );
+  if (fromEmbed?.[1]) return fromEmbed[1];
+  return null;
+}
+
+/** Spotify artist ID（22 文字）。URL / URI / 生 ID を受け付ける */
+export function parseSpotifyArtistIdInput(raw: string | null | undefined): string | null {
+  const s = (raw ?? '').trim();
+  if (!s) return null;
+  if (SPOTIFY_TRACK_ID_RE.test(s)) return s;
+
+  const uri = /^spotify:artist:([0-9A-Za-z]{22})$/i.exec(s);
+  if (uri?.[1]) return uri[1];
+
+  try {
+    const u = new URL(s);
+    const fromPath = /\/artist\/([0-9A-Za-z]{22})(?:\/|$)/i.exec(u.pathname);
+    if (fromPath?.[1]) return fromPath[1];
+  } catch {
+    /* 生テキストとして続行 */
+  }
+
+  const fromEmbed =
+    /(?:open\.spotify\.com\/(?:intl-[a-z]+\/)?artist\/|spotify:artist:)([0-9A-Za-z]{22})/i.exec(s);
+  if (fromEmbed?.[1]) return fromEmbed[1];
+  return null;
+}
+
 /** display_title の先頭 ` - ` でアーティスト／曲名に分割（正規化済み想定） */
 export function parseArtistTitleFromDisplayTitle(displayTitle: string): { artist: string; title: string } | null {
   const s = displayTitle.trim();

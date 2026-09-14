@@ -10,6 +10,7 @@ import {
   emptyStylesSummary,
   loadSongExportBundle,
   mergeYoutubeIndex,
+  toMusic8PublicStylesSummary,
   MUSIC8_JSON_SCHEMA_VERSION,
   type MusicaichatSongJson,
   type StylesSummaryItem,
@@ -143,9 +144,21 @@ export async function rebuildStylesSummaryFromDb(
 ): Promise<StylesSummaryItem[]> {
   const summary = emptyStylesSummary();
   const counts = new Map<string, number>(MUSIC8_NAV_STYLE_SLUGS.map((s) => [s, 0]));
-  const { data, error } = await admin.from('song_styles').select('catalog_styles(slug)');
-  if (!error && data) {
-    for (const r of data as { catalog_styles?: { slug?: string } | { slug?: string }[] | null }[]) {
+  const page = 1000;
+  for (let offset = 0; ; offset += page) {
+    const { data, error } = await admin
+      .from('song_styles')
+      .select('catalog_styles(slug)')
+      .range(offset, offset + page - 1);
+    if (error) {
+      console.warn('[rebuildStylesSummaryFromDb]', error.message);
+      break;
+    }
+    const rows = (data ?? []) as {
+      catalog_styles?: { slug?: string } | { slug?: string }[] | null;
+    }[];
+    if (rows.length === 0) break;
+    for (const r of rows) {
       const nested = r.catalog_styles;
       const slug = Array.isArray(nested)
         ? nested[0]?.slug
@@ -154,12 +167,17 @@ export async function rebuildStylesSummaryFromDb(
           : '';
       if (slug && counts.has(slug)) counts.set(slug, (counts.get(slug) ?? 0) + 1);
     }
+    if (rows.length < page) break;
   }
   for (const item of summary) {
     item.count = counts.get(item.slug) ?? 0;
   }
   const dir = resolveMusic8JsonExportDir(exportDir);
-  writeJsonAtomic(path.join(dir, 'styles_summary.json'), summary);
+  const today = new Date().toISOString().slice(0, 10);
+  writeJsonAtomic(
+    path.join(dir, 'styles_summary.json'),
+    toMusic8PublicStylesSummary(summary, today),
+  );
   return summary;
 }
 

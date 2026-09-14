@@ -6,39 +6,59 @@
  */
 
 import { useEffect, useState } from 'react';
-import { showRoomStyleUi } from '@/lib/product-branding';
+import { SongCoverThumb } from '@/components/song/SongCoverThumb';
+import { ReferencedMusicDataDisclaimer } from '@/components/room/ReferencedMusicDataDisclaimer';
 import { formatLibraryVocalDisplay } from '@/lib/library-vocal-display';
 import { resolveSongTitleForMusic8 } from '@/lib/music8-song-lookup';
 import {
   extractMusic8SongFields,
+  filterMusic8GenreLabels,
+  mergeMusic8SongExtracts,
   pickMusic8SongFullDescription,
   preferFullerMusic8Description,
+  resolveSongStyleForOverwriteFromMusic8,
   type Music8SongExtract,
 } from '@/lib/music8-song-fields';
-import { ReferencedMusicDataDisclaimer } from '@/components/room/ReferencedMusicDataDisclaimer';
-
-function mergeSongExtracts(parts: Music8SongExtract[]): Music8SongExtract | null {
-  if (parts.length === 0) return null;
-  const out: Music8SongExtract = { ...parts[0] };
-  for (const p of parts.slice(1)) {
-    if (!out.releaseDate && p.releaseDate) out.releaseDate = p.releaseDate;
-    if (p.genres.length > out.genres.length) out.genres = p.genres;
-    if (p.styleNames.length > out.styleNames.length) {
-      out.styleIds = p.styleIds;
-      out.styleNames = p.styleNames;
-    }
-    if (!out.vocalLabel && p.vocalLabel) out.vocalLabel = p.vocalLabel;
-    if (!out.structuredStyleFromFacts && p.structuredStyleFromFacts) {
-      out.structuredStyleFromFacts = p.structuredStyleFromFacts;
-    }
-  }
-  return out;
-}
+import { showRoomStyleUi } from '@/lib/product-branding';
+import { resolveSongCoverImage } from '@/lib/song-cover-image';
 
 async function fetchSongJson(url: string): Promise<unknown | null> {
   const res = await fetch(url, { credentials: 'include' });
   const json = (await res.json().catch(() => ({}))) as { song?: unknown };
   return json?.song && typeof json.song === 'object' ? json.song : null;
+}
+
+async function fetchDbSongCover(videoId: string): Promise<{
+  spotifyImages: string;
+  style: string;
+  genres: string[];
+  vocal: string;
+} | null> {
+  const res = await fetch(
+    `/api/library/song-by-video?videoId=${encodeURIComponent(videoId)}&coverOnly=1`,
+    { credentials: 'include' },
+  );
+  const json = (await res.json().catch(() => ({}))) as {
+    song?: {
+      spotify_images?: string | null;
+      style?: string | null;
+      genres?: string | null;
+      vocal?: string | null;
+    } | null;
+  };
+  if (!res.ok || !json?.song) return null;
+  const genres = filterMusic8GenreLabels(
+    (json.song.genres ?? '')
+      .split(/\s*[,、]\s*/)
+      .map((s) => s.trim())
+      .filter(Boolean),
+  );
+  return {
+    spotifyImages: (json.song.spotify_images ?? '').trim(),
+    style: (json.song.style ?? '').trim(),
+    genres,
+    vocal: (json.song.vocal ?? '').trim(),
+  };
 }
 
 interface SongDataTabPanelProps {
@@ -80,15 +100,17 @@ export default function SongDataTabPanel({
             `/api/music8/song-by-playback?artistName=${encodeURIComponent(artistName)}&songTitle=${encodeURIComponent(songTitle ?? '')}`,
           ),
         );
+        const dbCoverTask = vid ? fetchDbSongCover(vid) : Promise.resolve(null);
         const songs = (await Promise.all(tasks)).filter((s): s is Record<string, unknown> =>
           Boolean(s && typeof s === 'object'),
         );
+        const dbCover = await dbCoverTask;
         if (songs.length === 0) {
           setFields(null);
           setError(true);
           return;
         }
-        const merged = mergeSongExtracts(songs.map((s) => extractMusic8SongFields(s)));
+        const merged = mergeMusic8SongExtracts(songs.map((s) => extractMusic8SongFields(s)));
         let description = '';
         for (const s of songs) {
           description = preferFullerMusic8Description(description, pickMusic8SongFullDescription(s));
@@ -98,6 +120,13 @@ export default function SongDataTabPanel({
           setError(true);
           return;
         }
+        if (dbCover?.spotifyImages) merged.spotifyImages = dbCover.spotifyImages;
+        if (dbCover?.style) {
+          merged.structuredStyleFromFacts = dbCover.style;
+          if (merged.styleNames.length === 0) merged.styleNames = [dbCover.style];
+        }
+        if (dbCover && dbCover.genres.length > 0) merged.genres = dbCover.genres;
+        if (dbCover?.vocal) merged.vocalLabel = dbCover.vocal;
         setFields({ ...merged, description });
         setError(false);
       } catch {
@@ -192,6 +221,10 @@ export default function SongDataTabPanel({
 
   const vocalDisplay = formatLibraryVocalDisplay(fields.vocalLabel);
   const showStyleUi = showRoomStyleUi();
+  const styleDisplay = showStyleUi
+    ? resolveSongStyleForOverwriteFromMusic8(fields) || fields.styleNames.join(', ')
+    : '';
+  const genreDisplay = fields.genres.join(', ');
   const descriptionForDisplay =
     showStyleUi || !fields.description
       ? fields.description
@@ -206,10 +239,18 @@ export default function SongDataTabPanel({
           .join('\n')
           .trim();
 
+  const coverSpotify = fields.spotifyImages || null;
+  const coverVideoId = (videoId ?? '').trim() || fields.youtubeVideoId || null;
+  const cover = resolveSongCoverImage({
+    spotifyImages: coverSpotify,
+    videoId: coverVideoId,
+  });
+
   const hasAny =
+    Boolean(cover.url) ||
     fields.releaseDate ||
-    (showStyleUi && fields.styleNames.length > 0) ||
-    fields.genres.length > 0 ||
+    (showStyleUi && styleDisplay) ||
+    genreDisplay ||
     vocalDisplay ||
     descriptionForDisplay;
 
@@ -231,36 +272,50 @@ export default function SongDataTabPanel({
   }
 
   return (
-    <div className="flex h-full flex-col gap-3 overflow-auto p-4 text-sm">
-      {fields.releaseDate && (
-        <p className="text-gray-200">
-          <span className="text-gray-500">リリース：</span>
-          {fields.releaseDate}
-        </p>
-      )}
-      {showStyleUi && fields.styleNames.length > 0 && (
-        <p className="text-gray-200">
-          <span className="text-gray-500">スタイル：</span>
-          {fields.styleNames.join(', ')}
-        </p>
-      )}
-      {fields.genres.length > 0 && (
-        <p className="text-gray-200">
-          <span className="text-gray-500">ジャンル：</span>
-          {fields.genres.join(', ')}
-        </p>
-      )}
-      {vocalDisplay && (
-        <p className="text-gray-200">
-          <span className="text-gray-500">ボーカル：</span>
-          {vocalDisplay}
-        </p>
-      )}
-      {descriptionForDisplay ? (
-        <p className="whitespace-pre-wrap break-words text-gray-300 leading-relaxed">
-          {descriptionForDisplay}
-        </p>
-      ) : null}
+    <div className="h-full overflow-auto p-3 text-sm">
+      <section className="overflow-hidden rounded-xl border border-gray-700 bg-gray-900 shadow-[0_12px_40px_-24px_rgba(0,0,0,0.9)]">
+        <div className="flex gap-4 p-3 sm:p-4">
+          {cover.url ? (
+            <SongCoverThumb
+              spotifyImages={coverSpotify}
+              videoId={coverVideoId}
+              alt={cover.source === 'spotify' ? '曲ジャケット' : '曲サムネ'}
+              className="h-28 w-28 rounded-lg border border-gray-700"
+            />
+          ) : null}
+          <div className="min-w-0 flex-1 space-y-1.5 text-gray-200">
+            {fields.releaseDate ? (
+              <p>
+                <span className="text-gray-500">リリース：</span>
+                {fields.releaseDate}
+              </p>
+            ) : null}
+            {showStyleUi && styleDisplay ? (
+              <p>
+                <span className="text-gray-500">スタイル：</span>
+                {styleDisplay}
+              </p>
+            ) : null}
+            {genreDisplay ? (
+              <p>
+                <span className="text-gray-500">ジャンル：</span>
+                {genreDisplay}
+              </p>
+            ) : null}
+            {vocalDisplay ? (
+              <p>
+                <span className="text-gray-500">ボーカル：</span>
+                {vocalDisplay}
+              </p>
+            ) : null}
+          </div>
+        </div>
+        {descriptionForDisplay ? (
+          <p className="whitespace-pre-wrap break-words border-t border-gray-800 px-3 py-3 leading-relaxed text-gray-300 sm:px-4">
+            {descriptionForDisplay}
+          </p>
+        ) : null}
+      </section>
       <ReferencedMusicDataDisclaimer />
     </div>
   );

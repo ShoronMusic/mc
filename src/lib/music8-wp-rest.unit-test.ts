@@ -3,6 +3,7 @@ import {
   artistSlugCandidates,
   isLikelyYoutubeVideoId,
   wpArtistSlugAliasesFromMusic8Slug,
+  displayArtistNameFromWpRestSongJson,
   wpRestCategoryToMusic8ArtistJson,
   wpRestPostToMusic8SongJson,
 } from '@/lib/music8-wp-rest';
@@ -53,6 +54,18 @@ function run() {
   assert.equal(ex.primaryArtistNameJa, 'ヘイルストーム');
   assert.equal(ex.releaseDate, '2012.06');
   assert.deepEqual(ex.styleIds, [6409]);
+
+  const huConverted = wpRestPostToMusic8SongJson({
+    id: 140353,
+    slug: 'warrior-chant',
+    title: { rendered: 'Warrior Chant' },
+    style: [2845],
+    acf: { ytvideoid: 'GqrKj5lD5y4', spotify_artists: 'The HU' },
+    custom_fields: {
+      categories: [{ id: 2255, name: 'HU', slug: 'hu', prefix: '1' }],
+    },
+  });
+  assert.equal(displayArtistNameFromWpRestSongJson(huConverted), 'The HU');
 
   const snap = buildPersistableMusic8SongSnapshot(converted);
   assert.equal(snap?.kind, 'music8_wp_song');

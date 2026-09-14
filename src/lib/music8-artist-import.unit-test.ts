@@ -127,6 +127,11 @@ function run() {
     extractYoutubeChannelIdFromMusic8('https://www.youtube.com/channel/UCoUM-UJ7rirJYP8CQ0EIaHA'),
     'UCoUM-UJ7rirJYP8CQ0EIaHA',
   );
+  assert.equal(
+    extractYoutubeChannelIdFromMusic8('https://www.youtube.com/@ArtOfficialMusic'),
+    '@ArtOfficialMusic',
+  );
+  assert.equal(extractYoutubeChannelIdFromMusic8('@ArtOfficialMusic'), '@ArtOfficialMusic');
 
   console.log('music8-artist-import.unit-test: ok');
 }

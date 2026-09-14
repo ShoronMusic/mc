@@ -5,6 +5,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { resolveYoutubeChannelHref } from '@/lib/music8-artist-display';
 import { buildPersistableMusic8SongSnapshot } from '@/lib/music8-song-persist';
 import {
   buildSongDisplayTitle,
@@ -421,7 +422,7 @@ async function ensureArtistAndLinkSong(
   if ((info.wikipediaPage ?? '').trim()) artistPayload.wikipedia_page = info.wikipediaPage!.trim();
   // youtube_channel_id → URL に変換して保存（既存 youtube_channel_url が空の場合のみ書き込まない方が安全なため upsert 後に patch）
   const ytChannelId = (info.youtubeChannelId ?? '').trim();
-  const ytChannelUrl = ytChannelId ? `https://www.youtube.com/channel/${ytChannelId}` : '';
+  const ytChannelUrl = resolveYoutubeChannelHref(ytChannelId) ?? '';
 
   let artistId: string | null = null;
   if (slug) {

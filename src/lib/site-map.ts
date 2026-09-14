@@ -49,6 +49,11 @@ export const SITE_MAP_SECTIONS: readonly SiteMapSection[] = [
         href: '/',
         description: '開催中の部屋へ入室、または自分で会を始めます。',
       },
+      {
+        label: 'Music Library',
+        href: '/music',
+        description: '曲・アーティスト・スタイルの公開カタログ。YouTube 連続再生ができます。',
+      },
     ],
   },
   {

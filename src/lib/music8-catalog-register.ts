@@ -14,6 +14,7 @@ import { getVideoSnippet } from '@/lib/youtube-search';
 import { dateOnlyFromYoutubePublishedAt } from '@/lib/youtube-published-at-date';
 import { fetchArtistSongDefaultsForAdmin } from '@/lib/admin-song-artist-defaults';
 import { inferSongVideoVariantFromTitle } from '@/lib/song-alternate-pv-match';
+import { ensureMusic8SlugsForSong } from '@/lib/music8-song-slug';
 
 export type RegisterWesternSongInput = {
   youtubeId: string;
@@ -77,6 +78,15 @@ export async function registerWesternSongFromYoutube(
   });
   if (!songId) return { error: '曲マスタへの登録に失敗しました。' };
 
+  let assignedArtistSlug = '';
+  try {
+    const slugs = await ensureMusic8SlugsForSong(admin, songId);
+    if (slugs.ok) assignedArtistSlug = slugs.artistSlug;
+    else console.warn('[music8-catalog-register] ensureMusic8SlugsForSong', slugs.reason);
+  } catch (e) {
+    console.warn('[music8-catalog-register] ensureMusic8SlugsForSong', e);
+  }
+
   try {
     const { data: videoCol } = await admin
       .from('songs')
@@ -133,7 +143,7 @@ export async function registerWesternSongFromYoutube(
 
   const pseudoJson = {
     styles: input.styleSlug ? [input.styleSlug] : [],
-    artists: [{ name: artist, slug: '' }],
+    artists: [{ name: artist, slug: assignedArtistSlug }],
   };
   await syncMusic8CatalogTaxonomyFromSongJson(admin, songId, {
     ...pseudoJson,

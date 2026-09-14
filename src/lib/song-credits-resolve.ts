@@ -365,7 +365,6 @@ export function resolveSongCreditsFromInput(
   const m8 = music8MainArtistsFromSnapshot(input.music8_song_data);
   const credits: ResolvedSongCredit[] = [];
   const unresolved: string[] = [];
-  const count = latinNames.length;
 
   latinNames.forEach((name, i) => {
     const hint = m8.find((a) => normName(a.name) === normName(name)) ?? m8[i] ?? null;
@@ -374,7 +373,7 @@ export function resolveSongCreditsFromInput(
       unresolved.push(name);
       return;
     }
-    const role: 'main' | 'featured' = count <= 2 ? 'main' : i === 0 ? 'main' : 'featured';
+    const role: 'main' | 'featured' = i === 0 ? 'main' : 'featured';
     credits.push({
       artistId,
       displayOrder: i,

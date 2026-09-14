@@ -22,6 +22,11 @@ assert.ok(links.youtube?.includes('youtube.com'));
 assert.ok(links.spotify?.includes('open.spotify.com'));
 assert.ok(links.wikipedia?.includes('ja.wikipedia.org'));
 
+const handleLinks = buildLibraryArtistExternalLinks({
+  youtube_channel_id: '@ArtOfficialMusic',
+});
+assert.equal(handleLinks.youtube, 'https://www.youtube.com/@ArtOfficialMusic');
+
 const title = formatLibraryArtistDetailTitleLines('米津玄師', 'JPN', 1, 'Kenshi Yonezu');
 assert.equal(title.primary, '米津玄師 （1曲）');
 assert.equal(title.secondary, 'Kenshi Yonezu / JPN');

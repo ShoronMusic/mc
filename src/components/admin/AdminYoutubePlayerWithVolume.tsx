@@ -9,6 +9,7 @@ type YtPlayer = {
   mute: () => void;
   unMute: () => void;
   isMuted: () => boolean;
+  playVideo: () => void;
 };
 
 type YtNamespace = {
@@ -75,6 +76,10 @@ type Props = {
   className?: string;
   /** プレイヤー枠の追加 class（例: min-h） */
   playerClassName?: string;
+  /** 表示と同時に再生（カバークリックなどユーザー操作直後向け） */
+  autoplay?: boolean;
+  /** 初期音量 0–100 */
+  initialVolume?: number;
 };
 
 /**
@@ -85,14 +90,22 @@ export function AdminYoutubePlayerWithVolume({
   videoId,
   className = '',
   playerClassName = '',
+  autoplay = false,
+  initialVolume = 80,
 }: Props) {
   const reactId = useId().replace(/:/g, '');
   const containerId = `admin-yt-${reactId}`;
   const playerRef = useRef<YtPlayer | null>(null);
   const [ready, setReady] = useState(false);
-  const [volume, setVolume] = useState(80);
+  const [volume, setVolume] = useState(initialVolume);
   const [muted, setMuted] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const autoplayRef = useRef(autoplay);
+  autoplayRef.current = autoplay;
+  const volumeRef = useRef(volume);
+  volumeRef.current = volume;
+  const mutedRef = useRef(muted);
+  mutedRef.current = muted;
 
   useEffect(() => {
     let cancelled = false;
@@ -127,14 +140,18 @@ export function AdminYoutubePlayerWithVolume({
             rel: 0,
             playsinline: 1,
             enablejsapi: 1,
+            autoplay: autoplayRef.current ? 1 : 0,
           },
           events: {
             onReady: (event: { target: YtPlayer }) => {
               if (cancelled) return;
               try {
-                event.target.setVolume(volume);
-                if (muted) event.target.mute();
+                event.target.setVolume(volumeRef.current);
+                if (mutedRef.current || volumeRef.current <= 0) event.target.mute();
                 else event.target.unMute();
+                if (autoplayRef.current && typeof event.target.playVideo === 'function') {
+                  event.target.playVideo();
+                }
               } catch {
                 /* ignore */
               }

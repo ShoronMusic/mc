@@ -10,6 +10,10 @@ import type { AdminLibrarySongItem } from '@/app/api/admin/library/songs/route';
 import { libraryEffectiveReleaseDateForSort } from '@/lib/library-release-sort-date';
 import { shouldShowArtistMembersLine } from '@/lib/artist-members';
 import { SongCoverThumb } from '@/components/song/SongCoverThumb';
+import {
+  GenreBestRegisteredLabelLinks,
+  useGenreBestLabelsBySongIds,
+} from '@/components/admin/GenreBestRegisteredLabels';
 
 type SortMode = 'release_new' | 'release_old' | 'spotify_popularity';
 type AdminLibraryArtistInfo = {
@@ -82,6 +86,7 @@ export default function AdminLibraryPage() {
 
   const [selectedArtist, setSelectedArtist] = useState<string | null>(null);
   const [songs, setSongs] = useState<AdminLibrarySongItem[]>([]);
+  const genreBestLabelsBySong = useGenreBestLabelsBySongIds(songs.map((s) => s.id));
   const [artistInfo, setArtistInfo] = useState<AdminLibraryArtistInfo | null>(null);
   const [sort, setSort] = useState<SortMode>('release_new');
   const [loadingSongs, setLoadingSongs] = useState(false);
@@ -471,7 +476,12 @@ export default function AdminLibraryPage() {
                             ) : null}
                           </td>
                           <td className="py-2 pr-3 align-top">{s.main_artist ?? '—'}</td>
-                          <td className="py-2 pr-3 align-top">{title}</td>
+                          <td className="py-2 pr-3 align-top">
+                            <div className="flex flex-wrap items-baseline gap-1.5">
+                              <span>{title}</span>
+                              <GenreBestRegisteredLabelLinks labels={genreBestLabelsBySong[s.id]} />
+                            </div>
+                          </td>
                           <td className="py-2 pr-3 align-top text-gray-400">{s.style ?? '—'}</td>
                           <td className="py-2 pr-3 align-top text-right tabular-nums text-gray-400">
                             {s.play_count ?? 0}

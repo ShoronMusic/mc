@@ -5,6 +5,8 @@ import {
   buildStyleMonthly,
   emptyStylesSummary,
   mergeYoutubeIndex,
+  toMusic8PublicStylesSummary,
+  slugFromDisplayTitle,
   songJsonFileName,
   youtubeIndexEntriesForSong,
 } from '@/lib/music8-catalog-json-export';
@@ -67,10 +69,16 @@ function run() {
   assert.equal(merged.OMOGaugKpzs.song_slug, 'every-breath-you-take');
 
   assert.equal(artistSlugFromName('The Police', 'x'), 'police');
+  assert.equal(slugFromDisplayTitle('Dua Lipa', "Don't Start Now", 'id'), 'dont-start-now');
 
   const summary = emptyStylesSummary();
   assert.equal(summary.length, 9);
   assert.equal(summary[0].slug, 'pop');
+  summary[0].count = 12;
+  const pub = toMusic8PublicStylesSummary(summary, '2026-09-10');
+  assert.equal(pub[0]?.totalSongs, 12);
+  assert.equal(pub[0]?.updateDate, '2026-09-10');
+  assert.equal(pub.find((s) => s.slug === 'hip-hop')?.name, 'Hip-Hop');
 
   const monthly = buildStyleMonthly(
     [

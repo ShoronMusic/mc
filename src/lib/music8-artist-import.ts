@@ -10,6 +10,7 @@ import { stripLeadingArticleForSort } from '@/lib/admin-library-index';
 import {
   formatArtistDisplayName,
   formatMusic8ArtistDisplayLines,
+  normalizeYoutubeChannelRef,
   resolveYoutubeChannelHref,
   splitMusic8ArtistDescription,
   type Music8ArtistJson,
@@ -99,14 +100,9 @@ export function extractMusic8OccupationLabels(src: Music8ArtistJson): string[] {
   return [];
 }
 
-/** YouTube チャンネル ID（UC…）を raw / URL から抽出 */
+/** YouTube チャンネル ID（UC…）または @ハンドルを raw / URL から抽出 */
 export function extractYoutubeChannelIdFromMusic8(raw: string | null | undefined): string | null {
-  const t = (raw ?? '').trim();
-  if (!t) return null;
-  if (/^UC[0-9A-Za-z_-]{20,}$/.test(t)) return t;
-  const fromUrl = t.match(/youtube\.com\/channel\/(UC[0-9A-Za-z_-]{20,})/i);
-  if (fromUrl?.[1]) return fromUrl[1];
-  return null;
+  return normalizeYoutubeChannelRef(raw);
 }
 
 /** origin → catalog_scope（未設定時の推定） */

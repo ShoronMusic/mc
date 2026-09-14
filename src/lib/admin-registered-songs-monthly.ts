@@ -1,4 +1,5 @@
 import {
+  MUSIC8_NAV_STYLE_COLORS,
   MUSIC8_NAV_STYLE_LABELS,
   MUSIC8_NAV_STYLE_SLUGS,
   music8NavStyleSlugFromName,
@@ -14,23 +15,12 @@ export const ADMIN_STYLE_MONTHLY_LABELS: Record<Music8NavStyleSlug, string> = {
 };
 
 /** WP `$dashboard_style_colors` と同期 */
-export const ADMIN_STYLE_MONTHLY_COLORS: Record<Music8NavStyleSlug, string> = {
-  pop: '#f25042',
-  dance: '#f39800',
-  alternative: '#448aca',
-  electronica: '#ffd803',
-  rb: '#8c7851',
-  'hip-hop': '#078080',
-  rock: '#6246ea',
-  metal: '#9646ea',
-  others: '#BDBDBD',
-};
+export const ADMIN_STYLE_MONTHLY_COLORS = MUSIC8_NAV_STYLE_COLORS;
 
 export type AdminRegisteredSongMonthlyRow = {
   id: string;
   style: string | null;
-  created_at: string | null;
-  catalog_published_at: string | null;
+  original_release_date: string | null;
 };
 
 export type AdminRegisteredSongsMonthlyStyle = {
@@ -69,20 +59,27 @@ export function parseAdminRegisteredSongsMonthlyYear(
   return n;
 }
 
-/** 登録日（WP の投稿日相当）: catalog_published_at → created_at */
-export function registrationTimestampIso(row: {
-  catalog_published_at?: string | null;
-  created_at?: string | null;
+/**
+ * 月次表の日付。一覧の「公開日」と同じ `original_release_date`（リリース日）。
+ * DB 登録日（created_at）や WP 投稿日（catalog_published_at）は使わない。
+ */
+export function publicReleaseTimestampIso(row: {
+  original_release_date?: string | null;
 }): string | null {
-  const published = (row.catalog_published_at ?? '').trim();
-  if (published) return published;
-  const created = (row.created_at ?? '').trim();
-  return created || null;
+  const release = (row.original_release_date ?? '').trim();
+  return release || null;
 }
 
 export function jstYearMonthFromIso(iso: string | null | undefined): { year: number; month: number } | null {
   const raw = (iso ?? '').trim();
   if (!raw) return null;
+  const dateOnly = raw.match(/^(\d{4})-(\d{2})(?:-(\d{2}))?$/);
+  if (dateOnly) {
+    const year = Number(dateOnly[1]);
+    const month = Number(dateOnly[2]);
+    if (month < 1 || month > 12) return null;
+    return { year, month };
+  }
   const d = new Date(raw);
   if (Number.isNaN(d.getTime())) {
     const m = raw.slice(0, 7).match(/^(\d{4})-(\d{2})$/);
@@ -98,8 +95,19 @@ export function jstYearMonthFromIso(iso: string | null | undefined): { year: num
   return { year: Number(m[1]), month: Number(m[2]) };
 }
 
+/** 公開日（date）が指定年の曲だけ取る範囲 */
+export function originalReleaseDateYearBounds(year: number): { gte: string; lte: string } {
+  return { gte: `${year}-01-01`, lte: `${year}-12-31` };
+}
+
 export function isMusic8NavStyleSlug(value: string): value is Music8NavStyleSlug {
   return (MUSIC8_NAV_STYLE_SLUGS as readonly string[]).includes(value);
+}
+
+/** 一覧カバー左端バー。未設定・ナビ外は others 色。 */
+export function adminRegisteredSongStyleBarColor(style: string | null | undefined): string {
+  const slug = navSlugForRegisteredSongMonthly({ songsStyle: style }) ?? 'others';
+  return ADMIN_STYLE_MONTHLY_COLORS[slug];
 }
 
 /**
@@ -148,7 +156,7 @@ export function buildAdminRegisteredSongsMonthlyDashboard(opts: {
   const catalogStyleBySongId = opts.catalogStyleBySongId ?? new Map<string, string>();
   const rows: Array<{ styleSlug: string; year: number; month: number }> = [];
   for (const song of opts.songs) {
-    const ym = jstYearMonthFromIso(registrationTimestampIso(song));
+    const ym = jstYearMonthFromIso(publicReleaseTimestampIso(song));
     if (!ym || ym.year !== opts.year) continue;
     const slug = navSlugForRegisteredSongMonthly({
       catalogStyleSlug: catalogStyleBySongId.get(song.id) ?? null,

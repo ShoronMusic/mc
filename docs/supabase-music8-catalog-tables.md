@@ -45,7 +45,8 @@ Music8 公開サイトと MusicAiChat で **曲マスタを 1 本化**するた�
 | `npx tsx scripts/import-music8-playlists-from-wp.ts` | WP REST プレイリスト → `catalog_playlists*`（既定 dry-run。`--apply`） |
 | `npx tsx scripts/backfill-music8-intro-from-wp-songs-json.ts` | 曲 JSON `content` → `songs.music8_intro`（`<p>` 除去。既定 dry-run） |
 | `npx tsx scripts/export-music8-json-from-supabase.ts` | Supabase → musicaichat/v1 + `styles_summary.json` |
-| 管理 `POST /api/admin/songs-register` | YouTube 1 曲登録 + 増分 JSON |
+| `npx tsx scripts/backfill-music8-slugs-for-songs.ts` | 洋楽で slug が空の曲に `music8_artist_slug` / `music8_song_slug` を付与（既定 dry-run。`--apply`。`--export` で JSON も書く） |
+| 管理 `POST /api/admin/songs-register` | YouTube 1 曲登録 + slug 付与 + 増分 JSON |
 | 管理 `/admin/genre-best`・`/api/admin/genre-best*` | Genre BEST 一覧・詳細・曲登録・WP 取込 |
 
 初回は既存の曲一括取り込み（`import-music8-songs-bulk.ts` / 週次同期）のあと、本インポートで style/genre を埋める。

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { artistNameToMusic8Slug, resolveYoutubeChannelHref } from '@/lib/music8-artist-display';
+import { replaceArtistMemberGraph, validateArtistMemberGraph } from '@/lib/artist-members';
+import { artistNameToMusic8Slug, normalizeYoutubeChannelRef, resolveYoutubeChannelHref } from '@/lib/music8-artist-display';
 import {
   buildNameSort,
   type Music8ArtistDbPatch,
@@ -39,7 +40,9 @@ export function buildArtistDbPatchFromAdminDraft(
   const thePrefix = synced.thePrefix;
   const occupationLabel =
     synced.occupations.length > 0 ? synced.occupations.join(', ') : null;
-  const ytUrl = resolveYoutubeChannelHref(synced.youtubeChannelId);
+  const ytRaw = synced.youtubeChannelId?.trim() || null;
+  const ytRef = normalizeYoutubeChannelRef(ytRaw) ?? ytRaw;
+  const ytUrl = resolveYoutubeChannelHref(ytRef);
 
   const patch: Music8ArtistDbPatch = {
     name,
@@ -61,7 +64,7 @@ export function buildArtistDbPatchFromAdminDraft(
     spotify_artist_images: synced.spotifyArtistImages,
     spotify_artist_popularity: synced.spotifyArtistPopularity,
     image_url: synced.spotifyArtistImages,
-    youtube_channel_id: synced.youtubeChannelId,
+    youtube_channel_id: ytRef,
     youtube_channel_url: ytUrl,
     youtube_channel_title:
       synced.youtubeChannelTitle?.trim() || (ytUrl ? `${name} YouTube Channel` : null),
@@ -82,10 +85,18 @@ export async function saveAdminArtistProfile(params: {
   artistId?: string | null;
   aiModel?: string | null;
   dryRun?: boolean;
+  memberGraph?: { memberIds: string[]; bandIds: string[] } | null;
 }): Promise<SaveAdminArtistProfileResult> {
   const name = params.draft.name.trim() || params.draft.nameBase.trim();
   if (!name) {
     return { ok: false, error: 'アーティスト名が空です。' };
+  }
+
+  let memberGraph = params.memberGraph ?? null;
+  if (memberGraph) {
+    const checked = await validateArtistMemberGraph(params.admin, params.artistId, memberGraph);
+    if (!checked.ok) return { ok: false, error: checked.error };
+    memberGraph = { memberIds: checked.memberIds, bandIds: checked.bandIds };
   }
 
   const patch = buildArtistDbPatchFromAdminDraft(params.draft, {
@@ -111,6 +122,17 @@ export async function saveAdminArtistProfile(params: {
 
   if (result.error || !result.id) {
     return { ok: false, error: result.error ?? 'artists の保存に失敗しました。' };
+  }
+
+  if (!params.dryRun && memberGraph) {
+    try {
+      await replaceArtistMemberGraph(params.admin, result.id, memberGraph);
+    } catch (e) {
+      return {
+        ok: false,
+        error: e instanceof Error ? e.message : '所属関係の保存に失敗しました。',
+      };
+    }
   }
 
   return {

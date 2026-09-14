@@ -3,7 +3,7 @@
  * JSON ファイル未エクスポートでも WP 登録済みなら DB 補完に使える。
  */
 
-import { artistNameToMusic8Slug } from '@/lib/music8-artist-display';
+import { artistNameToMusic8Slug, formatArtistDisplayName } from '@/lib/music8-artist-display';
 import { getMainArtist } from '@/lib/format-song-display';
 import { resolveArtistNameForMusic8Lookup } from '@/lib/music8-main-artist-lookup';
 import {
@@ -27,12 +27,17 @@ export type WpRestArtistCategory = {
   name?: string;
   slug?: string;
   acf?: Record<string, unknown>;
+  /** WP カテゴリの Include "The" Prefix（`"1"` なら The） */
+  prefix?: string | number | boolean;
+  the_prefix?: string | number | boolean;
+  thePrefix?: string;
 };
 
 export type WpRestSongPost = {
   id: number;
   slug?: string;
   date?: string;
+  date_gmt?: string;
   modified?: string;
   title?: { rendered?: string };
   content?: { rendered?: string };
@@ -260,12 +265,22 @@ function titleMatches(post: WpRestSongPost, songTitle: string): boolean {
 export function wpRestPostToMusic8SongJson(post: WpRestSongPost): Record<string, unknown> {
   const acf = post.acf ?? {};
   const categories = post.custom_fields?.categories ?? [];
-  const artists = categories.map((c) => ({
-    id: c.id,
-    name: c.name,
-    slug: c.slug,
-    acf: c.acf ?? {},
-  }));
+  const artists = categories.map((c) => {
+    const thePrefixRaw = c.thePrefix ?? c.the_prefix ?? c.prefix;
+    const thePrefix =
+      thePrefixRaw === '1' || thePrefixRaw === 1 || thePrefixRaw === true
+        ? 'The'
+        : typeof thePrefixRaw === 'string' && thePrefixRaw.trim()
+          ? thePrefixRaw.trim()
+          : undefined;
+    return {
+      id: c.id,
+      name: c.name,
+      slug: c.slug,
+      ...(thePrefix ? { thePrefix } : {}),
+      acf: c.acf ?? {},
+    };
+  });
 
   const ytreleasedate = typeof acf.ytreleasedate === 'string' ? acf.ytreleasedate.trim() : '';
   const spotifyRelease = typeof acf.spotify_release_date === 'string' ? acf.spotify_release_date.trim() : '';
@@ -288,6 +303,25 @@ export function wpRestPostToMusic8SongJson(post: WpRestSongPost): Record<string,
     acf,
     modified: post.modified ?? '',
   };
+}
+
+/** WP 曲 JSON（REST 変換後）のメインアーティスト表示名。`prefix=1` は The を付ける。 */
+export function displayArtistNameFromWpRestSongJson(json: Record<string, unknown>): string {
+  const artists = json.artists;
+  if (Array.isArray(artists) && artists[0] && typeof artists[0] === 'object') {
+    const first = artists[0] as { name?: unknown; thePrefix?: unknown };
+    const name = typeof first.name === 'string' ? first.name.trim() : '';
+    if (name) {
+      const prefix = typeof first.thePrefix === 'string' ? first.thePrefix.trim() : '';
+      return formatArtistDisplayName(name, prefix || null) || name;
+    }
+  }
+  const acf = json.acf && typeof json.acf === 'object' ? (json.acf as Record<string, unknown>) : null;
+  for (const key of ['spotify_artists01', 'spotify_artists'] as const) {
+    const v = acf?.[key];
+    if (typeof v === 'string' && v.trim()) return v.trim();
+  }
+  return '';
 }
 
 async function fetchPostById(base: string, postId: number): Promise<WpRestSongPost | null> {

@@ -38,6 +38,12 @@ export interface Music8SongExtract {
   vocalLabel: string;
   /** `facts_for_ai` 行の「スタイル：…」から抽出（無ければ空） */
   structuredStyleFromFacts: string;
+  /** Spotify ジャケット URL（あれば） */
+  spotifyImages: string;
+  /** Music8 WP `thumbnail` など */
+  thumbnailUrl: string;
+  /** YouTube video id（曲 JSON にあれば） */
+  youtubeVideoId: string;
 }
 
 const KNOWN_STYLE_NAMES = new Set(Object.values(MUSIC8_STYLE_ID_TO_NAME));
@@ -98,9 +104,104 @@ function asStr(x: unknown): string {
   return '';
 }
 
-function asArr(x: unknown): unknown[] {
+/** 配列、または単体オブジェクトを 1 件リストにする（WP `vocals: { name: "M" }` 用） */
+function asItemList(x: unknown): unknown[] {
   if (Array.isArray(x)) return x;
+  if (x && typeof x === 'object') return [x];
   return [];
+}
+
+function emptySongExtract(): Music8SongExtract {
+  return {
+    description: '',
+    genres: [],
+    releaseDate: '',
+    styleIds: [],
+    styleNames: [],
+    primaryArtistNameJa: '',
+    vocalLabel: '',
+    structuredStyleFromFacts: '',
+    spotifyImages: '',
+    thumbnailUrl: '',
+    youtubeVideoId: '',
+  };
+}
+
+/** classification に混入したボーカル記号（M / F）かどうか */
+export function isMusic8VocalClassificationToken(raw: string | null | undefined): boolean {
+  const t = (raw ?? '').trim();
+  if (!t) return false;
+  return /^(m|f|male|female|fm|mf)$/i.test(t.replace(/[\s._-]+/g, ''));
+}
+
+export function filterMusic8GenreLabels(labels: string[]): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of labels) {
+    const t = (raw ?? '').trim();
+    if (!t || isMusic8VocalClassificationToken(t)) continue;
+    const key = t.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(t);
+  }
+  return out;
+}
+
+function pickSongCoverFields(obj: Record<string, unknown>): {
+  spotifyImages: string;
+  thumbnailUrl: string;
+  youtubeVideoId: string;
+} {
+  const acf = asObj(obj.acf);
+  const spotifyImages = (
+    asStr(obj.spotify_images ?? '') ||
+    (acf ? asStr(acf.spotify_images ?? '') : '')
+  ).trim();
+  const thumbnailUrl = asStr(obj.thumbnail ?? obj.thumbnailUrl ?? obj.thumbnail_url ?? '').trim();
+  const fromTop = asStr(obj.videoId ?? obj.video_id ?? '').trim();
+  const yt = asObj(obj.youtube);
+  const fromYt = yt ? asStr(yt.video_id ?? yt.videoId ?? '').trim() : '';
+  return {
+    spotifyImages,
+    thumbnailUrl,
+    youtubeVideoId: fromTop || fromYt,
+  };
+}
+
+function canonicalStyleScore(ex: Music8SongExtract): number {
+  if (ex.styleIds.some((id) => Boolean(MUSIC8_STYLE_ID_TO_NAME[String(id)]))) return 3;
+  if ((ex.structuredStyleFromFacts ?? '').trim()) return 2;
+  if (ex.styleNames.some((n) => KNOWN_STYLE_NAMES.has((n ?? '').trim()))) return 1;
+  return 0;
+}
+
+/** ソングデータタブ等: 複数ソースを 1 件にまとめる（スタイル ID を classification より優先） */
+export function mergeMusic8SongExtracts(parts: Music8SongExtract[]): Music8SongExtract | null {
+  if (parts.length === 0) return null;
+  const out: Music8SongExtract = { ...emptySongExtract(), ...parts[0] };
+  out.genres = filterMusic8GenreLabels(out.genres);
+  for (const p of parts.slice(1)) {
+    if (!out.releaseDate && p.releaseDate) out.releaseDate = p.releaseDate;
+    const pGenres = filterMusic8GenreLabels(p.genres);
+    if (pGenres.length > out.genres.length) out.genres = pGenres;
+    if (canonicalStyleScore(p) > canonicalStyleScore(out)) {
+      out.styleIds = p.styleIds;
+      out.styleNames = p.styleNames;
+      if (p.structuredStyleFromFacts) out.structuredStyleFromFacts = p.structuredStyleFromFacts;
+    }
+    if (!out.vocalLabel && p.vocalLabel) out.vocalLabel = p.vocalLabel;
+    if (!out.structuredStyleFromFacts && p.structuredStyleFromFacts) {
+      out.structuredStyleFromFacts = p.structuredStyleFromFacts;
+    }
+    if (!out.primaryArtistNameJa && p.primaryArtistNameJa) {
+      out.primaryArtistNameJa = p.primaryArtistNameJa;
+    }
+    if (!out.spotifyImages && p.spotifyImages) out.spotifyImages = p.spotifyImages;
+    if (!out.thumbnailUrl && p.thumbnailUrl) out.thumbnailUrl = p.thumbnailUrl;
+    if (!out.youtubeVideoId && p.youtubeVideoId) out.youtubeVideoId = p.youtubeVideoId;
+  }
+  return out;
 }
 
 /** ISO 日付または YYYY-MM-DD から YYYY.MM を返す */
@@ -512,19 +613,24 @@ function extractMusicaichatV1SongFields(data: unknown): Music8SongExtract | null
       }
     }
   }
-  if (styleNames.length === 0 && genres.length > 0) {
-    for (const g of genres) styleNames.push(g);
+  if (styleNames.length === 0 && structuredStyleFromFacts) {
+    styleNames.push(structuredStyleFromFacts);
+  } else if (styleNames.length === 0 && genres.length > 0) {
+    for (const g of filterMusic8GenreLabels(genres)) styleNames.push(g);
   }
+
+  const cover = pickSongCoverFields(obj);
 
   return {
     description: (descFromFacts || creditLine).trim().replace(/(\r?\n){2,}/g, '\n'),
-    genres,
+    genres: filterMusic8GenreLabels(genres),
     releaseDate: dateSrc ? formatReleaseYearMonth(dateSrc) : '',
     styleIds,
     styleNames,
     primaryArtistNameJa,
     vocalLabel,
     structuredStyleFromFacts,
+    ...cover,
   };
 }
 
@@ -538,16 +644,7 @@ export function extractMusic8SongFields(data: unknown): Music8SongExtract {
   if (mc) return mc;
 
   const obj = asObj(data);
-  const result: Music8SongExtract = {
-    description: '',
-    genres: [],
-    releaseDate: '',
-    styleIds: [],
-    styleNames: [],
-    primaryArtistNameJa: '',
-    vocalLabel: '',
-    structuredStyleFromFacts: '',
-  };
+  const result: Music8SongExtract = emptySongExtract();
 
   if (!obj) return result;
 
@@ -564,19 +661,21 @@ export function extractMusic8SongFields(data: unknown): Music8SongExtract {
 
   const genresSrc = obj.genres ?? obj.genre_data;
   if (Array.isArray(genresSrc)) {
-    result.genres = genresSrc
-      .map((g) => {
-        const item = asObj(g);
-        if (item && typeof item.name === 'string') return item.name.trim();
-        return '';
-      })
-      .filter(Boolean);
+    result.genres = filterMusic8GenreLabels(
+      genresSrc
+        .map((g) => {
+          const item = asObj(g);
+          if (item && typeof item.name === 'string') return item.name.trim();
+          return typeof g === 'string' ? g.trim() : '';
+        })
+        .filter(Boolean),
+    );
   }
 
   const dateSrc = asStr(obj.releaseDate ?? obj.date ?? obj.date_gmt ?? '');
   result.releaseDate = dateSrc ? formatReleaseYearMonth(dateSrc) : '';
 
-  const vocalSrc = [...asArr(obj.vocal_data), ...asArr(obj.vocals)];
+  const vocalSrc = [...asItemList(obj.vocal_data), ...asItemList(obj.vocals)];
   if (vocalSrc.length > 0) {
     const names: string[] = [];
     const seen = new Set<string>();
@@ -609,6 +708,11 @@ export function extractMusic8SongFields(data: unknown): Music8SongExtract {
       result.styleNames.push(name ?? String(n));
     }
   }
+
+  const cover = pickSongCoverFields(obj);
+  result.spotifyImages = cover.spotifyImages;
+  result.thumbnailUrl = cover.thumbnailUrl;
+  result.youtubeVideoId = cover.youtubeVideoId;
 
   return result;
 }
@@ -653,12 +757,15 @@ export function extractMusic8SongFieldsFromPersistedSnapshot(data: unknown): Mus
 
   return {
     description: '',
-    genres,
+    genres: filterMusic8GenreLabels(genres),
     releaseDate,
     styleIds,
     styleNames,
     primaryArtistNameJa,
     vocalLabel,
     structuredStyleFromFacts,
+    spotifyImages: typeof o.spotify_images === 'string' ? o.spotify_images.trim() : '',
+    thumbnailUrl: typeof o.thumbnail === 'string' ? o.thumbnail.trim() : '',
+    youtubeVideoId: typeof o.videoId === 'string' ? o.videoId.trim() : '',
   };
 }

@@ -56,7 +56,9 @@ Genre / Style タブ内はタイトル A–Z。
 | `/admin/genre-best` | 一覧（件数・タブ・サムネ／タイトル／曲数）＋ WP 取込 |
 | `/admin/genre-best/[slug]` | 詳細（カバー・字幕・曲一覧・曲削除） |
 | `/admin/library/artist` | 曲行末尾 **Genre BEST** ボタン＋登録済み `[ タイトル ]` ラベル |
-| `/admin/songs/[songId]` | プレイヤー下 **Genre BEST** ボタン＋登録済みラベル（リンク） |
+| `/admin/library` | アーティスト曲一覧のタイトル横に登録済みラベル |
+| `/admin/songs/[songId]` | プレイヤー下 **Genre BEST** ボタン＋登録済みラベル（リンク）。曲詳細から開くアーティスト詳細モーダルの曲一覧にも同じラベル |
+| 邦楽アーティスト編集 | 登録曲一覧に Genre BEST 登録済みラベル |
 
 詳細の曲順: `original_release_date` DESC（無ければ `position`）。
 

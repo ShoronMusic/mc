@@ -47,6 +47,7 @@ function parseArgs(argv: string[]) {
   return {
     songId: args.get('song-id')?.trim() || '',
     full: argv.includes('--full'),
+    summary: argv.includes('--summary'),
     year: args.get('year') ? Number(args.get('year')) : new Date().getFullYear(),
     out: args.get('out')?.trim() || '',
     limit: args.get('limit') ? Number(args.get('limit')) : null,
@@ -60,7 +61,8 @@ async function main() {
   if (opts.help) {
     console.log(`Usage:
   npx tsx scripts/export-music8-json-from-supabase.ts --song-id=<uuid>
-  npx tsx scripts/export-music8-json-from-supabase.ts --full [--year=2026] [--out=dir]`);
+  npx tsx scripts/export-music8-json-from-supabase.ts --full [--year=2026] [--out=dir]
+  npx tsx scripts/export-music8-json-from-supabase.ts --summary`);
     process.exit(0);
   }
 
@@ -84,8 +86,16 @@ async function main() {
     process.exit(0);
   }
 
+  if (opts.summary && !opts.full && !opts.songId) {
+    const summary = await rebuildStylesSummaryFromDb(admin, outDir);
+    const monthly = await rebuildStyleMonthlyFromDb(admin, opts.year, outDir);
+    console.log('[done] styles', summary.map((s) => `${s.slug}:${s.count}`).join(' '));
+    console.log('[done] style-monthly', monthly.year, monthly.total);
+    process.exit(0);
+  }
+
   if (!opts.full) {
-    console.error('--song-id または --full を指定してください。');
+    console.error('--song-id / --full / --summary のいずれかを指定してください。');
     process.exit(1);
   }
 

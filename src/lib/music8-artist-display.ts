@@ -37,13 +37,55 @@ export interface Music8ArtistJson {
   [key: string]: unknown;
 }
 
-/** Music8 `youtube_channel` を別タブ用の URL に正規化 */
+const YOUTUBE_UC_ID_RE = /^UC[0-9A-Za-z_-]{20,}$/;
+const YOUTUBE_HANDLE_RE = /^@[\w.-]{3,30}$/;
+
+/**
+ * `youtube_channel_id` 用に UC ID または @ハンドルへ正規化する。
+ * 例: UC… / @ArtOfficialMusic / https://www.youtube.com/@ArtOfficialMusic
+ */
+export function normalizeYoutubeChannelRef(raw: string | null | undefined): string | null {
+  const t = (raw ?? '').trim();
+  if (!t) return null;
+  if (YOUTUBE_UC_ID_RE.test(t)) return t;
+  if (YOUTUBE_HANDLE_RE.test(t)) return t;
+
+  const withProto = /^https?:\/\//i.test(t)
+    ? t
+    : /(?:^|\.)youtube\.com\//i.test(t) || /^youtu\.be\//i.test(t)
+      ? `https://${t.replace(/^\/+/, '')}`
+      : null;
+  if (withProto) {
+    try {
+      const u = new URL(withProto);
+      const host = u.hostname.replace(/^www\./i, '');
+      if (host === 'youtube.com' || host === 'youtu.be' || host === 'm.youtube.com') {
+        const path = u.pathname.replace(/\/+$/, '');
+        const channel = path.match(/^\/channel\/(UC[0-9A-Za-z_-]{20,})$/i);
+        if (channel?.[1]) return channel[1];
+        const handle = path.match(/^\/@([\w.-]{3,30})$/);
+        if (handle?.[1]) return `@${handle[1]}`;
+      }
+    } catch {
+      /* fall through */
+    }
+  }
+
+  const fromChannel = t.match(/youtube\.com\/channel\/(UC[0-9A-Za-z_-]{20,})/i);
+  if (fromChannel?.[1]) return fromChannel[1];
+  const fromHandle = t.match(/youtube\.com\/@([\w.-]{3,30})/i);
+  if (fromHandle?.[1]) return `@${fromHandle[1]}`;
+  return null;
+}
+
+/** Music8 `youtube_channel` / 管理 `youtube_channel_id` を別タブ用の URL に正規化 */
 export function resolveYoutubeChannelHref(raw: string | null | undefined): string | null {
   const s = (raw ?? '').trim();
   if (!s) return null;
+  const ref = normalizeYoutubeChannelRef(s);
+  if (ref?.startsWith('@')) return `https://www.youtube.com/${ref}`;
+  if (ref && YOUTUBE_UC_ID_RE.test(ref)) return `https://www.youtube.com/channel/${ref}`;
   if (/^https?:\/\//i.test(s)) return s;
-  if (s.startsWith('@')) return `https://www.youtube.com/${s}`;
-  if (/^UC[0-9A-Za-z_-]{20,}$/.test(s)) return `https://www.youtube.com/channel/${s}`;
   return `https://www.youtube.com/channel/${encodeURIComponent(s)}`;
 }
 

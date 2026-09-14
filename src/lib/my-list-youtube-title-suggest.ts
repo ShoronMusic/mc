@@ -276,7 +276,7 @@ export function suggestMyListArtistTitleFromYoutubeStyle(
   storedTitle: string | null | undefined,
 ): MyListArtistTitleSuggestion {
   const a = normalizeSpaces(storedArtist ?? '');
-  const t = (storedTitle ?? '').trim();
+  const t = (storedTitle ?? '').replace(/\s*\/{3,}\s*/g, ' - ').replace(/\s+\/\s+/g, ' - ').trim();
 
   if (!t) {
     const fromStored = parseCommaSeparatedArtists(a);

@@ -40,6 +40,17 @@ export function swapIfCompoundArtistStuckInSongSlot(
 const ARTIST_TITLE_SEPARATOR = /\s*[-\u2013\u2014\u2015\uFF0D]\s*/;
 /** 「Passenger | It Was Gonna Be You」型。前後空白付きパイプだけ（COLORS の `| A COLORS SHOW` とは別扱い） */
 const ARTIST_TITLE_SPACED_PIPE = /\s+\|\s+/;
+/** Vulfpeck 公式など「Artist /// Song」。拡張が潰した「Artist / Song」も同じ区切り */
+const ARTIST_TITLE_TRIPLE_SLASH = /\s*\/{3,}\s*/;
+const ARTIST_TITLE_SPACED_SLASH = /\s+\/\s+/;
+
+function normalizeSlashArtistTitleSeparator(title: string): string {
+  return title.replace(ARTIST_TITLE_TRIPLE_SLASH, ' - ').replace(ARTIST_TITLE_SPACED_SLASH, ' - ');
+}
+
+function titleHasSlashArtistSeparator(title: string): boolean {
+  return ARTIST_TITLE_TRIPLE_SLASH.test(title) || ARTIST_TITLE_SPACED_SLASH.test(title);
+}
 
 /**
  * パイプ右側が曲名ではなく、Vevo / COLORS / Official Video 等の末尾メタのとき true。
@@ -214,7 +225,8 @@ export function cleanAuthor(author: string): string {
   return author
     .replace(/\s*-\s*Topic\s*$/i, '') // "Prince - Topic" → "Prince"
     .replace(/\s*VEVO\s*$/i, '')
-    .replace(/\s*Official\s*$/i, '')
+    /** 単語としての Official のみ（ArtOfficial のような名前の一部は残す） */
+    .replace(/\s+Official\s*$/i, '')
     .trim();
 }
 
@@ -856,7 +868,7 @@ export function parsePerformerPlaysSongFromDescription(
 /**
  * タイトルからアーティストと曲名を分解。
  * 1) Artist "Song" / Artist 'Song' の引用符パターン
- * 2) 区切り（ - / – / — / ―）で分割（最初の区切りで artist / 残りを song）
+ * 2) 区切り（ - / – / — / ― / ///）で分割（最初の区切りで artist / 残りを song）
  * 取れなければ null
  * @param allowQuotedSongWithTrailingParens Genius 典型の「Artist "曲" (Live Performance)」のみ true（全体タイトルに付けると誤爆する）
  * @param allowColonQuotedSongWithTrailingParens Apple Music 典型の「Artist: "曲" (Live at …)」や「Artist: '曲' Live」のみ true
@@ -870,7 +882,9 @@ export function parseArtistTitle(
 ): { artist: string; song: string } | null {
   const raw0 = title.trim();
   if (!raw0) return null;
-  const raw = raw0.replace(/[\u201c\u201d]/g, '"').replace(/[\u2018\u2019]/g, "'");
+  const raw = normalizeSlashArtistTitleSeparator(
+    raw0.replace(/[\u201c\u201d]/g, '"').replace(/[\u2018\u2019]/g, "'"),
+  );
 
   const playsParsed = parsePerformerPlaysSongTitle(raw);
   if (playsParsed) return playsParsed;
@@ -1745,6 +1759,10 @@ export function getArtistAndSong(
     if (keepArtistSongOrderForCapsTitle || keepLongerCapsTokenLeftAsArtist) {
       shouldSwap = false;
     }
+    // 「VULFPECK /// Song」「VULFPECK / Song」は左=アーティスト固定
+    if (titleHasSlashArtistSeparator(titleForParse)) {
+      shouldSwap = false;
+    }
 
     // 「バンド名! - 曲名」はそのまま、「曲名 - バンド名!」だけ入れ替え（! を looksLikeArtistName に入れても
     // 「Tokyo Calling」が右側アーティスト扱いされて誤スワップするため、末尾 ! で最終判定する）
@@ -1944,7 +1962,9 @@ export function formatArtistTitle(
   };
   const opts = Object.keys(optsBase).length > 0 ? optsBase : undefined;
   const hasArtistTitleSplit =
-    ARTIST_TITLE_SEPARATOR.test(cleaned) || ARTIST_TITLE_SPACED_PIPE.test(cleaned);
+    ARTIST_TITLE_SEPARATOR.test(cleaned) ||
+    ARTIST_TITLE_SPACED_PIPE.test(cleaned) ||
+    titleHasSlashArtistSeparator(cleaned);
 
   if (!authorName) {
     if (opts || hasArtistTitleSplit) {

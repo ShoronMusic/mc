@@ -54,6 +54,11 @@ import { emptyAdminArtistProfileDraft } from '@/lib/admin-artist-profile-parse';
 assert.equal(normalizeAdminArtistOriginCountry('USA'), 'US');
 assert.equal(normalizeAdminArtistOriginCountry('Germany'), 'GER');
 assert.equal(extractYoutubeChannelIdClient('UCVBn_73DiztMsn9G6nKsn7g'), 'UCVBn_73DiztMsn9G6nKsn7g');
+assert.equal(
+  extractYoutubeChannelIdClient('https://www.youtube.com/@ArtOfficialMusic'),
+  '@ArtOfficialMusic',
+);
+assert.equal(extractYoutubeChannelIdClient('@ArtOfficialMusic'), '@ArtOfficialMusic');
 
 {
   const empty = mergeExternalGeminiArtistClipboardIntoDraft(

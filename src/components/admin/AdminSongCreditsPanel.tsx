@@ -14,6 +14,7 @@ export type AdminSongCreditRow = {
   displayOrder: number;
   /** 選曲／曲登録由来で未整備 */
   isNewArtist?: boolean;
+  spotifyArtistId?: string | null;
 };
 
 type Props = {
