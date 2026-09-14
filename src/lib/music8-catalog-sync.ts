@@ -66,6 +66,17 @@ async function resolveStyleIds(admin: SupabaseClient, slugs: string[]): Promise<
   return slugs.map((s) => bySlug.get(s)).filter((id): id is string => Boolean(id));
 }
 
+/** `songs.style`（Pop / Metal 等）を `song_styles` の1件に揃える。公開スタイル一覧の正本。 */
+export async function syncSongStylesFromAppStyle(
+  admin: SupabaseClient,
+  songId: string,
+  styleName: string | null | undefined,
+): Promise<void> {
+  const slug = music8NavStyleSlugFromName(styleName ?? '');
+  const ids = slug ? await resolveStyleIds(admin, [slug]) : [];
+  await replaceSongLinks(admin, 'song_styles', songId, 'style_id', ids);
+}
+
 export type SyncMusic8CatalogTaxonomyResult = {
   styles: number;
   genres: number;

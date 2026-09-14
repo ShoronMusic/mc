@@ -19,6 +19,8 @@ import {
   parseMusicLibraryPageParam,
   sliceMusicLibraryPage,
   withMusicLibraryAutoplay,
+  musicLibraryAdminArtistEditHref,
+  musicLibraryAdminSongEditHref,
 } from '@/lib/music-library-urls';
 import { MUSIC8_NAV_STYLE_COLORS, music8NavStyleColor } from '@/lib/music8-catalog-slugs';
 
@@ -67,5 +69,14 @@ assert.equal(withMusicLibraryAutoplay('/music/styles/pop/2'), '/music/styles/pop
 assert.equal(withMusicLibraryAutoplay('/music/styles/pop/2', 3), '/music/styles/pop/2?autoplay=1&i=3');
 assert.deepEqual(parseMusicLibraryAutoplayIndex({ autoplay: '1', i: '4' }), { autoplay: true, index: 4 });
 assert.deepEqual(parseMusicLibraryAutoplayIndex({}), { autoplay: false, index: 0 });
+
+assert.equal(
+  musicLibraryAdminSongEditHref('a1e377a4-ad68-4f77-9867-dd3b59bff3a'),
+  '/admin/songs/a1e377a4-ad68-4f77-9867-dd3b59bff3a',
+);
+assert.equal(
+  musicLibraryAdminArtistEditHref({ name: 'Orbit Culture', slug: 'orbit-culture' }),
+  '/admin/library/artist?slug=orbit-culture&name=Orbit+Culture',
+);
 
 console.log('music-library-urls.unit-test: ok');

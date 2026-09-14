@@ -11,6 +11,7 @@ import {
   youtubeIndexEntriesForSong,
 } from '@/lib/music8-catalog-json-export';
 import {
+  music8NavStyleColumnValues,
   music8NavStyleSlugFromName,
   music8NavStyleSlugFromStyleIds,
   slugifyCatalogLabel,
@@ -22,6 +23,9 @@ function run() {
   assert.equal(music8NavStyleSlugFromStyleIds([2844, 2849]), 'pop');
   assert.equal(music8NavStyleSlugFromName('R&B'), 'rb');
   assert.equal(music8NavStyleSlugFromName('Hip-hop'), 'hip-hop');
+  assert.equal(music8NavStyleSlugFromName('Metal'), 'metal');
+  assert.deepEqual(music8NavStyleColumnValues('metal'), ['Metal']);
+  assert.ok(music8NavStyleColumnValues('alternative').includes('Alternative rock'));
   assert.equal(slugifyCatalogLabel('New Wave'), 'new-wave');
   assert.equal(youtubeVideoIdFromUnknown('https://www.youtube.com/watch?v=dQw4w9WgXcQ'), 'dQw4w9WgXcQ');
   assert.equal(youtubeVideoIdFromUnknown('dQw4w9WgXcQ'), 'dQw4w9WgXcQ');

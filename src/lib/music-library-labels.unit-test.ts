@@ -3,8 +3,11 @@
  */
 import assert from 'node:assert/strict';
 import {
+  formatMusicLibraryActivePeriod,
+  formatMusicLibraryAgeParen,
   formatMusicLibraryOriginLabel,
   formatMusicLibraryYearMonth,
+  musicLibraryArtistNameFromRow,
   musicLibraryVocalLabels,
   parseMusicLibraryGenresColumn,
   parseMusicLibrarySnapshotArtists,
@@ -19,6 +22,16 @@ assert.equal(formatMusicLibraryYearMonth('2026'), '2026');
 assert.equal(formatMusicLibraryYearMonth(null), null);
 assert.equal(formatMusicLibraryYearMonth(''), null);
 assert.equal(formatMusicLibraryYearMonth('tba'), null);
+
+assert.equal(formatMusicLibraryAgeParen('78歳'), '(78)');
+assert.equal(formatMusicLibraryAgeParen('享年63歳'), '(享年63)');
+assert.equal(formatMusicLibraryAgeParen(null), null);
+
+assert.equal(formatMusicLibraryActivePeriod('2001 - -'), '2001 -');
+assert.equal(formatMusicLibraryActivePeriod('2001 -'), '2001 -');
+assert.equal(formatMusicLibraryActivePeriod('1977 - 1986'), '1977 - 1986');
+assert.equal(formatMusicLibraryActivePeriod('1966 - '), '1966 -');
+assert.equal(formatMusicLibraryActivePeriod(null), null);
 
 assert.equal(formatMusicLibraryOriginLabel('UK'), 'UK');
 assert.equal(formatMusicLibraryOriginLabel('GBR'), 'UK');
@@ -70,5 +83,24 @@ assert.deepEqual(
     { name: 'Tomoko Aran', slug: 'tomoko-aran' },
   ],
 );
+
+assert.equal(
+  musicLibraryArtistNameFromRow({ name_base: 'Weeknd', the_prefix: 'The', name: 'Weeknd' }),
+  'The Weeknd',
+);
+assert.equal(
+  musicLibraryArtistNameFromRow({ name: 'The Police', name_base: 'Police', the_prefix: 'The' }),
+  'The Police',
+);
+assert.equal(
+  musicLibraryArtistNameFromRow({ name: 'The Weeknd', the_prefix: 'The' }),
+  'The Weeknd',
+);
+assert.equal(
+  musicLibraryArtistNameFromRow({ name: 'Weeknd', the_prefix: 'The' }),
+  'The Weeknd',
+);
+assert.equal(musicLibraryArtistNameFromRow({ name: 'Madonna' }), 'Madonna');
+assert.equal(musicLibraryArtistNameFromRow({ name_base: '1975', the_prefix: 'The' }), 'The 1975');
 
 console.log('music-library-labels.unit-test: ok');

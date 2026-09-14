@@ -149,3 +149,16 @@ export function parseMusicLibraryAutoplayIndex(
   const index = Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0;
   return { autoplay, index };
 }
+
+export function musicLibraryAdminSongEditHref(songId: string): string {
+  return `/admin/songs/${encodeURIComponent(songId.trim())}`;
+}
+
+export function musicLibraryAdminArtistEditHref(opts: { name?: string | null; slug?: string | null }): string {
+  const qs = new URLSearchParams();
+  const slug = (opts.slug ?? '').trim();
+  const name = (opts.name ?? '').trim();
+  if (slug) qs.set('slug', slug);
+  if (name) qs.set('name', name);
+  return `/admin/library/artist?${qs.toString()}`;
+}

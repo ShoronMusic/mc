@@ -12,7 +12,8 @@ Music8 静的サイトは JSON のまま並走する。`wp/` と `E:\m8` は参�
 - データは GCS JSON ではなく Supabase（`songs` / `song_videos` / `artists` / `song_styles`）。
 - カタログフィルタは部屋ライブラリと同じ趣旨。ma は **明示 `domestic` 以外**（`western` および未設定の `unknown`。Music8 曲の大半は unknown）。mc は `all`。`eq western` の厳密一致はしない。
 - 一覧は一律 **40 曲/ページ**（Music8 はスタイル40・ジャンル/アーティスト曲20。本サイトは揃える）。
-- 曲一覧行: タイトル横にボーカル（`F` と `M` は別ラベル）と小さめジャンル（複数は `Pop / R&B`）。複数アーティストは名前ごとに国籍（例 `The Weeknd` `CAN` · `Tomoko Aran` `JP`）。右端は年月（例 `2026.09`）。欠落は非表示。
+- 曲一覧行: タイトル横にボーカル（`F` と `M` は別ラベル）と小さめジャンル（複数は `Pop / R&B`）。複数アーティストは名前ごとに国籍（例 `The Weeknd` `CAN` · `Tomoko Aran` `JP`）。`artists.the_prefix` がある場合は The を付けて表示し、冠詞あり／なしでも同一人物として照合する。右端は年月（例 `2026.09`）。欠落は非表示。
+- 再生中の右カラムはタブ切替。先頭 `SONG DATA`（曲詳細）、続けて曲のアーティスト名（複数なら複数。例 `SONG DATA | The Police | Prince`）。タブ幅は件数で等分。アーティストタブは `/api/music/artist` でプロフィールを取得。`STYLE_ADMIN` ログイン時のみ、曲詳細・アーティスト情報の右上に管理画面（`/admin/songs/{id}` / `/admin/library/artist`）への別タブリンクを出す。
 - 連続再生はページ内 YouTube IFrame のみ。部屋の Ably・announce・視聴履歴には書かない。
 - 9 スタイル（pop … others）。トップ見出しは「9 Styles」（Music8 トップの「8 Styles」は使わない）。
 - AI 曲解説は出さない。
@@ -53,12 +54,12 @@ Music8 静的サイトは JSON のまま並走する。`wp/` と `E:\m8` は参�
 ## 課題（バックログ）
 
 - slug 欠落曲は詳細 URL 不能。`scripts/backfill-music8-slugs-for-songs.ts` の適用が前提。
-- `song_styles` 未紐付けはスタイル一覧から落ちる（レガシー `songs.style` フォールバックは未実装）。紐付け自体は約 2.2 万件あり、欠落の主因ではなかった。
+- `songs.style` と `song_styles` が食い違うと誤掲載になる（例 Metal 曲が Pop 一覧に残る）。一覧は `songs.style` が別ナビなら除外し、`songs.style` 一致曲は JOIN 欠落でも含める。管理の曲保存／一括スタイル変更で `song_styles` を同期する。
 - 部屋索引は `main_artist` 文字列、公開 URL は slug。不一致は query 層で slug 優先。
 - 管理登録から一覧反映までメモリキャッシュ約2分（全件フォールバック時）。JOIN ページは都度 DB。
 - YouTube 埋め込み不可・地域制限は次曲スキップ。部屋選曲とは別失敗モード。
 - 公開 BFF は service role。anon 直読みはしない。レート制限は運用で見直す。
-- スタイル一覧は `songs` × `song_styles` の JOIN + `range`（失敗時は全件取得フォールバック）。
+- スタイル一覧は `songs` × `song_styles` の JOIN + `range` に、`songs.style` 列の一致曲をマージ（失敗時は全件取得フォールバック）。
 - SEO: 公開 index 可。canonical は musicai.jp/music（mc は musicchat.jp/music）。
 - PWA / モバイルは初版レスポンシブのみ。インストール導線は後続。
 - Music8 との意図的差分: ページサイズ40統一、Genre BEST が DB、データが DB 直読み、UI が ma ダーク。

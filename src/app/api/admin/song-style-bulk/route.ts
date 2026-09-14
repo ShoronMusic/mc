@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { requireStyleAdminApi } from '@/lib/admin-access';
 import { SONG_STYLE_OPTIONS } from '@/lib/song-styles';
+import { syncSongStylesFromAppStyle } from '@/lib/music8-catalog-sync';
 
 export const dynamic = 'force-dynamic';
 
@@ -64,9 +65,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  const updatedIds = (Array.isArray(data) ? data : [])
+    .map((row) => (row && typeof (row as { id?: unknown }).id === 'string' ? (row as { id: string }).id : ''))
+    .filter(Boolean);
+  await Promise.all(updatedIds.map((id) => syncSongStylesFromAppStyle(admin, id, style)));
+
   return NextResponse.json({
     ok: true,
     style,
-    updatedCount: Array.isArray(data) ? data.length : 0,
+    updatedCount: updatedIds.length,
   });
 }

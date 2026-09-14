@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { requireStyleAdminApi } from '@/lib/admin-access';
 import { uniqueNormalizedGenreNames } from '@/lib/admin-song-artist-defaults';
+import { syncSongStylesFromAppStyle } from '@/lib/music8-catalog-sync';
 import { normalizeSongCatalogScope, type SongCatalogScope } from '@/lib/song-catalog-scope';
 
 export const dynamic = 'force-dynamic';
@@ -127,6 +128,7 @@ export async function POST(request: Request) {
           { status: 500 },
         );
       }
+      await syncSongStylesFromAppStyle(admin, songId, style);
       return NextResponse.json({
         ok: true,
         songId,
@@ -138,5 +140,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  await syncSongStylesFromAppStyle(admin, songId, style);
   return NextResponse.json({ ok: true, songId });
 }

@@ -50,11 +50,13 @@ export default async function MusicLibraryStylePagedPage({ params, searchParams 
         nextPageHref={nextPageHref}
         initialAutoplay={autoplay.autoplay}
         initialIndex={autoplay.index}
-      />
-      <MusicLibraryPagination
-        page={result.page}
-        totalPages={result.totalPages}
-        hrefForPage={(n) => musicLibraryStyleHref(result.slug, n)}
+        listFooter={
+          <MusicLibraryPagination
+            page={result.page}
+            totalPages={result.totalPages}
+            hrefForPage={(n) => musicLibraryStyleHref(result.slug, n)}
+          />
+        }
       />
     </div>
   );

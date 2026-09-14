@@ -40,6 +40,29 @@ const ORIGIN_SHORT: Record<string, string> = {
   JAPAN: 'JP',
 };
 
+/** 日本語名横の年齢。`78歳` → `(78)`、`享年63歳` → `(享年63)`。 */
+export function formatMusicLibraryAgeParen(ageLabel: string | null | undefined): string | null {
+  const t = (ageLabel ?? '').trim();
+  if (!t) return null;
+  const died = t.match(/享年\s*(\d+)/);
+  if (died) return `(享年${died[1]})`;
+  const n = t.match(/(\d+)/);
+  if (n) return `(${n[1]})`;
+  return null;
+}
+
+/** 活動期。末尾の `-` 重複（`2001 - -`）を `2001 -` にまとめる。 */
+export function formatMusicLibraryActivePeriod(raw: string | null | undefined): string | null {
+  const t = (raw ?? '').trim();
+  if (!t || t === '-' || t === '—' || t === '－') return null;
+  const collapsed = t
+    .replace(/[-–—ー−]/g, '-')
+    .replace(/(\s*-\s*)+$/g, ' -')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return collapsed || null;
+}
+
 /** アーティスト横の国籍ラベル。`UK` / `US` / `JP` など短いコード。 */
 export function formatMusicLibraryOriginLabel(raw: string | null | undefined): string | null {
   const t = (raw ?? '').trim();
@@ -128,6 +151,32 @@ export function parseMusicLibrarySnapshotArtists(
     if (out.length >= 8) break;
   }
   return out;
+}
+
+function nameAlreadyHasArticlePrefix(name: string, prefix: string): boolean {
+  return name.toLowerCase().startsWith(`${prefix.toLowerCase()} `);
+}
+
+/**
+ * DB の `the_prefix` を一覧・クレジット表示名へ。
+ * `name` がすでに The 付きなら二重にしない。
+ */
+export function musicLibraryArtistNameFromRow(row: {
+  name?: string | null;
+  name_base?: string | null;
+  the_prefix?: string | null;
+}): string {
+  const prefix = (row.the_prefix ?? '').trim();
+  const base = (row.name_base ?? '').trim();
+  const name = (row.name ?? '').trim();
+  if (base && prefix) {
+    return nameAlreadyHasArticlePrefix(base, prefix) ? base : `${prefix} ${base}`;
+  }
+  if (name) {
+    if (prefix && !nameAlreadyHasArticlePrefix(name, prefix)) return `${prefix} ${name}`;
+    return name;
+  }
+  return base;
 }
 
 /** タイトル横のジャンル。複数は `Pop / R&B` のように `/` 区切り。 */

@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { MusicLibraryPagination } from '@/components/music-library/MusicLibraryPagination';
 import { MusicLibrarySongList } from '@/components/music-library/MusicLibrarySongList';
+import { MusicLibraryStyleAdminLink } from '@/components/music-library/MusicLibraryStyleAdminLink';
 import { MusicLibraryUnavailable } from '@/components/music-library/MusicLibraryStatus';
 import {
   fetchMusicLibraryArtistPage,
@@ -10,6 +11,7 @@ import {
 } from '@/lib/music-library-query';
 import {
   isMusicLibraryReservedSlug,
+  musicLibraryAdminArtistEditHref,
   musicLibraryArtistHref,
   parseMusicLibraryAutoplayIndex,
   parseMusicLibraryPageParam,
@@ -42,7 +44,10 @@ export default async function MusicLibraryArtistPage({ params, searchParams }: P
 
   return (
     <div className="space-y-8">
-      <header className="flex flex-col gap-4 sm:flex-row">
+      <header className="relative flex flex-col gap-4 pr-20 sm:flex-row">
+        <MusicLibraryStyleAdminLink
+          href={musicLibraryAdminArtistEditHref({ name: profile.name, slug: profile.slug })}
+        />
         {profile.imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -137,11 +142,13 @@ export default async function MusicLibraryArtistPage({ params, searchParams }: P
           nextPageHref={nextPageHref}
           initialAutoplay={autoplay.autoplay}
           initialIndex={autoplay.index}
-        />
-        <MusicLibraryPagination
-          page={result.page}
-          totalPages={result.totalPages}
-          hrefForPage={(n) => musicLibraryArtistHref(profile.slug, n)}
+          listFooter={
+            <MusicLibraryPagination
+              page={result.page}
+              totalPages={result.totalPages}
+              hrefForPage={(n) => musicLibraryArtistHref(profile.slug, n)}
+            />
+          }
         />
       </section>
     </div>

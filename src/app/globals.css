@@ -289,7 +289,7 @@ html.mc-prevent-pull-refresh .mc-room-viewport {
 .animate-now-playing-wave span:nth-child(4) { animation-delay: 0.3s; }
 .animate-now-playing-wave span:nth-child(5) { animation-delay: 0.4s; }
 
-/* Music Library: 停止中はスタイル色の下線のみ。再生中だけ光が走る */
+/* Music Library: 停止中は白の下線のみ。再生中だけスタイル色の光が走る */
 @keyframes music-library-now-playing-shine {
   0% {
     background-position: 0 0, -45% 0;
@@ -312,7 +312,7 @@ html.mc-prevent-pull-refresh .mc-room-viewport {
   height: 2px;
   border-radius: 999px;
   pointer-events: none;
-  background: var(--music-library-now-playing-color, #fff);
+  background: #fff;
 }
 
 .music-library-now-playing.is-playing::after {
@@ -337,6 +337,10 @@ html.mc-prevent-pull-refresh .mc-room-viewport {
   background-position: 0 0, -45% 0;
   box-shadow: 0 0 10px 1px color-mix(in srgb, var(--music-library-now-playing-color, #fff) 58%, transparent);
   animation: music-library-now-playing-shine 2.2s linear infinite;
+}
+
+html[data-theme='light'] .music-library-now-playing:not(.is-playing)::after {
+  background: #111827;
 }
 
 @media (prefers-reduced-motion: reduce) {

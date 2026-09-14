@@ -4,6 +4,7 @@
 import assert from 'node:assert/strict';
 import {
   musicLibraryArtistSlugForName,
+  musicLibrarySongBelongsToNavStyle,
   pickRankedVideosBySong,
   resolveMusicLibraryListArtists,
   sortMusicLibrarySongs,
@@ -58,9 +59,25 @@ assert.equal(card.href, '/music/police/songs/every-breath-you-take');
 assert.equal(card.artistHref, '/music/police');
 assert.equal(card.videoId, 'abc123');
 assert.equal(card.releaseDate, '1983-05-20');
+assert.equal(card.intro, null);
 assert.deepEqual(card.vocalLabels, []);
 assert.equal(card.genreLabel, null);
 assert.equal(card.artists?.[0]?.name, 'The Police');
+assert.equal(card.styleLabel, null);
+assert.equal(
+  toMusicLibrarySongCard(
+    {
+      id: 'uuid-intro',
+      main_artist: 'The Police',
+      song_title: 'Roxanne',
+      display_title: null,
+      original_release_date: '1978-01-01',
+      music8_intro: '1978年にリリースされたデビューアルバムの代表曲で、鋭いギターが印象的。',
+    },
+    null,
+  ).intro,
+  '1978年にリリースされたデビューアルバムの代表曲で、鋭いギターが印象的。',
+);
 
 const labeled = toMusicLibrarySongCard(
   {
@@ -81,6 +98,7 @@ assert.deepEqual(labeled.vocalLabels, ['F']);
 assert.equal(labeled.genreLabel, 'Pop-punk / Pop');
 assert.equal(labeled.artists?.[0]?.name, 'Shygirl');
 assert.equal(labeled.styleSlug, 'pop');
+assert.equal(labeled.styleLabel, 'Pop');
 
 const fromSnap = toMusicLibrarySongCard(
   {
@@ -173,5 +191,11 @@ assert.equal(top[1]?.songs.length, 0);
 assert.equal(musicLibrarySqlScopeMode('western'), 'exclude-domestic');
 assert.equal(musicLibrarySqlScopeMode('domestic'), 'domestic-only');
 assert.equal(musicLibrarySqlScopeMode('all'), 'all');
+
+assert.equal(musicLibrarySongBelongsToNavStyle('Metal', 'pop'), false);
+assert.equal(musicLibrarySongBelongsToNavStyle('Metal', 'metal'), true);
+assert.equal(musicLibrarySongBelongsToNavStyle('Pop', 'pop'), true);
+assert.equal(musicLibrarySongBelongsToNavStyle('', 'pop'), true);
+assert.equal(musicLibrarySongBelongsToNavStyle(null, 'metal'), true);
 
 console.log('music-library-query.unit-test: ok');

@@ -91,6 +91,15 @@ export function music8NavStyleSlugFromName(name: string): Music8NavStyleSlug | n
   return NAME_TO_SLUG[key] ?? null;
 }
 
+/** `songs.style` に入りうる表記（一覧を song_styles と突き合わせるとき）。 */
+export function music8NavStyleColumnValues(slug: Music8NavStyleSlug): string[] {
+  const label = MUSIC8_NAV_STYLE_LABELS[slug];
+  const extra: string[] = [];
+  if (slug === 'alternative') extra.push('Alternative rock');
+  if (slug === 'others') extra.push('Other');
+  return [...new Set([label, ...extra].filter(Boolean))];
+}
+
 export function music8NavStyleColor(slugOrName: string | null | undefined): string | null {
   const raw = (slugOrName ?? '').trim();
   if (!raw) return null;
