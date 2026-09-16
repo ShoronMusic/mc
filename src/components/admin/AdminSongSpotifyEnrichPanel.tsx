@@ -12,6 +12,7 @@ type Props = {
   hasPopularity?: boolean;
   hasSpotifyArtists?: boolean;
   currentTrackId?: string | null;
+  canReset?: boolean;
 };
 
 type EnrichResult = {
@@ -30,12 +31,14 @@ export function AdminSongSpotifyEnrichPanel({
   hasPopularity = false,
   hasSpotifyArtists = false,
   currentTrackId = null,
+  canReset = false,
 }: Props) {
   const router = useRouter();
   const workflow = useAdminSongDetailWorkflow();
   const [busy, setBusy] = useState(false);
   const [manualBusy, setManualBusy] = useState(false);
   const [alignBusy, setAlignBusy] = useState(false);
+  const [resetBusy, setResetBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [manualTrackId, setManualTrackId] = useState((currentTrackId ?? '').trim());
 
@@ -45,6 +48,7 @@ export function AdminSongSpotifyEnrichPanel({
 
   const alreadyComplete = hasTrackId && hasPopularity;
   const canAlignDisplay = hasTrackId || hasSpotifyArtists;
+  const anyBusy = busy || manualBusy || alignBusy || resetBusy;
 
   useEffect(() => {
     workflow?.setFilled('spotify', isAdminSongSpotifyFilled({ hasTrackId, hasPopularity }));
@@ -207,6 +211,43 @@ export function AdminSongSpotifyEnrichPanel({
     }
   }
 
+  async function runClearSpotifyMeta(): Promise<boolean> {
+    if (!canReset) {
+      setMsg('リセットする Spotify 値がありません。');
+      return false;
+    }
+    const ok = window.confirm(
+      'Spotify の track ID と、曲名・アーティスト表記・公開日・人気度・ジャケットを空にします。main_artist / display_title とクレジットは変えません。実行しますか？',
+    );
+    if (!ok) return false;
+
+    setResetBusy(true);
+    setMsg(null);
+    try {
+      const res = await fetch('/api/admin/song-spotify-by-track-id', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ songId, clear: true }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
+      if (!res.ok) {
+        setMsg(data.error ?? 'Spotify のリセットに失敗しました。');
+        return false;
+      }
+      setManualTrackId('');
+      setMsg(data.message ?? 'Spotify の track ID と関連値を空にしました。');
+      workflow?.setFilled('spotify', false);
+      router.refresh();
+      return true;
+    } catch {
+      setMsg('Spotify のリセットに失敗しました。');
+      return false;
+    } finally {
+      setResetBusy(false);
+    }
+  }
+
   useEffect(() => {
     if (!workflow) return;
     workflow.registerAction('spotify', runEnrich);
@@ -226,7 +267,7 @@ export function AdminSongSpotifyEnrichPanel({
         へ。共演曲の <code className="text-gray-500">main_artist</code> /{' '}
         <code className="text-gray-500">display_title</code> は{' '}
         <code className="text-gray-500">spotify_artists</code> の並び順を正とします。自動検索で
-        合わないときは、下に track ID を入れて再取得できます。
+        合わないときは、下に track ID を入れて再取得できます。誤った track ID は「Spotify をリセット」で空にしてからやり直してください。
       </p>
       {alreadyComplete ? (
         <p className="mt-2 text-xs text-green-200">track ID / popularity は入っています。</p>
@@ -242,7 +283,7 @@ export function AdminSongSpotifyEnrichPanel({
         {workflow ? null : (
           <button
             type="button"
-            disabled={busy || alreadyComplete || manualBusy}
+            disabled={busy || alreadyComplete || manualBusy || resetBusy}
             onClick={() => void runEnrich()}
             className="rounded bg-green-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-800 disabled:cursor-not-allowed disabled:opacity-50"
           >
@@ -257,11 +298,19 @@ export function AdminSongSpotifyEnrichPanel({
         )}
         <button
           type="button"
-          disabled={alignBusy || busy || manualBusy || !canAlignDisplay}
+          disabled={alignBusy || anyBusy || !canAlignDisplay}
           onClick={() => void runAlignDisplay()}
           className="rounded border border-green-800 bg-green-950/40 px-3 py-1.5 text-xs text-green-100 hover:bg-green-900/50 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {alignBusy ? '更新中…' : '表示を Spotify 並び順に合わせる'}
+        </button>
+        <button
+          type="button"
+          disabled={anyBusy || !canReset}
+          onClick={() => void runClearSpotifyMeta()}
+          className="rounded border border-amber-800 bg-amber-950/40 px-3 py-1.5 text-xs text-amber-100 hover:bg-amber-900/50 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {resetBusy ? 'リセット中…' : 'Spotify をリセット'}
         </button>
       </div>
       <div className="mt-3 rounded border border-green-900/40 bg-black/20 p-2.5">
@@ -284,7 +333,7 @@ export function AdminSongSpotifyEnrichPanel({
         </label>
         <button
           type="button"
-          disabled={manualBusy || busy || !manualTrackId.trim()}
+          disabled={manualBusy || anyBusy || !manualTrackId.trim()}
           onClick={() => void runManualByTrackId()}
           className="mt-2 rounded bg-green-800 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
         >

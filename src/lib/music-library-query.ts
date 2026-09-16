@@ -6,7 +6,11 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { stripLeadingArticleForSort, indexLetterForArtist } from '@/lib/admin-library-index';
 import { loadArtistMemberGraph, shouldShowArtistMembersLine } from '@/lib/artist-members';
-import { getLibraryArtistIndexCached } from '@/lib/build-library-artist-index';
+import { pickArtistPhotoUrl } from '@/lib/artist-photo-url';
+import {
+  getLibraryArtistIndexCached,
+  onLibraryArtistIndexCacheCleared,
+} from '@/lib/build-library-artist-index';
 import {
   compareLibraryReleaseSort,
   libraryEffectiveReleaseDateForSort,
@@ -20,22 +24,32 @@ import {
 import { formatLibraryVocalDisplay } from '@/lib/library-vocal-display';
 import {
   artistNamesMatchIgnoringLeadingArticle,
+  expandLibrarySearchQueryVariants,
   libraryArtistNameLookupVariants,
   parseCollabArtistNamesFromMainArtist,
   preferLibraryArtistDisplayName,
+  resolveMainArtistsForLibrarySearch,
 } from '@/lib/library-search-query';
 import {
+  compactArtistSearchNicknameKey,
+  resolveArtistSearchNicknameCanonical,
+} from '@/lib/artist-search-nicknames';
+import {
   formatMusicLibraryActivePeriod,
+  formatMusicLibraryOccupation,
   formatMusicLibraryOriginLabel,
+  musicLibraryActiveStartYear,
   musicLibraryArtistNameFromRow,
+  musicLibraryNameMatchesArtistSlug,
   musicLibraryVocalLabels,
   parseMusicLibrarySnapshotArtists,
   pickMusicLibraryGenreLabel,
+  resolveMusicLibraryArtistDisplayName,
 } from '@/lib/music-library-labels';
 import { extractMusic8SongFieldsFromPersistedSnapshot } from '@/lib/music8-song-fields';
 import { usableLibraryMusic8Intro } from '@/lib/library-song-commentary-text';
 import { rankLibraryVideoVariant } from '@/lib/library-video-variant-rank';
-import { artistNameToMusic8Slug } from '@/lib/music8-artist-display';
+import { artistNameToMusic8Slug, formatArtistBorn, formatArtistDied } from '@/lib/music8-artist-display';
 import { displayNameFromArtistRow } from '@/lib/music8-artist-import';
 import {
   MUSIC8_NAV_STYLE_LABELS,
@@ -59,10 +73,18 @@ import {
   musicLibraryArtistLetterParam,
   musicLibrarySongHref,
   musicLibraryTotalPages,
+  parseMusicLibraryArtistSearchQuery,
   parseMusicLibraryPageParam,
   sliceMusicLibraryPage,
 } from '@/lib/music-library-urls';
-import { type MusicLibraryArtistProfile, type MusicLibraryListArtist, type MusicLibrarySongCard } from '@/lib/music-library-types';
+import {
+  emptyMusicLibraryArtistProfile,
+  type MusicLibraryArtistCharts,
+  type MusicLibraryArtistProfile,
+  type MusicLibraryListArtist,
+  type MusicLibrarySongCard,
+} from '@/lib/music-library-types';
+import { buildMusicLibraryArtistCharts } from '@/lib/music-library-artist-charts';
 
 export type { MusicLibrarySongCard, MusicLibraryArtistProfile } from '@/lib/music-library-types';
 export { musicLibraryPlayableTracks } from '@/lib/music-library-types';
@@ -109,7 +131,26 @@ export type MusicLibraryArtistIndexEntry = {
   href: string;
   count: number;
   indexLetter: string;
+  originLabel?: string | null;
+  activeStartYear?: number | null;
+  imageUrl?: string | null;
+  styleSlug?: string | null;
+  /** 統合した別名（5sos 等）。検索用。 */
+  searchNames?: string[];
 };
+
+const RESOLVED_ARTIST_INDEX_TTL_MS = 15 * 60 * 1000;
+const RESOLVED_ARTIST_INDEX_CACHE_GEN = 10;
+const ARTIST_NAME_LOOKUP_CHUNK = 120;
+const ARTIST_NAME_LOOKUP_CONCURRENCY = 6;
+const resolvedArtistIndexCache = new Map<
+  LibraryCatalogFilter,
+  { at: number; gen: number; value: { letters: string[]; items: MusicLibraryArtistIndexEntry[] } }
+>();
+
+onLibraryArtistIndexCacheCleared(() => {
+  resolvedArtistIndexCache.clear();
+});
 
 export type MusicLibrarySongDetail = MusicLibrarySongCard & {
   intro: string | null;
@@ -308,6 +349,67 @@ function musicLibraryArtistNameKeys(name: string): string[] {
         .filter(Boolean),
     ),
   ];
+}
+
+type ResolvedArtistIndexRef = {
+  slug: string;
+  displayName: string;
+  originLabel: string | null;
+  activeStartYear: number | null;
+  imageUrl: string | null;
+};
+
+/** 同じ slug のマスタ行が複数あるとき、写真・国籍・slug 一致名を残す。 */
+export function mergeMusicLibraryArtistIndexRefs(
+  a: ResolvedArtistIndexRef,
+  b: ResolvedArtistIndexRef,
+): ResolvedArtistIndexRef {
+  const slug = a.slug || b.slug;
+  const aOk = musicLibraryNameMatchesArtistSlug(a.displayName, slug);
+  const bOk = musicLibraryNameMatchesArtistSlug(b.displayName, slug);
+  let displayName = a.displayName;
+  if (bOk && !aOk) displayName = b.displayName;
+  else if (aOk === bOk && a.displayName !== b.displayName) {
+    if (a.displayName === a.displayName.toLowerCase() && b.displayName !== b.displayName.toLowerCase()) {
+      displayName = b.displayName;
+    }
+  }
+  return {
+    slug,
+    displayName,
+    originLabel: a.originLabel || b.originLabel,
+    activeStartYear: a.activeStartYear ?? b.activeStartYear,
+    imageUrl: a.imageUrl || b.imageUrl,
+  };
+}
+
+/** 曲の main_artist 表記（ash）からマスタ行（Ash）を拾う。 */
+export function lookupMusicLibraryArtistIndexRef(
+  byKey: Map<string, ResolvedArtistIndexRef>,
+  mainArtist: string,
+): ResolvedArtistIndexRef | undefined {
+  const name = mainArtist.trim();
+  if (!name) return undefined;
+  const slug = musicLibraryArtistSlugForName(name);
+  return (
+    byKey.get(name.toLowerCase()) ??
+    byKey.get(stripLeadingArticleForSort(name).toLowerCase()) ??
+    (slug ? byKey.get(slug) : undefined)
+  );
+}
+
+/** マスタ英語名があれば曲側の小文字表記より優先する。 */
+export function musicLibraryArtistIndexDisplayName(input: {
+  mainArtist: string;
+  slug: string;
+  resolvedDisplayName?: string | null;
+}): string {
+  const canonical = (input.resolvedDisplayName ?? '').trim();
+  return resolveMusicLibraryArtistDisplayName({
+    name: canonical || input.mainArtist,
+    slug: input.slug,
+    fallbacks: [input.mainArtist, canonical],
+  });
 }
 
 type ArtistJoinRow = {
@@ -665,7 +767,11 @@ export async function attachMusicLibraryListArtists(
   return withArtists.map((card) => {
     const artists = (card.artists ?? []).map((artist) => {
       const canonical = lookupDisplay(artist);
-      const name = canonical ? preferLibraryArtistDisplayName(artist.name, canonical) : artist.name;
+      const name = resolveMusicLibraryArtistDisplayName({
+        name: artist.name,
+        slug: artist.slug,
+        fallbacks: [canonical, card.artistName],
+      });
       const origin = lookupOrigin(artist);
       if (name === artist.name && origin === artist.originLabel) return artist;
       return { ...artist, name, originLabel: origin };
@@ -918,58 +1024,252 @@ export async function fetchMusicLibraryTopByStyle(
   return takeNewestPerStyle(byStyle, MUSIC_LIBRARY_TOP_PER_STYLE);
 }
 
+const SONG_GENRE_JOIN_SELECT = `${SONG_LIST_SELECT}, song_genres!inner(catalog_genres!inner(slug))`;
+
+export type MusicLibraryGenrePage = {
+  slug: string;
+  name: string;
+  nameJa: string | null;
+  cards: MusicLibrarySongCard[];
+  page: number;
+  totalPages: number;
+  totalItems: number;
+};
+
+async function fetchCatalogGenreBySlug(
+  admin: SupabaseClient,
+  genreSlug: string,
+): Promise<{ slug: string; name: string; nameJa: string | null } | null> {
+  const slug = genreSlug.trim().toLowerCase();
+  if (!slug) return null;
+  const { data, error } = await admin
+    .from('catalog_genres')
+    .select('slug, name, name_ja')
+    .eq('slug', slug)
+    .maybeSingle();
+  if (error) {
+    if (error.code === '42P01') return null;
+    throw new Error(error.message);
+  }
+  const row = data as { slug?: string | null; name?: string | null; name_ja?: string | null } | null;
+  const name = (row?.name ?? '').trim();
+  const resolvedSlug = (row?.slug ?? '').trim().toLowerCase() || slug;
+  if (!name) return null;
+  return { slug: resolvedSlug, name, nameJa: (row?.name_ja ?? '').trim() || null };
+}
+
+async function countSongsForGenreJoin(
+  admin: SupabaseClient,
+  genreSlug: string,
+  catalog: LibraryCatalogFilter,
+): Promise<number | null> {
+  let query = admin
+    .from('songs')
+    .select('id, song_genres!inner(catalog_genres!inner(slug))', { count: 'exact', head: true })
+    .eq('song_genres.catalog_genres.slug', genreSlug);
+  query = withCatalogScope(query, catalog);
+  const { count, error } = await query;
+  if (error) {
+    console.warn('[music-library] genre count join', error.message);
+    return null;
+  }
+  return typeof count === 'number' ? count : 0;
+}
+
+async function fetchGenreSongsViaJoin(
+  admin: SupabaseClient,
+  genreSlug: string,
+  catalog: LibraryCatalogFilter,
+  range: { from: number; to: number } | { limit: number },
+): Promise<SongListRow[] | null> {
+  await ensureWesternTreatedJpArtistCache(admin);
+  let query = admin
+    .from('songs')
+    .select(SONG_GENRE_JOIN_SELECT)
+    .eq('song_genres.catalog_genres.slug', genreSlug)
+    .order('original_release_date', { ascending: false, nullsFirst: false });
+  query = withCatalogScope(query, catalog);
+  if ('limit' in range) {
+    query = query.limit(range.limit);
+  } else {
+    query = query.range(range.from, range.to);
+  }
+  const { data, error } = await query;
+  if (error) {
+    console.warn('[music-library] genre songs join', error.message);
+    return null;
+  }
+  return sortMusicLibrarySongs(filterSongRowsByLibraryCatalog(data ?? [], catalog)).slice(
+    0,
+    requestedStyleRowCount(range),
+  );
+}
+
+export async function fetchMusicLibraryGenrePage(
+  admin: SupabaseClient,
+  genreSlug: string,
+  page: number,
+  catalog: LibraryCatalogFilter = musicLibraryCatalogFilter(),
+): Promise<MusicLibraryGenrePage | null> {
+  const genre = await fetchCatalogGenreBySlug(admin, genreSlug);
+  if (!genre) return null;
+  const safePage = parseMusicLibraryPageParam(page) ?? 1;
+  const from = (safePage - 1) * MUSIC_LIBRARY_PAGE_SIZE;
+  const to = from + MUSIC_LIBRARY_PAGE_SIZE - 1;
+
+  const [joinRows, joinCount] = await Promise.all([
+    fetchGenreSongsViaJoin(admin, genre.slug, catalog, { from, to }),
+    countSongsForGenreJoin(admin, genre.slug, catalog),
+  ]);
+
+  if (joinRows && joinCount != null) {
+    const { cards } = await attachVideosToSongs(admin, joinRows);
+    const totalPages = musicLibraryTotalPages(joinCount, MUSIC_LIBRARY_PAGE_SIZE);
+    return {
+      slug: genre.slug,
+      name: genre.name,
+      nameJa: genre.nameJa,
+      cards,
+      page: Math.min(safePage, Math.max(1, totalPages)),
+      totalPages,
+      totalItems: joinCount,
+    };
+  }
+
+  return {
+    slug: genre.slug,
+    name: genre.name,
+    nameJa: genre.nameJa,
+    cards: [],
+    page: 1,
+    totalPages: 1,
+    totalItems: 0,
+  };
+}
+
 async function resolveArtistSlugsByNames(
   admin: SupabaseClient,
   names: string[],
-): Promise<Map<string, { slug: string; displayName: string }>> {
-  const out = new Map<string, { slug: string; displayName: string }>();
+): Promise<Map<string, ResolvedArtistIndexRef>> {
+  const out = new Map<string, ResolvedArtistIndexRef>();
   const unique = [...new Set(names.map((n) => n.trim()).filter(Boolean))];
   const queryNames = [...new Set(unique.flatMap((n) => libraryArtistNameLookupVariants(n)))];
-  let select = 'name, name_base, the_prefix, music8_artist_slug';
+  let select =
+    'name, name_base, the_prefix, music8_artist_slug, origin_country, active_period, image_url, spotify_artist_images';
+  const putRef = (key: string, ref: ResolvedArtistIndexRef) => {
+    const existing = out.get(key);
+    out.set(key, existing ? mergeMusicLibraryArtistIndexRefs(existing, ref) : ref);
+  };
   const remember = (row: {
     name?: string | null;
     name_base?: string | null;
     the_prefix?: string | null;
     music8_artist_slug?: string | null;
+    origin_country?: string | null;
+    active_period?: string | null;
+    image_url?: string | null;
+    spotify_artist_images?: string | null;
   }) => {
-    const display = musicLibraryArtistNameFromRow(row) || (row.name ?? '').trim();
-    const slug = musicLibraryArtistSlugForName(display || (row.name ?? ''), row.music8_artist_slug);
+    const rawDisplay = musicLibraryArtistNameFromRow(row) || (row.name ?? '').trim();
+    const slug = musicLibraryArtistSlugForName(rawDisplay || (row.name ?? ''), row.music8_artist_slug);
     if (!slug) return;
-    const ref = { slug, displayName: display || (row.name ?? '').trim() };
-    if (!ref.displayName) return;
-    for (const key of musicLibraryArtistNameKeys(ref.displayName)) out.set(key, ref);
+    const displayName = resolveMusicLibraryArtistDisplayName({
+      name: rawDisplay,
+      slug,
+      fallbacks: [(row.name ?? '').trim()],
+    });
+    if (!displayName) return;
+    const ref: ResolvedArtistIndexRef = {
+      slug,
+      displayName,
+      originLabel: formatMusicLibraryOriginLabel(row.origin_country),
+      activeStartYear: musicLibraryActiveStartYear(row.active_period),
+      imageUrl: pickArtistPhotoUrl(row),
+    };
+    for (const key of musicLibraryArtistNameKeys(ref.displayName)) putRef(key, ref);
     const raw = (row.name ?? '').trim();
     if (raw) {
-      for (const key of musicLibraryArtistNameKeys(raw)) out.set(key, ref);
+      for (const key of musicLibraryArtistNameKeys(raw)) putRef(key, ref);
     }
     const base = (row.name_base ?? '').trim();
-    if (base) out.set(base.toLowerCase(), ref);
+    if (base) putRef(base.toLowerCase(), ref);
+    for (const key of musicLibraryArtistSlugKeys(slug)) putRef(key, ref);
   };
-  for (const chunk of chunkArray(queryNames, 80)) {
-    const { data, error } = await admin.from('artists').select(select).in('name', chunk);
-    if (error) {
-      if (error.code === '42P01') break;
-      if (error.code === '42703' && select.includes('the_prefix')) {
-        select = 'name, music8_artist_slug';
-        const retry = await admin.from('artists').select(select).in('name', chunk);
-        if (retry.error) {
-          if (retry.error.code === '42P01' || retry.error.code === '42703') break;
-          throw new Error(retry.error.message);
+  const queryBy = async (column: 'name' | 'music8_artist_slug', values: string[]) => {
+    if (values.length === 0) return;
+    const pending: Array<() => Promise<void>> = [];
+    for (const chunk of chunkArray(values, ARTIST_NAME_LOOKUP_CHUNK)) {
+      pending.push(async () => {
+        const { data, error } = await admin.from('artists').select(select).in(column, chunk);
+        if (error) {
+          if (error.code === '42P01') return;
+          if (error.code === '42703') {
+            if (select.includes('image_url') || select.includes('spotify_artist_images')) {
+              select = 'name, name_base, the_prefix, music8_artist_slug, origin_country, active_period';
+            } else if (select.includes('active_period')) {
+              select = 'name, name_base, the_prefix, music8_artist_slug';
+            } else if (select.includes('the_prefix')) {
+              select = 'name, music8_artist_slug';
+            } else {
+              return;
+            }
+            const retry = await admin.from('artists').select(select).in(column, chunk);
+            if (retry.error) {
+              if (retry.error.code === '42P01' || retry.error.code === '42703') return;
+              throw new Error(retry.error.message);
+            }
+            for (const row of (retry.data ?? []) as Parameters<typeof remember>[0][]) remember(row);
+            return;
+          }
+          throw new Error(error.message);
         }
-        for (const row of (retry.data ?? []) as Parameters<typeof remember>[0][]) remember(row);
-        continue;
-      }
-      throw new Error(error.message);
+        for (const row of (data ?? []) as Parameters<typeof remember>[0][]) remember(row);
+      });
     }
-    for (const row of (data ?? []) as Parameters<typeof remember>[0][]) remember(row);
-  }
+    for (let i = 0; i < pending.length; i += ARTIST_NAME_LOOKUP_CONCURRENCY) {
+      await Promise.all(pending.slice(i, i + ARTIST_NAME_LOOKUP_CONCURRENCY).map((fn) => fn()));
+    }
+  };
+  await queryBy('name', queryNames);
+  const slugs = [
+    ...new Set(
+      unique.map((n) => musicLibraryArtistSlugForName(n)).filter((s): s is string => Boolean(s)),
+    ),
+  ];
+  await queryBy('music8_artist_slug', slugs);
   return out;
+}
+
+export function countMusicLibraryArtistsByLetter(items: { indexLetter: string }[]): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const it of items) {
+    const letter = musicLibraryArtistLetterParam(it.indexLetter);
+    counts.set(letter, (counts.get(letter) ?? 0) + 1);
+  }
+  return counts;
+}
+
+/** A–Z 索引。公開一覧と同じ統合後の件数。 */
+export async function fetchMusicLibraryArtistLetterCounts(
+  admin: SupabaseClient,
+  catalog: LibraryCatalogFilter = musicLibraryCatalogFilter(),
+): Promise<Map<string, number>> {
+  const { items } = await fetchMusicLibraryArtistIndex(admin, catalog);
+  return countMusicLibraryArtistsByLetter(items);
 }
 
 export async function fetchMusicLibraryArtistIndex(
   admin: SupabaseClient,
   catalog: LibraryCatalogFilter = musicLibraryCatalogFilter(),
 ): Promise<{ letters: string[]; items: MusicLibraryArtistIndexEntry[] }> {
+  const cached = resolvedArtistIndexCache.get(catalog);
+  if (
+    cached &&
+    cached.gen === RESOLVED_ARTIST_INDEX_CACHE_GEN &&
+    Date.now() - cached.at < RESOLVED_ARTIST_INDEX_TTL_MS
+  ) {
+    return cached.value;
+  }
   await ensureWesternTreatedJpArtistCache(admin);
   const payload = await getLibraryArtistIndexCached(admin, catalog);
   const slugByName = await resolveArtistSlugsByNames(
@@ -978,28 +1278,229 @@ export async function fetchMusicLibraryArtistIndex(
   );
   const items: MusicLibraryArtistIndexEntry[] = [];
   for (const it of payload.items) {
-    const resolved =
-      slugByName.get(it.main_artist.trim().toLowerCase()) ??
-      slugByName.get(stripLeadingArticleForSort(it.main_artist).toLowerCase());
+    const resolved = lookupMusicLibraryArtistIndexRef(slugByName, it.main_artist);
     const slug = resolved?.slug ?? musicLibraryArtistSlugForName(it.main_artist);
     if (!slug) continue;
-    const name = resolved?.displayName
-      ? preferLibraryArtistDisplayName(it.main_artist, resolved.displayName)
-      : it.main_artist;
+    const name = musicLibraryArtistIndexDisplayName({
+      mainArtist: it.main_artist,
+      slug,
+      resolvedDisplayName: resolved?.displayName,
+    });
     items.push({
       name,
       slug,
       href: musicLibraryArtistHref(slug),
       count: it.count,
-      indexLetter: it.indexLetter || indexLetterForArtist(name),
+      indexLetter: indexLetterForArtist(name),
+      originLabel: resolved?.originLabel ?? null,
+      activeStartYear: resolved?.activeStartYear ?? null,
+      imageUrl: resolved?.imageUrl ?? null,
     });
   }
-  const letters = [...new Set(items.map((i) => musicLibraryArtistLetterParam(i.indexLetter)))].sort((a, b) => {
+  const finalized = applyMusicLibraryArtistIndexSongCounts(
+    finalizeMusicLibraryArtistIndexItems(items, payload.countsBySlug),
+    payload.countsBySlug,
+    payload.styleBySlug,
+  );
+  const letters = [...new Set(finalized.map((i) => musicLibraryArtistLetterParam(i.indexLetter)))].sort((a, b) => {
     if (a === 'other') return 1;
     if (b === 'other') return -1;
+    if (a === '0-9') return 1;
+    if (b === '0-9') return -1;
     return a.localeCompare(b, 'en');
   });
-  return { letters, items };
+  const value = { letters, items: finalized };
+  resolvedArtistIndexCache.set(catalog, { at: Date.now(), gen: RESOLVED_ARTIST_INDEX_CACHE_GEN, value });
+  return value;
+}
+
+function pickMusicLibraryIndexDisplayName(a: string, b: string, slug: string): string {
+  const aOk = musicLibraryNameMatchesArtistSlug(a, slug);
+  const bOk = musicLibraryNameMatchesArtistSlug(b, slug);
+  if (aOk && !bOk) return a;
+  if (bOk && !aOk) return b;
+  if (a.toLowerCase() === b.toLowerCase() && a !== b) {
+    if (a === a.toLowerCase() && b !== b.toLowerCase()) return b;
+    if (b === b.toLowerCase() && a !== a.toLowerCase()) return a;
+  }
+  return preferLibraryArtistDisplayName(a, b);
+}
+
+function uniqMusicLibrarySearchNames(names: Iterable<string | null | undefined>): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of names) {
+    const t = (raw ?? '').trim();
+    if (!t) continue;
+    const k = t.toLowerCase();
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(t);
+  }
+  return out;
+}
+
+function musicLibraryArtistNicknameMergeKey(name: string, slug: string): string | null {
+  const canonical =
+    resolveArtistSearchNicknameCanonical(name) ||
+    resolveArtistSearchNicknameCanonical(slug.replace(/-/g, ' '));
+  if (!canonical) return null;
+  const key = compactArtistSearchNicknameKey(canonical);
+  return key || null;
+}
+
+function catalogCountForIndexSlug(
+  slug: string,
+  fallback: number,
+  countsBySlug?: Record<string, number>,
+): number {
+  const n = countsBySlug?.[slug];
+  if (typeof n === 'number' && Number.isFinite(n)) return n;
+  return fallback;
+}
+
+function pickMergedNicknameIndexSlug(
+  a: MusicLibraryArtistIndexEntry,
+  b: MusicLibraryArtistIndexEntry,
+  countsBySlug: Record<string, number> | undefined,
+  canonical: string | null,
+): string {
+  const ca = catalogCountForIndexSlug(a.slug, a.count, countsBySlug);
+  const cb = catalogCountForIndexSlug(b.slug, b.count, countsBySlug);
+  if (cb > ca) return b.slug;
+  if (ca > cb) return a.slug;
+  const hasA = countsBySlug != null && Object.prototype.hasOwnProperty.call(countsBySlug, a.slug);
+  const hasB = countsBySlug != null && Object.prototype.hasOwnProperty.call(countsBySlug, b.slug);
+  if (hasB && !hasA) return b.slug;
+  if (hasA && !hasB) return a.slug;
+  if (canonical) {
+    const generated = artistNameToMusic8Slug(canonical);
+    if (generated && a.slug === generated && b.slug !== generated) return b.slug;
+    if (generated && b.slug === generated && a.slug !== generated) return a.slug;
+  }
+  return a.slug;
+}
+
+function mergeNicknameIndexEntries(
+  a: MusicLibraryArtistIndexEntry,
+  b: MusicLibraryArtistIndexEntry,
+  countsBySlug?: Record<string, number>,
+): MusicLibraryArtistIndexEntry {
+  const canonical =
+    resolveArtistSearchNicknameCanonical(a.name) ||
+    resolveArtistSearchNicknameCanonical(b.name) ||
+    resolveArtistSearchNicknameCanonical(a.slug.replace(/-/g, ' ')) ||
+    resolveArtistSearchNicknameCanonical(b.slug.replace(/-/g, ' '));
+  const slug = pickMergedNicknameIndexSlug(a, b, countsBySlug, canonical);
+  const fromSlug = slug === b.slug ? b : a;
+  const other = slug === b.slug ? a : b;
+  const name = canonical || pickMusicLibraryIndexDisplayName(fromSlug.name, other.name, slug);
+  const searchNames = uniqMusicLibrarySearchNames([
+    ...(a.searchNames ?? []),
+    ...(b.searchNames ?? []),
+    a.name,
+    b.name,
+    canonical,
+  ]).filter((n) => n.toLowerCase() !== name.toLowerCase());
+  return {
+    ...fromSlug,
+    ...other,
+    slug,
+    name,
+    href: musicLibraryArtistHref(slug),
+    count: Math.max(a.count, b.count),
+    indexLetter: indexLetterForArtist(name),
+    originLabel: a.originLabel || b.originLabel,
+    activeStartYear: a.activeStartYear ?? b.activeStartYear,
+    imageUrl: a.imageUrl || b.imageUrl,
+    styleSlug: fromSlug.styleSlug || other.styleSlug,
+    searchNames: searchNames.length > 0 ? searchNames : undefined,
+  };
+}
+
+/** 愛称マスタで同一人物（5sos / 5 Seconds of Summer）なら1行にまとめる。 */
+export function mergeMusicLibraryArtistIndexNicknameAliases(
+  items: MusicLibraryArtistIndexEntry[],
+  countsBySlug?: Record<string, number>,
+): MusicLibraryArtistIndexEntry[] {
+  const byKey = new Map<string, MusicLibraryArtistIndexEntry>();
+  for (const it of items) {
+    const nick = musicLibraryArtistNicknameMergeKey(it.name, it.slug);
+    const key = nick ? `nick:${nick}` : `slug:${it.slug}`;
+    const existing = byKey.get(key);
+    if (!existing) {
+      byKey.set(key, it);
+      continue;
+    }
+    byKey.set(key, mergeNicknameIndexEntries(existing, it, countsBySlug));
+  }
+  return [...byKey.values()];
+}
+
+/** 表示名の先頭文字で文字索引を振り直し、同じ slug は曲数を合算する。愛称も統合。 */
+export function finalizeMusicLibraryArtistIndexItems(
+  items: MusicLibraryArtistIndexEntry[],
+  countsBySlug?: Record<string, number>,
+): MusicLibraryArtistIndexEntry[] {
+  const bySlug = new Map<string, MusicLibraryArtistIndexEntry>();
+  for (const it of items) {
+    const slug = it.slug.trim().toLowerCase();
+    if (!slug) continue;
+    const name = it.name.trim();
+    if (!name) continue;
+    const next: MusicLibraryArtistIndexEntry = {
+      ...it,
+      slug,
+      name,
+      href: musicLibraryArtistHref(slug),
+      indexLetter: indexLetterForArtist(name),
+    };
+    const existing = bySlug.get(slug);
+    if (!existing) {
+      bySlug.set(slug, next);
+      continue;
+    }
+    const mergedName = pickMusicLibraryIndexDisplayName(existing.name, next.name, slug);
+    const searchNames = uniqMusicLibrarySearchNames([
+      ...(existing.searchNames ?? []),
+      ...(next.searchNames ?? []),
+      existing.name,
+      next.name,
+    ]).filter((n) => n.toLowerCase() !== mergedName.toLowerCase());
+    bySlug.set(slug, {
+      ...existing,
+      name: mergedName,
+      count: existing.count + next.count,
+      href: musicLibraryArtistHref(slug),
+      indexLetter: indexLetterForArtist(mergedName),
+      originLabel: existing.originLabel || next.originLabel,
+      activeStartYear: existing.activeStartYear ?? next.activeStartYear,
+      imageUrl: existing.imageUrl || next.imageUrl,
+      searchNames: searchNames.length > 0 ? searchNames : undefined,
+    });
+  }
+  return mergeMusicLibraryArtistIndexNicknameAliases([...bySlug.values()], countsBySlug);
+}
+
+/** 公開一覧の曲数を詳細ページと同じ `music8_artist_slug` 件数にする。最多スタイルも載せる。 */
+export function applyMusicLibraryArtistIndexSongCounts(
+  items: MusicLibraryArtistIndexEntry[],
+  countsBySlug: Record<string, number> | undefined,
+  styleBySlug?: Record<string, string>,
+): MusicLibraryArtistIndexEntry[] {
+  const out: MusicLibraryArtistIndexEntry[] = [];
+  for (const it of items) {
+    const n = countsBySlug?.[it.slug];
+    let next = it;
+    if (typeof n === 'number' && Number.isFinite(n)) {
+      if (n <= 0) continue;
+      next = { ...next, count: n };
+    }
+    const style = styleBySlug?.[it.slug]?.trim().toLowerCase();
+    if (style) next = { ...next, styleSlug: style };
+    out.push(next);
+  }
+  return out;
 }
 
 export function filterMusicLibraryArtistsByLetter(
@@ -1007,11 +1508,73 @@ export function filterMusicLibraryArtistsByLetter(
   letterParam: string,
 ): MusicLibraryArtistIndexEntry[] {
   const want = musicLibraryArtistLetterParam(letterParam);
-  return items.filter((it) => musicLibraryArtistLetterParam(it.indexLetter) === want);
+  return items.filter((it) => musicLibraryArtistLetterParam(indexLetterForArtist(it.name)) === want);
+}
+
+function musicLibraryArtistMatchesSearchNeedles(
+  item: MusicLibraryArtistIndexEntry,
+  needles: string[],
+  mode: 'includes' | 'exact',
+): boolean {
+  const name = item.name.trim().toLowerCase();
+  const slug = item.slug.trim().toLowerCase();
+  const slugSpaced = slug.replace(/-/g, ' ');
+  const aliases = (item.searchNames ?? []).map((n) => n.trim().toLowerCase()).filter(Boolean);
+  for (const raw of needles) {
+    const n = raw.trim().toLowerCase();
+    if (!n) continue;
+    if (mode === 'exact') {
+      if (name === n || slug === n || slugSpaced === n) return true;
+      if (aliases.some((a) => a === n)) return true;
+      if (artistNamesMatchIgnoringLeadingArticle(item.name, raw)) return true;
+      if (aliases.some((a) => artistNamesMatchIgnoringLeadingArticle(a, raw))) return true;
+      continue;
+    }
+    if (name.includes(n) || slug.includes(n) || slugSpaced.includes(n)) return true;
+    if (aliases.some((a) => a.includes(n))) return true;
+    if (artistNamesMatchIgnoringLeadingArticle(item.name, raw)) return true;
+    if (aliases.some((a) => artistNamesMatchIgnoringLeadingArticle(a, raw))) return true;
+  }
+  return false;
+}
+
+/** 索引をアーティスト名で絞る（愛称展開＋日本語名から解決した英語名）。 */
+export function filterMusicLibraryArtistsBySearchQuery(
+  items: MusicLibraryArtistIndexEntry[],
+  rawQuery: string,
+  extraNames: string[] = [],
+): MusicLibraryArtistIndexEntry[] {
+  const q = parseMusicLibraryArtistSearchQuery(rawQuery);
+  if (!q) return [];
+  const variants = [...new Set([...expandLibrarySearchQueryVariants(q), q].map((n) => n.trim()).filter(Boolean))];
+  const extras = [...new Set(extraNames.map((n) => n.trim()).filter(Boolean))];
+  return items.filter(
+    (it) =>
+      musicLibraryArtistMatchesSearchNeedles(it, variants, 'includes') ||
+      musicLibraryArtistMatchesSearchNeedles(it, extras, 'exact'),
+  );
+}
+
+export async function searchMusicLibraryArtistIndex(
+  admin: SupabaseClient,
+  items: MusicLibraryArtistIndexEntry[],
+  rawQuery: string,
+): Promise<MusicLibraryArtistIndexEntry[]> {
+  const q = parseMusicLibraryArtistSearchQuery(rawQuery);
+  if (!q) return [];
+  let extra: string[] = [];
+  if (q.length >= 2) {
+    try {
+      extra = await resolveMainArtistsForLibrarySearch(admin, q);
+    } catch {
+      extra = [];
+    }
+  }
+  return filterMusicLibraryArtistsBySearchQuery(items, q, extra);
 }
 
 const ARTIST_SELECT =
-  'id, name, name_ja, name_base, the_prefix, music8_artist_slug, kind, origin_country, active_period, members, youtube_channel_url, youtube_channel_id, spotify_artist_id, wikipedia_page, image_url, image_credit, profile_text, birth_date, death_date';
+  'id, name, name_ja, name_en, name_base, the_prefix, music8_artist_slug, kind, occupations, origin_country, active_period, members, youtube_channel_url, youtube_channel_id, spotify_artist_id, wikipedia_page, image_url, image_credit, spotify_artist_images, profile_text, description_en, birth_date, death_date';
 
 const ARTIST_SELECT_MIN =
   'id, name, name_ja, music8_artist_slug, kind, origin_country, active_period, members, youtube_channel_url, image_url, image_credit, profile_text';
@@ -1030,10 +1593,12 @@ type ArtistRow = {
   id: string;
   name: string | null;
   name_ja?: string | null;
+  name_en?: string | null;
   name_base?: string | null;
   the_prefix?: string | null;
   music8_artist_slug?: string | null;
   kind?: string | null;
+  occupations?: string[] | null;
   origin_country?: string | null;
   active_period?: string | null;
   members?: string | null;
@@ -1043,29 +1608,49 @@ type ArtistRow = {
   wikipedia_page?: string | null;
   image_url?: string | null;
   image_credit?: string | null;
+  spotify_artist_images?: string | null;
   profile_text?: string | null;
+  description_en?: string | null;
   birth_date?: string | null;
   death_date?: string | null;
 };
 
-function profileFromArtistRow(row: ArtistRow, fallbackName: string, slug: string): MusicLibraryArtistProfile {
-  const name = musicLibraryArtistNameFromRow(row) || (row.name ?? '').trim() || fallbackName;
+function profileFromArtistRow(
+  row: ArtistRow,
+  fallbackName: string,
+  slug: string,
+  extraFallbacks: readonly string[] = [],
+): MusicLibraryArtistProfile {
+  const raw = musicLibraryArtistNameFromRow(row) || (row.name ?? '').trim() || fallbackName;
+  const name = resolveMusicLibraryArtistDisplayName({
+    name: raw,
+    slug,
+    fallbacks: [fallbackName, ...extraFallbacks],
+  });
   const memberLinks: MusicLibraryArtistProfile['memberLinks'] = [];
   const bandLinks: MusicLibraryArtistProfile['bandLinks'] = [];
+  const bornLabel = formatArtistBorn(row.birth_date, row.death_date).trim() || null;
+  const diedRaw = formatArtistDied(row.death_date, row.birth_date).replace(/^永眠:\s*/, '').trim();
+  const diedLabel = diedRaw || null;
   return {
     id: row.id,
     name,
     slug,
     nameJa: (row.name_ja ?? '').trim() || null,
+    nameEn: (row.name_en ?? '').trim() || null,
     kind: (row.kind ?? '').trim() || null,
+    occupation: formatMusicLibraryOccupation(row.kind, row.occupations),
     originCountry: (row.origin_country ?? '').trim() || null,
     originLabel: formatLibraryOriginCountry(row.origin_country),
     activePeriod: formatMusicLibraryActivePeriod(row.active_period),
     membersFallback: (row.members ?? '').trim() || null,
-    imageUrl: (row.image_url ?? '').trim() || null,
+    imageUrl: pickArtistPhotoUrl(row),
     imageCredit: (row.image_credit ?? '').trim() || null,
     profileText: (row.profile_text ?? '').trim() || null,
+    descriptionEn: (row.description_en ?? '').trim() || null,
     ageLabel: formatLibraryArtistAgeLabel(row.birth_date, row.death_date),
+    bornLabel,
+    diedLabel,
     links: buildLibraryArtistExternalLinks(row),
     memberLinks,
     bandLinks,
@@ -1155,6 +1740,7 @@ export async function fetchMusicLibraryArtistPage(
 ): Promise<{
   profile: MusicLibraryArtistProfile;
   cards: MusicLibrarySongCard[];
+  charts: MusicLibraryArtistCharts;
   page: number;
   totalPages: number;
   totalItems: number;
@@ -1196,30 +1782,20 @@ export async function fetchMusicLibraryArtistPage(
   if (rows.length === 0 && !artistRow) return null;
 
   rows = sortMusicLibrarySongs(rows);
+  const songArtistNames = rows.map((r) => artistNameOf(r));
   const fallbackName = artistRow
     ? musicLibraryArtistNameFromRow(artistRow) || artistRow.name || slug
     : artistNameOf(rows[0]!);
   let profile: MusicLibraryArtistProfile = artistRow
-    ? profileFromArtistRow(artistRow, fallbackName, slug)
-    : {
-        id: null,
-        name: fallbackName,
+    ? profileFromArtistRow(artistRow, fallbackName, slug, songArtistNames)
+    : emptyMusicLibraryArtistProfile(
+        resolveMusicLibraryArtistDisplayName({
+          name: fallbackName,
+          slug,
+          fallbacks: songArtistNames,
+        }),
         slug,
-        nameJa: null,
-        kind: null,
-        originCountry: null,
-        originLabel: null,
-        activePeriod: null,
-        membersFallback: null,
-        imageUrl: null,
-        imageCredit: null,
-        profileText: null,
-        ageLabel: null,
-        links: { youtube: null, spotify: null, wikipedia: null },
-        memberLinks: [],
-        bandLinks: [],
-        showMembersLine: false,
-      };
+      );
 
   if (profile.id) {
     try {
@@ -1251,6 +1827,7 @@ export async function fetchMusicLibraryArtistPage(
   return {
     profile,
     cards,
+    charts: buildMusicLibraryArtistCharts(rows),
     page: sliced.page,
     totalPages: sliced.totalPages,
     totalItems: sliced.totalItems,

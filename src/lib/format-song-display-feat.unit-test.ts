@@ -30,7 +30,11 @@ import {
   splitArtistNameForM8Storage,
 } from './song-registration-normalize';
 
-assert.equal(compoundArtistCanonicalIfKnown('Hall & Oates'), 'Daryl Hall & John Oates');
+assert.equal(compoundArtistCanonicalIfKnown('Aly & Aj'), 'Aly & Aj');
+assert.equal(compoundArtistCanonicalIfKnown('Aly & AJ'), 'Aly & Aj');
+assert.equal(compoundArtistCanonicalIfKnown('aly aj'), 'Aly & Aj');
+assert.equal(compoundArtistCanonicalIfKnown('Aly &Amp; Aj'), 'Aly & Aj');
+assert.equal(getMainArtist('Aly & Aj'), 'Aly & Aj');
 assert.equal(compoundArtistCanonicalIfKnown('Hall and Oates'), 'Daryl Hall & John Oates');
 assert.equal(compoundArtistCanonicalIfKnown('Earth, Wind & Fire'), 'Earth, Wind & Fire');
 assert.equal(compoundArtistCanonicalIfKnown('Earth Wind and Fire'), 'Earth, Wind & Fire');

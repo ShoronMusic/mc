@@ -4,6 +4,7 @@
 
 import { formatLibraryVocalDisplay } from '@/lib/library-vocal-display';
 import { filterMusic8GenreLabels } from '@/lib/music8-song-fields';
+import { artistNameToMusic8Slug } from '@/lib/music8-artist-display';
 import type { MusicLibraryVocalLabel } from '@/lib/music-library-types';
 
 /** 原盤日・YouTube 公開日を一覧右端の `2026.09` 形式にする。月が無ければ年のみ。 */
@@ -19,6 +20,27 @@ export function formatMusicLibraryYearMonth(iso: string | null | undefined): str
   const yearOnly = t.match(/^(\d{4})$/);
   if (yearOnly) return yearOnly[1];
   return null;
+}
+
+/** 一覧の年見出し用。年月表示から先頭4桁を取る。 */
+export function musicLibraryReleaseYear(iso: string | null | undefined): string | null {
+  const ym = formatMusicLibraryYearMonth(iso);
+  if (!ym) return null;
+  const y = ym.match(/^(\d{4})/);
+  return y?.[1] ?? null;
+}
+
+export function groupMusicLibrarySongsByYear<T extends { releaseDate?: string | null }>(
+  songs: readonly T[],
+): { year: string | null; songs: T[] }[] {
+  const groups: { year: string | null; songs: T[] }[] = [];
+  for (const song of songs) {
+    const year = musicLibraryReleaseYear(song.releaseDate);
+    const last = groups[groups.length - 1];
+    if (last && last.year === year) last.songs.push(song);
+    else groups.push({ year, songs: [song] });
+  }
+  return groups;
 }
 
 const ORIGIN_SHORT: Record<string, string> = {
@@ -61,6 +83,32 @@ export function formatMusicLibraryActivePeriod(raw: string | null | undefined): 
     .replace(/\s+/g, ' ')
     .trim();
   return collapsed || null;
+}
+
+/** `2013 -` / `1977 - 1986` の開始年。無ければ null。 */
+export function musicLibraryActiveStartYear(raw: string | null | undefined): number | null {
+  const t = formatMusicLibraryActivePeriod(raw) ?? (raw ?? '').trim();
+  if (!t) return null;
+  const m = t.match(/\b((?:18|19|20)\d{2})\b/);
+  if (!m) return null;
+  const y = Number(m[1]);
+  return Number.isFinite(y) ? y : null;
+}
+
+/** 職種・種別。occupations があればそちら、無ければ kind。英語は単語頭を大文字に。 */
+export function formatMusicLibraryOccupation(
+  kind: string | null | undefined,
+  occupations?: string[] | null,
+): string | null {
+  const occ = Array.isArray(occupations)
+    ? occupations.map((s) => s.trim()).filter(Boolean)
+    : [];
+  const raw = occ.length > 0 ? occ.join(', ') : (kind ?? '').trim();
+  if (!raw) return null;
+  if (raw === raw.toLowerCase()) {
+    return raw.replace(/\b[a-z]/g, (c) => c.toUpperCase());
+  }
+  return raw;
 }
 
 /** アーティスト横の国籍ラベル。`UK` / `US` / `JP` など短いコード。 */
@@ -177,6 +225,48 @@ export function musicLibraryArtistNameFromRow(row: {
     return name;
   }
   return base;
+}
+
+/** slug と英語名が同じ人物か（All For Love vs bryan-adams は false）。 */
+export function musicLibraryNameMatchesArtistSlug(name: string, slug: string | null | undefined): boolean {
+  const s = (slug ?? '').trim().toLowerCase();
+  const n = artistNameToMusic8Slug(name);
+  if (!s || !n) return false;
+  if (n === s) return true;
+  if (n.startsWith('the-') && n.slice(4) === s) return true;
+  if (s.startsWith('the-') && s.slice(4) === n) return true;
+  return false;
+}
+
+export function musicLibraryDisplayNameFromSlug(slug: string): string {
+  const raw = slug.trim().toLowerCase().replace(/^the-/, '');
+  return raw
+    .split('-')
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+/**
+ * `artists.name` に曲名が入っているとき（Billie Jean / All For Love）は slug か曲の main_artist を使う。
+ */
+export function resolveMusicLibraryArtistDisplayName(input: {
+  name?: string | null;
+  slug?: string | null;
+  fallbacks?: readonly (string | null | undefined)[] | null;
+}): string {
+  const slug = (input.slug ?? '').trim().toLowerCase();
+  const name = (input.name ?? '').trim();
+  const fallbacks = (input.fallbacks ?? []).map((x) => (x ?? '').trim()).filter(Boolean);
+  const candidates = [...new Set([name, ...fallbacks].filter(Boolean))];
+  if (slug) {
+    const matched = candidates.find((c) => musicLibraryNameMatchesArtistSlug(c, slug));
+    if (matched) return matched;
+    if (name && !musicLibraryNameMatchesArtistSlug(name, slug)) {
+      return musicLibraryDisplayNameFromSlug(slug);
+    }
+  }
+  return name || (slug ? musicLibraryDisplayNameFromSlug(slug) : '');
 }
 
 /** タイトル横のジャンル。複数は `Pop / R&B` のように `/` 区切り。 */

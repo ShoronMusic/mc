@@ -7,10 +7,11 @@ import { LibraryYoutubePreviewPlayer } from '@/components/chat/LibraryYoutubePre
 import { MusicLibraryNowPlayingAside } from '@/components/music-library/MusicLibraryNowPlayingAside';
 import { SongCoverThumb } from '@/components/song/SongCoverThumb';
 import { IS_MC_PRODUCT } from '@/lib/product-branding';
-import { formatMusicLibraryYearMonth } from '@/lib/music-library-labels';
-import { music8NavStyleColor } from '@/lib/music8-catalog-slugs';
+import { formatMusicLibraryYearMonth, groupMusicLibrarySongsByYear } from '@/lib/music-library-labels';
+import { MUSIC8_NAV_STYLE_LABELS, music8NavStyleColor } from '@/lib/music8-catalog-slugs';
 import type { MusicLibrarySongCard } from '@/lib/music-library-types';
 import { musicLibraryPlayableTracks } from '@/lib/music-library-types';
+import type { MusicLibraryPageArtistRef } from '@/lib/music-library-now-playing-tabs';
 import { withMusicLibraryAutoplay } from '@/lib/music-library-urls';
 
 const MUSIC_LIBRARY_FIX_KEY = 'music-library-fix';
@@ -23,6 +24,8 @@ export type MusicLibrarySongListProps = {
   initialIndex?: number;
   hideList?: boolean;
   listFooter?: ReactNode;
+  /** アーティスト詳細の曲一覧。当該アーティストは右カラムタブから除く */
+  pageArtist?: MusicLibraryPageArtistRef | null;
 };
 
 export function MusicLibrarySongList({
@@ -33,6 +36,7 @@ export function MusicLibrarySongList({
   initialIndex = 0,
   hideList = false,
   listFooter = null,
+  pageArtist = null,
 }: MusicLibrarySongListProps) {
   const router = useRouter();
   const playable = useMemo(() => musicLibraryPlayableTracks(songs), [songs]);
@@ -50,6 +54,7 @@ export function MusicLibrarySongList({
 
   const current = playable[index] ?? null;
   const nowPlayingColor = music8NavStyleColor(current?.styleSlug) ?? '#ffffff';
+  const yearGroups = useMemo(() => groupMusicLibrarySongsByYear(songs), [songs]);
 
   const goTo = useCallback(
     (next: number, play: boolean) => {
@@ -134,7 +139,13 @@ export function MusicLibrarySongList({
       const active = activeRowRef.current;
       if (!container || !active) return;
       const prev = active.previousElementSibling;
-      const target = prev instanceof HTMLElement ? prev : active;
+      const section = active.closest('section');
+      const target =
+        prev instanceof HTMLElement
+          ? prev
+          : section instanceof HTMLElement
+            ? section
+            : active;
       const nextTop =
         container.scrollTop + (target.getBoundingClientRect().top - container.getBoundingClientRect().top);
       container.scrollTo({
@@ -178,6 +189,9 @@ export function MusicLibrarySongList({
   const dateClass = IS_MC_PRODUCT
     ? 'shrink-0 tabular-nums text-xs text-gray-500'
     : 'shrink-0 tabular-nums text-xs text-gray-500';
+  const yearHeading = IS_MC_PRODUCT
+    ? 'mb-1.5 text-xs font-medium tracking-wide text-gray-400'
+    : 'mb-1.5 text-xs font-medium tracking-wide text-gray-500';
 
   const rootClass =
     !hideList && fixOn
@@ -268,7 +282,7 @@ export function MusicLibrarySongList({
               </div>
             </div>
           </div>
-          <MusicLibraryNowPlayingAside song={current} />
+          <MusicLibraryNowPlayingAside song={current} pageArtist={pageArtist} />
         </div>
       ) : (
         <p className={IS_MC_PRODUCT ? 'text-sm text-gray-500' : 'text-sm text-gray-500'}>
@@ -279,8 +293,12 @@ export function MusicLibrarySongList({
 
       {hideList ? null : (
       <div ref={listScrollRef} className={listColumnClass}>
-      <ul className={`divide-y overflow-hidden rounded-xl border ${rowBorder}`}>
-        {songs.map((song) => {
+      <div className="space-y-8">
+        {yearGroups.map((group, gi) => (
+          <section key={`${group.year ?? 'undated'}-${gi}`}>
+            {group.year ? <h3 className={yearHeading}>{group.year}</h3> : null}
+            <ul className={`divide-y overflow-hidden rounded-xl border ${rowBorder}`}>
+        {group.songs.map((song) => {
           const queueIndex = playableIds.indexOf(song.id);
           const active = current?.id === song.id;
           const title = song.href ? (
@@ -295,12 +313,17 @@ export function MusicLibrarySongList({
           const artists = song.artists?.length
             ? song.artists
             : [{ name: song.artistName, href: song.artistHref, slug: song.artistSlug, originLabel: null }];
+          const styleColor = music8NavStyleColor(song.styleSlug);
+          const styleLabel =
+            song.styleSlug && song.styleSlug in MUSIC8_NAV_STYLE_LABELS
+              ? MUSIC8_NAV_STYLE_LABELS[song.styleSlug as keyof typeof MUSIC8_NAV_STYLE_LABELS]
+              : song.styleLabel?.trim() || null;
           return (
             <li
               key={song.id}
               ref={active ? activeRowRef : undefined}
               aria-current={active ? 'true' : undefined}
-              className={`flex items-center gap-3 px-3 py-2 ${
+              className={`flex items-stretch ${
                 active ? `music-library-now-playing ${isPlaying ? 'is-playing' : ''} ${rowActive}` : ''
               }`}
               style={
@@ -309,57 +332,69 @@ export function MusicLibrarySongList({
                   : undefined
               }
             >
-              <button
-                type="button"
-                className="shrink-0"
-                onClick={() => {
-                  if (queueIndex >= 0) playAtQueueIndex(queueIndex);
-                }}
-                disabled={queueIndex < 0}
-                aria-label={`${song.songTitle} を再生`}
-              >
-                <SongCoverThumb
-                  spotifyImages={song.spotifyImages}
-                  videoId={song.videoId}
-                  alt=""
-                  className="h-12 w-12"
-                />
-              </button>
-              <div className="min-w-0 flex-1">
-                <p className="flex min-w-0 items-baseline gap-1.5">
-                  <span className="min-w-0 truncate">{title}</span>
-                  {(song.vocalLabels ?? []).map((label) => (
-                    <span key={label} className={vocalBadge(label)}>
-                      {label}
-                    </span>
-                  ))}
-                  {song.genreLabel ? <span className={genreClass}>{song.genreLabel}</span> : null}
-                </p>
-                <p className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
-                  {artists.map((artist, i) => {
-                    const nameEl = artist.href ? (
-                      <Link href={artist.href} className={artistClass}>
-                        {artist.name}
-                      </Link>
-                    ) : (
-                      <span className={IS_MC_PRODUCT ? 'text-sm text-gray-600' : 'text-sm text-gray-400'}>
-                        {artist.name}
+              <span
+                className="w-[5px] shrink-0 self-stretch"
+                style={{ backgroundColor: styleColor ?? 'transparent' }}
+                title={styleLabel ?? undefined}
+                aria-label={styleLabel ?? undefined}
+                aria-hidden={!styleLabel}
+              />
+              <div className="flex min-w-0 flex-1 items-center gap-3 py-2 pl-2 pr-3">
+                <button
+                  type="button"
+                  className="shrink-0"
+                  onClick={() => {
+                    if (queueIndex >= 0) playAtQueueIndex(queueIndex);
+                  }}
+                  disabled={queueIndex < 0}
+                  aria-label={`${song.songTitle} を再生`}
+                >
+                  <SongCoverThumb
+                    spotifyImages={song.spotifyImages}
+                    videoId={song.videoId}
+                    alt=""
+                    className="h-12 w-12"
+                  />
+                </button>
+                <div className="min-w-0 flex-1">
+                  <p className="flex min-w-0 items-baseline gap-1.5">
+                    <span className="min-w-0 truncate">{title}</span>
+                    {(song.vocalLabels ?? []).map((label) => (
+                      <span key={label} className={vocalBadge(label)}>
+                        {label}
                       </span>
-                    );
-                    return (
-                      <span key={`${artist.slug ?? artist.name}-${i}`} className="inline-flex min-w-0 max-w-full items-center gap-1">
-                        <span className="min-w-0 truncate">{nameEl}</span>
-                        {artist.originLabel ? <span className={originBadge}>{artist.originLabel}</span> : null}
-                      </span>
-                    );
-                  })}
-                </p>
+                    ))}
+                    {song.genreLabel ? <span className={genreClass}>{song.genreLabel}</span> : null}
+                  </p>
+                  <p className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+                    {artists.map((artist, i) => {
+                      const nameEl = artist.href ? (
+                        <Link href={artist.href} className={artistClass}>
+                          {artist.name}
+                        </Link>
+                      ) : (
+                        <span className={IS_MC_PRODUCT ? 'text-sm text-gray-600' : 'text-sm text-gray-400'}>
+                          {artist.name}
+                        </span>
+                      );
+                      return (
+                        <span key={`${artist.slug ?? artist.name}-${i}`} className="inline-flex min-w-0 max-w-full items-center gap-1">
+                          <span className="min-w-0 truncate">{nameEl}</span>
+                          {artist.originLabel ? <span className={originBadge}>{artist.originLabel}</span> : null}
+                        </span>
+                      );
+                    })}
+                  </p>
+                </div>
+                <span className={dateClass}>{formatMusicLibraryYearMonth(song.releaseDate) ?? ''}</span>
               </div>
-              <span className={dateClass}>{formatMusicLibraryYearMonth(song.releaseDate) ?? ''}</span>
             </li>
           );
         })}
-      </ul>
+            </ul>
+          </section>
+        ))}
+      </div>
       {listFooter}
       </div>
       )}

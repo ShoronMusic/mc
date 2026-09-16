@@ -8,7 +8,17 @@ import { LibraryArtistExternalLinkPills } from '@/components/chat/LibraryArtistE
 import { MusicLibraryStyleAdminLink } from '@/components/music-library/MusicLibraryStyleAdminLink';
 import { formatMusicLibraryActivePeriod, formatMusicLibraryAgeParen, formatMusicLibraryOriginLabel, formatMusicLibraryYearMonth } from '@/lib/music-library-labels';
 import type { MusicLibraryArtistProfile, MusicLibraryListArtist, MusicLibrarySongCard } from '@/lib/music-library-types';
-import { isMusicLibraryNavStyleSlug, musicLibraryAdminArtistEditHref, musicLibraryAdminSongEditHref, musicLibraryArtistHref, musicLibraryStyleHref } from '@/lib/music-library-urls';
+import {
+  musicLibraryNowPlayingArtistTabs,
+  type MusicLibraryPageArtistRef,
+} from '@/lib/music-library-now-playing-tabs';
+import {
+  isMusicLibraryNavStyleSlug,
+  musicLibraryAdminArtistEditHref,
+  musicLibraryAdminSongEditHref,
+  musicLibraryArtistHref,
+  musicLibraryStyleHref,
+} from '@/lib/music-library-urls';
 
 type Tab = { id: string; label: string; artist?: MusicLibraryListArtist };
 
@@ -23,10 +33,10 @@ function artistCacheKey(artist: MusicLibraryListArtist): string {
   return (artist.slug || artist.name).trim().toLowerCase();
 }
 
-function tabsForSong(song: MusicLibrarySongCard): Tab[] {
+function tabsForSong(song: MusicLibrarySongCard, pageArtist?: MusicLibraryPageArtistRef | null): Tab[] {
   const seen = new Set<string>();
   const artistTabs: Tab[] = [];
-  for (const artist of listArtists(song)) {
+  for (const artist of musicLibraryNowPlayingArtistTabs(listArtists(song), pageArtist)) {
     const key = artistCacheKey(artist);
     if (!key || seen.has(key)) continue;
     seen.add(key);
@@ -45,8 +55,14 @@ function vocalBadge(label: 'F' | 'M'): string {
   return IS_MC_PRODUCT ? `${base} bg-sky-100` : `${base} bg-sky-500/25`;
 }
 
-export function MusicLibraryNowPlayingAside({ song }: { song: MusicLibrarySongCard }) {
-  const tabs = useMemo(() => tabsForSong(song), [song]);
+export function MusicLibraryNowPlayingAside({
+  song,
+  pageArtist = null,
+}: {
+  song: MusicLibrarySongCard;
+  pageArtist?: MusicLibraryPageArtistRef | null;
+}) {
+  const tabs = useMemo(() => tabsForSong(song, pageArtist), [song, pageArtist]);
   const [tabId, setTabId] = useState('song');
 
   useEffect(() => {

@@ -21,6 +21,12 @@ import {
   withMusicLibraryAutoplay,
   musicLibraryAdminArtistEditHref,
   musicLibraryAdminSongEditHref,
+  musicLibraryArtistsHref,
+  parseMusicLibraryArtistSearchQuery,
+  isMusicLibraryGenreLetterSegment,
+  musicLibraryGenreHref,
+  musicLibraryGenreLetterHref,
+  musicLibraryGenresHref,
 } from '@/lib/music-library-urls';
 import { MUSIC8_NAV_STYLE_COLORS, music8NavStyleColor } from '@/lib/music8-catalog-slugs';
 
@@ -62,8 +68,43 @@ assert.equal(musicLibrarySongHref('sting', ''), null);
 
 assert.equal(musicLibraryArtistLetterParam('M'), 'm');
 assert.equal(musicLibraryArtistLetterParam('#'), 'other');
+assert.equal(musicLibraryArtistLetterParam('9'), '0-9');
+assert.equal(musicLibraryArtistLetterParam('0-9'), '0-9');
 assert.equal(musicLibraryArtistLetterHref('B'), '/music/artists/b');
 assert.equal(musicLibraryArtistLetterHref('#'), '/music/artists/other');
+assert.equal(musicLibraryArtistLetterHref('9'), '/music/artists/0-9');
+assert.equal(musicLibraryArtistLetterHref('0-9', 2), '/music/artists/0-9/2');
+assert.equal(musicLibraryArtistLetterHref('a', 2), '/music/artists/a/2');
+assert.equal(
+  musicLibraryArtistLetterHref('a', 1, { sort: 'active', dir: 'desc' }),
+  '/music/artists/a?sort=active',
+);
+
+assert.equal(parseMusicLibraryArtistSearchQuery('  grimes  '), 'grimes');
+assert.equal(parseMusicLibraryArtistSearchQuery(''), '');
+assert.equal(musicLibraryArtistsHref(), '/music/artists');
+assert.equal(musicLibraryArtistsHref({ q: '  ' }), '/music/artists');
+assert.equal(musicLibraryArtistsHref({ q: 'grimes' }), '/music/artists?q=grimes');
+assert.equal(musicLibraryArtistsHref({ q: 'grimes', page: 2 }), '/music/artists?q=grimes&page=2');
+assert.equal(
+  musicLibraryArtistsHref({ q: 'grimes', sort: 'abc', dir: 'asc' }),
+  '/music/artists?q=grimes&sort=abc',
+);
+assert.equal(musicLibraryArtistsHref({ q: 'grimes', sort: 'songs', dir: 'desc' }), '/music/artists?q=grimes');
+
+assert.equal(isMusicLibraryGenreLetterSegment('b'), true);
+assert.equal(isMusicLibraryGenreLetterSegment('other'), true);
+assert.equal(isMusicLibraryGenreLetterSegment('0-9'), true);
+assert.equal(isMusicLibraryGenreLetterSegment('britpop'), false);
+assert.equal(musicLibraryGenresHref(), '/music/genres');
+assert.equal(musicLibraryGenresHref({ q: 'britpop' }), '/music/genres?q=britpop');
+assert.equal(musicLibraryGenreLetterHref('B'), '/music/genres/b');
+assert.equal(musicLibraryGenreLetterHref('a', 2), '/music/genres/a/2');
+assert.equal(musicLibraryGenreLetterHref('2'), '/music/genres/0-9');
+assert.equal(musicLibraryGenreLetterHref('0-9', 2), '/music/genres/0-9/2');
+assert.equal(musicLibraryGenreHref('Britpop', 1), '/music/genres/britpop/1');
+assert.equal(musicLibraryGenreHref('synth-pop', 2), '/music/genres/synth-pop/2');
+assert.equal(musicLibraryGenreHref('2-step', 1), '/music/genres/2-step/1');
 
 assert.equal(withMusicLibraryAutoplay('/music/styles/pop/2'), '/music/styles/pop/2?autoplay=1');
 assert.equal(withMusicLibraryAutoplay('/music/styles/pop/2', 3), '/music/styles/pop/2?autoplay=1&i=3');

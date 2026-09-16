@@ -49,7 +49,7 @@
     "test:user-co-attendance-count": "tsx src/lib/user-co-attendance-count.unit-test.ts",
     "test:cover-original-hints": "tsx src/lib/cover-original-hints.unit-test.ts",
     "test:music8-catalog": "tsx src/lib/music8-catalog.unit-test.ts",
-    "test:music-library": "tsx src/lib/music-library-urls.unit-test.ts && tsx src/lib/music-library-query.unit-test.ts && tsx src/lib/music-library-labels.unit-test.ts",
+    "test:music-library": "tsx src/lib/music-library-urls.unit-test.ts && tsx src/lib/music-library-query.unit-test.ts && tsx src/lib/music-library-labels.unit-test.ts && tsx src/lib/music-library-artist-charts.unit-test.ts && tsx src/lib/music-library-now-playing-tabs.unit-test.ts && tsx src/lib/music-library-genre-index.unit-test.ts",
     "test:youtube-published-at-date": "tsx src/lib/youtube-published-at-date.unit-test.ts",
     "test:music8-moderator-prefix": "tsx src/lib/music8-moderator-chat-prefix.unit-test.ts",
     "test:music8-release-date": "tsx src/lib/music8-release-date-sql.unit-test.ts",

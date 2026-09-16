@@ -40,7 +40,10 @@ export type MusicLibraryArtistProfile = {
   name: string;
   slug: string;
   nameJa: string | null;
+  nameEn: string | null;
   kind: string | null;
+  /** occupations 優先。無ければ kind を表示用に整形 */
+  occupation: string | null;
   originCountry: string | null;
   originLabel: string | null;
   activePeriod: string | null;
@@ -48,13 +51,62 @@ export type MusicLibraryArtistProfile = {
   imageUrl: string | null;
   imageCredit: string | null;
   profileText: string | null;
+  descriptionEn: string | null;
   ageLabel: string | null;
+  bornLabel: string | null;
+  diedLabel: string | null;
   links: { youtube: string | null; spotify: string | null; wikipedia: string | null };
   memberLinks: { name: string; slug: string | null }[];
   bandLinks: { name: string; slug: string | null }[];
   showMembersLine: boolean;
 };
 
+export function emptyMusicLibraryArtistProfile(name: string, slug: string): MusicLibraryArtistProfile {
+  return {
+    id: null,
+    name,
+    slug,
+    nameJa: null,
+    nameEn: null,
+    kind: null,
+    occupation: null,
+    originCountry: null,
+    originLabel: null,
+    activePeriod: null,
+    membersFallback: null,
+    imageUrl: null,
+    imageCredit: null,
+    profileText: null,
+    descriptionEn: null,
+    ageLabel: null,
+    bornLabel: null,
+    diedLabel: null,
+    links: { youtube: null, spotify: null, wikipedia: null },
+    memberLinks: [],
+    bandLinks: [],
+    showMembersLine: false,
+  };
+}
+
 export function musicLibraryPlayableTracks(cards: MusicLibrarySongCard[]): MusicLibrarySongCard[] {
   return cards.filter((c) => Boolean((c.videoId ?? '').trim()));
+}
+
+export type MusicLibraryChartSlice = {
+  key: string;
+  label: string;
+  count: number;
+  percent: number;
+  color: string;
+  href: string | null;
+};
+
+export type MusicLibraryArtistCharts = {
+  songCount: number;
+  styles: MusicLibraryChartSlice[];
+  genres: MusicLibraryChartSlice[];
+};
+
+export function emptyMusicLibraryArtistCharts(): MusicLibraryArtistCharts {
+  return { songCount: 0, styles: [], genres: [] };
 }

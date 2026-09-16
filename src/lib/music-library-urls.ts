@@ -7,6 +7,12 @@ import {
   MUSIC8_NAV_STYLE_SLUGS,
   type Music8NavStyleSlug,
 } from '@/lib/music8-catalog-slugs';
+import {
+  parseMusicLibraryArtistLetterDir,
+  parseMusicLibraryArtistLetterSort,
+  type MusicLibraryArtistLetterDir,
+  type MusicLibraryArtistLetterSort,
+} from '@/lib/music-library-artist-letter-sort';
 
 export const MUSIC_LIBRARY_BASE = '/music';
 export const MUSIC_LIBRARY_PAGE_SIZE = 40;
@@ -87,22 +93,128 @@ export function musicLibraryStyleHref(styleSlug: string, page = 1): string {
   return `${MUSIC_LIBRARY_BASE}/styles/${encodeURIComponent(slug)}/${p}`;
 }
 
-export function musicLibraryArtistsHref(): string {
-  return `${MUSIC_LIBRARY_BASE}/artists`;
+export function musicLibraryGenresHref(query?: MusicLibraryArtistsHrefQuery): string {
+  const q = parseMusicLibraryArtistSearchQuery(query?.q);
+  if (!q) return `${MUSIC_LIBRARY_BASE}/genres`;
+  const page = parseMusicLibraryPageParam(query?.page) ?? 1;
+  const sort = query?.sort != null ? parseMusicLibraryArtistLetterSort(query.sort) : 'songs';
+  const dir = query?.dir ?? parseMusicLibraryArtistLetterDir(null, sort);
+  const qs = new URLSearchParams();
+  qs.set('q', q);
+  if (page > 1) qs.set('page', String(page));
+  if (sort !== 'songs') qs.set('sort', sort);
+  const defaultDir = parseMusicLibraryArtistLetterDir(null, sort);
+  if (dir !== defaultDir) qs.set('dir', dir);
+  return `${MUSIC_LIBRARY_BASE}/genres?${qs.toString()}`;
 }
 
-/** A–Z は小文字、記号・非ラテンは `other`。 */
+/** A–Z / `0-9` / `other`。ジャンルスラッグ（britpop 等）は false。 */
+export function isMusicLibraryGenreLetterSegment(raw: string): boolean {
+  const t = (raw ?? '').trim().toLowerCase();
+  if (!t) return false;
+  if (t === '0-9') return true;
+  if (/^[0-9]$/.test(t)) return true;
+  return t === musicLibraryArtistLetterParam(t);
+}
+
+/** ジャンル索引。数字始まり（2-step 等）は `0-9`。 */
+export function musicLibraryGenreLetterParam(letter: string): string {
+  const t = (letter ?? '').trim().toLowerCase();
+  if (t === '0-9' || t === 'num') return '0-9';
+  const artist = musicLibraryArtistLetterParam(letter);
+  if (/^[0-9]$/.test(artist)) return '0-9';
+  return artist;
+}
+
+export function musicLibraryGenreLetterHref(
+  letter: string,
+  page = 1,
+  query?: { sort?: MusicLibraryArtistLetterSort; dir?: MusicLibraryArtistLetterDir },
+): string {
+  const param = musicLibraryGenreLetterParam(letter);
+  const p = parseMusicLibraryPageParam(page) ?? 1;
+  const path =
+    p <= 1
+      ? `${MUSIC_LIBRARY_BASE}/genres/${encodeURIComponent(param)}`
+      : `${MUSIC_LIBRARY_BASE}/genres/${encodeURIComponent(param)}/${p}`;
+  const sort = parseMusicLibraryArtistLetterSort(query?.sort);
+  const dir = query?.dir ?? parseMusicLibraryArtistLetterDir(null, sort);
+  const qs = new URLSearchParams();
+  if (sort !== 'abc') qs.set('sort', sort);
+  const defaultDir = parseMusicLibraryArtistLetterDir(null, sort);
+  if (dir !== defaultDir) qs.set('dir', dir);
+  const q = qs.toString();
+  return q ? `${path}?${q}` : path;
+}
+
+export function musicLibraryGenreHref(genreSlug: string, page = 1): string {
+  const slug = genreSlug.trim().toLowerCase();
+  const p = parseMusicLibraryPageParam(page) ?? 1;
+  return `${MUSIC_LIBRARY_BASE}/genres/${encodeURIComponent(slug)}/${p}`;
+}
+
+export const MUSIC_LIBRARY_ARTIST_SEARCH_MAX_LEN = 80;
+
+export type MusicLibraryArtistsHrefQuery = {
+  q?: string;
+  page?: number;
+  sort?: MusicLibraryArtistLetterSort;
+  dir?: MusicLibraryArtistLetterDir;
+};
+
+/** アーティスト索引の検索語。空なら検索しない。 */
+export function parseMusicLibraryArtistSearchQuery(raw: string | null | undefined): string {
+  const t = (raw ?? '').trim().replace(/\s+/g, ' ');
+  if (!t) return '';
+  return t.slice(0, MUSIC_LIBRARY_ARTIST_SEARCH_MAX_LEN);
+}
+
+export function musicLibraryArtistsHref(query?: MusicLibraryArtistsHrefQuery): string {
+  const q = parseMusicLibraryArtistSearchQuery(query?.q);
+  if (!q) return `${MUSIC_LIBRARY_BASE}/artists`;
+  const page = parseMusicLibraryPageParam(query?.page) ?? 1;
+  const sort = query?.sort != null ? parseMusicLibraryArtistLetterSort(query.sort) : 'songs';
+  const dir = query?.dir ?? parseMusicLibraryArtistLetterDir(null, sort);
+  const qs = new URLSearchParams();
+  qs.set('q', q);
+  if (page > 1) qs.set('page', String(page));
+  if (sort !== 'songs') qs.set('sort', sort);
+  const defaultDir = parseMusicLibraryArtistLetterDir(null, sort);
+  if (dir !== defaultDir) qs.set('dir', dir);
+  return `${MUSIC_LIBRARY_BASE}/artists?${qs.toString()}`;
+}
+
+/** A–Z は小文字、数字始まりは `0-9`、記号・非ラテンは `other`。 */
 export function musicLibraryArtistLetterParam(letter: string): string {
   const t = letter.trim();
   if (!t || t === '#' || /^other$/i.test(t)) return 'other';
+  const lower = t.toLowerCase();
+  if (lower === '0-9' || lower === 'num') return '0-9';
   const first = t[0] ?? '';
   if (/[A-Za-z]/.test(first)) return first.toLowerCase();
-  if (/[0-9]/.test(first)) return first;
+  if (/[0-9]/.test(first)) return '0-9';
   return 'other';
 }
 
-export function musicLibraryArtistLetterHref(letter: string): string {
-  return `${MUSIC_LIBRARY_BASE}/artists/${encodeURIComponent(musicLibraryArtistLetterParam(letter))}`;
+export function musicLibraryArtistLetterHref(
+  letter: string,
+  page = 1,
+  query?: { sort?: MusicLibraryArtistLetterSort; dir?: MusicLibraryArtistLetterDir },
+): string {
+  const param = musicLibraryArtistLetterParam(letter);
+  const p = parseMusicLibraryPageParam(page) ?? 1;
+  const path =
+    p <= 1
+      ? `${MUSIC_LIBRARY_BASE}/artists/${encodeURIComponent(param)}`
+      : `${MUSIC_LIBRARY_BASE}/artists/${encodeURIComponent(param)}/${p}`;
+  const sort = parseMusicLibraryArtistLetterSort(query?.sort);
+  const dir = query?.dir ?? parseMusicLibraryArtistLetterDir(null, sort);
+  const qs = new URLSearchParams();
+  if (sort !== 'abc') qs.set('sort', sort);
+  const defaultDir = parseMusicLibraryArtistLetterDir(null, sort);
+  if (dir !== defaultDir) qs.set('dir', dir);
+  const q = qs.toString();
+  return q ? `${path}?${q}` : path;
 }
 
 export function musicLibraryArtistHref(artistSlug: string, page = 1): string {

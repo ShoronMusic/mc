@@ -1,6 +1,6 @@
 import Link from 'next/link';
-import { MusicLibraryArtistLetterList } from '@/components/music-library/MusicLibraryArtistLetterList';
-import { MusicLibraryArtistSearchForm } from '@/components/music-library/MusicLibraryArtistSearchForm';
+import { MusicLibraryGenreLetterList } from '@/components/music-library/MusicLibraryGenreLetterList';
+import { MusicLibraryGenreSearchForm } from '@/components/music-library/MusicLibraryGenreSearchForm';
 import { MusicLibraryPagination } from '@/components/music-library/MusicLibraryPagination';
 import { MusicLibraryUnavailable } from '@/components/music-library/MusicLibraryStatus';
 import {
@@ -9,16 +9,15 @@ import {
   sortMusicLibraryArtistLetterItems,
 } from '@/lib/music-library-artist-letter-sort';
 import {
-  fetchMusicLibraryArtistIndex,
-  fetchMusicLibraryArtistLetterCounts,
-  getMusicLibraryAdmin,
-  musicLibraryCatalogFilter,
-  searchMusicLibraryArtistIndex,
-} from '@/lib/music-library-query';
+  fetchMusicLibraryGenreIndex,
+  filterMusicLibraryGenresBySearchQuery,
+  countMusicLibraryGenresByLetter,
+} from '@/lib/music-library-genre-index';
+import { getMusicLibraryAdmin, musicLibraryCatalogFilter } from '@/lib/music-library-query';
 import {
-  musicLibraryArtistLetterHref,
-  musicLibraryArtistLetterParam,
-  musicLibraryArtistsHref,
+  musicLibraryGenreLetterParam,
+  musicLibraryGenreLetterHref,
+  musicLibraryGenresHref,
   parseMusicLibraryArtistSearchQuery,
   parseMusicLibraryPageParam,
   sliceMusicLibraryPage,
@@ -38,13 +37,14 @@ function firstQuery(raw: string | string[] | undefined): string | undefined {
   return Array.isArray(raw) ? raw[0] : raw;
 }
 
-export default async function MusicLibraryArtistsPage({ searchParams }: Props) {
+export default async function MusicLibraryGenresPage({ searchParams }: Props) {
   const admin = getMusicLibraryAdmin();
   if (!admin) return <MusicLibraryUnavailable />;
 
   const catalog = musicLibraryCatalogFilter();
   const q = parseMusicLibraryArtistSearchQuery(firstQuery(searchParams?.q));
-  const counts = await fetchMusicLibraryArtistLetterCounts(admin, catalog);
+  const items = await fetchMusicLibraryGenreIndex(admin, catalog);
+  const counts = countMusicLibraryGenresByLetter(items);
   const mc = isMcProduct();
   const letters = [...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split(''), '0-9', 'other'];
 
@@ -56,8 +56,7 @@ export default async function MusicLibraryArtistsPage({ searchParams }: Props) {
     const sortRaw = firstQuery(searchParams?.sort);
     const sort = sortRaw ? parseMusicLibraryArtistLetterSort(sortRaw) : 'songs';
     const dir = parseMusicLibraryArtistLetterDir(firstQuery(searchParams?.dir), sort);
-    const { items } = await fetchMusicLibraryArtistIndex(admin, catalog);
-    const matched = await searchMusicLibraryArtistIndex(admin, items, q);
+    const matched = filterMusicLibraryGenresBySearchQuery(items, q);
     const sorted = sortMusicLibraryArtistLetterItems(matched, sort, dir);
     const page = parseMusicLibraryPageParam(firstQuery(searchParams?.page)) ?? 1;
     const sliced = sliceMusicLibraryPage(sorted, page);
@@ -70,17 +69,17 @@ export default async function MusicLibraryArtistsPage({ searchParams }: Props) {
           </h2>
           <p className={muted}>
             {sliced.totalItems > 0
-              ? `${sliced.totalItems} 人 · ${sliced.page} / ${sliced.totalPages} ページ`
-              : '一致するアーティストはありません。'}
+              ? `${sliced.totalItems} 件 · ${sliced.page} / ${sliced.totalPages} ページ`
+              : '一致するジャンルはありません。'}
           </p>
         </header>
         {sliced.totalItems > 0 ? (
           <>
-            <MusicLibraryArtistLetterList items={sliced.items} sort={sort} dir={dir} query={q} />
+            <MusicLibraryGenreLetterList items={sliced.items} sort={sort} dir={dir} query={q} />
             <MusicLibraryPagination
               page={sliced.page}
               totalPages={sliced.totalPages}
-              hrefForPage={(n) => musicLibraryArtistsHref({ q, page: n, sort, dir })}
+              hrefForPage={(n) => musicLibraryGenresHref({ q, page: n, sort, dir })}
             />
           </>
         ) : null}
@@ -91,40 +90,39 @@ export default async function MusicLibraryArtistsPage({ searchParams }: Props) {
   return (
     <div className="space-y-6">
       <header className="space-y-4">
-        <h1 className={titleClass}>Artists</h1>
+        <h1 className={titleClass}>Genres</h1>
         <div className="max-w-xl">
-          <MusicLibraryArtistSearchForm query={q} />
+          <MusicLibraryGenreSearchForm query={q} />
         </div>
       </header>
       {searchBlock}
-      <section className="space-y-3" aria-labelledby="music-library-artist-az">
+      <section className="space-y-3" aria-labelledby="music-library-genre-az">
         <h2
-          id="music-library-artist-az"
+          id="music-library-genre-az"
           className={mc ? 'text-lg font-semibold text-gray-900' : 'text-lg font-semibold text-white'}
         >
           アルファベット索引
         </h2>
         <ul className="flex flex-wrap gap-2">
-        {letters.map((letter) => {
-          const count = counts.get(musicLibraryArtistLetterParam(letter)) ?? 0;
-          const label = letter === 'other' ? '#' : letter;
-          const wide = letter === '0-9';
-          return (
-            <li key={letter}>
-              <Link
-                href={musicLibraryArtistLetterHref(letter)}
-                className={
-                  mc
-                    ? `inline-flex ${wide ? 'min-w-[2.75rem]' : 'min-w-[2.25rem]'} items-center justify-center rounded border border-gray-200 bg-white px-2 py-1 text-sm hover:border-gray-400`
-                    : `inline-flex ${wide ? 'min-w-[2.75rem]' : 'min-w-[2.25rem]'} items-center justify-center rounded border border-gray-800 bg-gray-900/40 px-2 py-1 text-sm hover:border-gray-600`
-                }
-              >
-                {label}
-                <span className={mc ? 'ml-1 text-xs text-gray-500' : 'ml-1 text-xs text-gray-500'}>{count}</span>
-              </Link>
-            </li>
-          );
-        })}
+          {letters.map((letter) => {
+            const count = counts.get(musicLibraryGenreLetterParam(letter)) ?? 0;
+            const label = letter === 'other' ? '#' : letter;
+            return (
+              <li key={letter}>
+                <Link
+                  href={musicLibraryGenreLetterHref(letter)}
+                  className={
+                    mc
+                      ? `inline-flex ${letter === '0-9' ? 'min-w-[2.75rem]' : 'min-w-[2.25rem]'} items-center justify-center rounded border border-gray-200 bg-white px-2 py-1 text-sm hover:border-gray-400`
+                      : `inline-flex ${letter === '0-9' ? 'min-w-[2.75rem]' : 'min-w-[2.25rem]'} items-center justify-center rounded border border-gray-800 bg-gray-900/40 px-2 py-1 text-sm hover:border-gray-600`
+                  }
+                >
+                  {label}
+                  <span className={mc ? 'ml-1 text-xs text-gray-500' : 'ml-1 text-xs text-gray-500'}>{count}</span>
+                </Link>
+              </li>
+            );
+          })}
         </ul>
       </section>
     </div>

@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { isMcProduct } from '@/lib/product-mode';
 import {
   musicLibraryArtistsHref,
+  musicLibraryGenresHref,
   musicLibraryHomeHref,
   musicLibraryStylesHref,
 } from '@/lib/music-library-urls';
@@ -11,6 +12,7 @@ const NAV = [
   { href: musicLibraryHomeHref(), label: 'Home' },
   { href: musicLibraryStylesHref(), label: 'Styles' },
   { href: musicLibraryArtistsHref(), label: 'Artists' },
+  { href: musicLibraryGenresHref(), label: 'Genres' },
 ] as const;
 
 export function MusicLibraryShell({ children }: { children: ReactNode }) {

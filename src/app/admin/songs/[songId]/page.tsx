@@ -35,7 +35,7 @@ import {
   type AdminSongArtistLink,
 } from '@/lib/admin-song-artist-links';
 import { ensureAdminSongArtistLinksByNames } from '@/lib/admin-song-artist-lookup';
-import { upsertSpotifyArtistsFromTrack } from '@/lib/admin-song-spotify-by-track-id';
+import { songHasResettableSpotifyMeta, upsertSpotifyArtistsFromTrack } from '@/lib/admin-song-spotify-by-track-id';
 import { syncSongCreditsFromSongId } from '@/lib/song-credits-sync';
 import { fetchSpotifyTrackWithArtistsById } from '@/lib/spotify-search-track';
 import { AdminNewArtistBadge } from '@/components/admin/AdminNewArtistBadge';
@@ -1060,6 +1060,7 @@ export default async function SongDetailPage({ params, searchParams }: SongDetai
           hasPopularity={song.spotify_popularity != null}
           hasSpotifyArtists={Boolean((song.spotify_artists ?? '').trim())}
           currentTrackId={song.spotify_track_id ?? null}
+          canReset={songHasResettableSpotifyMeta(song)}
         />
         <AdminSongCreditsPanel
           songId={song.id}

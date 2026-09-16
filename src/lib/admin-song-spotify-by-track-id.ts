@@ -23,6 +23,63 @@ import { normalizeSongCatalogScope } from '@/lib/song-catalog-scope';
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+/** 曲行の Spotify メタ。リセット対象（表示名・クレジットは含めない）。 */
+export const SPOTIFY_SONG_RESET_FIELDS = [
+  'spotify_track_id',
+  'spotify_name',
+  'spotify_artists',
+  'spotify_release_date',
+  'spotify_popularity',
+  'spotify_images',
+] as const;
+
+export function buildClearSpotifySongPayload(): Record<(typeof SPOTIFY_SONG_RESET_FIELDS)[number], null> {
+  return {
+    spotify_track_id: null,
+    spotify_name: null,
+    spotify_artists: null,
+    spotify_release_date: null,
+    spotify_popularity: null,
+    spotify_images: null,
+  };
+}
+
+/** Music8 スナップショット内の track ID を外す（再取得で誤 ID が戻らないように）。 */
+export function stripSpotifyTrackIdFromMusic8SongData(raw: unknown): unknown {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return raw;
+  const obj = { ...(raw as Record<string, unknown>) };
+  let changed = false;
+  if ('spotify_track_id' in obj) {
+    delete obj.spotify_track_id;
+    changed = true;
+  }
+  const ids = obj.identifiers;
+  if (ids && typeof ids === 'object' && !Array.isArray(ids) && 'spotify_track_id' in (ids as object)) {
+    const nextIds = { ...(ids as Record<string, unknown>) };
+    delete nextIds.spotify_track_id;
+    obj.identifiers = nextIds;
+    changed = true;
+  }
+  return changed ? obj : raw;
+}
+
+export function songHasResettableSpotifyMeta(row: {
+  spotify_track_id?: string | null;
+  spotify_name?: string | null;
+  spotify_artists?: string | null;
+  spotify_release_date?: string | null;
+  spotify_popularity?: number | null;
+  spotify_images?: string | null;
+}): boolean {
+  if ((row.spotify_track_id ?? '').trim()) return true;
+  if ((row.spotify_name ?? '').trim()) return true;
+  if ((row.spotify_artists ?? '').trim()) return true;
+  if ((row.spotify_release_date ?? '').trim()) return true;
+  if ((row.spotify_images ?? '').trim()) return true;
+  if (row.spotify_popularity != null && Number.isFinite(row.spotify_popularity)) return true;
+  return false;
+}
+
 export function buildOverwriteSpotifySongPayload(opts: {
   songTitle: string | null | undefined;
   currentMainArtist: string | null | undefined;
@@ -227,5 +284,53 @@ export async function applyManualSpotifyTrackIdToSong(
         : ((song as { display_title?: string | null }).display_title ?? null),
     artistsCreated: artistStats.created,
     artistsPatched: artistStats.patched,
+  };
+}
+
+export type ClearSpotifyMetaFromSongResult =
+  | { ok: true; clearedFields: string[]; reviewQueueDeleted: boolean }
+  | { ok: false; error: string; status?: number };
+
+export async function clearSpotifyMetaFromSong(
+  admin: SupabaseClient,
+  songIdRaw: string,
+): Promise<ClearSpotifyMetaFromSongResult> {
+  const songId = songIdRaw.trim();
+  if (!songId || !UUID_RE.test(songId)) {
+    return { ok: false, error: 'songId が無効です。', status: 400 };
+  }
+
+  const { data: song, error: songErr } = await admin
+    .from('songs')
+    .select('id, music8_song_data')
+    .eq('id', songId)
+    .maybeSingle();
+  if (songErr) return { ok: false, error: songErr.message, status: 500 };
+  if (!song) return { ok: false, error: '曲が見つかりません。', status: 404 };
+
+  const payload: Record<string, unknown> = { ...buildClearSpotifySongPayload() };
+  const snapshot = (song as { music8_song_data?: unknown }).music8_song_data;
+  const stripped = stripSpotifyTrackIdFromMusic8SongData(snapshot);
+  if (stripped !== snapshot) payload.music8_song_data = stripped;
+
+  const { error: upErr } = await admin.from('songs').update(payload).eq('id', songId);
+  if (upErr) return { ok: false, error: upErr.message, status: 500 };
+
+  let reviewQueueDeleted = false;
+  const { error: qErr } = await admin.from('song_spotify_review_queue').delete().eq('song_id', songId);
+  if (!qErr) reviewQueueDeleted = true;
+  else if (qErr.code !== '42P01') {
+    console.warn('[admin-song-spotify-by-track-id] review queue delete', qErr.message);
+  }
+
+  const { error: vErr } = await admin.from('song_videos').update({ spotify_track_id: null }).eq('song_id', songId);
+  if (vErr && vErr.code !== '42703' && vErr.code !== '42P01') {
+    console.warn('[admin-song-spotify-by-track-id] song_videos spotify_track_id clear', vErr.message);
+  }
+
+  return {
+    ok: true,
+    clearedFields: [...SPOTIFY_SONG_RESET_FIELDS],
+    reviewQueueDeleted,
   };
 }

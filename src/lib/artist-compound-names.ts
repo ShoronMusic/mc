@@ -23,6 +23,7 @@ type CompoundJsonEntry =
 /** 比較用: 小文字・空白正規化・and→& */
 export function normArtistCompoundKey(name: string): string {
   return name
+    .replace(/&amp;/gi, '&')
     .toLowerCase()
     .replace(/\s+/g, ' ')
     .trim()

@@ -31,6 +31,7 @@ Supabase 上の `songs` / `song_videos` / `song_commentary` / `song_tidbits` / `
 
 - **Music8 スナップショット再取得**: `POST /api/admin/song-music8-refresh`（`STYLE_ADMIN` + Service Role）。空の `music8_song_data` を埋める緊急用。正本は `songs` の列。公開 JSON から戻すと手修正を上書きすることがある。
 - **Music8 JSON URL 直接インポート**: **使わない。** 正本切替後は公開 JSON はキャッシュ。日常の修正は「基本情報の修正」。API `POST /api/admin/song-music8-json-import` は残しているが管理 UI からは外した。
+- **Spotify メタ取得**: 曲詳細の Spotify パネル。`POST /api/admin/domestic-songs-spotify-enrich`（空欄補完）／`POST /api/admin/song-spotify-by-track-id`（track ID 指定で上書き、または `{ clear: true }` で track ID・曲名・アーティスト表記・公開日・人気度・ジャケットを空にする。`main_artist` / `display_title` / クレジットは触らない）。誤マッチのやり直し用。
 - **削除**: 誤マスタ（アーティスト／タイトルのテレコ等）向けに、確認入力付きで `POST /api/admin/song-master-delete`（`STYLE_ADMIN` + `SUPABASE_SERVICE_ROLE_KEY`）。確認文は `normalizeSongDeleteConfirmText` で大文字小文字・スマート引用符等を正規化して照合。詳細は `src/lib/admin-delete-song-master.ts`。
 - `display_title`（例: Culture Club - Karma Chameleon）
 - `main_artist`

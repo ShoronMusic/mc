@@ -121,6 +121,7 @@ export function getMusic8ArtistJsonUrlCandidates(artistName: string): string[] {
 export function artistNameToMusic8Slug(artistName: string): string {
   let s = (artistName ?? '').trim();
   if (!s) return '';
+  s = s.replace(/&amp;/gi, '&');
   try {
     const main = getMainArtist(s);
     if (main && typeof main === 'string') {

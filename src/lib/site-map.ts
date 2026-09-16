@@ -52,7 +52,7 @@ export const SITE_MAP_SECTIONS: readonly SiteMapSection[] = [
       {
         label: 'Music Library',
         href: '/music',
-        description: '曲・アーティスト・スタイルの公開カタログ。YouTube 連続再生ができます。',
+        description: '曲・アーティスト・スタイル・ジャンルの公開カタログ。YouTube 連続再生ができます。',
       },
     ],
   },

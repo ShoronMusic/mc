@@ -13,6 +13,8 @@ function run() {
       { main_artist: 'Queen', count: 5, indexLetter: 'Q' },
     ],
     letters: ['B', 'Q', 1, ''],
+    countsBySlug: { beatles: 10, queen: 5 },
+    styleBySlug: { beatles: 'rock', queen: 'rock' },
   });
   assert.ok(ok);
   assert.deepEqual(
@@ -20,6 +22,25 @@ function run() {
     ['The Beatles', 'Queen'],
   );
   assert.deepEqual(ok.letters, ['B', 'Q']);
+  assert.equal(ok.countsBySlug.beatles, 10);
+  assert.equal(ok.styleBySlug.beatles, 'rock');
+  const fromItems = parseLibraryArtistIndexSnapshotPayload({
+    items: [
+      { main_artist: 'Prince', count: 108, indexLetter: 'P' },
+      { __countsBySlug: { prince: 66 }, __styleBySlug: { prince: 'pop' } },
+    ],
+    letters: ['P'],
+  });
+  assert.equal(fromItems?.countsBySlug.prince, 66);
+  assert.equal(fromItems?.styleBySlug.prince, 'pop');
+  assert.equal(fromItems?.items.length, 1);
+  assert.equal(
+    parseLibraryArtistIndexSnapshotPayload({
+      items: [{ main_artist: 'Queen', count: 5, indexLetter: 'Q' }],
+      letters: ['Q'],
+    }),
+    null,
+  );
 
   console.log('build-library-artist-index.unit-test: ok');
 }

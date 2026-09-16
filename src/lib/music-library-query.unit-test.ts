@@ -11,6 +11,14 @@ import {
   musicLibrarySqlScopeMode,
   takeNewestPerStyle,
   toMusicLibrarySongCard,
+  countMusicLibraryArtistsByLetter,
+  filterMusicLibraryArtistsByLetter,
+  finalizeMusicLibraryArtistIndexItems,
+  applyMusicLibraryArtistIndexSongCounts,
+  lookupMusicLibraryArtistIndexRef,
+  mergeMusicLibraryArtistIndexRefs,
+  musicLibraryArtistIndexDisplayName,
+  filterMusicLibraryArtistsBySearchQuery,
 } from '@/lib/music-library-query';
 
 assert.equal(musicLibraryArtistSlugForName('Madonna', 'madonna'), 'madonna');
@@ -197,5 +205,202 @@ assert.equal(musicLibrarySongBelongsToNavStyle('Metal', 'metal'), true);
 assert.equal(musicLibrarySongBelongsToNavStyle('Pop', 'pop'), true);
 assert.equal(musicLibrarySongBelongsToNavStyle('', 'pop'), true);
 assert.equal(musicLibrarySongBelongsToNavStyle(null, 'metal'), true);
+
+const letterCounts = countMusicLibraryArtistsByLetter([
+  { indexLetter: 'A' },
+  { indexLetter: 'a' },
+  { indexLetter: '#' },
+  { indexLetter: '9' },
+  { indexLetter: '2' },
+]);
+assert.equal(letterCounts.get('a'), 2);
+assert.equal(letterCounts.get('other'), 1);
+assert.equal(letterCounts.get('0-9'), 2);
+
+const finalized = finalizeMusicLibraryArtistIndexItems([
+  {
+    name: 'Bryan Adams',
+    slug: 'bryan-adams',
+    href: '/music/all-for-love',
+    count: 48,
+    indexLetter: 'A',
+    imageUrl: 'https://example.com/bryan.jpg',
+  },
+  {
+    name: 'All For Love',
+    slug: 'bryan-adams',
+    href: '/music/all-for-love',
+    count: 2,
+    indexLetter: 'A',
+  },
+  {
+    name: 'a-ha',
+    slug: 'a-ha',
+    href: '/music/a-ha',
+    count: 13,
+    indexLetter: 'A',
+  },
+]);
+assert.equal(finalized.length, 2);
+const bryan = finalized.find((it) => it.slug === 'bryan-adams');
+assert.equal(bryan?.name, 'Bryan Adams');
+assert.equal(bryan?.count, 50);
+assert.equal(bryan?.indexLetter, 'B');
+assert.equal(bryan?.href, '/music/bryan-adams');
+assert.equal(bryan?.imageUrl, 'https://example.com/bryan.jpg');
+assert.equal(filterMusicLibraryArtistsByLetter(finalized, 'a').some((it) => it.slug === 'bryan-adams'), false);
+assert.equal(filterMusicLibraryArtistsByLetter(finalized, 'b').some((it) => it.slug === 'bryan-adams'), true);
+assert.equal(
+  filterMusicLibraryArtistsByLetter(
+    [{ name: 'Bryan Adams', slug: 'bryan-adams', href: '/music/bryan-adams', count: 48, indexLetter: 'A' }],
+    'a',
+  ).length,
+  0,
+);
+assert.equal(
+  filterMusicLibraryArtistsByLetter(
+    [{ name: '911', slug: '911', href: '/music/911', count: 3, indexLetter: '9' }],
+    '0-9',
+  ).some((it) => it.slug === '911'),
+  true,
+);
+assert.equal(
+  filterMusicLibraryArtistsByLetter(
+    [{ name: '!!!', slug: 'chk-chk-chk', href: '/music/chk-chk-chk', count: 2, indexLetter: '#' }],
+    'other',
+  ).some((it) => it.slug === 'chk-chk-chk'),
+  true,
+);
+
+assert.equal(
+  musicLibraryArtistIndexDisplayName({
+    mainArtist: 'ash',
+    slug: 'ash',
+    resolvedDisplayName: 'Ash',
+  }),
+  'Ash',
+);
+assert.equal(
+  lookupMusicLibraryArtistIndexRef(
+    new Map([
+      [
+        'ash',
+        {
+          slug: 'ash',
+          displayName: 'Ash',
+          originLabel: 'UK',
+          activeStartYear: 1992,
+          imageUrl: 'https://example.com/ash.jpg',
+        },
+      ],
+    ]),
+    'ash',
+  )?.displayName,
+  'Ash',
+);
+
+const mergedCasing = finalizeMusicLibraryArtistIndexItems([
+  { name: 'ash', slug: 'ash', href: '/music/ash', count: 47, indexLetter: 'A' },
+  {
+    name: 'Ash',
+    slug: 'ash',
+    href: '/music/ash',
+    count: 0,
+    indexLetter: 'A',
+    originLabel: 'UK',
+    imageUrl: 'https://example.com/ash.jpg',
+  },
+]);
+assert.equal(mergedCasing[0]?.name, 'Ash');
+assert.equal(mergedCasing[0]?.originLabel, 'UK');
+assert.equal(mergedCasing[0]?.imageUrl, 'https://example.com/ash.jpg');
+assert.equal(mergedCasing[0]?.count, 47);
+
+const fiveSosMerged = finalizeMusicLibraryArtistIndexItems(
+  [
+    {
+      name: '5 Seconds of Summer',
+      slug: '5-seconds-of-summer',
+      href: '/music/5-seconds-of-summer',
+      count: 33,
+      indexLetter: '5',
+    },
+    {
+      name: '5sos',
+      slug: '5sos',
+      href: '/music/5sos',
+      count: 33,
+      indexLetter: '5',
+      originLabel: 'AUS',
+      imageUrl: 'https://example.com/5sos.jpg',
+    },
+  ],
+  { '5sos': 33 },
+);
+assert.equal(fiveSosMerged.length, 1);
+assert.equal(fiveSosMerged[0]?.name, '5 Seconds of Summer');
+assert.equal(fiveSosMerged[0]?.slug, '5sos');
+assert.equal(fiveSosMerged[0]?.href, '/music/5sos');
+assert.equal(fiveSosMerged[0]?.originLabel, 'AUS');
+assert.ok((fiveSosMerged[0]?.searchNames ?? []).some((n) => n.toLowerCase() === '5sos'));
+assert.equal(filterMusicLibraryArtistsBySearchQuery(fiveSosMerged, '5sos')[0]?.slug, '5sos');
+assert.equal(filterMusicLibraryArtistsBySearchQuery(fiveSosMerged, '5 Seconds of Summer')[0]?.slug, '5sos');
+assert.equal(filterMusicLibraryArtistsBySearchQuery(fiveSosMerged, '5SOS')[0]?.slug, '5sos');
+
+const arianaMerged = mergeMusicLibraryArtistIndexRefs(
+  {
+    slug: 'ariana-grande',
+    displayName: 'Ariana Grande',
+    originLabel: null,
+    activeStartYear: null,
+    imageUrl: null,
+  },
+  {
+    slug: 'ariana-grande',
+    displayName: 'The Weeknd, Ariana Grande',
+    originLabel: 'US',
+    activeStartYear: 2013,
+    imageUrl: 'https://example.com/ariana.jpg',
+  },
+);
+assert.equal(arianaMerged.displayName, 'Ariana Grande');
+assert.equal(arianaMerged.originLabel, 'US');
+assert.equal(arianaMerged.imageUrl, 'https://example.com/ariana.jpg');
+
+const searchPool = [
+  { name: 'Grimes', slug: 'grimes', href: '/music/grimes', count: 29, indexLetter: 'G' },
+  { name: 'Chelcee Grimes', slug: 'chelcee-grimes', href: '/music/chelcee-grimes', count: 1, indexLetter: 'C' },
+  { name: 'The Beatles', slug: 'beatles', href: '/music/beatles', count: 80, indexLetter: 'B' },
+  { name: 'Ariana Grande', slug: 'ariana-grande', href: '/music/ariana-grande', count: 24, indexLetter: 'A' },
+];
+const grimesHits = filterMusicLibraryArtistsBySearchQuery(searchPool, 'grimes');
+assert.equal(grimesHits.length, 2);
+assert.equal(grimesHits[0]?.name, 'Grimes');
+assert.equal(grimesHits[1]?.name, 'Chelcee Grimes');
+assert.equal(filterMusicLibraryArtistsBySearchQuery(searchPool, 'beatles')[0]?.name, 'The Beatles');
+assert.equal(
+  filterMusicLibraryArtistsBySearchQuery(searchPool, 'グライムズ', ['Grimes']).map((it) => it.name).join(','),
+  'Grimes',
+);
+assert.deepEqual(filterMusicLibraryArtistsBySearchQuery(searchPool, ''), []);
+
+const princeListed = applyMusicLibraryArtistIndexSongCounts(
+  [
+    { name: 'Prince', slug: 'prince', href: '/music/prince', count: 108, indexLetter: 'P' },
+    { name: 'Madonna', slug: 'madonna', href: '/music/madonna', count: 40, indexLetter: 'M' },
+  ],
+  { prince: 66 },
+  { prince: 'pop' },
+);
+assert.equal(princeListed.find((it) => it.slug === 'prince')?.count, 66);
+assert.equal(princeListed.find((it) => it.slug === 'prince')?.styleSlug, 'pop');
+assert.equal(princeListed.find((it) => it.slug === 'madonna')?.count, 40);
+assert.equal(
+  applyMusicLibraryArtistIndexSongCounts(
+    [{ name: 'Only Credits', slug: 'only-credits', href: '/music/only-credits', count: 12, indexLetter: 'O' }],
+    { 'only-credits': 0 },
+  ).length,
+  0,
+);
 
 console.log('music-library-query.unit-test: ok');

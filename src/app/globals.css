@@ -306,7 +306,7 @@ html.mc-prevent-pull-refresh .mc-room-viewport {
 .music-library-now-playing::after {
   content: '';
   position: absolute;
-  left: 0.75rem;
+  left: calc(5px + 0.5rem);
   right: 0.75rem;
   bottom: 3px;
   height: 2px;
