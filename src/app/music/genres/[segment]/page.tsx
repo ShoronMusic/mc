@@ -36,8 +36,9 @@ export default async function MusicLibraryGenreSegmentPage({ params, searchParam
   const raw = (params.segment ?? '').trim().toLowerCase();
   if (!raw) notFound();
 
-  const page = params.page ? parseMusicLibraryPageParam(params.page) : 1;
-  if (params.page && !page) notFound();
+  const parsedPage = params.page ? parseMusicLibraryPageParam(params.page) : 1;
+  if (params.page && parsedPage == null) notFound();
+  const page = parsedPage ?? 1;
 
   if (/^[0-9]$/.test(raw)) {
     redirect(musicLibraryGenreLetterHref('0-9', page));
@@ -57,7 +58,7 @@ export default async function MusicLibraryGenreSegmentPage({ params, searchParam
   const items = await fetchMusicLibraryGenreIndex(admin, musicLibraryCatalogFilter());
   const filtered = filterMusicLibraryGenresByLetter(items, letter);
   const sorted = sortMusicLibraryArtistLetterItems(filtered, sort, dir);
-  const sliced = sliceMusicLibraryPage(sorted, page ?? 1);
+  const sliced = sliceMusicLibraryPage(sorted, page);
   const mc = isMcProduct();
   const title = letter === 'other' ? '#' : letter === '0-9' ? '0-9' : letter.toUpperCase();
 
