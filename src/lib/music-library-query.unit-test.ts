@@ -70,6 +70,7 @@ assert.equal(card.releaseDate, '1983-05-20');
 assert.equal(card.intro, null);
 assert.deepEqual(card.vocalLabels, []);
 assert.equal(card.genreLabel, null);
+assert.deepEqual(card.genreLinks, []);
 assert.equal(card.artists?.[0]?.name, 'The Police');
 assert.equal(card.styleLabel, null);
 assert.equal(
@@ -104,6 +105,10 @@ const labeled = toMusicLibrarySongCard(
 );
 assert.deepEqual(labeled.vocalLabels, ['F']);
 assert.equal(labeled.genreLabel, 'Pop-punk / Pop');
+assert.deepEqual(labeled.genreLinks, [
+  { name: 'Pop-punk', slug: 'pop-punk', href: '/music/genres/pop-punk/1' },
+  { name: 'Pop', slug: 'pop', href: '/music/genres/pop/1' },
+]);
 assert.equal(labeled.artists?.[0]?.name, 'Shygirl');
 assert.equal(labeled.styleSlug, 'pop');
 assert.equal(labeled.styleLabel, 'Pop');
@@ -125,6 +130,10 @@ const fromSnap = toMusicLibrarySongCard(
 );
 assert.deepEqual(fromSnap.vocalLabels, ['F']);
 assert.equal(fromSnap.genreLabel, 'Synth-pop / Pop');
+assert.deepEqual(fromSnap.genreLinks, [
+  { name: 'Synth-pop', slug: 'synth-pop', href: '/music/genres/synth-pop/1' },
+  { name: 'Pop', slug: 'pop', href: '/music/genres/pop/1' },
+]);
 
 const duet = toMusicLibrarySongCard(
   {

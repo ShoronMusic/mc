@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   buildGenreBestTabGroups,
   filterGenreBestByTab,
@@ -77,6 +78,19 @@ export function GenreBestRegisterModal({
     void load();
   }, [open, load]);
 
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (successAnimating) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      onCloseRef.current();
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [open, successAnimating]);
+
   /** WP: animationend + 最低 2s の両方完了後に閉じる */
   useEffect(() => {
     if (!successAnimating) return;
@@ -144,11 +158,11 @@ export function GenreBestRegisterModal({
     }
   };
 
-  if (!open) return null;
+  if (!open || typeof document === 'undefined') return null;
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+      className="fixed inset-0 z-[90] flex items-center justify-center bg-black/70 p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="genre-best-modal-title"
@@ -275,6 +289,7 @@ export function GenreBestRegisterModal({
           </ul>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

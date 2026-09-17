@@ -92,6 +92,32 @@ export function playlistMatchesStyle(styles: string[], styleName: string): boole
   return styles.some((s) => styleKeysMatch(s, styleName));
 }
 
+export function genreBestTabParam(key: GenreBestTabKey): string {
+  const t = String(key ?? '').trim();
+  if (!t) return 'genre';
+  const lower = t.toLowerCase();
+  if (lower === 'genre') return 'genre';
+  if (lower === 'updated') return 'updated';
+  return normalizeStyleKey(t) || lower;
+}
+
+export function parseGenreBestTabKey(raw: string | null | undefined): GenreBestTabKey {
+  const t = (raw ?? '').trim();
+  if (!t) return 'genre';
+  const lower = t.toLowerCase();
+  if (lower === 'genre') return 'genre';
+  if (lower === 'updated') return 'updated';
+  const found = GENRE_BEST_STYLE_ORDER.find((s) => normalizeStyleKey(s) === normalizeStyleKey(t));
+  return found ?? t;
+}
+
+export function genreBestTabsEqual(a: GenreBestTabKey, b: GenreBestTabKey): boolean {
+  if (a === 'genre' || b === 'genre' || a === 'updated' || b === 'updated') {
+    return String(a).toLowerCase() === String(b).toLowerCase();
+  }
+  return styleKeysMatch(String(a), String(b));
+}
+
 export function buildGenreBestTabGroups(
   items: Array<{ styles: string[] }>,
 ): Array<{ key: GenreBestTabKey; label: string }> {

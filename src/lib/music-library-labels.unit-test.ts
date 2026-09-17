@@ -13,6 +13,7 @@ import {
   musicLibraryArtistNameFromRow,
   musicLibraryReleaseYear,
   musicLibraryVocalLabels,
+  listMusicLibraryGenreLinks,
   parseMusicLibraryGenresColumn,
   parseMusicLibrarySnapshotArtists,
   pickMusicLibraryGenreLabel,
@@ -96,6 +97,15 @@ assert.equal(
 assert.equal(pickMusicLibraryGenreLabel({ columnGenres: ['Pop'] }), 'Pop');
 assert.equal(pickMusicLibraryGenreLabel({ columnGenres: ['F', 'M'] }), null);
 assert.equal(pickMusicLibraryGenreLabel({}), null);
+assert.deepEqual(listMusicLibraryGenreLinks({ columnGenres: ['Pop', 'R&B'] }), [
+  { name: 'Pop', slug: 'pop', href: '/music/genres/pop/1' },
+  { name: 'R&B', slug: 'rb', href: '/music/genres/rb/1' },
+]);
+assert.deepEqual(listMusicLibraryGenreLinks({ columnGenres: ['Pop', 'Pop-punk'] }), [
+  { name: 'Pop', slug: 'pop', href: '/music/genres/pop/1' },
+  { name: 'Pop-punk', slug: 'pop-punk', href: '/music/genres/pop-punk/1' },
+]);
+assert.deepEqual(listMusicLibraryGenreLinks({ columnGenres: ['F', 'M'] }), []);
 
 assert.deepEqual(musicLibraryVocalLabels('F'), ['F']);
 assert.deepEqual(musicLibraryVocalLabels('M'), ['M']);

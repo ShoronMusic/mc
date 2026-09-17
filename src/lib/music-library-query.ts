@@ -43,7 +43,7 @@ import {
   musicLibraryNameMatchesArtistSlug,
   musicLibraryVocalLabels,
   parseMusicLibrarySnapshotArtists,
-  pickMusicLibraryGenreLabel,
+  listMusicLibraryGenreLinks,
   resolveMusicLibraryArtistDisplayName,
 } from '@/lib/music-library-labels';
 import { extractMusic8SongFieldsFromPersistedSnapshot } from '@/lib/music8-song-fields';
@@ -65,6 +65,19 @@ import {
   type LibraryCatalogFilter,
 } from '@/lib/song-catalog-scope';
 import { ensureWesternTreatedJpArtistCache } from '@/lib/western-treated-jp-artists';
+import {
+  getGenreBestBySlug,
+  isCatalogPlaylistTableMissingError,
+  listGenreBestPlaylists,
+  type GenreBestListItem,
+} from '@/lib/catalog-genre-best';
+import {
+  formatWeeklyChartWeekLabel,
+  loadLatestWeeklyChartIssue,
+  weeklyChartPublicSubtitle,
+  weeklyChartPublicTitle,
+  type WeeklyChartRegion,
+} from '@/lib/weekly-charts';
 import {
   MUSIC_LIBRARY_PAGE_SIZE,
   MUSIC_LIBRARY_TOP_PER_STYLE,
@@ -279,10 +292,11 @@ export function toMusicLibrarySongCard(
   const snap = extractMusic8SongFieldsFromPersistedSnapshot(row.music8_song_data);
   const vocalFromCol = musicLibraryVocalLabels(row.vocal);
   const vocalLabels = vocalFromCol.length ? vocalFromCol : musicLibraryVocalLabels(snap?.vocalLabel);
-  const genreLabel = pickMusicLibraryGenreLabel({
+  const genreLinks = listMusicLibraryGenreLinks({
     columnGenres: row.genres,
     snapshotGenres: snap?.genres ?? null,
   });
+  const genreLabel = genreLinks.length > 0 ? genreLinks.map((g) => g.name).join(' / ') : null;
   const artists = resolveMusicLibraryListArtists({
     artistName,
     artistSlug,
@@ -312,6 +326,7 @@ export function toMusicLibrarySongCard(
     styleLabel,
     vocalLabels,
     genreLabel,
+    genreLinks,
     artists,
     intro: usableLibraryMusic8Intro(row.music8_intro),
   };
@@ -1145,6 +1160,190 @@ export async function fetchMusicLibraryGenrePage(
     totalPages: 1,
     totalItems: 0,
   };
+}
+
+export type MusicLibraryGenreBestPage = {
+  slug: string;
+  title: string;
+  description: string | null;
+  coverImageUrl: string | null;
+  showGenreBestSubtitle: boolean;
+  styles: string[];
+  cards: MusicLibrarySongCard[];
+  page: number;
+  totalPages: number;
+  totalItems: number;
+};
+
+async function recountGenreBestPublicSongCounts(
+  admin: SupabaseClient,
+  items: GenreBestListItem[],
+  catalog: LibraryCatalogFilter,
+): Promise<GenreBestListItem[]> {
+  if (items.length === 0) return items;
+  const ids = items.map((i) => i.id);
+  const links: Array<{ playlist_id?: string; song_id?: string }> = [];
+  for (const chunk of chunkArray(ids, SONG_ID_CHUNK)) {
+    const { data, error } = await admin
+      .from('catalog_playlist_songs')
+      .select('playlist_id, song_id')
+      .in('playlist_id', chunk);
+    if (error) {
+      if (isCatalogPlaylistTableMissingError(error.message)) return items;
+      console.warn('[music-library] genre-best song links', error.message);
+      return items;
+    }
+    if (Array.isArray(data)) links.push(...(data as Array<{ playlist_id?: string; song_id?: string }>));
+  }
+  const songIds = [...new Set(links.map((l) => (l.song_id ?? '').trim()).filter(Boolean))];
+  const allowed = new Set<string>();
+  if (songIds.length > 0) {
+    const rows = await fetchSongRowsByIds(admin, songIds);
+    for (const row of filterSongRowsByLibraryCatalog(rows, catalog)) {
+      if (row.id) allowed.add(row.id);
+    }
+  }
+  const countByPlaylist = new Map<string, number>();
+  for (const link of links) {
+    const playlistId = (link.playlist_id ?? '').trim();
+    const songId = (link.song_id ?? '').trim();
+    if (!playlistId || !songId || !allowed.has(songId)) continue;
+    countByPlaylist.set(playlistId, (countByPlaylist.get(playlistId) ?? 0) + 1);
+  }
+  return items.map((item) => ({
+    ...item,
+    songCount: countByPlaylist.get(item.id) ?? 0,
+  }));
+}
+
+export async function fetchMusicLibraryGenreBestList(
+  admin: SupabaseClient,
+  catalog: LibraryCatalogFilter = musicLibraryCatalogFilter(),
+): Promise<{ items: GenreBestListItem[]; tableMissing?: boolean }> {
+  const { items, error, tableMissing } = await listGenreBestPlaylists(admin);
+  if (tableMissing) return { items: [], tableMissing: true };
+  if (error) {
+    console.warn('[music-library] genre-best list', error);
+    return { items: [] };
+  }
+  const counted = await recountGenreBestPublicSongCounts(admin, items, catalog);
+  return { items: counted };
+}
+
+export async function fetchMusicLibraryGenreBestPage(
+  admin: SupabaseClient,
+  slug: string,
+  page: number,
+  catalog: LibraryCatalogFilter = musicLibraryCatalogFilter(),
+): Promise<MusicLibraryGenreBestPage | null> {
+  const { detail, error, tableMissing } = await getGenreBestBySlug(admin, slug);
+  if (tableMissing || error) {
+    if (error && !tableMissing) console.warn('[music-library] genre-best detail', error);
+    return null;
+  }
+  if (!detail) return null;
+
+  const orderedIds = detail.songs.map((s) => s.songId).filter(Boolean);
+  const rows = await fetchSongRowsByIds(admin, orderedIds);
+  const byId = new Map(filterSongRowsByLibraryCatalog(rows, catalog).map((row) => [row.id, row]));
+  const orderedRows = orderedIds.map((id) => byId.get(id)).filter((row): row is SongListRow => !!row);
+  const sliced = sliceMusicLibraryPage(orderedRows, page, MUSIC_LIBRARY_PAGE_SIZE);
+  const { cards } = await attachVideosToSongs(admin, sliced.items);
+
+  return {
+    slug: detail.slug,
+    title: detail.title,
+    description: detail.description,
+    coverImageUrl: detail.coverImageUrl,
+    showGenreBestSubtitle: detail.showGenreBestSubtitle,
+    styles: detail.styles,
+    cards,
+    page: sliced.page,
+    totalPages: sliced.totalPages,
+    totalItems: sliced.totalItems,
+  };
+}
+
+export type MusicLibraryWeeklyChartPage = {
+  region: WeeklyChartRegion;
+  title: string;
+  subtitle: string;
+  chartWeek: string;
+  chartWeekLabel: string;
+  playlistName: string | null;
+  cards: MusicLibrarySongCard[];
+  chartSize: number;
+};
+
+export type MusicLibraryWeeklyChartIndexItem = {
+  region: WeeklyChartRegion;
+  title: string;
+  subtitle: string;
+  chartWeek: string | null;
+  chartWeekLabel: string | null;
+  songCount: number;
+  available: boolean;
+};
+
+export async function fetchMusicLibraryWeeklyChartPage(
+  admin: SupabaseClient,
+  region: WeeklyChartRegion,
+  catalog: LibraryCatalogFilter = musicLibraryCatalogFilter(),
+): Promise<{ page: MusicLibraryWeeklyChartPage | null; tableMissing?: boolean }> {
+  const { issue, error, tableMissing } = await loadLatestWeeklyChartIssue(admin, region, false);
+  if (tableMissing) return { page: null, tableMissing: true };
+  if (error) {
+    console.warn('[music-library] weekly-chart', error);
+    return { page: null };
+  }
+  if (!issue) return { page: null };
+
+  const linked = issue.entries.filter((e) => e.songId).sort((a, b) => a.position - b.position);
+  const orderedIds = linked.map((e) => e.songId as string);
+  const rows = await fetchSongRowsByIds(admin, orderedIds);
+  const byId = new Map(filterSongRowsByLibraryCatalog(rows, catalog).map((row) => [row.id, row]));
+  const orderedRows: SongListRow[] = [];
+  const positions: number[] = [];
+  for (const entry of linked) {
+    const row = byId.get(entry.songId as string);
+    if (!row) continue;
+    orderedRows.push(row);
+    positions.push(entry.position);
+  }
+  const { cards } = await attachVideosToSongs(admin, orderedRows);
+  return {
+    page: {
+      region,
+      title: weeklyChartPublicTitle(region),
+      subtitle: weeklyChartPublicSubtitle(),
+      chartWeek: issue.chartWeek,
+      chartWeekLabel: formatWeeklyChartWeekLabel(issue.chartWeek),
+      playlistName: issue.playlistName,
+      cards: cards.map((card, i) => ({ ...card, chartPosition: positions[i] ?? null })),
+      chartSize: issue.entries.length,
+    },
+  };
+}
+
+export async function fetchMusicLibraryWeeklyChartIndex(
+  admin: SupabaseClient,
+  catalog: LibraryCatalogFilter = musicLibraryCatalogFilter(),
+): Promise<{ items: MusicLibraryWeeklyChartIndexItem[]; tableMissing?: boolean }> {
+  const items: MusicLibraryWeeklyChartIndexItem[] = [];
+  for (const region of ['us', 'uk'] as WeeklyChartRegion[]) {
+    const { page, tableMissing } = await fetchMusicLibraryWeeklyChartPage(admin, region, catalog);
+    if (tableMissing) return { items: [], tableMissing: true };
+    items.push({
+      region,
+      title: weeklyChartPublicTitle(region),
+      subtitle: weeklyChartPublicSubtitle(),
+      chartWeek: page?.chartWeek ?? null,
+      chartWeekLabel: page?.chartWeekLabel ?? null,
+      songCount: page?.cards.length ?? 0,
+      available: Boolean(page),
+    });
+  }
+  return { items };
 }
 
 async function resolveArtistSlugsByNames(

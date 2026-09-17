@@ -177,7 +177,7 @@ M8 の価値は **ジャンル・スタイル・ボーカル・公開日の正�
 優先度の高い順。
 
 1. **新曲インボックス API / 管理画面** — URL 列 → oEmbed/MB 自動プレビュー → 「WP 登録済み」チェック
-2. **Spotify New Releases → 候補リスト** — 週 1 バッチ、YouTube 公式 PV 検索リンク付き
+2. **週間チャート管理** — `/admin/weekly-charts`。US Billboard（火曜）・UK Official Charts（金曜）の Spotify 公式PL上位10を取り込み、**取込時点で既存登録曲と新規を区別**。SQL: `docs/sql/weekly-charts.sql`
 3. **WP 下書き一括生成** — JSON/CSV → WP REST API で draft（人間が公開・スタイル確認）
 4. **重複チェック** — 追加時に `youtube_to_song.json` / DB 照合
 5. **週次レポート** — `releaseDate 2025` の今週追加、インボックス残、pending 数

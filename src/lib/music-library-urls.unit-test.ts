@@ -27,6 +27,10 @@ import {
   musicLibraryGenreHref,
   musicLibraryGenreLetterHref,
   musicLibraryGenresHref,
+  musicLibraryGenreBestHref,
+  musicLibraryGenreBestDetailHref,
+  musicLibraryChartsHref,
+  musicLibraryWeeklyChartHref,
 } from '@/lib/music-library-urls';
 import { MUSIC8_NAV_STYLE_COLORS, music8NavStyleColor } from '@/lib/music8-catalog-slugs';
 
@@ -34,6 +38,7 @@ assert.equal(MUSIC_LIBRARY_PAGE_SIZE, 40);
 assert.equal(MUSIC_LIBRARY_TOP_PER_STYLE, 3);
 assert.equal(musicLibraryHomeHref(), '/music');
 assert.equal(isMusicLibraryReservedSlug('styles'), true);
+assert.equal(isMusicLibraryReservedSlug('charts'), true);
 assert.equal(isMusicLibraryReservedSlug('Madonna'), false);
 assert.equal(isMusicLibraryNavStyleSlug('pop'), true);
 assert.equal(isMusicLibraryNavStyleSlug('jazz'), false);
@@ -105,6 +110,16 @@ assert.equal(musicLibraryGenreLetterHref('0-9', 2), '/music/genres/0-9/2');
 assert.equal(musicLibraryGenreHref('Britpop', 1), '/music/genres/britpop/1');
 assert.equal(musicLibraryGenreHref('synth-pop', 2), '/music/genres/synth-pop/2');
 assert.equal(musicLibraryGenreHref('2-step', 1), '/music/genres/2-step/1');
+
+assert.equal(musicLibraryGenreBestHref(), '/music/genre-best');
+assert.equal(musicLibraryGenreBestHref('pop'), '/music/genre-best?tab=pop');
+assert.equal(musicLibraryGenreBestDetailHref('disco', 1), '/music/genre-best/disco/1');
+assert.equal(musicLibraryGenreBestDetailHref('synth-pop', 2), '/music/genre-best/synth-pop/2');
+
+assert.equal(isMusicLibraryReservedSlug('charts'), true);
+assert.equal(musicLibraryChartsHref(), '/music/charts');
+assert.equal(musicLibraryWeeklyChartHref('us'), '/music/charts/us');
+assert.equal(musicLibraryWeeklyChartHref('uk'), '/music/charts/uk');
 
 assert.equal(withMusicLibraryAutoplay('/music/styles/pop/2'), '/music/styles/pop/2?autoplay=1');
 assert.equal(withMusicLibraryAutoplay('/music/styles/pop/2', 3), '/music/styles/pop/2?autoplay=1&i=3');

@@ -12,7 +12,7 @@ Music8 静的サイトは JSON のまま並走する。`wp/` と `E:\m8` は参�
 - データは GCS JSON ではなく Supabase（`songs` / `song_videos` / `artists` / `song_styles`）。
 - カタログフィルタは部屋ライブラリと同じ趣旨。ma は **明示 `domestic` 以外**（`western` および未設定の `unknown`。Music8 曲の大半は unknown）。mc は `all`。`eq western` の厳密一致はしない。
 - 一覧は一律 **40 曲/ページ**（Music8 はスタイル40・ジャンル/アーティスト曲20。本サイトは揃える）。
-- 曲一覧行: 枠左端にナビスタイル色（5px。サムネとの間に余白）。タイトル横にボーカル（`F` と `M` は別ラベル）と小さめジャンル（複数は `Pop / R&B`）。複数アーティストは名前ごとに国籍（例 `The Weeknd` `CAN` · `Tomoko Aran` `JP`）。`artists.the_prefix` がある場合は The を付けて表示し、冠詞あり／なしでも同一人物として照合する。右端は年月（例 `2026.09`）。欠落は非表示。**スタイル・アーティスト等の共通曲一覧は年見出しで区切る**（ページ内・新しい年が上。Music8 と同じ）。
+- 曲一覧行: 枠左端にナビスタイル色（5px。サムネとの間に余白）。タイトル横にボーカル（`F` と `M` は別ラベル）と小さめジャンル（複数は `Pop / R&B`）。複数アーティストは名前ごとに国籍（例 `The Weeknd` `CAN` · `Tomoko Aran` `JP`）。`artists.the_prefix` がある場合は The を付けて表示し、冠詞あり／なしでも同一人物として照合する。右端は年月（例 `2026.09`）、その下に三点メニュー（モーダルでジャンル別曲一覧へのリンク。`STYLE_ADMIN` 時は曲詳細と同じ Genre BEST 追加ボタンも出す）。欠落は非表示。**スタイル・アーティスト等の共通曲一覧は年見出しで区切る**（ページ内・新しい年が上。Music8 と同じ）。
 - 再生中の右カラムはタブ切替。先頭 `SONG DATA`（曲詳細）、続けて曲のアーティスト名（複数なら複数。例 `SONG DATA | The Police | Prince`）。**アーティスト詳細の曲一覧に限り**、ページの当該アーティストはタブに出さない。単独曲は `SONG DATA` のみ、共演者がいるときだけ他アーティストを横に出す。タブ幅は件数で等分。アーティストタブは `/api/music/artist` でプロフィールを取得。`STYLE_ADMIN` ログイン時のみ、曲詳細・アーティスト情報の右上に管理画面（`/admin/songs/{id}` / `/admin/library/artist`）への別タブリンクを出す。
 - 連続再生はページ内 YouTube IFrame のみ。部屋の Ably・announce・視聴履歴には書かない。
 - 9 スタイル（pop … others）。トップ見出しは「9 Styles」（Music8 トップの「8 Styles」は使わない）。
@@ -20,7 +20,7 @@ Music8 静的サイトは JSON のまま並走する。`wp/` と `E:\m8` は参�
 
 ## URL
 
-予約パス: `styles` / `artists` / `genres` / 将来 `genre-best` / `search`。`[roomId]` より静的 `music` が優先。`music` は部屋 ID 扱いにしない。
+- 予約パス: `styles` / `artists` / `genres` / `genre-best` / `charts` / `search`。`[roomId]` より静的 `music` が優先。`music` は部屋 ID 扱いにしない。
 
 | パス | 内容 |
 |------|------|
@@ -34,6 +34,10 @@ Music8 静的サイトは JSON のまま並走する。`wp/` と `E:\m8` は参�
 | `/music/genres` | A–Z 索引。`?q=` でジャンル名検索（40件ページ。既定は曲数↓。日本語名も対象） |
 | `/music/genres/{letter}` · `/{letter}/{page}` | 頭文字一覧（40件）。並び替え: ABC・曲数。行左端にジャンル色。`0-9` = 数字始まり（2-step 等）。`other` = 記号・非ラテン |
 | `/music/genres/{slug}/{page}` | ジャンル別曲一覧（40件）。`/{slug}` は `/1` へ |
+| `/music/genre-best` | Genre BEST 一覧。タブは管理と同じ（Genre → 9スタイル → 更新順）。`?tab=` で切替 |
+| `/music/genre-best/{slug}/{page}` | Genre BEST 別曲一覧（40件。年見出しの共通曲一覧）。`/{slug}` は `/1` へ |
+| `/music/charts` | 週間チャート一覧（US / UK） |
+| `/music/charts/us` · `/uk` | 直近取込の Top 10。順位順（年見出しなし）。未紐づけ曲は出さない |
 
 公開キーは `songs.music8_artist_slug` / `music8_song_slug`。欠落曲は詳細リンクを出さない。
 
@@ -50,7 +54,8 @@ Music8 静的サイトは JSON のまま並走する。`wp/` と `E:\m8` は参�
 ### 第2
 
 - ジャンル一覧・ジャンル別曲一覧（40件）。`catalog_genres` / `song_genres`。索引は `/music/genres`。
-- Genre BEST 一覧・詳細。`catalog-genre-best.ts` の公開ラップ。
+- Genre BEST 一覧・曲一覧（40件）。`catalog_playlists` / `catalog_playlist_songs`。索引は `/music/genre-best`。
+- 週間チャート Top 10（US 火曜 / UK 金曜）。管理 `/admin/weekly-charts` で Spotify 公式PL取込。公開の PV は紐づいた曲の代表 YouTube（公式優先）。別曲の PV へは管理の「PVを変更」。公開は `/music/charts`。
 - 検索。曲検索は未実装。アーティスト索引は `/music/artists?q=`、ジャンル索引は `/music/genres?q=`。
 - 開催中部屋への選曲投稿。`GET /api/room-live-status` + `mc:last_active_room` + `tryDeliverShareToOpenRoom`。ソロ再生とは独立。
 

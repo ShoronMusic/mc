@@ -3,8 +3,11 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { EllipsisHorizontalIcon } from '@heroicons/react/24/outline';
 import { LibraryYoutubePreviewPlayer } from '@/components/chat/LibraryYoutubePreviewPlayer';
 import { MusicLibraryNowPlayingAside } from '@/components/music-library/MusicLibraryNowPlayingAside';
+import { MusicLibrarySongGenreModal } from '@/components/music-library/MusicLibrarySongGenreModal';
+import { useMusicLibraryStyleAdmin } from '@/components/music-library/MusicLibraryStyleAdminContext';
 import { SongCoverThumb } from '@/components/song/SongCoverThumb';
 import { IS_MC_PRODUCT } from '@/lib/product-branding';
 import { formatMusicLibraryYearMonth, groupMusicLibrarySongsByYear } from '@/lib/music-library-labels';
@@ -26,6 +29,8 @@ export type MusicLibrarySongListProps = {
   listFooter?: ReactNode;
   /** アーティスト詳細の曲一覧。当該アーティストは右カラムタブから除く */
   pageArtist?: MusicLibraryPageArtistRef | null;
+  /** false なら年見出しなし（週間チャートの順位順） */
+  groupByYear?: boolean;
 };
 
 export function MusicLibrarySongList({
@@ -37,8 +42,10 @@ export function MusicLibrarySongList({
   hideList = false,
   listFooter = null,
   pageArtist = null,
+  groupByYear = true,
 }: MusicLibrarySongListProps) {
   const router = useRouter();
+  const isStyleAdmin = useMusicLibraryStyleAdmin();
   const playable = useMemo(() => musicLibraryPlayableTracks(songs), [songs]);
   const playableIds = useMemo(() => playable.map((s) => s.id), [playable]);
   const [index, setIndex] = useState(() => {
@@ -48,13 +55,17 @@ export function MusicLibrarySongList({
   const [playNonce, setPlayNonce] = useState(initialAutoplay ? 1 : 0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [fixOn, setFixOn] = useState(false);
+  const [genreModalSong, setGenreModalSong] = useState<MusicLibrarySongCard | null>(null);
   const skipTimer = useRef<number | null>(null);
   const listScrollRef = useRef<HTMLDivElement>(null);
   const activeRowRef = useRef<HTMLLIElement>(null);
 
   const current = playable[index] ?? null;
   const nowPlayingColor = music8NavStyleColor(current?.styleSlug) ?? '#ffffff';
-  const yearGroups = useMemo(() => groupMusicLibrarySongsByYear(songs), [songs]);
+  const yearGroups = useMemo(
+    () => (groupByYear ? groupMusicLibrarySongsByYear(songs) : [{ year: null, songs }]),
+    [groupByYear, songs],
+  );
 
   const goTo = useCallback(
     (next: number, play: boolean) => {
@@ -187,8 +198,11 @@ export function MusicLibrarySongList({
     ? 'min-w-0 max-w-[18rem] truncate text-[11px] text-gray-500'
     : 'min-w-0 max-w-[18rem] truncate text-[11px] text-gray-500';
   const dateClass = IS_MC_PRODUCT
-    ? 'shrink-0 tabular-nums text-xs text-gray-500'
-    : 'shrink-0 tabular-nums text-xs text-gray-500';
+    ? 'tabular-nums text-xs text-gray-500'
+    : 'tabular-nums text-xs text-gray-500';
+  const kebabClass = IS_MC_PRODUCT
+    ? 'rounded p-0.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700'
+    : 'rounded p-0.5 text-gray-500 hover:bg-white/10 hover:text-gray-200';
   const yearHeading = IS_MC_PRODUCT
     ? 'mb-1.5 text-xs font-medium tracking-wide text-gray-400'
     : 'mb-1.5 text-xs font-medium tracking-wide text-gray-500';
@@ -340,6 +354,17 @@ export function MusicLibrarySongList({
                 aria-hidden={!styleLabel}
               />
               <div className="flex min-w-0 flex-1 items-center gap-3 py-2 pl-2 pr-3">
+                {song.chartPosition != null ? (
+                  <span
+                    className={
+                      IS_MC_PRODUCT
+                        ? 'w-6 shrink-0 text-right text-xs tabular-nums text-gray-500'
+                        : 'w-6 shrink-0 text-right text-xs tabular-nums text-gray-400'
+                    }
+                  >
+                    {song.chartPosition}
+                  </span>
+                ) : null}
                 <button
                   type="button"
                   className="shrink-0"
@@ -386,7 +411,19 @@ export function MusicLibrarySongList({
                     })}
                   </p>
                 </div>
-                <span className={dateClass}>{formatMusicLibraryYearMonth(song.releaseDate) ?? ''}</span>
+                <div className="flex shrink-0 flex-col items-end gap-0.5">
+                  <span className={dateClass}>{formatMusicLibraryYearMonth(song.releaseDate) ?? ''}</span>
+                  {(song.genreLinks?.length ?? 0) > 0 || isStyleAdmin ? (
+                    <button
+                      type="button"
+                      className={kebabClass}
+                      aria-label={`${song.songTitle}のメニュー`}
+                      onClick={() => setGenreModalSong(song)}
+                    >
+                      <EllipsisHorizontalIcon className="h-5 w-5" />
+                    </button>
+                  ) : null}
+                </div>
               </div>
             </li>
           );
@@ -398,6 +435,14 @@ export function MusicLibrarySongList({
       {listFooter}
       </div>
       )}
+      <MusicLibrarySongGenreModal
+        open={genreModalSong != null}
+        songId={genreModalSong?.id ?? null}
+        songTitle={genreModalSong?.songTitle ?? ''}
+        artistName={genreModalSong?.artistName ?? ''}
+        genres={genreModalSong?.genreLinks ?? []}
+        onClose={() => setGenreModalSong(null)}
+      />
     </div>
   );
 }

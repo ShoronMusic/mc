@@ -5,7 +5,9 @@
 import { formatLibraryVocalDisplay } from '@/lib/library-vocal-display';
 import { filterMusic8GenreLabels } from '@/lib/music8-song-fields';
 import { artistNameToMusic8Slug } from '@/lib/music8-artist-display';
-import type { MusicLibraryVocalLabel } from '@/lib/music-library-types';
+import { slugifyCatalogLabel } from '@/lib/music8-catalog-slugs';
+import type { MusicLibraryGenreLink, MusicLibraryVocalLabel } from '@/lib/music-library-types';
+import { musicLibraryGenreHref } from '@/lib/music-library-urls';
 
 /** 原盤日・YouTube 公開日を一覧右端の `2026.09` 形式にする。月が無ければ年のみ。 */
 export function formatMusicLibraryYearMonth(iso: string | null | undefined): string | null {
@@ -269,16 +271,32 @@ export function resolveMusicLibraryArtistDisplayName(input: {
   return name || (slug ? musicLibraryDisplayNameFromSlug(slug) : '');
 }
 
+/** 曲のジャンル → `/music/genres/{slug}`。 */
+export function listMusicLibraryGenreLinks(input: {
+  columnGenres?: unknown;
+  snapshotGenres?: readonly string[] | null;
+}): MusicLibraryGenreLink[] {
+  const merged = uniqueGenreNames([
+    ...(input.snapshotGenres ?? []),
+    ...parseMusicLibraryGenresColumn(input.columnGenres),
+  ]);
+  const out: MusicLibraryGenreLink[] = [];
+  const seen = new Set<string>();
+  for (const name of filterMusic8GenreLabels(merged)) {
+    const slug = slugifyCatalogLabel(name);
+    if (!slug || seen.has(slug)) continue;
+    seen.add(slug);
+    out.push({ name, slug, href: musicLibraryGenreHref(slug, 1) });
+  }
+  return out;
+}
+
 /** タイトル横のジャンル。複数は `Pop / R&B` のように `/` 区切り。 */
 export function pickMusicLibraryGenreLabel(input: {
   columnGenres?: unknown;
   snapshotGenres?: readonly string[] | null;
 }): string | null {
-  const merged = uniqueGenreNames([
-    ...(input.snapshotGenres ?? []),
-    ...parseMusicLibraryGenresColumn(input.columnGenres),
-  ]);
-  const labels = filterMusic8GenreLabels(merged);
-  if (labels.length === 0) return null;
-  return labels.join(' / ');
+  const items = listMusicLibraryGenreLinks(input);
+  if (items.length === 0) return null;
+  return items.map((g) => g.name).join(' / ');
 }

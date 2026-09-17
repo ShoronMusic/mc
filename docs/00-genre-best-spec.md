@@ -49,7 +49,16 @@ npx tsx scripts/import-music8-playlists-from-wp.ts --apply --limit=5
 
 Genre / Style タブ内はタイトル A–Z。
 
-## 画面（STYLE_ADMIN）
+## 画面
+
+### 公開（ログイン不要）
+
+| パス | 内容 |
+|------|------|
+| `/music/genre-best` | 一覧（タブ・タイトル／曲数。サムネなし。カタログフィルタ後の件数） |
+| `/music/genre-best/[slug]` · `/[slug]/[page]` | 曲一覧（40件ページ・Music Library 共通曲一覧 UI）。`/{slug}` は `/1` へ |
+
+### STYLE_ADMIN
 
 | パス | 内容 |
 |------|------|
@@ -58,6 +67,7 @@ Genre / Style タブ内はタイトル A–Z。
 | `/admin/library/artist` | 曲行末尾 **Genre BEST** ボタン＋登録済み `[ タイトル ]` ラベル |
 | `/admin/library` | アーティスト曲一覧のタイトル横に登録済みラベル |
 | `/admin/songs/[songId]` | プレイヤー下 **Genre BEST** ボタン＋登録済みラベル（リンク）。曲詳細から開くアーティスト詳細モーダルの曲一覧にも同じラベル |
+| `/music` 曲一覧三点メニュー | `STYLE_ADMIN` 時、ジャンルリンクモーダル内に曲詳細と同じ **Genre BEST** 追加ボタン＋登録済みラベル |
 | 邦楽アーティスト編集 | 登録曲一覧に Genre BEST 登録済みラベル |
 
 詳細の曲順: `original_release_date` DESC（無ければ `position`）。

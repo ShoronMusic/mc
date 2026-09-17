@@ -28,6 +28,7 @@ Music8 公開サイトと MusicAiChat で **曲マスタを 1 本化**するた�
 | ACF `likecount` | `songs.is_liked`（チェック有無。数値カウンタではない） |
 | ACF `spotify_artists01-05` | 使わない。`song_credits` が正 |
 | ACF `chart_name1-6` / `chart_position1-6` | `catalog_charts` + `song_chart_entries` |
+| 週間チャート US/UK トップ10（管理） | `weekly_chart_issues` + `weekly_chart_entries`（パッチ: [`sql/weekly-charts.sql`](./sql/weekly-charts.sql)。過去ピーク表とは別） |
 | ACF `member` | `artist_members` |
 | ACF `Occupation` | `artists.occupations` |
 | ACF `related_artists`（textarea） | `artists.related_artists_raw`（正規化は後続） |

@@ -4,6 +4,12 @@
 
 export type MusicLibraryVocalLabel = 'F' | 'M';
 
+export type MusicLibraryGenreLink = {
+  name: string;
+  slug: string;
+  href: string;
+};
+
 export type MusicLibraryListArtist = {
   name: string;
   slug: string | null;
@@ -29,10 +35,14 @@ export type MusicLibrarySongCard = {
   vocalLabels?: MusicLibraryVocalLabel[];
   /** タイトル横の小さめジャンル。例 Pop-punk */
   genreLabel?: string | null;
+  /** 三点メニュー用。ジャンル別曲一覧へのリンク */
+  genreLinks?: MusicLibraryGenreLink[];
   /** 曲に紐づくアーティスト（国籍は人ごと） */
   artists?: MusicLibraryListArtist[];
   /** 曲紹介（`songs.music8_intro`）。無ければ非表示 */
   intro?: string | null;
+  /** 週間チャートの順位（1–10）。無ければ非表示 */
+  chartPosition?: number | null;
 };
 
 export type MusicLibraryArtistProfile = {

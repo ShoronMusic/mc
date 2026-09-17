@@ -5,8 +5,11 @@
 import {
   buildGenreBestTabGroups,
   filterGenreBestByTab,
+  genreBestTabParam,
+  genreBestTabsEqual,
   isGenrePlaylistStyles,
   normalizeStyleKey,
+  parseGenreBestTabKey,
   styleKeysMatch,
   type GenreBestListItem,
 } from '@/lib/catalog-genre-best';
@@ -54,5 +57,14 @@ assert(genre[0]?.title === 'Afro House', 'genre A-Z');
 
 const updated = filterGenreBestByTab(items, 'updated');
 assert(updated[0]?.title === 'Pop//Alt-pop', 'updated desc');
+
+assert(genreBestTabParam('genre') === 'genre', 'tab param genre');
+assert(genreBestTabParam('Pop') === 'pop', 'tab param Pop');
+assert(genreBestTabParam('R&B') === 'rb', 'tab param R&B');
+assert(parseGenreBestTabKey('pop') === 'Pop', 'parse pop');
+assert(parseGenreBestTabKey('rb') === 'R&B', 'parse rb');
+assert(parseGenreBestTabKey('') === 'genre', 'parse empty');
+assert(genreBestTabsEqual('Pop', 'pop'), 'tabs equal Pop/pop');
+assert(genreBestTabsEqual('genre', 'Genre'), 'tabs equal genre');
 
 console.log('catalog-genre-best.unit-test: ok');

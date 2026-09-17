@@ -8,12 +8,13 @@ import type { GenreBestSongLabel } from '@/lib/catalog-genre-best';
 type Props = {
   songId: string;
   songLabel?: string;
+  className?: string;
 };
 
 /**
  * 曲詳細プレイヤー下: Genre BEST 登録ボタン＋登録済みラベル（リンク）
  */
-export function GenreBestSongDetailActions({ songId, songLabel }: Props) {
+export function GenreBestSongDetailActions({ songId, songLabel, className = 'mt-3 space-y-2' }: Props) {
   const [labels, setLabels] = useState<GenreBestSongLabel[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -55,7 +56,7 @@ export function GenreBestSongDetailActions({ songId, songLabel }: Props) {
   }, [loadLabels]);
 
   return (
-    <div className="mt-3 space-y-2">
+    <div className={className}>
       <div className="flex flex-wrap items-center gap-2">
         <button
           type="button"

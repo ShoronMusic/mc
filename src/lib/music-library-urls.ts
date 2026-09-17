@@ -24,6 +24,7 @@ export const MUSIC_LIBRARY_RESERVED_SLUGS = [
   'genres',
   'search',
   'genre-best',
+  'charts',
   'about',
   'playlists',
   'songs',
@@ -151,6 +152,27 @@ export function musicLibraryGenreHref(genreSlug: string, page = 1): string {
   const slug = genreSlug.trim().toLowerCase();
   const p = parseMusicLibraryPageParam(page) ?? 1;
   return `${MUSIC_LIBRARY_BASE}/genres/${encodeURIComponent(slug)}/${p}`;
+}
+
+export function musicLibraryGenreBestHref(tab?: string | null): string {
+  const param = (tab ?? '').trim();
+  if (!param) return `${MUSIC_LIBRARY_BASE}/genre-best`;
+  return `${MUSIC_LIBRARY_BASE}/genre-best?tab=${encodeURIComponent(param)}`;
+}
+
+export function musicLibraryGenreBestDetailHref(slug: string, page = 1): string {
+  const s = slug.trim();
+  const p = parseMusicLibraryPageParam(page) ?? 1;
+  return `${MUSIC_LIBRARY_BASE}/genre-best/${encodeURIComponent(s)}/${p}`;
+}
+
+export function musicLibraryChartsHref(): string {
+  return `${MUSIC_LIBRARY_BASE}/charts`;
+}
+
+export function musicLibraryWeeklyChartHref(region: string): string {
+  const r = region.trim().toLowerCase();
+  return `${MUSIC_LIBRARY_BASE}/charts/${encodeURIComponent(r)}`;
 }
 
 export const MUSIC_LIBRARY_ARTIST_SEARCH_MAX_LEN = 80;

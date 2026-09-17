@@ -214,6 +214,14 @@ export const ADMIN_SECTIONS: AdminSection[] = [
     activePathPrefix: '/admin/songs/new',
   },
   {
+    href: '/admin/weekly-charts',
+    title: '週間チャート',
+    description:
+      'US（火曜）・UK（金曜）公式 Spotify プレイリスト上位10を取り込み。取込時点で既存登録曲と新規を区別。YouTube検索・1曲登録',
+    category: 'library',
+    activePathPrefix: '/admin/weekly-charts',
+  },
+  {
     href: '/admin/genre-best',
     title: 'Genre BEST',
     description:

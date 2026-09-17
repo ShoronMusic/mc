@@ -54,6 +54,16 @@ export const SITE_MAP_SECTIONS: readonly SiteMapSection[] = [
         href: '/music',
         description: '曲・アーティスト・スタイル・ジャンルの公開カタログ。YouTube 連続再生ができます。',
       },
+      {
+        label: 'Genre BEST',
+        href: '/music/genre-best',
+        description: 'ジャンル／スタイル別のおすすめ曲リストと曲一覧。',
+      },
+      {
+        label: 'Charts',
+        href: '/music/charts',
+        description: 'US Billboard（火曜）と UK Official Singles（金曜）の週間チャート Top 10。',
+      },
     ],
   },
   {
