@@ -179,6 +179,7 @@ type LibraryArtistInfo = {
   youtube_channel_id: string | null;
   spotify_artist_id: string | null;
   wikipedia_page: string | null;
+  wikipedia_url: string | null;
   memberArtists?: { name: string; music8_artist_slug?: string | null }[];
   bandArtists?: { name: string; music8_artist_slug?: string | null }[];
 };
@@ -663,6 +664,7 @@ function libraryVariantLabel(variant: string | null): string {
   const v = (variant ?? '').trim().toLowerCase();
   if (v === 'official') return '公式';
   if (v === 'lyric') return 'リリック';
+  if (v === '和訳') return '和訳';
   if (v === 'live') return 'ライブ';
   if (v === 'topic') return 'Topic';
   if (!v) return 'その他';
@@ -1716,6 +1718,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
         youtube_channel_id: typeof a.youtube_channel_id === 'string' ? a.youtube_channel_id : null,
         spotify_artist_id: typeof a.spotify_artist_id === 'string' ? a.spotify_artist_id : null,
         wikipedia_page: typeof a.wikipedia_page === 'string' ? a.wikipedia_page : null,
+        wikipedia_url: typeof a.wikipedia_url === 'string' ? a.wikipedia_url : null,
         memberArtists: parseLibraryArtistNavLinks(a.memberArtists),
         bandArtists: parseLibraryArtistNavLinks(a.bandArtists),
       };
@@ -3371,7 +3374,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                 ) : null}
               </div>
               <div
-                className={`flex min-w-0 items-center gap-2 ${
+                className={`flex min-w-0 flex-nowrap items-center gap-2 ${
                   isMobileLandscape ? 'shrink-0 gap-1' : 'w-full max-lg:w-full lg:ml-auto lg:w-auto lg:shrink-0'
                 }`}
               >
@@ -3394,8 +3397,8 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                   </div>
                 ) : null}
                 <div
-                  className={`flex min-w-0 items-center gap-2 ${
-                    isMobileLandscape ? 'shrink-0' : 'flex-1 lg:flex-none'
+                  className={`flex shrink-0 flex-nowrap items-center gap-2 ${
+                    isMobileLandscape ? '' : 'lg:flex-none'
                   }`}
                 >
                   <button

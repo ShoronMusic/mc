@@ -2,6 +2,7 @@
  * `npx tsx src/lib/music-library-query.unit-test.ts`
  */
 import assert from 'node:assert/strict';
+import { visibleMusicLibraryGenreBestLabels } from '@/lib/music-library-types';
 import {
   musicLibraryArtistSlugForName,
   musicLibrarySongBelongsToNavStyle,
@@ -411,5 +412,20 @@ assert.equal(
   ).length,
   0,
 );
+
+const genreBestShown = visibleMusicLibraryGenreBestLabels(
+  [
+    { slug: 'best-pop', title: 'Best Pop' },
+    { slug: '  ', title: 'blank' },
+    { slug: 'best-80s', title: '  ' },
+    { slug: 'best-rock', title: 'Best Rock' },
+  ],
+  'best-pop',
+);
+assert.deepEqual(
+  genreBestShown.map((lb) => lb.slug),
+  ['best-rock'],
+);
+assert.equal(visibleMusicLibraryGenreBestLabels(undefined, null).length, 0);
 
 console.log('music-library-query.unit-test: ok');

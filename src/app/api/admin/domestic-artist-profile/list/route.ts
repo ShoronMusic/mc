@@ -13,6 +13,18 @@ export const dynamic = 'force-dynamic';
 
 const PAGE = 1000;
 
+const ARTIST_LIST_SELECT =
+  'id, name, name_ja, name_sort, image_url, spotify_artist_images, updated_at, ' +
+  'description_en, profile_text, ai_profile_generated_at, ai_profile_source, ' +
+  'origin_country, active_period, birth_date, death_date, occupations, kind, ' +
+  'spotify_artist_id, youtube_channel_id, wikipedia_page, wikipedia_url';
+
+const ARTIST_LIST_SELECT_NO_WIKI_URL =
+  'id, name, name_ja, name_sort, image_url, spotify_artist_images, updated_at, ' +
+  'description_en, profile_text, ai_profile_generated_at, ai_profile_source, ' +
+  'origin_country, active_period, birth_date, death_date, occupations, kind, ' +
+  'spotify_artist_id, youtube_channel_id, wikipedia_page';
+
 export type DomesticRegisteredArtistListItem = {
   id: string;
   name: string;
@@ -45,6 +57,7 @@ type ArtistRow = {
   spotify_artist_id?: string | null;
   youtube_channel_id?: string | null;
   wikipedia_page?: string | null;
+  wikipedia_url?: string | null;
 };
 
 function sortKey(row: ArtistRow): string {
@@ -151,25 +164,28 @@ export async function GET() {
   }
 
   const rawRows: ArtistRow[] = [];
-  for (let offset = 0; ; offset += PAGE) {
+  let artistSelect = ARTIST_LIST_SELECT;
+  for (let offset = 0; ; ) {
     const { data, error } = await admin
       .from('artists')
-      .select(
-        'id, name, name_ja, name_sort, image_url, spotify_artist_images, updated_at, ' +
-          'description_en, profile_text, ai_profile_generated_at, ai_profile_source, ' +
-          'origin_country, active_period, birth_date, death_date, occupations, kind, ' +
-          'spotify_artist_id, youtube_channel_id, wikipedia_page',
-      )
+      .select(artistSelect)
       .eq('catalog_scope', 'domestic')
       .order('name_sort', { ascending: true, nullsFirst: false })
       .range(offset, offset + PAGE - 1);
     if (error) {
+      if (error.code === '42703' && artistSelect === ARTIST_LIST_SELECT) {
+        artistSelect = ARTIST_LIST_SELECT_NO_WIKI_URL;
+        rawRows.length = 0;
+        offset = 0;
+        continue;
+      }
       console.error('[admin/domestic-artist-profile/list]', error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
     if (!data?.length) break;
     rawRows.push(...(data as ArtistRow[]));
     if (data.length < PAGE) break;
+    offset += PAGE;
   }
 
   const prelim = rawRows

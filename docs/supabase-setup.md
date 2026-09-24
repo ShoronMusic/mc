@@ -2,6 +2,8 @@
 
 簡易登録（メールで登録・ログイン）と Google認証を使うには、Supabase のプロジェクトを作成し、`.env.local` に設定を追加します。
 
+**2026-10-30 以降**にこの文書の `CREATE TABLE` を新規プロジェクトや作り直しで実行するときは、Data API 用の `GRANT` を足す。既存テーブルへの遡及作業は不要。手順は `docs/supabase-data-api-grants.md`。
+
 ---
 
 ## 1. Supabase アカウントとプロジェクト

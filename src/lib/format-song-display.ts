@@ -576,6 +576,12 @@ const FEAT_BLOCK = /\s*[(\[]\s*(feat\.?|ft\.?|fet\.?|featuring|with|w\/?)\s+[^)\
 const FEAT_SEPARATOR = /\s+(?:ft\.?|feat\.?|fet\.?|featuring|w\/?)\s+/i;
 /** 表示用リストから除外する区切り語（ft. 等が混入した場合のフォールバック） */
 const FEAT_WORDS = /^(?:ft\.?|feat\.?|fet\.?|featuring|with|w\/?)$/i;
+/**
+ * 「A and B」「A & B」は共演区切り。
+ * 「A and the Heartbreakers」「A & The News」は1組のバンド名なので分けない。
+ */
+const COLLAB_AND_SPLIT = /\s+and\s+(?!the\b)/i;
+const COLLAB_AMP_SPLIT = /\s+&\s+(?!the\b)/i;
 
 /**
  * 複数アーティスト表記からメインアーティストを特定する。
@@ -592,9 +598,9 @@ export function getMainArtist(artistPart: string): string {
   if (compound) return compound;
   const byFeat = main.split(FEAT_SEPARATOR);
   main = (byFeat[0] ?? main).trim();
-  const byAmp = main.split(/\s+&\s+/);
+  const byAmp = main.split(COLLAB_AMP_SPLIT);
   main = (byAmp[0] ?? main).trim();
-  const byAnd = main.split(/\s+and\s+/i);
+  const byAnd = main.split(COLLAB_AND_SPLIT);
   main = (byAnd[0] ?? main).trim();
   const byX = main.split(/\s+x\s+/);
   main = (byX[0] ?? main).trim();
@@ -613,8 +619,8 @@ export function getArtistDisplayString(artistPart: string): string {
   if (compound) return compound;
   const parts = s
     .split(FEAT_SEPARATOR)
-    .flatMap((p) => p.split(/\s+&\s+/))
-    .flatMap((p) => p.split(/\s+and\s+/i))
+    .flatMap((p) => p.split(COLLAB_AMP_SPLIT))
+    .flatMap((p) => p.split(COLLAB_AND_SPLIT))
     .flatMap((p) => p.split(/\s+x\s+/))
     .flatMap((p) => p.split(',').map((x) => x.trim()).filter(Boolean))
     .map((p) => cleanAuthor(p.trim()))

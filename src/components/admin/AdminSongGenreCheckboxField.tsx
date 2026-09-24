@@ -1,7 +1,15 @@
 'use client';
 
 import { useEffect, useId, useMemo, useState } from 'react';
-import { groupGenresByInitial, catalogGenreKey, normalizeCatalogGenreName, type AdminSuggestedGenre } from '@/lib/admin-song-artist-defaults';
+import { AdminCatalogGenreCreateModal } from '@/components/admin/AdminCatalogGenreCreateModal';
+import {
+  groupGenresByInitial,
+  catalogGenreKey,
+  normalizeCatalogGenreName,
+  uniqueNormalizedGenreNames,
+  type AdminSuggestedGenre,
+} from '@/lib/admin-song-artist-defaults';
+import type { CatalogGenreRow } from '@/lib/catalog-genres';
 
 function genreKey(name: string): string {
   return catalogGenreKey(name);
@@ -17,11 +25,17 @@ type Props = {
 export function AdminSongGenreCheckboxField({ selected, onChange, suggested, allGenres }: Props) {
   const titleId = useId();
   const [modalOpen, setModalOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createdNames, setCreatedNames] = useState<string[]>([]);
   const selectedKeys = useMemo(() => new Set(selected.map(genreKey)), [selected]);
+  const mergedAllGenres = useMemo(
+    () => uniqueNormalizedGenreNames([...allGenres, ...createdNames]),
+    [allGenres, createdNames],
+  );
 
   const displayByKey = useMemo(() => {
     const m = new Map<string, string>();
-    for (const g of allGenres) {
+    for (const g of mergedAllGenres) {
       const name = normalizeCatalogGenreName(g);
       const k = catalogGenreKey(name);
       if (k && !m.has(k)) m.set(k, name);
@@ -37,7 +51,7 @@ export function AdminSongGenreCheckboxField({ selected, onChange, suggested, all
       if (k && !m.has(k)) m.set(k, name);
     }
     return m;
-  }, [allGenres, suggested, selected]);
+  }, [mergedAllGenres, suggested, selected]);
 
   const suggestedUnique = useMemo(() => {
     const map = new Map<string, AdminSuggestedGenre>();
@@ -53,8 +67,11 @@ export function AdminSongGenreCheckboxField({ selected, onChange, suggested, all
   }, [suggested]);
 
   const groupedAll = useMemo(
-    () => groupGenresByInitial(allGenres.length > 0 ? allGenres : suggested.map((g) => g.name)),
-    [allGenres, suggested],
+    () =>
+      groupGenresByInitial(
+        mergedAllGenres.length > 0 ? mergedAllGenres : suggested.map((g) => g.name),
+      ),
+    [mergedAllGenres, suggested],
   );
   const initials = useMemo(() => groupedAll.map((g) => g.initial), [groupedAll]);
 
@@ -63,14 +80,14 @@ export function AdminSongGenreCheckboxField({ selected, onChange, suggested, all
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') setModalOpen(false);
+      if (e.key === 'Escape' && !createOpen) setModalOpen(false);
     }
     window.addEventListener('keydown', onKey);
     return () => {
       document.body.style.overflow = prev;
       window.removeEventListener('keydown', onKey);
     };
-  }, [modalOpen]);
+  }, [modalOpen, createOpen]);
 
   function toggleName(name: string) {
     const key = genreKey(name);
@@ -81,6 +98,15 @@ export function AdminSongGenreCheckboxField({ selected, onChange, suggested, all
       return;
     }
     onChange([...selected, display]);
+  }
+
+  function handleGenreCreated(item: CatalogGenreRow) {
+    const name = normalizeCatalogGenreName(item.name);
+    if (!name) return;
+    setCreatedNames((prev) => uniqueNormalizedGenreNames([...prev, name]));
+    if (!selectedKeys.has(genreKey(name))) {
+      onChange([...selected, name]);
+    }
   }
 
   function scrollToInitial(initial: string) {
@@ -137,19 +163,33 @@ export function AdminSongGenreCheckboxField({ selected, onChange, suggested, all
         <p className="mt-2 text-[11px] text-gray-500">このアーティストの既存曲から集計したジャンルはまだありません。</p>
       )}
 
-      <button
-        type="button"
-        onClick={() => setModalOpen(true)}
-        className="mt-2 rounded border border-gray-600 bg-gray-900 px-3 py-1.5 text-xs text-gray-100 hover:bg-gray-800"
-      >
-        すべてのジャンル（{allGenres.length || suggested.length}）
-      </button>
+      <div className="mt-2 flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => setModalOpen(true)}
+          className="rounded border border-gray-600 bg-gray-900 px-3 py-1.5 text-xs text-gray-100 hover:bg-gray-800"
+        >
+          すべてのジャンル（{mergedAllGenres.length || suggested.length}）
+        </button>
+        <button
+          type="button"
+          onClick={() => setCreateOpen(true)}
+          className="rounded border border-violet-700/80 bg-violet-950/30 px-3 py-1.5 text-xs font-medium text-violet-100 hover:bg-violet-900/40"
+        >
+          新規ジャンル登録
+        </button>
+      </div>
+      <p className="mt-1 text-[11px] text-gray-500">
+        マスタに無いジャンルは「新規ジャンル登録」から追加できます。
+      </p>
 
       {modalOpen ? (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-3"
           role="presentation"
-          onClick={() => setModalOpen(false)}
+          onClick={() => {
+            if (!createOpen) setModalOpen(false);
+          }}
         >
           <div
             role="dialog"
@@ -212,7 +252,14 @@ export function AdminSongGenreCheckboxField({ selected, onChange, suggested, all
                 </section>
               ))}
             </div>
-            <div className="border-t border-gray-800 px-4 py-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-gray-800 px-4 py-3">
+              <button
+                type="button"
+                onClick={() => setCreateOpen(true)}
+                className="rounded border border-violet-700/80 bg-violet-950/30 px-3 py-1.5 text-xs font-medium text-violet-100 hover:bg-violet-900/40"
+              >
+                新規ジャンル登録
+              </button>
               <button
                 type="button"
                 onClick={() => setModalOpen(false)}
@@ -224,6 +271,12 @@ export function AdminSongGenreCheckboxField({ selected, onChange, suggested, all
           </div>
         </div>
       ) : null}
+
+      <AdminCatalogGenreCreateModal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onCreated={handleGenreCreated}
+      />
     </div>
   );
 }

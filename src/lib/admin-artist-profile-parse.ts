@@ -4,7 +4,6 @@
 
 import { extractEnglishArtistNameFromDescription } from '@/lib/artist-english-name';
 import { formatArtistDisplayName } from '@/lib/music8-artist-display';
-import { splitArtistNameForM8Storage } from '@/lib/song-registration-normalize';
 
 /** Music8 / WP `thePrefix` 相当（Include "The" Prefix は `The`） */
 export type AdminArtistThePrefix = 'The' | 'A' | 'An';
@@ -32,6 +31,11 @@ export type AdminArtistProfileDraft = {
   youtubeChannelId: string | null;
   youtubeChannelTitle: string | null;
   wikipediaPage: string | null;
+  /**
+   * 英語版以外の Wikipedia 記事 URL（`artists.wikipedia_url`）。
+   * 値があれば公開リンクは wikipedia_page より優先。
+   */
+  wikipediaUrl: string | null;
 };
 
 export function normalizeAdminArtistThePrefix(
@@ -56,7 +60,13 @@ export function composeAdminArtistDisplayName(
   return formatArtistDisplayName(base, thePrefix ?? null) || base;
 }
 
-/** 入力文字列 → name_base / the_prefix / 表示名 */
+const LEADING_ARTICLE = /^(the|a|an)\s+(.+)$/i;
+
+/**
+ * 管理の本体名は1アーティスト名として扱う。
+ * 先頭の The/A/An だけ prefix に分離し、「And The Heartbreakers」のような途中の The は切らない。
+ * （選曲時の getArtistDisplayString は共演の and で分割するため、ここでは使わない）
+ */
 export function splitAdminArtistNameParts(raw: string): {
   nameBase: string;
   thePrefix: AdminArtistThePrefix | null;
@@ -64,12 +74,12 @@ export function splitAdminArtistNameParts(raw: string): {
 } {
   const trimmed = raw.trim();
   if (!trimmed) return { nameBase: '', thePrefix: null, name: '' };
-  const split = splitArtistNameForM8Storage(trimmed);
-  if (!split) {
+  const articleMatch = trimmed.match(LEADING_ARTICLE);
+  if (!articleMatch) {
     return { nameBase: trimmed, thePrefix: null, name: trimmed };
   }
-  const thePrefix = normalizeAdminArtistThePrefix(split.thePrefix);
-  const nameBase = split.nameBase.trim() || trimmed;
+  const thePrefix = normalizeAdminArtistThePrefix(articleMatch[1]);
+  const nameBase = (articleMatch[2] ?? '').trim() || trimmed;
   return {
     nameBase,
     thePrefix,
@@ -253,6 +263,7 @@ export function parseGeminiArtistProfileFields(
     youtubeChannelId: null,
     youtubeChannelTitle: null,
     wikipediaPage: null,
+    wikipediaUrl: null,
   };
 }
 
@@ -281,5 +292,6 @@ export function emptyAdminArtistProfileDraft(
     youtubeChannelId: null,
     youtubeChannelTitle: null,
     wikipediaPage: null,
+    wikipediaUrl: null,
   };
 }

@@ -52,6 +52,8 @@ export function LibraryArtistDetailMusic8Body({
         typeof source.spotify_artist_id === 'string' ? source.spotify_artist_id : null,
       wikipedia_page:
         typeof source.wikipedia_page === 'string' ? source.wikipedia_page : null,
+      wikipedia_url:
+        typeof source.wikipedia_url === 'string' ? source.wikipedia_url : null,
     });
   const birthRaw = typeof source.artistborn === 'string' ? source.artistborn : null;
   const deathRaw = typeof source.artistdied === 'string' ? source.artistdied : null;

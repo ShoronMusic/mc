@@ -80,6 +80,7 @@ export default async function MusicLibraryGenreBestPagedPage({ params, searchPar
           nextPageHref={nextPageHref}
           initialAutoplay={autoplay.autoplay}
           initialIndex={autoplay.index}
+          omitGenreBestSlug={result.slug}
           listFooter={
             <MusicLibraryPagination
               page={result.page}

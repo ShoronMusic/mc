@@ -359,21 +359,21 @@ export function librarySongRowMetaClass(): string {
 /** ライブラリヘッダー検索ボタン */
 export function libraryHeaderSearchBtnClass(compact: boolean, grow = false): string {
   const size = compact ? 'h-8 px-2.5' : 'h-9 px-3';
-  const flex = grow ? 'min-w-0 flex-1' : 'shrink-0';
+  const flex = grow ? 'min-w-max flex-1' : 'shrink-0';
   if (IS_MC_PRODUCT) {
-    return `mc-accent-primary inline-flex ${flex} items-center justify-center rounded border text-xs disabled:opacity-50 ${size}`;
+    return `mc-accent-primary inline-flex ${flex} items-center justify-center whitespace-nowrap rounded border text-xs disabled:opacity-50 ${size}`;
   }
-  return `inline-flex ${flex} items-center justify-center rounded border border-lime-500/70 bg-lime-900/30 text-xs text-lime-100 hover:bg-lime-900/60 disabled:opacity-50 ${size}`;
+  return `inline-flex ${flex} items-center justify-center whitespace-nowrap rounded border border-lime-500/70 bg-lime-900/30 text-xs text-lime-100 hover:bg-lime-900/60 disabled:opacity-50 ${size}`;
 }
 
 /** ライブラリヘッダー副ボタン（リセット・閉じる） */
 export function libraryHeaderSecondaryBtnClass(compact: boolean, grow = false): string {
   const size = compact ? 'h-8 px-2.5' : 'h-9 px-3';
-  const flex = grow ? 'min-w-0 flex-1' : 'shrink-0';
+  const flex = grow ? 'min-w-max flex-1' : 'shrink-0';
   if (IS_MC_PRODUCT) {
-    return `inline-flex ${flex} items-center justify-center rounded border border-gray-300 bg-gray-50 text-xs text-gray-800 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40 ${size}`;
+    return `inline-flex ${flex} items-center justify-center whitespace-nowrap rounded border border-gray-300 bg-gray-50 text-xs text-gray-800 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40 ${size}`;
   }
-  return `inline-flex ${flex} items-center justify-center rounded border border-lime-700/60 bg-gray-800 text-xs text-lime-100 hover:bg-gray-700 ${size}`;
+  return `inline-flex ${flex} items-center justify-center whitespace-nowrap rounded border border-lime-700/60 bg-gray-800 text-xs text-lime-100 hover:bg-gray-700 ${size}`;
 }
 
 export function libraryPanelDividerClass(): string {

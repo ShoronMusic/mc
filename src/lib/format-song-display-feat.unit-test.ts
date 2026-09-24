@@ -46,6 +46,24 @@ assert.equal(compoundArtistCanonicalIfKnown('Christine and the Queens'), 'Christ
 assert.equal(compoundArtistCanonicalIfKnown('Christine & the Queens'), 'Christine and the Queens');
 assert.equal(getMainArtist('Christine and the Queens'), 'Christine and the Queens');
 assert.equal(getArtistDisplayString('Christine and the Queens'), 'Christine and the Queens');
+assert.equal(
+  compoundArtistCanonicalIfKnown('Tom Petty And The Heartbreakers'),
+  'Tom Petty and the Heartbreakers',
+);
+assert.equal(getMainArtist('Tom Petty And The Heartbreakers'), 'Tom Petty and the Heartbreakers');
+assert.equal(
+  getArtistDisplayString('Tom Petty And The Heartbreakers'),
+  'Tom Petty and the Heartbreakers',
+);
+assert.equal(getArtistDisplayString('Tom Petty & The Heartbreakers'), 'Tom Petty and the Heartbreakers');
+assert.equal(getMainArtist('Elton John and Kiki Dee'), 'Elton John');
+assert.equal(getArtistDisplayString('Elton John and Kiki Dee'), 'Elton John, Kiki Dee');
+{
+  const split = splitArtistNameForM8Storage('Tom Petty And The Heartbreakers');
+  assert.equal(split?.displayName, 'Tom Petty and the Heartbreakers');
+  assert.equal(split?.nameBase, 'Tom Petty and the Heartbreakers');
+  assert.equal(split?.thePrefix, null);
+}
 {
   const r = getArtistAndSong('Christine and the Queens - Tilted (Official Video)', null);
   assert.equal(r.artistDisplay, 'Christine and the Queens');

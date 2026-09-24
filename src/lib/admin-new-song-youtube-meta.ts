@@ -62,17 +62,29 @@ export function resolveAdminNewSongMetaFromYoutube(input: {
 
   const junk = looksLikeYoutubeWatchPageChromeMeta(queryArtist, queryTitle);
   const parsed = getArtistAndSong(youtubeTitle, channel || null);
-  const artistRaw = (parsed.artistDisplay || parsed.artist || channel || queryArtist).trim();
-  const artist = getArtistDisplayString(artistRaw) || artistRaw;
-  const title = (parsed.song || youtubeTitle).trim();
+  let artistRaw = (parsed.artistDisplay || parsed.artist || channel || queryArtist).trim();
+  let artist = getArtistDisplayString(artistRaw) || artistRaw;
+  let title = (parsed.song || youtubeTitle).trim();
   const droppedStayWith =
     youtubeSongTitleKeepsWithAsTitle(title) && !/\bwith\b/i.test(queryTitle);
   const agrees = queryTitleAgreesWithYoutubeTitle(queryTitle, youtubeTitle);
-  if (!junk && agrees && !droppedStayWith) {
+
+  /* 拡張がアーティスト空で開いたとき: パイプ分割で曲名がアーティスト欄に入るのを避け、チャンネルを使う */
+  if (!queryArtist) {
+    if (channel) {
+      artist = getArtistDisplayString(channel) || channel;
+    } else {
+      artist = '';
+    }
+    if (queryTitle && agrees) {
+      title = queryTitle;
+    }
+  } else if (!junk && agrees && !droppedStayWith) {
     return { artist: queryArtist, title: queryTitle, corrected: false };
   }
+
   if (!artist || !title) {
-    return { artist: queryArtist, title: queryTitle, corrected: false };
+    return { artist: queryArtist || artist, title: queryTitle || title, corrected: false };
   }
   if (artist === queryArtist && title === queryTitle) {
     return { artist, title, corrected: false };

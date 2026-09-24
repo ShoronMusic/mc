@@ -73,4 +73,14 @@ const noSnippet = resolveAdminNewSongMetaFromYoutube({
 });
 assert.equal(noSnippet.corrected, false);
 
+const titleOnlyFromExtension = resolveAdminNewSongMetaFromYoutube({
+  queryArtist: '',
+  queryTitle: "You're Still The One",
+  youtubeTitle: "You're Still The One (Candy Crush) Official Video | Music Season 2026",
+  youtubeChannelTitle: 'Shania Twain',
+});
+assert.equal(titleOnlyFromExtension.corrected, true);
+assert.match(titleOnlyFromExtension.artist, /Shania Twain/i);
+assert.match(titleOnlyFromExtension.title, /You.?re Still The One/i);
+
 console.log('admin-new-song-youtube-meta.unit-test ok');

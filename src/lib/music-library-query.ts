@@ -67,6 +67,7 @@ import {
 import { ensureWesternTreatedJpArtistCache } from '@/lib/western-treated-jp-artists';
 import {
   getGenreBestBySlug,
+  getGenreBestLabelsForSongs,
   isCatalogPlaylistTableMissingError,
   listGenreBestPlaylists,
   type GenreBestListItem,
@@ -525,7 +526,35 @@ export async function attachVideosToSongs(
     }
   }
   const withArtists = await attachMusicLibraryListArtists(admin, cards, rows);
+  await attachGenreBestLabels(admin, withArtists);
   return { cards: withArtists, youtubeBySong };
+}
+
+/** 曲一覧の Genre BEST ラベル。テーブル未作成・取得失敗でも曲一覧自体は出す。 */
+async function attachGenreBestLabels(
+  admin: SupabaseClient,
+  cards: MusicLibrarySongCard[],
+): Promise<void> {
+  const ids = cards.map((c) => c.id).filter(Boolean);
+  if (ids.length === 0) return;
+  try {
+    const bySongId: Record<string, { slug: string; title: string }[]> = {};
+    for (const chunk of chunkArray(ids, SONG_ID_CHUNK)) {
+      const { bySongId: part, error, tableMissing } = await getGenreBestLabelsForSongs(admin, chunk);
+      if (tableMissing) return;
+      if (error) {
+        console.warn('[music-library] genre-best labels', error);
+        return;
+      }
+      Object.assign(bySongId, part);
+    }
+    for (const card of cards) {
+      const labels = bySongId[card.id];
+      if (labels?.length) card.genreBestLabels = labels;
+    }
+  } catch (e) {
+    console.warn('[music-library] genre-best labels', e);
+  }
 }
 
 type ArtistOriginRow = {
@@ -1773,13 +1802,16 @@ export async function searchMusicLibraryArtistIndex(
 }
 
 const ARTIST_SELECT =
+  'id, name, name_ja, name_en, name_base, the_prefix, music8_artist_slug, kind, occupations, origin_country, active_period, members, youtube_channel_url, youtube_channel_id, spotify_artist_id, wikipedia_page, wikipedia_url, image_url, image_credit, spotify_artist_images, profile_text, description_en, birth_date, death_date';
+
+const ARTIST_SELECT_NO_WIKI_URL =
   'id, name, name_ja, name_en, name_base, the_prefix, music8_artist_slug, kind, occupations, origin_country, active_period, members, youtube_channel_url, youtube_channel_id, spotify_artist_id, wikipedia_page, image_url, image_credit, spotify_artist_images, profile_text, description_en, birth_date, death_date';
 
 const ARTIST_SELECT_MIN =
   'id, name, name_ja, music8_artist_slug, kind, origin_country, active_period, members, youtube_channel_url, image_url, image_credit, profile_text';
 
 async function loadArtistRowsBySlug(admin: SupabaseClient, slug: string): Promise<ArtistRow[]> {
-  for (const sel of [ARTIST_SELECT, ARTIST_SELECT_MIN]) {
+  for (const sel of [ARTIST_SELECT, ARTIST_SELECT_NO_WIKI_URL, ARTIST_SELECT_MIN]) {
     const { data, error } = await admin.from('artists').select(sel).eq('music8_artist_slug', slug).limit(5);
     if (!error) return (data ?? []) as unknown as ArtistRow[];
     if (error.code === '42P01') return [];
@@ -1805,6 +1837,7 @@ type ArtistRow = {
   youtube_channel_id?: string | null;
   spotify_artist_id?: string | null;
   wikipedia_page?: string | null;
+  wikipedia_url?: string | null;
   image_url?: string | null;
   image_credit?: string | null;
   spotify_artist_images?: string | null;
@@ -1859,7 +1892,7 @@ function profileFromArtistRow(
 
 async function loadArtistRowByName(admin: SupabaseClient, name: string): Promise<ArtistRow | null> {
   const variants = libraryArtistNameLookupVariants(name);
-  for (const sel of [ARTIST_SELECT, ARTIST_SELECT_MIN]) {
+  for (const sel of [ARTIST_SELECT, ARTIST_SELECT_NO_WIKI_URL, ARTIST_SELECT_MIN]) {
     for (const n of variants) {
       const { data, error } = await admin.from('artists').select(sel).ilike('name', n).limit(1);
       if (error) {

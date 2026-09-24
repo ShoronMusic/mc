@@ -86,6 +86,23 @@ function run() {
   const vBeatles = expandLibrarySearchQueryVariants('ビートルズ');
   assert.ok(vBeatles.includes('The Beatles'));
 
+  for (const q of ['ボン・ジョヴィ', 'ボン・ジョビ', 'ボンジョヴィ', 'ボンジョビ']) {
+    const v = expandLibrarySearchQueryVariants(q);
+    assert.ok(v.includes('ボン・ジョヴィ'), q);
+  }
+
+  for (const q of ['アーハ', 'アハ', 'ア・ハ', 'あーは', 'あは', 'あ・は']) {
+    const v = expandLibrarySearchQueryVariants(q);
+    assert.ok(v.includes('アーハ'), q);
+  }
+
+  for (const q of ['ぼん・じょび', 'ぼんじょび', 'ぼんじょゔぃ']) {
+    const v = expandLibrarySearchQueryVariants(q);
+    assert.ok(v.includes('ボン・ジョヴィ'), q);
+  }
+  assert.ok(expandLibrarySearchQueryVariants('びーとるず').includes('The Beatles'));
+  assert.ok(expandLibrarySearchQueryVariants('どりかむ').includes('Dreams Come True'));
+
   const vDct = expandLibrarySearchQueryVariants('ドリカム');
   assert.ok(vDct.includes('ドリカム'));
   assert.ok(vDct.includes('Dreams Come True'));

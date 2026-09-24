@@ -14,10 +14,11 @@ import {
 import type { AdminSongsRegisterResponse } from '@/lib/admin-songs-register-types';
 import type { ExistingSongMatchCandidate } from '@/lib/admin-new-song-existing-match';
 import type { AlternatePvMatchLevel } from '@/lib/song-alternate-pv-match';
+import { SONG_VIDEO_VARIANT_OPTIONS } from '@/lib/song-video-variants';
 
 type RegisterBusyMode = 'stay' | 'detail';
 
-const ATTACH_VARIANT_OPTIONS = ['official', 'visualizer', 'lyric', 'live', 'topic', 'other'] as const;
+const ATTACH_VARIANT_OPTIONS = SONG_VIDEO_VARIANT_OPTIONS;
 
 function levelLabel(level: AlternatePvMatchLevel): string {
   if (level === 'high') return '同一曲（高）';
@@ -56,6 +57,7 @@ export function AdminNewSongForm() {
   const [songId, setSongId] = useState<string | null>(null);
   const [metaCorrectedNote, setMetaCorrectedNote] = useState<string | null>(null);
   const youtubeMetaAppliedFor = useRef<string | null>(null);
+  const skipYoutubeMetaCorrectRef = useRef(false);
   const busy = busyMode != null;
 
   const parsedVideoId = useMemo(() => youtubeVideoIdFromUnknown(youtubeId), [youtubeId]);
@@ -64,6 +66,7 @@ export function AdminNewSongForm() {
 
   useEffect(() => {
     youtubeMetaAppliedFor.current = null;
+    skipYoutubeMetaCorrectRef.current = false;
     setMetaCorrectedNote(null);
   }, [parsedVideoId]);
 
@@ -97,23 +100,25 @@ export function AdminNewSongForm() {
             typeof data.youtubeChannelTitle === 'string' ? data.youtubeChannelTitle : null;
           if (parsedVideoId && ytTitle && youtubeMetaAppliedFor.current !== parsedVideoId) {
             youtubeMetaAppliedFor.current = parsedVideoId;
-            const resolved = resolveAdminNewSongMetaFromYoutube({
-              queryArtist: artist,
-              queryTitle: title,
-              youtubeTitle: ytTitle,
-              youtubeChannelTitle: ytChannel,
-            });
-            if (resolved.corrected) {
-              setArtist(resolved.artist);
-              setTitle(resolved.title);
-              setMetaCorrectedNote(
-                'YouTube の動画タイトルから曲名・アーティストを補正しました。',
-              );
-              setYtPublishedAt(typeof data.youtubePublishedAt === 'string' ? data.youtubePublishedAt : null);
-              const sugEarly = typeof data.suggestedVariant === 'string' ? data.suggestedVariant : null;
-              setSuggestedVariant(sugEarly);
-              if (sugEarly) setAttachVariant(sugEarly);
-              return;
+            if (!skipYoutubeMetaCorrectRef.current) {
+              const resolved = resolveAdminNewSongMetaFromYoutube({
+                queryArtist: artist,
+                queryTitle: title,
+                youtubeTitle: ytTitle,
+                youtubeChannelTitle: ytChannel,
+              });
+              if (resolved.corrected) {
+                setArtist(resolved.artist);
+                setTitle(resolved.title);
+                setMetaCorrectedNote(
+                  'YouTube の動画タイトルから曲名・アーティストを補正しました。',
+                );
+                setYtPublishedAt(typeof data.youtubePublishedAt === 'string' ? data.youtubePublishedAt : null);
+                const sugEarly = typeof data.suggestedVariant === 'string' ? data.suggestedVariant : null;
+                setSuggestedVariant(sugEarly);
+                if (sugEarly) setAttachVariant(sugEarly);
+                return;
+              }
             }
           }
           setYtPublishedAt(typeof data.youtubePublishedAt === 'string' ? data.youtubePublishedAt : null);
@@ -141,6 +146,13 @@ export function AdminNewSongForm() {
       window.clearTimeout(timer);
     };
   }, [parsedVideoId, artist, title]);
+
+  function swapArtistAndTitle() {
+    skipYoutubeMetaCorrectRef.current = true;
+    setArtist(title);
+    setTitle(artist);
+    setMetaCorrectedNote(null);
+  }
 
   async function registerSong(mode: RegisterBusyMode) {
     setBusyMode(mode);
@@ -280,6 +292,19 @@ export function AdminNewSongForm() {
               required
             />
           </label>
+          <div>
+            <button
+              type="button"
+              onClick={swapArtistAndTitle}
+              disabled={busy || (!artist.trim() && !title.trim())}
+              className="rounded border border-gray-600 bg-gray-900 px-3 py-1.5 text-xs text-amber-100 hover:border-amber-700 hover:bg-amber-950/40 disabled:opacity-50"
+            >
+              アーティスト ⇄ 曲名 を入れ替え
+            </button>
+            <p className="mt-1 text-[11px] text-gray-500">
+              YouTube の表示順が逆のときに、この画面で入れ替えてから登録できます。
+            </p>
+          </div>
           <label className="block text-sm">
             曲名
             <input

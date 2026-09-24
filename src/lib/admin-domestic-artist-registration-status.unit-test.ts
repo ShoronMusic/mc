@@ -31,4 +31,9 @@ const complete = resolveDomesticArtistRegistrationStatus({
 assert.equal(complete.stage, 5);
 assert.equal(complete.hasWikipedia, true);
 
+const wikiUrlOnly = resolveDomesticArtistRegistrationStatus({
+  wikipedia_url: 'https://de.wikipedia.org/wiki/Velveteen_Queen',
+});
+assert.equal(wikiUrlOnly.hasWikipedia, true);
+
 console.log('admin-domestic-artist-registration-status.unit-test: ok');

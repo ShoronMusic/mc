@@ -4,6 +4,7 @@
  * お題ミッション「実施中」から開く一覧。視聴履歴と同じ列構成（読み取り専用）。
  */
 
+import { UserIcon } from '@heroicons/react/24/outline';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { RoomPlaybackHistoryRow } from '@/lib/room-playback-history-types';
 import { appendRoomPlaybackHistoryPagination } from '@/lib/room-playback-history-pagination';
@@ -15,12 +16,11 @@ import {
 import { showRoomStyleUi } from '@/lib/product-branding';
 
 const COL_NO = 'No';
-const COL_PARTICIPANT = '選曲者';
-const COL_TIME = '時間';
-const COL_ARTIST_TITLE = 'アーティスト - タイトル';
-const COL_STYLE = 'スタイル';
-const COL_ERA = '年代';
-const COL_LINK = 'リンク';
+const COL_TIME = 'Time';
+const COL_ARTIST_TITLE = 'Artist - Title';
+const COL_STYLE = 'Style';
+const COL_ERA = 'Era';
+const COL_LINK = 'Link';
 const COL_FAV = '♡';
 
 const COL_WIDTH_NO = 34;
@@ -364,18 +364,27 @@ export default function ThemePlaylistMissionEntriesModal({ open, onClose, themeI
                         maxWidth: COL_WIDTH_PARTICIPANT,
                       }}
                       scope="col"
+                      title="選曲者"
+                      aria-label="選曲者"
                     >
-                      <span className="block truncate">{COL_PARTICIPANT}</span>
+                      <UserIcon className="h-3.5 w-3.5" aria-hidden />
                     </th>
                     <th
-                      className="border-b border-gray-600 py-1 pr-1 font-medium text-gray-400"
+                      className="border-b border-gray-600 py-1 pr-1 text-[10px] font-medium leading-none text-gray-400"
                       style={{ width: COL_WIDTH_TIME, minWidth: COL_WIDTH_TIME, maxWidth: COL_WIDTH_TIME }}
                       scope="col"
                     >
                       <span className="block truncate">{COL_TIME}</span>
                     </th>
                     <th
-                      className="border-b border-gray-600 py-1 pr-1 font-medium text-gray-400"
+                      className="border-b border-gray-600 py-1 pr-1 text-[10px] font-medium leading-none text-gray-400"
+                      style={{ minWidth: COL_MIN_WIDTH_ARTIST_TITLE }}
+                      scope="col"
+                    >
+                      <span className="block truncate">{COL_ARTIST_TITLE}</span>
+                    </th>
+                    <th
+                      className="border-b border-gray-600 py-1 pr-1 text-[10px] font-medium leading-none text-gray-400"
                       style={{ width: COL_WIDTH_ERA, minWidth: COL_WIDTH_ERA, maxWidth: COL_WIDTH_ERA }}
                       scope="col"
                     >
@@ -383,7 +392,7 @@ export default function ThemePlaylistMissionEntriesModal({ open, onClose, themeI
                     </th>
                     {showStyleUi && (
                       <th
-                        className="border-b border-gray-600 py-1 pr-1 font-medium text-gray-400"
+                        className="border-b border-gray-600 py-1 pr-1 text-[10px] font-medium leading-none text-gray-400"
                         style={{ width: COL_WIDTH_STYLE, minWidth: COL_WIDTH_STYLE, maxWidth: COL_WIDTH_STYLE }}
                         scope="col"
                       >
@@ -391,14 +400,7 @@ export default function ThemePlaylistMissionEntriesModal({ open, onClose, themeI
                       </th>
                     )}
                     <th
-                      className="border-b border-gray-600 py-1 pr-1 font-medium text-gray-400"
-                      style={{ minWidth: COL_MIN_WIDTH_ARTIST_TITLE }}
-                      scope="col"
-                    >
-                      <span className="block truncate">{COL_ARTIST_TITLE}</span>
-                    </th>
-                    <th
-                      className="border-b border-gray-600 py-1 pr-1 font-medium text-gray-400"
+                      className="border-b border-gray-600 py-1 pr-1 text-[10px] font-medium leading-none text-gray-400"
                       style={{ width: COL_WIDTH_LINK, minWidth: COL_WIDTH_LINK, maxWidth: COL_WIDTH_LINK }}
                       scope="col"
                     >
@@ -475,6 +477,13 @@ export default function ThemePlaylistMissionEntriesModal({ open, onClose, themeI
                             </span>
                           </td>
                           <td
+                            className="truncate border-b border-gray-700/80 py-0.5 pr-1 text-gray-200"
+                            style={{ minWidth: COL_MIN_WIDTH_ARTIST_TITLE }}
+                            title={artistTitle}
+                          >
+                            {artistTitle}
+                          </td>
+                          <td
                             className="truncate border-b border-gray-700/80 py-0.5 pr-1 text-gray-400"
                             style={{
                               width: COL_WIDTH_ERA,
@@ -500,13 +509,6 @@ export default function ThemePlaylistMissionEntriesModal({ open, onClose, themeI
                               {style ?? '—'}
                             </td>
                           )}
-                          <td
-                            className="truncate border-b border-gray-700/80 py-0.5 pr-1 text-gray-200"
-                            style={{ minWidth: COL_MIN_WIDTH_ARTIST_TITLE }}
-                            title={artistTitle}
-                          >
-                            {artistTitle}
-                          </td>
                           <td
                             className="border-b border-gray-700/80 py-0.5 pr-1"
                             style={{ width: COL_WIDTH_LINK, minWidth: COL_WIDTH_LINK, maxWidth: COL_WIDTH_LINK }}

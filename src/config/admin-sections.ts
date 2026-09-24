@@ -230,6 +230,14 @@ export const ADMIN_SECTIONS: AdminSection[] = [
     activePathPrefix: '/admin/genre-best',
   },
   {
+    href: '/admin/genres',
+    title: 'ジャンル',
+    description:
+      'catalog_genres の一覧・新規登録・編集。公開ライブラリ /music/genres。曲への紐づけは曲詳細',
+    category: 'library',
+    activePathPrefix: '/admin/genres',
+  },
+  {
     href: '/admin/featured-pages',
     title: '特集ページ',
     description:

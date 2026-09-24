@@ -84,6 +84,7 @@ export function emptyDraft(name: string): AdminArtistProfileDraft {
     youtubeChannelId: null,
     youtubeChannelTitle: null,
     wikipediaPage: null,
+    wikipediaUrl: null,
   };
 }
 
@@ -156,6 +157,7 @@ export function artistRowToDraft(
     youtubeChannelTitle:
       typeof row.youtube_channel_title === 'string' ? row.youtube_channel_title : null,
     wikipediaPage: typeof row.wikipedia_page === 'string' ? row.wikipedia_page : null,
+    wikipediaUrl: typeof row.wikipedia_url === 'string' ? row.wikipedia_url : null,
   };
 }
 

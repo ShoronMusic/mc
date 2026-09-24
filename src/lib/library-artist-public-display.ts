@@ -56,11 +56,56 @@ export function buildSpotifyArtistHref(artistId: string | null | undefined): str
 export function buildWikipediaPageHref(page: string | null | undefined): string | null {
   const t = (page ?? '').trim();
   if (!t) return null;
-  if (/^https?:\/\//i.test(t)) return t;
+  if (/^https?:\/\//i.test(t)) {
+    return normalizeWikipediaArticleHref(t) ?? t;
+  }
   if (/[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF]/.test(t)) {
     return `https://ja.wikipedia.org/wiki/${encodeURIComponent(t)}`;
   }
   return `https://en.wikipedia.org/wiki/${encodeURIComponent(t)}`;
+}
+
+/**
+ * 英語版以外を含む Wikipedia 記事 URL。`xx.wikipedia.org/wiki/…` のみ許可。
+ * 例: https://de.wikipedia.org/wiki/Velveteen_Queen
+ */
+export function normalizeWikipediaArticleHref(raw: string | null | undefined): string | null {
+  const t = (raw ?? '').trim();
+  if (!t) return null;
+  const withProto = /^https?:\/\//i.test(t) ? t : `https://${t.replace(/^\/+/, '')}`;
+  let u: URL;
+  try {
+    u = new URL(withProto);
+  } catch {
+    return null;
+  }
+  const host = u.hostname.replace(/^www\./i, '').toLowerCase();
+  const hostNorm = host.replace(/^([a-z0-9-]+)\.m\.wikipedia\.org$/, '$1.wikipedia.org');
+  const langMatch = hostNorm.match(/^([a-z]{2,3}(?:-[a-z0-9]+)?)\.wikipedia\.org$/);
+  if (!langMatch) return null;
+  const lang = langMatch[1];
+  const pathMatch = u.pathname.match(/^\/wiki\/(.+)$/);
+  if (!pathMatch?.[1]) return null;
+  let slug: string;
+  try {
+    slug = decodeURIComponent(pathMatch[1]);
+  } catch {
+    slug = pathMatch[1];
+  }
+  slug = slug.replace(/ /g, '_').replace(/#.*$/, '').trim();
+  if (!slug) return null;
+  if (/^(Special|Wikipedia|Help|File|Talk|User|Template|Category):/i.test(slug)) return null;
+  return `https://${lang}.wikipedia.org/wiki/${encodeURIComponent(slug).replace(/%2F/gi, '/')}`;
+}
+
+/** `wikipedia_url`（英語版以外）があればそれを優先し、なければ `wikipedia_page` スラッグから組む */
+export function resolveArtistWikipediaHref(input: {
+  wikipedia_url?: string | null;
+  wikipedia_page?: string | null;
+}): string | null {
+  const override = normalizeWikipediaArticleHref(input.wikipedia_url);
+  if (override) return override;
+  return buildWikipediaPageHref(input.wikipedia_page);
 }
 
 export function buildLibraryArtistExternalLinks(input: {
@@ -68,6 +113,7 @@ export function buildLibraryArtistExternalLinks(input: {
   youtube_channel_id?: string | null;
   spotify_artist_id?: string | null;
   wikipedia_page?: string | null;
+  wikipedia_url?: string | null;
 }): LibraryArtistExternalLinks {
   const youtube =
     resolveYoutubeChannelHref(input.youtube_channel_url) ??
@@ -75,7 +121,7 @@ export function buildLibraryArtistExternalLinks(input: {
   return {
     youtube,
     spotify: buildSpotifyArtistHref(input.spotify_artist_id),
-    wikipedia: buildWikipediaPageHref(input.wikipedia_page),
+    wikipedia: resolveArtistWikipediaHref(input),
   };
 }
 

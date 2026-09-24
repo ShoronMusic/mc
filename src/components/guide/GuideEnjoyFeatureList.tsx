@@ -6,6 +6,7 @@ import { useSearchParams } from 'next/navigation';
 import { useState, type CSSProperties } from 'react';
 import {
   GUIDE_ENJOY_BADGE_LABELS,
+  GUIDE_ENJOY_FRAME_SEC,
   GUIDE_ENJOY_CORE_SECTIONS,
   GUIDE_ENJOY_INTRO,
   GUIDE_ENJOY_ORIGINAL_AIS,
@@ -14,8 +15,11 @@ import {
   GUIDE_ENJOY_THREE_STEPS,
   GUIDE_ENJOY_USAGE_HIGHLIGHTS,
   type GuideEnjoyCategory,
+  type GuideEnjoyDeviceTone,
   type GuideEnjoyFeatureBadge,
   type GuideEnjoyIllustration,
+  type GuideEnjoySelectionPattern,
+  type GuideEnjoySelectionPreludeStep,
 } from '@/lib/guide-enjoy-features';
 import { guideInternalHref } from '@/lib/policy-modal-link';
 
@@ -37,23 +41,116 @@ function FeatureBadge({ badge }: { badge: GuideEnjoyFeatureBadge }) {
   );
 }
 
+function enjoyDeviceToneClass(
+  tone: GuideEnjoyDeviceTone | 'neutral' | undefined,
+  lightTone: boolean,
+): string {
+  if (tone === 'pc') {
+    return lightTone ? 'text-red-700' : 'text-red-300';
+  }
+  if (tone === 'mobile') {
+    return lightTone ? 'text-emerald-700' : 'text-emerald-300';
+  }
+  return lightTone ? 'text-gray-600' : 'text-gray-400';
+}
+
+function enjoyDeviceBadgeClass(tone: GuideEnjoyDeviceTone): string {
+  return tone === 'pc' ? 'bg-red-700 text-white' : 'bg-emerald-700 text-white';
+}
+
+function SelectionMethodPrelude({
+  steps,
+  lightTone,
+}: {
+  steps: readonly GuideEnjoySelectionPreludeStep[];
+  lightTone: boolean;
+}) {
+  return (
+    <ol className="space-y-2">
+      {steps.map((step) => (
+        <li key={step.step} className="flex items-start gap-2">
+          <span
+            className={`mt-0.5 inline-flex h-6 min-w-6 shrink-0 items-center justify-center rounded px-1.5 text-xs font-bold tabular-nums ${
+              lightTone ? 'bg-gray-800 text-white' : 'bg-gray-200 text-gray-900'
+            }`}
+          >
+            {step.step}
+          </span>
+          <div className="min-w-0 pt-0.5">
+            <p
+              className={`text-sm font-medium leading-relaxed ${
+                lightTone ? 'text-gray-900' : 'text-white'
+              }`}
+            >
+              {step.href ? (
+                <a
+                  href={step.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`underline-offset-2 hover:underline ${
+                    lightTone ? 'text-sky-700 hover:text-sky-800' : 'text-sky-400 hover:text-sky-300'
+                  }`}
+                >
+                  {step.title}
+                </a>
+              ) : (
+                step.title
+              )}
+            </p>
+            {step.description ? (
+              <p className={`mt-0.5 text-sm ${lightTone ? 'text-gray-600' : 'text-gray-400'}`}>
+                {step.description}
+              </p>
+            ) : null}
+          </div>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 function SelectionMethodDescription({
   description,
   descriptionParagraphs,
+  descriptionParagraphTones,
+  descriptionParagraphFrames,
   lightTone = false,
 }: {
   description: string;
   descriptionParagraphs?: readonly string[];
+  descriptionParagraphTones?: readonly (GuideEnjoyDeviceTone | 'neutral')[];
+  descriptionParagraphFrames?: readonly (number | null)[];
   lightTone?: boolean;
 }) {
   const textClass = lightTone ? 'text-gray-600' : 'text-gray-400';
+  const frameCount = descriptionParagraphFrames?.filter((frame) => frame != null).length ?? 0;
+  const duration = frameCount * GUIDE_ENJOY_FRAME_SEC;
 
   if (descriptionParagraphs?.length) {
     return (
-      <div className={`mt-2 space-y-2 text-sm ${textClass}`}>
-        {descriptionParagraphs.map((paragraph) => (
-          <p key={paragraph}>{paragraph}</p>
-        ))}
+      <div className="mt-2 space-y-2 text-sm">
+        {descriptionParagraphs.map((paragraph, index) => {
+          const frame = descriptionParagraphFrames?.[index];
+          const synced = frame != null && frameCount > 0;
+          return (
+            <p
+              key={paragraph}
+              className={`${enjoyDeviceToneClass(descriptionParagraphTones?.[index] ?? 'neutral', lightTone)}${
+                synced ? ` guide-line-mark rounded px-1 ${frame === 0 ? 'guide-line-mark-first' : ''}` : ''
+              }`}
+              style={
+                synced
+                  ? {
+                      animationDuration: `${duration}s`,
+                      animationDelay: `${frame * GUIDE_ENJOY_FRAME_SEC}s`,
+                    }
+                  : undefined
+              }
+            >
+              {paragraph}
+            </p>
+          );
+        })}
       </div>
     );
   }
@@ -61,32 +158,191 @@ function SelectionMethodDescription({
   return <p className={`mt-2 text-sm ${textClass}`}>{description}</p>;
 }
 
+function SelectionMethodPatternImage({
+  image,
+  sizes,
+}: {
+  image: GuideEnjoyIllustration;
+  sizes: string;
+}) {
+  return (
+    <div className="relative overflow-hidden rounded-lg border border-gray-200 bg-white">
+      <Image
+        src={image.src}
+        alt={image.alt}
+        width={image.width}
+        height={image.height}
+        className="h-auto w-full"
+        sizes={sizes}
+      />
+      {image.blinkSrc ? (
+        <Image
+          src={image.blinkSrc}
+          alt=""
+          width={image.width}
+          height={image.height}
+          className="pointer-events-none absolute inset-0 h-full w-full object-contain animate-guide-highlight-blink"
+          sizes={sizes}
+          aria-hidden
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function SelectionMethodPatterns({
+  patterns,
+  lightTone,
+}: {
+  patterns: readonly GuideEnjoySelectionPattern[];
+  lightTone: boolean;
+}) {
+  return (
+    <div className="w-full min-w-0 space-y-8 px-4 pb-5">
+      {patterns.map((pattern) => (
+        <section key={pattern.id} className="min-w-0" aria-label={`${pattern.label} ${pattern.title}`}>
+          <div className="mb-3 flex items-start gap-2">
+            <span
+              className={`mt-0.5 inline-flex h-6 min-w-6 shrink-0 items-center justify-center rounded px-1.5 text-xs font-bold ${enjoyDeviceBadgeClass(pattern.tone)}`}
+            >
+              {pattern.label}
+            </span>
+            <p className={`text-sm font-medium leading-relaxed ${enjoyDeviceToneClass(pattern.tone, lightTone)}`}>
+              {pattern.title}
+            </p>
+          </div>
+          <div
+            className={
+              pattern.tone === 'mobile' && pattern.images.length >= 2
+                ? 'grid w-full grid-cols-2 items-start gap-3 sm:gap-5'
+                : 'space-y-4'
+            }
+          >
+            {pattern.images.map((image, index) => {
+              const showStepNumber = pattern.images.length >= 2;
+              return (
+              <figure key={image.src} className="min-w-0">
+                {image.caption || showStepNumber ? (
+                  <figcaption
+                    className={`mb-2 flex items-start gap-2 text-sm font-medium leading-snug ${enjoyDeviceToneClass(
+                      image.captionTone ?? pattern.tone,
+                      lightTone,
+                    )}`}
+                  >
+                    {showStepNumber ? (
+                      <span
+                        className={`mt-0.5 inline-flex h-6 min-w-6 shrink-0 items-center justify-center rounded px-1.5 text-xs font-bold tabular-nums ${enjoyDeviceBadgeClass(pattern.tone)}`}
+                      >
+                        {index + 1}
+                      </span>
+                    ) : null}
+                    {image.caption ? <span className="pt-0.5">{image.caption}</span> : null}
+                  </figcaption>
+                ) : null}
+                <SelectionMethodPatternImage
+                  image={image}
+                  sizes={
+                    pattern.tone === 'mobile'
+                      ? '(max-width: 640px) 45vw, 280px'
+                      : '(max-width: 768px) 100vw, 720px'
+                  }
+                />
+              </figure>
+              );
+            })}
+          </div>
+        </section>
+      ))}
+    </div>
+  );
+}
+
+function SelectionMethodImageSequence({
+  images,
+}: {
+  images: readonly GuideEnjoyIllustration[];
+}) {
+  const first = images[0];
+  if (!first) return null;
+  const frameSec = GUIDE_ENJOY_FRAME_SEC;
+  const duration = images.length * frameSec;
+
+  return (
+    <div className="w-full min-w-0 px-4 pb-5">
+      <div
+        className="relative mx-auto w-full overflow-hidden rounded-lg border border-gray-200 bg-white"
+        style={{
+          aspectRatio: `${first.width} / ${first.height}`,
+          maxWidth: first.width,
+        }}
+      >
+        {images.map((image, index) => (
+          <Image
+            key={image.src}
+            src={image.src}
+            alt={index === 0 ? image.alt : ''}
+            width={image.width}
+            height={image.height}
+            className="guide-frame-seq absolute inset-0 h-full w-full object-contain"
+            style={{
+              animationDuration: `${duration}s`,
+              animationDelay: `${index * frameSec}s`,
+            }}
+            sizes="(max-width: 640px) 100vw, 1000px"
+            aria-hidden={index === 0 ? undefined : true}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function SelectionMethodImages({
   images,
   lightTone,
+  animate = false,
 }: {
   images: readonly GuideEnjoyIllustration[];
   lightTone: boolean;
+  animate?: boolean;
 }) {
-  const totalWidth = images.reduce((sum, image) => sum + image.width, 0);
+  if (animate && images.length > 1) {
+    return <SelectionMethodImageSequence images={images} />;
+  }
+  const isPair = images.length === 2;
+  const pairTotalWidth = images.reduce((sum, image) => sum + image.width, 0);
 
   return (
-    <div className="w-full min-w-0 shrink px-3 py-3 sm:shrink-0 sm:px-4 sm:py-4">
-      <div className="mx-auto flex w-full max-w-full items-end justify-center gap-2 sm:mx-0 sm:ml-auto sm:justify-end">
-        {images.map((image) => (
+    <div className="w-full min-w-0 px-4 pb-5">
+      <div
+        className={
+          isPair
+            ? 'grid w-full items-end gap-x-12 gap-y-4 sm:gap-x-16'
+            : 'flex w-full justify-center'
+        }
+        style={
+          isPair
+            ? {
+                gridTemplateColumns: images
+                  .map((image) => `minmax(0, ${image.width}fr)`)
+                  .join(' '),
+              }
+            : undefined
+        }
+      >
+        {images.map((image) => {
+          const pairDisplayWidth = Math.round((image.width / pairTotalWidth) * 720);
+          return (
           <figure
             key={image.src}
-            className="flex min-w-0 flex-col items-center"
-            style={{
-              flex: `${image.width} 1 0`,
-              maxWidth: `${Math.round((image.width / totalWidth) * 100)}%`,
-            }}
+            className={`flex min-w-0 flex-col items-center ${isPair ? 'w-full' : 'max-w-full'}`}
           >
             {image.caption ? (
               <figcaption
-                className={`mb-1.5 text-center text-xs font-medium ${
-                  lightTone ? 'text-gray-600' : 'text-gray-300'
-                }`}
+                className={`mb-1.5 text-center text-xs font-medium ${enjoyDeviceToneClass(
+                  image.captionTone ?? 'neutral',
+                  lightTone,
+                )}`}
               >
                 {image.caption}
               </figcaption>
@@ -96,11 +352,21 @@ function SelectionMethodImages({
               alt={image.alt}
               width={image.width}
               height={image.height}
-              className="h-auto w-full max-w-full"
-              sizes={`(max-width: 640px) ${Math.round((image.width / totalWidth) * 45)}vw, ${image.width}px`}
+              className="h-auto w-full"
+              style={
+                isPair
+                  ? { width: '100%', height: 'auto' }
+                  : { width: `min(100%, ${image.width}px)`, height: 'auto' }
+              }
+              sizes={
+                isPair
+                  ? `(max-width: 640px) 65vw, ${pairDisplayWidth}px`
+                  : `(max-width: 640px) 100vw, ${image.width}px`
+              }
             />
           </figure>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -421,24 +687,34 @@ export function GuideEnjoyFeatureList() {
                 : 'border-emerald-800/45 bg-emerald-950/20'
             }`}
           >
-            <div
-              className={
-                activeSelectionMethod.images?.length
-                  ? 'flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between'
-                  : 'p-4'
-              }
-            >
-              <div
-                className={
-                  activeSelectionMethod.images?.length ? 'min-w-0 flex-1 p-4 pb-0 sm:pb-4' : ''
-                }
-              >
+            <div className="flex flex-col">
+              <div className="min-w-0 p-4">
+                {activeSelectionMethod.preludeSteps?.length ? (
+                  <div className="mb-4 border-b border-gray-200 pb-4">
+                    <SelectionMethodPrelude
+                      steps={activeSelectionMethod.preludeSteps}
+                      lightTone={activeSelectionMethod.cardTone === 'light'}
+                    />
+                  </div>
+                ) : null}
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <h3
-                    className={`font-semibold ${
+                    className={`break-keep font-semibold ${
                       activeSelectionMethod.cardTone === 'light' ? 'text-gray-900' : 'text-white'
                     }`}
                   >
+                    {activeSelectionMethod.preludeSteps?.length ? (
+                      <span
+                        className={`mr-2 inline-flex h-6 min-w-6 items-center justify-center rounded px-1.5 align-middle text-xs font-bold tabular-nums ${
+                          activeSelectionMethod.cardTone === 'light'
+                            ? 'bg-red-700 text-white'
+                            : 'bg-red-500 text-white'
+                        }`}
+                      >
+                        {activeSelectionMethod.preludeSteps[activeSelectionMethod.preludeSteps.length - 1]
+                          .step + 1}
+                      </span>
+                    ) : null}
                     {activeSelectionMethod.title}
                   </h3>
                   {activeSelectionMethod.badge ? (
@@ -448,6 +724,12 @@ export function GuideEnjoyFeatureList() {
                 <SelectionMethodDescription
                   description={activeSelectionMethod.description}
                   descriptionParagraphs={activeSelectionMethod.descriptionParagraphs}
+                  descriptionParagraphTones={activeSelectionMethod.descriptionParagraphTones}
+                  descriptionParagraphFrames={
+                    activeSelectionMethod.animateImages
+                      ? activeSelectionMethod.descriptionParagraphFrames
+                      : undefined
+                  }
                   lightTone={activeSelectionMethod.cardTone === 'light'}
                 />
                 {activeSelectionMethod.href ? (
@@ -465,8 +747,18 @@ export function GuideEnjoyFeatureList() {
                   </p>
                 ) : null}
               </div>
+              {activeSelectionMethod.patterns?.length ? (
+                <SelectionMethodPatterns
+                  patterns={activeSelectionMethod.patterns}
+                  lightTone={activeSelectionMethod.cardTone === 'light'}
+                />
+              ) : null}
               {activeSelectionMethod.images?.length ? (
-                <SelectionMethodImages images={activeSelectionMethod.images} lightTone={activeSelectionMethod.cardTone === 'light'} />
+                <SelectionMethodImages
+                  images={activeSelectionMethod.images}
+                  lightTone={activeSelectionMethod.cardTone === 'light'}
+                  animate={activeSelectionMethod.animateImages}
+                />
               ) : null}
             </div>
           </div>

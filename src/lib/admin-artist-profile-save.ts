@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { replaceArtistMemberGraph, validateArtistMemberGraph } from '@/lib/artist-members';
 import { artistNameToMusic8Slug, normalizeYoutubeChannelRef, resolveYoutubeChannelHref } from '@/lib/music8-artist-display';
+import { normalizeWikipediaArticleHref } from '@/lib/library-artist-public-display';
 import {
   buildNameSort,
   type Music8ArtistDbPatch,
@@ -69,6 +70,7 @@ export function buildArtistDbPatchFromAdminDraft(
     youtube_channel_title:
       synced.youtubeChannelTitle?.trim() || (ytUrl ? `${name} YouTube Channel` : null),
     wikipedia_page: synced.wikipediaPage,
+    wikipedia_url: normalizeWikipediaArticleHref(synced.wikipediaUrl),
     music8_artist_slug: buildArtistSlug(name),
     ai_profile_generated_at: new Date().toISOString(),
     ai_profile_model: opts?.aiModel?.trim() || null,

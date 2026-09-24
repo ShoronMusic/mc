@@ -16,6 +16,7 @@ export function isSelectionRegisteredArtistPendingWp(row: {
   origin_country?: string | null;
   youtube_channel_id?: string | null;
   wikipedia_page?: string | null;
+  wikipedia_url?: string | null;
   kind?: string | null;
   occupations?: string[] | null;
 }): boolean {

@@ -13,6 +13,10 @@ type Props = {
   hasSpotifyArtists?: boolean;
   currentTrackId?: string | null;
   canReset?: boolean;
+  displayTitle?: string | null;
+  spotifyArtists?: string | null;
+  spotifyName?: string | null;
+  spotifyPopularity?: number | null;
 };
 
 type EnrichResult = {
@@ -32,6 +36,10 @@ export function AdminSongSpotifyEnrichPanel({
   hasSpotifyArtists = false,
   currentTrackId = null,
   canReset = false,
+  displayTitle = null,
+  spotifyArtists = null,
+  spotifyName = null,
+  spotifyPopularity = null,
 }: Props) {
   const router = useRouter();
   const workflow = useAdminSongDetailWorkflow();
@@ -89,12 +97,6 @@ export function AdminSongSpotifyEnrichPanel({
     if (alreadyComplete) {
       return runAlignDisplay();
     }
-    const ok = window.confirm(
-      hasTrackId
-        ? '既存の track ID は上書きせず、空の Spotify 項目（popularity 等）だけ補完します。実行しますか？'
-        : 'Spotify を検索して track ID / popularity 等を空欄補完します。曖昧な場合はレビューキューへ入ります。実行しますか？',
-    );
-    if (!ok) return false;
 
     setBusy(true);
     setMsg(null);
@@ -122,9 +124,8 @@ export function AdminSongSpotifyEnrichPanel({
 
       const r = data.results?.find((x) => x.status !== 'skipped_complete') ?? data.results?.[0];
       if (r?.status === 'updated' || (data.summary?.updated ?? 0) > 0) {
-        const displayNote = r?.displayTitle ? ` 表示: ${r.displayTitle}` : '';
         setMsg(
-          `反映しました（track: ${r?.spotifyTrackId ?? '—'} / 人気: ${r?.spotifyPopularity ?? '—'}）。${displayNote}`,
+          `反映しました（track: ${r?.spotifyTrackId ?? '—'} / 人気: ${r?.spotifyPopularity ?? '—'}）。`,
         );
         workflow?.setFilled('spotify', true);
         router.refresh();
@@ -197,8 +198,7 @@ export function AdminSongSpotifyEnrichPanel({
         (data.artistsCreated ?? 0) > 0 || (data.artistsPatched ?? 0) > 0
           ? ` アーティスト新規 ${data.artistsCreated ?? 0} / 補完 ${data.artistsPatched ?? 0}。`
           : '';
-      const displayNote = data.displayTitle ? ` 表示: ${data.displayTitle}` : '';
-      setMsg((data.message ?? '反映しました。') + displayNote + extra);
+      setMsg((data.message ?? '反映しました。') + extra);
       if (data.spotifyTrackId) setManualTrackId(data.spotifyTrackId);
       workflow?.setFilled('spotify', true);
       router.refresh();
@@ -279,6 +279,18 @@ export function AdminSongSpotifyEnrichPanel({
           {msg}
         </p>
       ) : null}
+      <dl className="mt-3 grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-3 gap-y-1.5 text-sm">
+        <dt className="text-gray-400">表示</dt>
+        <dd className="text-xl font-semibold leading-snug text-white">{displayTitle?.trim() || '—'}</dd>
+        <dt className="text-gray-400">Spotify Artists</dt>
+        <dd className="text-gray-100">{spotifyArtists?.trim() || '—'}</dd>
+        <dt className="text-gray-400">タイトル</dt>
+        <dd className="text-gray-100">{spotifyName?.trim() || '—'}</dd>
+        <dt className="text-gray-400">Popularity</dt>
+        <dd className="text-gray-100">
+          {spotifyPopularity != null && Number.isFinite(spotifyPopularity) ? String(spotifyPopularity) : '—'}
+        </dd>
+      </dl>
       <div className="mt-3 flex flex-wrap gap-2">
         {workflow ? null : (
           <button

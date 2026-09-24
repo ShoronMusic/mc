@@ -57,6 +57,7 @@ Genre / Style タブ内はタイトル A–Z。
 |------|------|
 | `/music/genre-best` | 一覧（タブ・タイトル／曲数。サムネなし。カタログフィルタ後の件数） |
 | `/music/genre-best/[slug]` · `/[slug]/[page]` | 曲一覧（40件ページ・Music Library 共通曲一覧 UI）。`/{slug}` は `/1` へ |
+| `/music` のスタイル・アーティスト・ジャンルなどの曲一覧 | 登録曲にプレイリスト名のリンク付きラベル（琥珀の小バッジ）。開いている Genre BEST 自身のラベルは出さない |
 
 ### STYLE_ADMIN
 

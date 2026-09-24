@@ -9,6 +9,7 @@ import {
   splitAdminArtistNameParts,
   withSyncedAdminArtistDisplayName,
 } from '@/lib/admin-artist-profile-parse';
+import { normalizeWikipediaArticleHref } from '@/lib/library-artist-public-display';
 
 export const dynamic = 'force-dynamic';
 
@@ -84,6 +85,7 @@ function parseDraft(raw: unknown): AdminArtistProfileDraft | null {
     youtubeChannelId: asNullableString(o.youtubeChannelId),
     youtubeChannelTitle: asNullableString(o.youtubeChannelTitle),
     wikipediaPage: asNullableString(o.wikipediaPage),
+    wikipediaUrl: normalizeWikipediaArticleHref(asNullableString(o.wikipediaUrl)),
   });
 }
 
@@ -106,6 +108,19 @@ export async function POST(request: Request) {
   const draft = parseDraft(body.draft);
   if (!draft) {
     return NextResponse.json({ error: 'draft（name 必須）が不正です。' }, { status: 400 });
+  }
+  const wikiUrlRaw =
+    body.draft && typeof body.draft === 'object' && !Array.isArray(body.draft)
+      ? asNullableString((body.draft as Record<string, unknown>).wikipediaUrl)
+      : null;
+  if (wikiUrlRaw && !normalizeWikipediaArticleHref(wikiUrlRaw)) {
+    return NextResponse.json(
+      {
+        error:
+          '英語版以外の Wikipedia URL は https://de.wikipedia.org/wiki/記事名 のような形式にしてください。',
+      },
+      { status: 400 },
+    );
   }
 
   const artistId = typeof body.artistId === 'string' ? body.artistId.trim() : null;

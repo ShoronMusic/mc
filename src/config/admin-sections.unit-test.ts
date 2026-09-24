@@ -37,6 +37,15 @@ const detailKeepsDashboard = isAdminSectionActive(
   '/admin/songs/cd689902-7bf7-4bde-8a2e-1e1c9835027a',
   dashboardSection,
 );
+const genresSection = ADMIN_SECTIONS.find((s) => s.href === '/admin/genres')!;
+const genreBestSection = ADMIN_SECTIONS.find((s) => s.href === '/admin/genre-best')!;
+const genresNavInLibrary = librarySections.some((s) => s.href === '/admin/genres');
+const genreNewHighlightsGenres =
+  isAdminSectionActive('/admin/genres/new', genresSection) &&
+  !isAdminSectionActive('/admin/genres/new', genreBestSection);
+const genreBestStaysOwn =
+  isAdminSectionActive('/admin/genre-best', genreBestSection) &&
+  !isAdminSectionActive('/admin/genre-best', genresSection);
 
 const ok =
   sum === total &&
@@ -51,7 +60,10 @@ const ok =
   newFormHighlightsList &&
   listWinsOverDashboard &&
   noStandaloneNewSongNav &&
-  detailKeepsDashboard;
+  detailKeepsDashboard &&
+  genresNavInLibrary &&
+  genreNewHighlightsGenres &&
+  genreBestStaysOwn;
 
 if (!ok) {
   console.error('admin-sections unit tests: FAILED', { total, sum, counts });

@@ -22,6 +22,7 @@ export type LibraryArtistDetailDbInfo = {
   youtube_channel_id: string | null;
   spotify_artist_id: string | null;
   wikipedia_page: string | null;
+  wikipedia_url?: string | null;
   memberArtists?: { name: string; music8_artist_slug?: string | null }[];
   bandArtists?: { name: string; music8_artist_slug?: string | null }[];
 };

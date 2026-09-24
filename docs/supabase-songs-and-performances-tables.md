@@ -99,7 +99,8 @@ alter table public.artists add column if not exists profile_text text null;
 alter table public.artists add column if not exists spotify_artist_id text null;        -- Spotify アーティスト ID
 alter table public.artists add column if not exists spotify_artist_images text null;    -- Spotify アーティスト画像 URL
 alter table public.artists add column if not exists spotify_artist_popularity smallint null; -- 0–100
-alter table public.artists add column if not exists wikipedia_page text null;           -- Wikipedia スラッグ（例: "The_Police"）
+alter table public.artists add column if not exists wikipedia_page text null;           -- Wikipedia スラッグ（例: "The_Police"）。英語版は https://en.wikipedia.org/wiki/ に連結。日本語名なら ja
+alter table public.artists add column if not exists wikipedia_url text null;            -- 英語版以外の Wikipedia 記事 URL（例: https://de.wikipedia.org/wiki/Velveteen_Queen）。値があれば公開リンクは wikipedia_page より優先
 ```
 
 ### 洋楽 / 邦楽スコープ（`catalog_scope`・2026-07）

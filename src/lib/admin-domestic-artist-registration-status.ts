@@ -26,6 +26,7 @@ export type DomesticArtistRegistrationStatusInput = {
   spotify_artist_id?: string | null;
   youtube_channel_id?: string | null;
   wikipedia_page?: string | null;
+  wikipedia_url?: string | null;
 };
 
 function nonEmpty(s: string | null | undefined): boolean {
@@ -53,7 +54,7 @@ export function resolveDomesticArtistRegistrationStatus(
 
   const hasSpotify = nonEmpty(row.spotify_artist_id);
   const hasYoutube = nonEmpty(row.youtube_channel_id);
-  const hasWikipedia = nonEmpty(row.wikipedia_page);
+  const hasWikipedia = nonEmpty(row.wikipedia_page) || nonEmpty(row.wikipedia_url);
 
   let stage: 1 | 2 | 3 | 4 | 5 = 1;
   if (hasBasicInfo) stage = 2;

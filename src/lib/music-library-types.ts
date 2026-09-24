@@ -10,6 +10,25 @@ export type MusicLibraryGenreLink = {
   href: string;
 };
 
+/** Genre BEST 登録。曲一覧のリンク付きラベル用 */
+export type MusicLibraryGenreBestLabel = {
+  slug: string;
+  title: string;
+};
+
+/** いま開いている Genre BEST 自身はラベルに出さない */
+export function visibleMusicLibraryGenreBestLabels(
+  labels: readonly MusicLibraryGenreBestLabel[] | undefined,
+  omitSlug?: string | null,
+): MusicLibraryGenreBestLabel[] {
+  const omit = (omitSlug ?? '').trim();
+  return (labels ?? []).filter((lb) => {
+    const slug = lb.slug.trim();
+    const title = lb.title.trim();
+    return Boolean(slug && title && slug !== omit);
+  });
+}
+
 export type MusicLibraryListArtist = {
   name: string;
   slug: string | null;
@@ -43,6 +62,8 @@ export type MusicLibrarySongCard = {
   intro?: string | null;
   /** 週間チャートの順位（1–10）。無ければ非表示 */
   chartPosition?: number | null;
+  /** Genre BEST 登録。無ければ非表示 */
+  genreBestLabels?: MusicLibraryGenreBestLabel[];
 };
 
 export type MusicLibraryArtistProfile = {

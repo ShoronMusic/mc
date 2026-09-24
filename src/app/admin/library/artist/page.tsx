@@ -33,6 +33,7 @@ type ArtistRow = {
   spotify_artist_id?: string | null;
   spotify_artist_images?: string | null;
   wikipedia_page?: string | null;
+  wikipedia_url?: string | null;
   image_url?: string | null;
   image_credit?: string | null;
   profile_text?: string | null;
@@ -174,6 +175,7 @@ export default async function AdminLibraryArtistPage({
     youtube_channel_id: artist?.youtube_channel_id,
     spotify_artist_id: artist?.spotify_artist_id,
     wikipedia_page: artist?.wikipedia_page,
+    wikipedia_url: artist?.wikipedia_url,
   });
   const songArtistKeys = Array.from(
     new Set(

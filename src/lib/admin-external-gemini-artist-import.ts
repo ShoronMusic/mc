@@ -296,6 +296,7 @@ export function mergeExternalGeminiArtistClipboardIntoDraft(
     descriptionEn: generated.descriptionEn ?? draft.descriptionEn,
     profileText: generated.profileText ?? draft.profileText,
     wikipediaPage: wiki ?? draft.wikipediaPage,
+    wikipediaUrl: draft.wikipediaUrl,
     youtubeChannelId: ytId ?? draft.youtubeChannelId,
     // Spotify 等は消さない
     spotifyArtistId: draft.spotifyArtistId,

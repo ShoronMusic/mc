@@ -35,6 +35,11 @@ function compactJa(s: string): string {
   return s.replace(/[・･\u30FB\s\u3000]+/g, '').trim();
 }
 
+/** ひらがな（ぁ〜ゖ・ゔ）をカタカナにする。長音・中黒はそのまま */
+function hiraganaToKatakana(s: string): string {
+  return s.replace(/[\u3041-\u3096]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) + 0x60));
+}
+
 /** 日本語カタカナ／略称から優先表示する英語 `main_artist`（検索 API の並び替えにも使用） */
 export function resolveLibrarySearchPriorityArtistNames(rawQuery: string): string[] {
   const q = rawQuery.trim();
@@ -62,6 +67,79 @@ function katakanaWiSuVariants(s: string): string[] {
   return out;
 }
 
+/** ヴァ↔バ、ヴィ↔ビ 等。短い語（「ビ」単体など）は広げない */
+const KATAKANA_VU_ROW_PAIRS: readonly [string, string][] = [
+  ['ヴァ', 'バ'],
+  ['ヴィ', 'ビ'],
+  ['ヴェ', 'ベ'],
+  ['ヴォ', 'ボ'],
+  ['ヴュ', 'ビュ'],
+];
+
+function katakanaVuRowVariants(s: string): string[] {
+  if (s.length < 3) return [];
+  const out: string[] = [];
+  for (const [withVu, plain] of KATAKANA_VU_ROW_PAIRS) {
+    if (s.includes(withVu)) out.push(s.replaceAll(withVu, plain));
+    else if (s.includes(plain)) out.push(s.replaceAll(plain, withVu));
+  }
+  return out;
+}
+
+const KATAKANA_SMALL = /[ァィゥェォャュョッヮ]/;
+
+/** カタカナのみの文字列をモーラ列にする。小書きと長音は直前へ付ける（ジョ・ヴィ・ット・アー） */
+function splitKatakanaMoras(s: string): string[] | null {
+  if (!/^[\u30A0-\u30FF]+$/.test(s)) return null;
+  const moras: string[] = [];
+  for (const ch of s) {
+    if ((KATAKANA_SMALL.test(ch) || ch === 'ー') && moras.length > 0) moras[moras.length - 1] += ch;
+    else moras.push(ch);
+  }
+  return moras.length >= 2 ? moras : null;
+}
+
+function katakanaMoras(s: string): string[] | null {
+  if (s.length < 2) return null;
+  return splitKatakanaMoras(s);
+}
+
+/**
+ * 短いカタカナ（アハ → アーハ）に長音を1つ足す。
+ * 長いアーティスト名まで伸ばすと候補が膨らむので、4文字・3モーラまで。
+ */
+function longVowelInsertions(s: string, limit: number): string[] {
+  if (s.includes('ー') || s.length > 4 || limit <= 0) return [];
+  const moras = splitKatakanaMoras(s);
+  if (!moras || moras.length < 2 || moras.length > 3) return [];
+  const out: string[] = [];
+  for (let i = 0; i < moras.length && out.length < limit; i++) {
+    const m = moras[i]!;
+    if (/[ンッー]$/.test(m)) continue;
+    const next = moras.slice();
+    next[i] = `${m}ー`;
+    out.push(next.join(''));
+  }
+  return out;
+}
+
+/**
+ * 中黒なし表記から、モーラ境界に「・」を1つ入れた候補。
+ * 左右の長さが近い位置を先にする（ボンジョヴィ → ボン・ジョヴィ）。
+ */
+function middleDotInsertions(s: string, limit: number): string[] {
+  const moras = katakanaMoras(s);
+  if (!moras || limit <= 0) return [];
+  const splits: { at: number; balance: number }[] = [];
+  for (let i = 1; i < moras.length; i++) {
+    splits.push({ at: i, balance: Math.min(i, moras.length - i) });
+  }
+  splits.sort((a, b) => b.balance - a.balance || a.at - b.at);
+  return splits
+    .slice(0, limit)
+    .map(({ at }) => `${moras.slice(0, at).join('')}・${moras.slice(at).join('')}`);
+}
+
 /**
  * DB `ilike` 用の検索語バリエーション（最大 max 件）。
  */
@@ -77,17 +155,47 @@ export function expandLibrarySearchQueryVariants(raw: string, max = 12): string[
 
   add(q);
   add(compactJa(q));
+  const kataQ = hiraganaToKatakana(q);
+  if (kataQ !== q) {
+    add(kataQ);
+    add(compactJa(kataQ));
+  }
 
   const seed = [...out];
   for (const base of seed) {
     for (const v of katakanaWiSuVariants(base)) add(v);
+    for (const v of katakanaVuRowVariants(base)) add(v);
+  }
+  // ヴィ↔ビ のあとにもう一段（ボンジョビ → ボンジョヴィ を中黒挿入の元にする）
+  const folded = [...out];
+  for (const base of folded) {
+    if (seed.includes(base)) continue;
+    for (const v of katakanaWiSuVariants(base)) add(v);
+    for (const v of katakanaVuRowVariants(base)) add(v);
   }
 
-  for (const name of resolveLibrarySearchPriorityArtistNames(q)) {
-    add(name);
+  for (const query of kataQ === q ? [q] : [q, kataQ]) {
+    for (const name of resolveLibrarySearchPriorityArtistNames(query)) {
+      add(name);
+    }
+    for (const name of expandArtistSearchNicknameVariants(query)) {
+      add(name);
+    }
   }
-  for (const name of expandArtistSearchNicknameVariants(q)) {
-    add(name);
+
+  const kanaBases = [...out];
+  for (const base of kanaBases) {
+    if (out.size >= max) break;
+    if (/[・･\u30FB\s\u3000]/.test(base)) continue;
+    for (const stretched of longVowelInsertions(base, 2)) {
+      add(stretched);
+      if (out.size >= max) break;
+    }
+    if (out.size >= max) break;
+    for (const dotted of middleDotInsertions(base, 3)) {
+      add(dotted);
+      if (out.size >= max) break;
+    }
   }
 
   return [...out].slice(0, max);

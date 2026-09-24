@@ -3,6 +3,7 @@ export function libraryVariantLabel(variant: string | null): string {
   const v = (variant ?? '').trim().toLowerCase();
   if (v === 'official') return '公式';
   if (v === 'lyric') return 'リリック';
+  if (v === '和訳') return '和訳';
   if (v === 'live') return 'ライブ';
   if (v === 'topic') return 'Topic';
   if (!v) return 'その他';

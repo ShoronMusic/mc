@@ -25,9 +25,10 @@ export default function ConsentPage({
   const shell = IS_MC_PRODUCT
     ? 'flex min-h-screen flex-col items-center bg-gray-100 p-4 pt-8 pb-8'
     : 'flex min-h-screen flex-col items-center bg-gray-950 p-4 pt-8 pb-8';
+  // サービス比較表（min-w 640px）＋左右余白・縦スクロール分。これより狭いと表に横スクロールが出る
   const card = IS_MC_PRODUCT
-    ? 'flex h-[min(100vh-2rem,56rem)] w-full max-w-lg flex-col rounded-xl border border-gray-200 bg-white shadow-lg'
-    : 'flex h-[min(100vh-2rem,56rem)] w-full max-w-lg flex-col rounded-xl border border-gray-700 bg-gray-900 shadow-lg';
+    ? 'flex h-[min(100vh-2rem,56rem)] w-full max-w-[46rem] flex-col rounded-xl border border-gray-200 bg-white shadow-lg'
+    : 'flex h-[min(100vh-2rem,56rem)] w-full max-w-[46rem] flex-col rounded-xl border border-gray-700 bg-gray-900 shadow-lg';
   const headerBorder = IS_MC_PRODUCT ? 'border-gray-200' : 'border-gray-700';
   const titleClass = IS_MC_PRODUCT
     ? 'text-center text-xl font-bold text-gray-900'

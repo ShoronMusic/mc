@@ -112,10 +112,10 @@ export function StartPageSiteIntro({
     <>
       <figure className="mb-4">
         <Image
-          src="/musicaichat_cover_l_2.png"
-          alt="洋楽AIチャット：同じタイミングでYouTubeを視聴し、チャットで交流するイメージ"
-          width={1920}
-          height={1071}
+          src="/images/music_chat_cover_image_illust_logo_wh2.jpg"
+          alt="MUSIC CHAT：同じタイミングでYouTubeを視聴し、チャットで交流するイメージ"
+          width={800}
+          height={446}
           className="w-full rounded-lg border border-gray-700 bg-gray-950"
           sizes={INTRO_IMAGE_SIZES}
           priority

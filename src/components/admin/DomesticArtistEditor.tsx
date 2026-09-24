@@ -27,6 +27,10 @@ import type { AdminMemberHintStatus, ArtistMemberLink } from '@/lib/artist-membe
 import type { AdminArtistProfileDraft, AdminArtistThePrefix } from '@/lib/admin-artist-profile-parse';
 import { resolveYoutubeChannelHref } from '@/lib/music8-artist-display';
 import {
+  normalizeWikipediaArticleHref,
+  resolveArtistWikipediaHref,
+} from '@/lib/library-artist-public-display';
+import {
   composeAdminArtistDisplayName,
   normalizeAdminArtistThePrefix,
   splitAdminArtistNameParts,
@@ -422,6 +426,7 @@ export function DomesticArtistEditor(props: Props) {
             youtubeChannelId: prev?.youtubeChannelId ?? generated.youtubeChannelId,
             youtubeChannelTitle: prev?.youtubeChannelTitle ?? generated.youtubeChannelTitle,
             wikipediaPage: prev?.wikipediaPage ?? generated.wikipediaPage,
+            wikipediaUrl: prev?.wikipediaUrl ?? generated.wikipediaUrl,
             catalogScope: prev?.catalogScope ?? generated.catalogScope,
           });
         });
@@ -1044,7 +1049,7 @@ export function DomesticArtistEditor(props: Props) {
     if (!draft) return;
     const parts = splitAdminArtistNameParts(draft.nameBase);
     if (!parts.nameBase) return;
-    // 本体名に The を含めて打った場合は自動でプレフィックスへ分離
+    // 先頭の The/A/An だけ prefix へ。途中の And The は切らない
     if (parts.thePrefix && parts.nameBase !== draft.nameBase.trim()) {
       patchNameParts({ nameBase: parts.nameBase, thePrefix: parts.thePrefix });
     } else {
@@ -1066,6 +1071,7 @@ export function DomesticArtistEditor(props: Props) {
         spotify_artist_id: draft.spotifyArtistId,
         youtube_channel_id: draft.youtubeChannelId,
         wikipedia_page: draft.wikipediaPage,
+        wikipedia_url: draft.wikipediaUrl,
       })
     : null;
 
@@ -1195,9 +1201,12 @@ export function DomesticArtistEditor(props: Props) {
                   value={draft.nameBase}
                   onChange={(e) => patchNameParts({ nameBase: e.target.value })}
                   onBlur={() => onNameBaseBlur()}
-                  placeholder="冠詞なし（例: Sways / Strokes）"
+                  placeholder="冠詞なし（例: Sways / Strokes / Tom Petty And The Heartbreakers）"
                 />
               </Field>
+              <p className="text-[11px] text-gray-500">
+                先頭が The/A/An のときだけ Prefix に分離します。途中の「And The …」はバンド名としてそのまま残します。
+              </p>
               <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
                 <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-200">
                   <input
@@ -1471,7 +1480,7 @@ export function DomesticArtistEditor(props: Props) {
                   className={`${inputClass} min-w-[12rem] flex-1`}
                   value={draft.wikipediaPage ?? ''}
                   onChange={(e) => patchDraft({ wikipediaPage: e.target.value || null })}
-                  placeholder="Kenshi_Yonezu"
+                  placeholder="Velveteen_Queen"
                 />
                 <button
                   type="button"
@@ -1482,20 +1491,41 @@ export function DomesticArtistEditor(props: Props) {
                   {fetchingWikipedia ? '取得中…' : 'Wikipedia取得'}
                 </button>
               </div>
-              {draft.wikipediaPage ? (
-                <a
-                  href={
-                    /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF]/.test(draft.wikipediaPage)
-                      ? `https://ja.wikipedia.org/wiki/${encodeURIComponent(draft.wikipediaPage)}`
-                      : `https://en.wikipedia.org/wiki/${encodeURIComponent(draft.wikipediaPage)}`
-                  }
-                  target="_blank"
-                  rel="noreferrer"
-                  className="mt-1 inline-block text-xs text-sky-300 hover:underline"
-                >
-                  Wikipedia で開く
-                </a>
+              <p className="mt-1 text-[11px] text-gray-500">
+                英語版スラッグ（https://en.wikipedia.org/wiki/ の後）。日本語名なら ja.wikipedia.org。
+              </p>
+            </Field>
+            <Field label="wikipedia_url（英語版以外）">
+              <input
+                className={inputClass}
+                value={draft.wikipediaUrl ?? ''}
+                onChange={(e) => patchDraft({ wikipediaUrl: e.target.value || null })}
+                placeholder="https://de.wikipedia.org/wiki/Velveteen_Queen"
+              />
+              <p className="mt-1 text-[11px] text-gray-500">
+                英語版以外の記事 URL。値があると Wikipedia リンクはこちらを優先します。
+              </p>
+              {draft.wikipediaUrl?.trim() && !normalizeWikipediaArticleHref(draft.wikipediaUrl) ? (
+                <p className="mt-1 text-[11px] text-amber-300">
+                  https://de.wikipedia.org/wiki/記事名 の形式にしてください。
+                </p>
               ) : null}
+              {(() => {
+                const href = resolveArtistWikipediaHref({
+                  wikipedia_url: draft.wikipediaUrl,
+                  wikipedia_page: draft.wikipediaPage,
+                });
+                return href ? (
+                  <a
+                    href={href}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-1 inline-block text-xs text-sky-300 hover:underline"
+                  >
+                    Wikipedia で開く
+                  </a>
+                ) : null;
+              })()}
             </Field>
           </div>
 

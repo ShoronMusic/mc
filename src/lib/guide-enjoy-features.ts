@@ -5,12 +5,30 @@
 
 export type GuideEnjoyFeatureBadge = 'beta' | 'login' | 'optional';
 
+/** 選曲手順の対象端末。PC は赤系、スマホは緑系で表示する */
+export type GuideEnjoyDeviceTone = 'pc' | 'mobile';
+
 export type GuideEnjoyIllustration = {
   src: string;
   alt: string;
   width: number;
   height: number;
   caption?: string;
+  captionTone?: GuideEnjoyDeviceTone;
+  /** 同構図の色付き版。重ねてハイライトをゆっくり点滅させる */
+  blinkSrc?: string;
+};
+
+/** 手順画像を1枚出す秒数。説明行のマークと揃える */
+export const GUIDE_ENJOY_FRAME_SEC = 2.4;
+
+/** PC / スマホそれぞれのコピー手順（A・B） */
+export type GuideEnjoySelectionPattern = {
+  id: string;
+  label: string;
+  title: string;
+  tone: GuideEnjoyDeviceTone;
+  images: readonly GuideEnjoyIllustration[];
 };
 
 export type GuideEnjoyFeature = {
@@ -76,7 +94,7 @@ export const GUIDE_ENJOY_USAGE_HIGHLIGHTS: readonly GuideEnjoyUsageHighlight[] =
     title: 'みんなでワイワイ',
     description:
       '友達や初対面の参加者と同じ部屋に入り、URL やライブラリで順番に選曲。曲解説をきっかけに感想を交わし、クイズやお題で盛り上がる。',
-    imageSrc: '/images/point_illust_01r4.png',
+    imageSrc: '/images/point_illust_01r4_logo.png',
     imageAlt: '複数の参加者が Music AI Chat でつながり、一緒に楽しむイラスト',
     imageWidth: 390,
     imageHeight: 221,
@@ -86,7 +104,7 @@ export const GUIDE_ENJOY_USAGE_HIGHLIGHTS: readonly GuideEnjoyUsageHighlight[] =
     title: 'ひとりでじっくり',
     description:
       '自分で会を立てて一人入室。好きな曲を流し、AI 解説を読みながら @ で深掘り質問。お気に入りやマイリストに残して次回につなげる。',
-    imageSrc: '/images/point_illust_02r3.png',
+    imageSrc: '/images/point_illust_02r3_logo.png',
     imageAlt: 'ヘッドフォンをつけて一人で曲を聴き、タブレットで楽しむイラスト',
     imageWidth: 290,
     imageHeight: 214,
@@ -132,18 +150,39 @@ export const GUIDE_ENJOY_THREE_STEPS: GuideEnjoyStep[] = [
 ];
 
 /** 3ステップの直後：選曲の基本操作と楽しみ方 */
+export type GuideEnjoySelectionPreludeStep = {
+  step: number;
+  title: string;
+  description?: string;
+  /** 指定時はタイトルをリンクにする（外部は別タブ） */
+  href?: string;
+};
+
 export type GuideEnjoySelectionMethod = {
   step: number;
   title: string;
   /** タブボタン用の短いラベル */
   tabLabel: string;
+  /** タイトル（コピー手順）の前に出す前提ステップ */
+  preludeSteps?: readonly GuideEnjoySelectionPreludeStep[];
   description: string;
   /** 複数段落で表示する説明（指定時は description より優先） */
   descriptionParagraphs?: readonly string[];
+  /** descriptionParagraphs と同じ並び。pc は赤系、mobile は緑系 */
+  descriptionParagraphTones?: readonly (GuideEnjoyDeviceTone | 'neutral')[];
+  /**
+   * descriptionParagraphs と同じ並び。画像アニメのフレーム番号。
+   * null はその行を切り替えない。
+   */
+  descriptionParagraphFrames?: readonly (number | null)[];
   href?: string;
   hrefLabel?: string;
   badge?: GuideEnjoyFeatureBadge;
+  /** PC / スマホの手順画面（A・B）。先に用意できたものから表示する */
+  patterns?: readonly GuideEnjoySelectionPattern[];
   images?: readonly GuideEnjoyIllustration[];
+  /** images を順に切り替える（同じ構図の手順アニメ） */
+  animateImages?: boolean;
   /** 枠内を白背景にする（暗いページ上でイラストが見やすいカード用） */
   cardTone?: 'light';
 };
@@ -157,30 +196,100 @@ export const GUIDE_ENJOY_SONG_SELECTION = {
       step: 1,
       tabLabel: 'YouTube URL',
       title: 'YouTube で URL をコピーしてスタンバイ',
-      description:
-        'PC版YouTubeではアドレス欄のURLをコピー、または共有ボタン→コピー。スマホYouTubeアプリでは共有ボタン→コピーで曲のURLをコピーできます。自分の番になったら発言欄に貼って送信するのが基本です。',
-      descriptionParagraphs: [
-        'PC版YouTubeではアドレス欄のURLをコピー、または共有ボタン→コピー。',
-        'スマホYouTubeアプリでは共有ボタン→コピーで曲のURLをコピーできます。',
-        '自分の番になったら発言欄に貼って送信するのが基本です。',
-      ],
-      href: '/guide/first-song',
-      hrefLabel: '選曲のしかた（PC）',
-      cardTone: 'light',
-      images: [
+      preludeSteps: [
         {
-          src: '/images/point_illust_04_1r.png',
-          alt: 'YouTube で URL をコピーして選曲するイラスト',
-          width: 352,
-          height: 272,
-          caption: 'PC版YouTube',
+          step: 1,
+          title: 'YouTubeにアクセス',
+          description: 'リンクから YouTube を別タブで開きます。',
+          href: 'https://www.youtube.com/',
         },
         {
-          src: '/images/point_illust_04_2r.png',
-          alt: '発言欄に URL を貼って送信するイラスト',
-          width: 160,
-          height: 272,
-          caption: 'スマホYouTubeアプリ',
+          step: 2,
+          title: '聴きたい曲を検索',
+          description: '検索欄にアーティスト名や曲名を入れます。',
+        },
+        {
+          step: 3,
+          title: '検索結果から動画を選択',
+          description: '再生したい動画をクリックして開きます。',
+        },
+      ],
+      description:
+        'PC版YouTubeではアドレス欄のURLをコピー、または共有ボタン→コピー。スマホYouTubeアプリでは共有の矢印ボタン→コピーで曲のURLをコピーできます。自分の番になったら発言欄に貼って送信するのが基本です。次の自分の番1回分までなら、番が来る前に貼って予約できます。',
+      descriptionParagraphs: [
+        'PC版YouTubeではアドレス欄のURLをコピー、または共有ボタン→コピー。',
+        'スマホYouTubeアプリでは共有の矢印ボタン→コピーで曲のURLをコピーできます。',
+        '自分の番になったら発言欄に貼って送信するのが基本です。次の自分の番1回分までなら、番が来る前に貼って予約できます。',
+      ],
+      descriptionParagraphTones: ['pc', 'mobile', 'neutral'],
+      cardTone: 'light',
+      patterns: [
+        {
+          id: 'pc-a',
+          label: 'A',
+          title: 'ブラウザのアドレス欄のURLを選択してコピー',
+          tone: 'pc',
+          images: [
+            {
+              src: '/images/pc_youtube_01a.png',
+              alt: 'PC版YouTubeでブラウザのアドレス欄のURLを選択してコピーする画面',
+              width: 1000,
+              height: 881,
+              blinkSrc: '/images/pc_youtube_01.png',
+            },
+          ],
+        },
+        {
+          id: 'pc-b',
+          label: 'B',
+          title: '共有からコピー',
+          tone: 'pc',
+          images: [
+            {
+              src: '/images/pc_youtube_01a.png',
+              alt: 'PC版YouTubeの共有ボタンをクリックする画面',
+              width: 1000,
+              height: 881,
+              caption: '共有ボタンをクリック',
+              captionTone: 'pc',
+              blinkSrc: '/images/pc_youtube_02.png',
+            },
+            {
+              src: '/images/pc_youtube_03a.png',
+              alt: '共有サブウィンドウのURL横にあるコピーボタンをクリックする画面',
+              width: 1000,
+              height: 881,
+              caption: 'サブウィンドウのURL横のコピーボタンをクリック',
+              captionTone: 'pc',
+              blinkSrc: '/images/pc_youtube_03.png',
+            },
+          ],
+        },
+        {
+          id: 'mobile-share',
+          label: 'スマホ',
+          title: 'YouTubeアプリで共有からコピー',
+          tone: 'mobile',
+          images: [
+            {
+              src: '/images/sumaho_youtube_01a.png',
+              alt: 'スマホYouTubeアプリの共有の矢印ボタンをクリックする画面',
+              width: 1000,
+              height: 1241,
+              caption: '共有の矢印ボタンをクリック',
+              captionTone: 'mobile',
+              blinkSrc: '/images/sumaho_youtube_01.png',
+            },
+            {
+              src: '/images/sumaho_youtube_02a.png',
+              alt: '共有サブウィンドウのコピーボタンをクリックする画面',
+              width: 1000,
+              height: 1879,
+              caption: 'サブウィンドウのコピーボタンをクリック',
+              captionTone: 'mobile',
+              blinkSrc: '/images/sumaho_youtube_02.png',
+            },
+          ],
         },
       ],
     },
@@ -197,13 +306,33 @@ export const GUIDE_ENJOY_SONG_SELECTION = {
         'E 曲一覧で曲を選ぶと、F 曲詳細にプレビュー動画と曲情報が出ます。',
         'F の「この曲を選曲」を押すと、部屋にそのまま流せます。YouTube を行き来せず、アプリ内で完結します。',
       ],
+      descriptionParagraphFrames: [null, 0, 1, 2, 3],
       cardTone: 'light',
+      animateImages: true,
       images: [
         {
-          src: '/images/point_illust_04_3r.png',
-          alt: 'ライブラリから選曲ボタンで曲を選ぶイラスト',
-          width: 163,
-          height: 252,
+          src: '/images/library_01.png',
+          alt: 'ライブラリの検索欄にキーワードを入れて検索する',
+          width: 1000,
+          height: 622,
+        },
+        {
+          src: '/images/library_02.png',
+          alt: 'アーティスト一覧からアーティストを選ぶ',
+          width: 1000,
+          height: 622,
+        },
+        {
+          src: '/images/library_04.png',
+          alt: '曲一覧から曲を選ぶ',
+          width: 1000,
+          height: 622,
+        },
+        {
+          src: '/images/library_05.png',
+          alt: '曲詳細の「この曲を選曲」を押す',
+          width: 1000,
+          height: 622,
         },
       ],
     },
@@ -235,7 +364,7 @@ export const GUIDE_ENJOY_SONG_SELECTION = {
     {
       title: '自分の選曲が終わってから、次の番までに次曲をセット',
       description:
-        '順番制のため、流れている曲を聴きながら次の一曲を決めておけます。候補リストに次曲を溜めておく方法も使えます。自分の番が来る前に選曲すると「予約済み」と表示されます。',
+        '順番制のため、流れている曲を聴きながら次の一曲を決めておけます。次の自分の番1回分まで予約でき、番が来る前に選曲すると「予約済み」と表示されます。候補リストに次曲を溜めておく方法も使えます。',
       cardTone: 'light',
       image: {
         src: '/images/point_illust_05_1r.png',

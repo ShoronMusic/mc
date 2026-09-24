@@ -1,11 +1,11 @@
 'use client';
 
 /**
- * 部屋の視聴履歴（プレイヤー下）。選曲者・時間・年代・スタイル・アーティスト-タイトル・YouTubeリンク。
+ * 部屋の視聴履歴（プレイヤー下）。選曲者・時間・アーティスト-タイトル・年代・スタイル・YouTubeリンク。
  * 固定列幅・はみ出しは...、ソート（時間デフォルト／選曲者）、アクティブ行表示。
  */
 
-import { CalendarDaysIcon, ChartBarIcon, ClockIcon } from '@heroicons/react/24/outline';
+import { CalendarDaysIcon, ChartBarIcon, ClockIcon, UserIcon } from '@heroicons/react/24/outline';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { RoomPlaybackHistoryRow } from '@/lib/room-playback-history-types';
 import {
@@ -36,12 +36,11 @@ import StyleDistributionModal from './StyleDistributionModal';
 type SortKey = 'played_at' | 'display_name';
 type SortOrder = 'desc' | 'asc';
 
-const COL_PARTICIPANT = '選曲者';
-const COL_TIME = '時間';
-const COL_ARTIST_TITLE = 'アーティスト - タイトル';
-const COL_STYLE = 'スタイル';
-const COL_ERA = '年代';
-const COL_LINK = 'リンク';
+const COL_TIME = 'Time';
+const COL_ARTIST_TITLE = 'Artist - Title';
+const COL_STYLE = 'Style';
+const COL_ERA = 'Era';
+const COL_LINK = 'Link';
 const COL_FAV = '♡';
 
 const COL_WIDTH_PARTICIPANT = 68;
@@ -57,9 +56,9 @@ function playbackHistoryGridTemplate(showStyleUi: boolean): string {
   return [
     `${COL_WIDTH_PARTICIPANT}px`,
     `${COL_WIDTH_TIME}px`,
+    `minmax(${COL_MIN_WIDTH_ARTIST_TITLE}px, 1fr)`,
     `${COL_WIDTH_ERA}px`,
     ...(showStyleUi ? [`${COL_WIDTH_STYLE}px`] : []),
-    `minmax(${COL_MIN_WIDTH_ARTIST_TITLE}px, 1fr)`,
     `${COL_WIDTH_LINK}px`,
     `${COL_WIDTH_FAV}px`,
     '28px',
@@ -71,7 +70,7 @@ const PLAYBACK_HISTORY_GRID_ROW_CLASS = 'grid w-full min-w-0 items-stretch';
 /** データ行セル共通（行側で border-b するためセルには付けない） */
 const PLAYBACK_HISTORY_CELL_CLASS = 'min-w-0 truncate py-0.5 pr-1 flex items-center';
 const PLAYBACK_HISTORY_HEADER_CELL_CLASS =
-  'min-w-0 truncate border-b border-gray-600 py-1 pr-1 font-medium text-gray-400 flex items-center';
+  'min-w-0 truncate border-b border-gray-600 py-1 pr-1 text-[10px] font-medium leading-none text-gray-400 flex items-center';
 
 /** スタイル値ごとの文字色（背景は従来どおり） */
 const STYLE_TEXT_COLORS: Record<string, string> = {
@@ -937,9 +936,10 @@ export default function RoomPlaybackHistory({
                 role="columnheader"
                 className={`${PLAYBACK_HISTORY_HEADER_CELL_CLASS} cursor-pointer`}
                 title="選曲者でソート"
+                aria-label="選曲者"
                 onClick={setSortByParticipant}
               >
-                {COL_PARTICIPANT}
+                <UserIcon className="h-3.5 w-3.5 shrink-0" aria-hidden />
               </div>
               <div
                 role="columnheader"
@@ -948,6 +948,17 @@ export default function RoomPlaybackHistory({
                 onClick={setSortByTime}
               >
                 {COL_TIME}
+              </div>
+              <div
+                role="columnheader"
+                className={PLAYBACK_HISTORY_HEADER_CELL_CLASS}
+                title={
+                  canEditStyles
+                    ? 'アーティスト - タイトル（STYLE_ADMIN: セルをクリックして修正）'
+                    : 'アーティスト - タイトル'
+                }
+              >
+                {COL_ARTIST_TITLE}
               </div>
               <div
                 role="columnheader"
@@ -965,17 +976,6 @@ export default function RoomPlaybackHistory({
                   {COL_STYLE}
                 </div>
               )}
-              <div
-                role="columnheader"
-                className={PLAYBACK_HISTORY_HEADER_CELL_CLASS}
-                title={
-                  canEditStyles
-                    ? 'アーティスト - タイトル（STYLE_ADMIN: セルをクリックして修正）'
-                    : 'アーティスト - タイトル'
-                }
-              >
-                {COL_ARTIST_TITLE}
-              </div>
               <div role="columnheader" className={PLAYBACK_HISTORY_HEADER_CELL_CLASS}>
                 {COL_LINK}
               </div>
@@ -1051,46 +1051,6 @@ export default function RoomPlaybackHistory({
                       </div>
                       <div
                         role="cell"
-                        className={`${PLAYBACK_HISTORY_CELL_CLASS} text-gray-400`}
-                        style={{ color: getEraTextColor(row.era) }}
-                        title={row.era ? `年代: ${row.era}` : '年代未設定（新規再生で付与）'}
-                      >
-                        {row.era?.trim() ? row.era : '—'}
-                      </div>
-                      {showStyleUi && (
-                        <div
-                          role="cell"
-                          className={
-                            canEditStyles
-                              ? `${PLAYBACK_HISTORY_CELL_CLASS} cursor-pointer text-gray-400 hover:bg-gray-700/50 hover:text-white hover:underline`
-                              : `${PLAYBACK_HISTORY_CELL_CLASS} text-gray-400`
-                          }
-                          style={{ color: getStyleTextColor(row.style) }}
-                          title={
-                            canEditStyles
-                              ? row.style
-                                ? `${row.style}（クリックで変更）`
-                                : 'クリックでスタイルを設定'
-                              : row.style ?? undefined
-                          }
-                          onClick={canEditStyles ? () => openStyleModal(row) : undefined}
-                          onKeyDown={
-                            canEditStyles
-                              ? (e) => {
-                                  if (e.key === 'Enter' || e.key === ' ') {
-                                    e.preventDefault();
-                                    openStyleModal(row);
-                                  }
-                                }
-                              : undefined
-                          }
-                          tabIndex={canEditStyles ? 0 : undefined}
-                        >
-                          {row.style ?? '—'}
-                        </div>
-                      )}
-                      <div
-                        role="cell"
                         className={
                           canEditStyles && titleEditRowId !== row.id
                             ? `${PLAYBACK_HISTORY_CELL_CLASS} cursor-pointer text-gray-200 hover:bg-gray-700/40`
@@ -1164,6 +1124,46 @@ export default function RoomPlaybackHistory({
                           artistTitle(row)
                         )}
                       </div>
+                      <div
+                        role="cell"
+                        className={`${PLAYBACK_HISTORY_CELL_CLASS} text-gray-400`}
+                        style={{ color: getEraTextColor(row.era) }}
+                        title={row.era ? `年代: ${row.era}` : '年代未設定（新規再生で付与）'}
+                      >
+                        {row.era?.trim() ? row.era : '—'}
+                      </div>
+                      {showStyleUi && (
+                        <div
+                          role="cell"
+                          className={
+                            canEditStyles
+                              ? `${PLAYBACK_HISTORY_CELL_CLASS} cursor-pointer text-gray-400 hover:bg-gray-700/50 hover:text-white hover:underline`
+                              : `${PLAYBACK_HISTORY_CELL_CLASS} text-gray-400`
+                          }
+                          style={{ color: getStyleTextColor(row.style) }}
+                          title={
+                            canEditStyles
+                              ? row.style
+                                ? `${row.style}（クリックで変更）`
+                                : 'クリックでスタイルを設定'
+                              : row.style ?? undefined
+                          }
+                          onClick={canEditStyles ? () => openStyleModal(row) : undefined}
+                          onKeyDown={
+                            canEditStyles
+                              ? (e) => {
+                                  if (e.key === 'Enter' || e.key === ' ') {
+                                    e.preventDefault();
+                                    openStyleModal(row);
+                                  }
+                                }
+                              : undefined
+                          }
+                          tabIndex={canEditStyles ? 0 : undefined}
+                        >
+                          {row.style ?? '—'}
+                        </div>
+                      )}
                       <div role="cell" className={PLAYBACK_HISTORY_CELL_CLASS}>
                         <a
                           href={url}

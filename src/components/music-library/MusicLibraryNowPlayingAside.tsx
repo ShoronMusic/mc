@@ -5,6 +5,7 @@ import { Fragment, useEffect, useMemo, useState } from 'react';
 import { SongCoverThumb } from '@/components/song/SongCoverThumb';
 import { IS_MC_PRODUCT } from '@/lib/product-branding';
 import { LibraryArtistExternalLinkPills } from '@/components/chat/LibraryArtistExternalLinkButtons';
+import { MusicLibraryGenreBestLabels } from '@/components/music-library/MusicLibraryGenreBestLabels';
 import { MusicLibraryStyleAdminLink } from '@/components/music-library/MusicLibraryStyleAdminLink';
 import { formatMusicLibraryActivePeriod, formatMusicLibraryAgeParen, formatMusicLibraryOriginLabel, formatMusicLibraryYearMonth } from '@/lib/music-library-labels';
 import type { MusicLibraryArtistProfile, MusicLibraryListArtist, MusicLibrarySongCard } from '@/lib/music-library-types';
@@ -58,9 +59,11 @@ function vocalBadge(label: 'F' | 'M'): string {
 export function MusicLibraryNowPlayingAside({
   song,
   pageArtist = null,
+  omitGenreBestSlug = null,
 }: {
   song: MusicLibrarySongCard;
   pageArtist?: MusicLibraryPageArtistRef | null;
+  omitGenreBestSlug?: string | null;
 }) {
   const tabs = useMemo(() => tabsForSong(song, pageArtist), [song, pageArtist]);
   const [tabId, setTabId] = useState('song');
@@ -127,6 +130,7 @@ export function MusicLibraryNowPlayingAside({
             artistClass={artistClass}
             originBadge={originBadge}
             muted={muted}
+            omitGenreBestSlug={omitGenreBestSlug}
           />
         ) : (
           <ArtistDataBody artist={activeTab.artist} />
@@ -142,12 +146,14 @@ function SongDataBody({
   artistClass,
   originBadge,
   muted,
+  omitGenreBestSlug,
 }: {
   song: MusicLibrarySongCard;
   titleClass: string;
   artistClass: string;
   originBadge: string;
   muted: string;
+  omitGenreBestSlug?: string | null;
 }) {
   const genreClass = IS_MC_PRODUCT
     ? 'min-w-0 max-w-[18rem] truncate text-[11px] text-gray-500'
@@ -213,6 +219,7 @@ function SongDataBody({
               </span>
             ))}
             {song.genreLabel ? <span className={genreClass}>{song.genreLabel}</span> : null}
+            <MusicLibraryGenreBestLabels labels={song.genreBestLabels} omitSlug={omitGenreBestSlug} />
             {formatMusicLibraryYearMonth(song.releaseDate) ? (
               <span className={dateClass}>{formatMusicLibraryYearMonth(song.releaseDate)}</span>
             ) : null}

@@ -398,6 +398,86 @@ html[data-theme='light'] .mc-room-mobile-chat {
   }
 }
 
+@keyframes guide-highlight-blink {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.animate-guide-highlight-blink {
+  animation: guide-highlight-blink 3.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-guide-highlight-blink {
+    animation: none;
+    opacity: 1;
+  }
+}
+
+@keyframes guide-frame-seq {
+  0%,
+  24.99% {
+    opacity: 1;
+  }
+  25%,
+  100% {
+    opacity: 0;
+  }
+}
+
+.guide-frame-seq {
+  opacity: 0;
+  animation-name: guide-frame-seq;
+  animation-timing-function: step-end;
+  animation-iteration-count: infinite;
+}
+
+@keyframes guide-line-mark {
+  0%,
+  24.99% {
+    background-color: #ffe14a;
+    color: #1a1a1a;
+  }
+  25%,
+  100% {
+    background-color: transparent;
+    color: #4b5563;
+  }
+}
+
+.guide-line-mark {
+  animation-name: guide-line-mark;
+  animation-timing-function: step-end;
+  animation-iteration-count: infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .guide-frame-seq {
+    animation: none;
+    opacity: 0;
+  }
+
+  .guide-frame-seq:first-child {
+    opacity: 1;
+  }
+
+  .guide-line-mark {
+    animation: none;
+    background-color: transparent;
+    color: #4b5563;
+  }
+
+  .guide-line-mark-first {
+    background-color: #ffe14a;
+    color: #1a1a1a;
+  }
+}
+
 @keyframes ai-commentary-fade-in {
   0% {
     opacity: 0;

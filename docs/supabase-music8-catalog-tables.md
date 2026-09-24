@@ -49,6 +49,7 @@ Music8 公開サイトと MusicAiChat で **曲マスタを 1 本化**するた�
 | `npx tsx scripts/backfill-music8-slugs-for-songs.ts` | 洋楽で slug が空の曲に `music8_artist_slug` / `music8_song_slug` を付与（既定 dry-run。`--apply`。`--export` で JSON も書く） |
 | 管理 `POST /api/admin/songs-register` | YouTube 1 曲登録 + slug 付与 + 増分 JSON |
 | 管理 `/admin/genre-best`・`/api/admin/genre-best*` | Genre BEST 一覧・詳細・曲登録・WP 取込 |
+| 管理 `/admin/genres`・`/admin/genres/new`・`/admin/genres/[id]`・`/api/admin/catalog-genres*` | ジャンルマスタ（`catalog_genres`）一覧・新規登録・編集 |
 
 初回は既存の曲一括取り込み（`import-music8-songs-bulk.ts` / 週次同期）のあと、本インポートで style/genre を埋める。
 

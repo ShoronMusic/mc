@@ -34,6 +34,10 @@ const indexCache = new Map<
   { at: number; gen: number; items: MusicLibraryGenreIndexEntry[] }
 >();
 
+export function clearMusicLibraryGenreIndexCache(): void {
+  indexCache.clear();
+}
+
 type CatalogGenreRow = {
   id: string;
   slug: string | null;

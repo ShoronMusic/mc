@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { EllipsisHorizontalIcon } from '@heroicons/react/24/outline';
 import { LibraryYoutubePreviewPlayer } from '@/components/chat/LibraryYoutubePreviewPlayer';
+import { MusicLibraryGenreBestLabels } from '@/components/music-library/MusicLibraryGenreBestLabels';
 import { MusicLibraryNowPlayingAside } from '@/components/music-library/MusicLibraryNowPlayingAside';
 import { MusicLibrarySongGenreModal } from '@/components/music-library/MusicLibrarySongGenreModal';
 import { useMusicLibraryStyleAdmin } from '@/components/music-library/MusicLibraryStyleAdminContext';
@@ -31,6 +32,8 @@ export type MusicLibrarySongListProps = {
   pageArtist?: MusicLibraryPageArtistRef | null;
   /** false なら年見出しなし（週間チャートの順位順） */
   groupByYear?: boolean;
+  /** いま開いている Genre BEST の slug。当該ラベルは曲行に出さない */
+  omitGenreBestSlug?: string | null;
 };
 
 export function MusicLibrarySongList({
@@ -43,6 +46,7 @@ export function MusicLibrarySongList({
   listFooter = null,
   pageArtist = null,
   groupByYear = true,
+  omitGenreBestSlug = null,
 }: MusicLibrarySongListProps) {
   const router = useRouter();
   const isStyleAdmin = useMusicLibraryStyleAdmin();
@@ -296,7 +300,11 @@ export function MusicLibrarySongList({
               </div>
             </div>
           </div>
-          <MusicLibraryNowPlayingAside song={current} pageArtist={pageArtist} />
+          <MusicLibraryNowPlayingAside
+            song={current}
+            pageArtist={pageArtist}
+            omitGenreBestSlug={omitGenreBestSlug}
+          />
         </div>
       ) : (
         <p className={IS_MC_PRODUCT ? 'text-sm text-gray-500' : 'text-sm text-gray-500'}>
@@ -382,14 +390,18 @@ export function MusicLibrarySongList({
                   />
                 </button>
                 <div className="min-w-0 flex-1">
-                  <p className="flex min-w-0 items-baseline gap-1.5">
-                    <span className="min-w-0 truncate">{title}</span>
+                  <p className="flex min-w-0 flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
+                    <span className="min-w-0 max-w-full truncate">{title}</span>
                     {(song.vocalLabels ?? []).map((label) => (
                       <span key={label} className={vocalBadge(label)}>
                         {label}
                       </span>
                     ))}
                     {song.genreLabel ? <span className={genreClass}>{song.genreLabel}</span> : null}
+                    <MusicLibraryGenreBestLabels
+                      labels={song.genreBestLabels}
+                      omitSlug={omitGenreBestSlug}
+                    />
                   </p>
                   <p className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
                     {artists.map((artist, i) => {

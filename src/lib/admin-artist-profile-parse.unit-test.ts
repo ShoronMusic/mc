@@ -44,6 +44,14 @@ assert.ok(draft.profileText?.includes('米津玄師'));
   assert.equal(normalizeAdminArtistThePrefix('1'), 'The');
   assert.equal(normalizeAdminArtistThePrefix('an'), 'An');
 
+  const petty = splitAdminArtistNameParts('Tom Petty And The Heartbreakers');
+  assert.equal(petty.nameBase, 'Tom Petty And The Heartbreakers');
+  assert.equal(petty.thePrefix, null);
+  assert.equal(petty.name, 'Tom Petty And The Heartbreakers');
+  const pettyAmp = splitAdminArtistNameParts('Tom Petty & The Heartbreakers');
+  assert.equal(pettyAmp.nameBase, 'Tom Petty & The Heartbreakers');
+  assert.equal(pettyAmp.thePrefix, null);
+
   const western = emptyAdminArtistProfileDraft('Sways', 'western');
   western.thePrefix = 'The';
   western.nameBase = 'Sways';
@@ -57,6 +65,13 @@ assert.ok(draft.profileText?.includes('米津玄師'));
   const handlePatch = buildArtistDbPatchFromAdminDraft(withHandle);
   assert.equal(handlePatch.youtube_channel_id, '@ArtOfficialMusic');
   assert.equal(handlePatch.youtube_channel_url, 'https://www.youtube.com/@ArtOfficialMusic');
+
+  const wikiUrlDraft = emptyAdminArtistProfileDraft('Velveteen Queen', 'western');
+  wikiUrlDraft.wikipediaPage = 'Velveteen_Queen';
+  wikiUrlDraft.wikipediaUrl = 'https://de.wikipedia.org/wiki/Velveteen_Queen';
+  const wikiUrlPatch = buildArtistDbPatchFromAdminDraft(wikiUrlDraft);
+  assert.equal(wikiUrlPatch.wikipedia_page, 'Velveteen_Queen');
+  assert.equal(wikiUrlPatch.wikipedia_url, 'https://de.wikipedia.org/wiki/Velveteen_Queen');
 }
 
 assert.equal(normalizeAdminArtistActivePeriod('1989 - 現在'), '1989 -');

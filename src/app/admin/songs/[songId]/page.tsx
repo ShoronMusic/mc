@@ -40,6 +40,7 @@ import { syncSongCreditsFromSongId } from '@/lib/song-credits-sync';
 import { fetchSpotifyTrackWithArtistsById } from '@/lib/spotify-search-track';
 import { AdminNewArtistBadge } from '@/components/admin/AdminNewArtistBadge';
 import { AdminSongAlternatePvPanel } from '@/components/admin/AdminSongAlternatePvPanel';
+import { AdminSongVideoVariantCell } from '@/components/admin/AdminSongVideoVariantCell';
 import { SongCoverThumb } from '@/components/song/SongCoverThumb';
 import { resolveSongCoverImage } from '@/lib/song-cover-image';
 import { formatLibraryVocalDisplay } from '@/lib/library-vocal-display';
@@ -1061,6 +1062,10 @@ export default async function SongDetailPage({ params, searchParams }: SongDetai
           hasSpotifyArtists={Boolean((song.spotify_artists ?? '').trim())}
           currentTrackId={song.spotify_track_id ?? null}
           canReset={songHasResettableSpotifyMeta(song)}
+          displayTitle={song.display_title ?? null}
+          spotifyArtists={song.spotify_artists ?? null}
+          spotifyName={song.spotify_name ?? null}
+          spotifyPopularity={song.spotify_popularity ?? null}
         />
         <AdminSongCreditsPanel
           songId={song.id}
@@ -1106,7 +1111,13 @@ export default async function SongDetailPage({ params, searchParams }: SongDetai
                       <td className="px-2 py-1 font-mono text-[11px] text-blue-300">
                         {v.video_id}
                       </td>
-                      <td className="px-2 py-1">{v.variant ?? ''}</td>
+                      <td className="px-2 py-1">
+                        <AdminSongVideoVariantCell
+                          songId={song.id}
+                          videoId={v.video_id}
+                          variant={v.variant}
+                        />
+                      </td>
                       <td className="px-2 py-1 text-[11px] font-mono text-gray-400">
                         {v.performance_id ?? ''}
                       </td>

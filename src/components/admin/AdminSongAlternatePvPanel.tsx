@@ -6,6 +6,7 @@ import {
   MAX_SONG_VIDEO_VARIANTS,
   type AlternatePvMatchLevel,
 } from '@/lib/song-alternate-pv-match';
+import { SONG_VIDEO_VARIANT_OPTIONS } from '@/lib/song-video-variants';
 
 type Preview = {
   videoId: string;
@@ -25,7 +26,7 @@ type Preview = {
   added?: boolean;
 };
 
-const VARIANT_OPTIONS = ['official', 'visualizer', 'lyric', 'live', 'topic', 'other'] as const;
+const VARIANT_OPTIONS = SONG_VIDEO_VARIANT_OPTIONS;
 
 function levelLabel(level: AlternatePvMatchLevel): string {
   if (level === 'high') return '同一曲（高）';

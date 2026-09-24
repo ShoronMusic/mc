@@ -57,6 +57,7 @@ type DbArtist = {
   youtube_channel?: string | null;
   spotify_artist_id?: string | null;
   wikipedia_page?: string | null;
+  wikipedia_url?: string | null;
   memberArtists?: { name: string; music8_artist_slug?: string | null }[];
   bandArtists?: { name: string; music8_artist_slug?: string | null }[];
 };
@@ -145,6 +146,7 @@ function music8ExternalLinks(artist: Music8ArtistJson | null): LibraryArtistExte
     spotify_artist_id:
       typeof source.spotify_artist_id === 'string' ? source.spotify_artist_id : null,
     wikipedia_page: typeof source.wikipedia_page === 'string' ? source.wikipedia_page : null,
+    wikipedia_url: typeof source.wikipedia_url === 'string' ? source.wikipedia_url : null,
   });
 }
 
