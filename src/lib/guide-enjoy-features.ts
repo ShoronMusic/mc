@@ -359,7 +359,7 @@ export const GUIDE_ENJOY_SONG_SELECTION = {
         },
       ],
     },
-  ] satisfies GuideEnjoySelectionMethod[],
+  ] satisfies GuideEnjoySelectionMethod[] as GuideEnjoySelectionMethod[],
   basics: [
     {
       title: '自分の選曲が終わってから、次の番までに次曲をセット',
