@@ -198,7 +198,9 @@ export function FeaturedPageModal({
       const items = Array.isArray(data.items) ? data.items : [];
       const next: Partial<Record<WeeklyChartRegion, string>> = {};
       for (const item of items) {
-        const region = item?.region === 'us' || item?.region === 'uk' ? item.region : null;
+        const rawRegion: unknown = item?.region;
+        const region: WeeklyChartRegion | null =
+          rawRegion === 'us' || rawRegion === 'uk' ? rawRegion : null;
         const label = typeof item?.chartWeekLabel === 'string' ? item.chartWeekLabel.trim() : '';
         if (region && label) next[region] = label;
       }

@@ -10,7 +10,7 @@ import { isMusicLibraryNavStyleSlug, parseMusicLibraryPageParam } from '@/lib/mu
 export const dynamic = 'force-dynamic';
 
 /** チャット特集のスタイル別一覧。Other を除き 10 曲ずつ。 */
-export const CHAT_STYLE_SONG_PAGE_SIZE = 10;
+const CHAT_STYLE_SONG_PAGE_SIZE = 10;
 
 export async function GET(request: Request) {
   const admin = getMusicLibraryAdmin();
