@@ -5,7 +5,7 @@
  * 固定列幅・はみ出しは...、ソート（時間デフォルト／選曲者）、アクティブ行表示。
  */
 
-import { CalendarDaysIcon, ChartBarIcon, ClockIcon, UserIcon } from '@heroicons/react/24/outline';
+import { CalendarDaysIcon, ChartBarIcon, ClockIcon, DocumentTextIcon, UserIcon } from '@heroicons/react/24/outline';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { RoomPlaybackHistoryRow } from '@/lib/room-playback-history-types';
 import {
@@ -28,10 +28,15 @@ import {
   showRoomStyleUi,
 } from '@/lib/product-branding';
 import { participantChatColorForSurface } from '@/lib/chat-text-color';
+import type { CommentPackSlotSelection } from '@/lib/comment-pack-slots';
+import type { SongCommentaryPanelSlot } from '@/lib/song-commentary-panel';
 import MainArtistTabPanel from './MainArtistTabPanel';
+import SongCommentaryTabPanel from './SongCommentaryTabPanel';
 import SongDataTabPanel from './SongDataTabPanel';
 import EraDistributionModal from './EraDistributionModal';
 import StyleDistributionModal from './StyleDistributionModal';
+
+const EMPTY_SONG_COMMENTARY_SLOTS: (SongCommentaryPanelSlot | null)[] = [null, null, null, null, null];
 
 type SortKey = 'played_at' | 'display_name';
 type SortOrder = 'desc' | 'asc';
@@ -322,6 +327,14 @@ interface RoomPlaybackHistoryProps {
   }) => void;
   /** 「視聴履歴」タブ押下で部屋側の拡大モーダルを開く */
   onOpenHistoryModal?: () => void;
+  /** 再生中の曲の AI 曲解説（最大5）。PC 左カラムの曲解説タブで表示 */
+  songCommentarySlots?: readonly (SongCommentaryPanelSlot | null)[];
+  /** オーナーの曲解説スロット ON/OFF。未指定なら空枠は生成中扱い */
+  commentarySlotEnabled?: CommentPackSlotSelection;
+  /** 解説が届いたら曲解説タブを開く（PC のみ true） */
+  autoOpenCommentaryTab?: boolean;
+  canRejectSongCommentary?: boolean;
+  onSongCommentaryTidbitReject?: (messageId: string, tidbitId: string) => void | Promise<void>;
   /** メインアーティストタブの「ライブラリ」から選曲ライブラリを開く */
   onOpenLibraryForArtist?: (
     mainArtist: string,
@@ -356,6 +369,11 @@ export default function RoomPlaybackHistory({
   onRegenerateAiAfterPlaybackTitleSave,
   onOpenHistoryModal,
   onOpenLibraryForArtist,
+  songCommentarySlots,
+  commentarySlotEnabled,
+  autoOpenCommentaryTab = false,
+  canRejectSongCommentary = false,
+  onSongCommentaryTidbitReject,
 }: RoomPlaybackHistoryProps) {
   const [items, setItems] = useState<RoomPlaybackHistoryRow[]>([]);
   const [hasMoreHistory, setHasMoreHistory] = useState(false);
@@ -371,7 +389,9 @@ export default function RoomPlaybackHistory({
   const [titleDraft, setTitleDraft] = useState('');
   const [titleSaving, setTitleSaving] = useState(false);
   const titleEditInputRef = useRef<HTMLInputElement | null>(null);
-  const [activeTab, setActiveTab] = useState<'history' | 'artist' | 'songdata'>('history');
+  const [activeTab, setActiveTab] = useState<'commentary' | 'history' | 'artist' | 'songdata'>('history');
+  /** 再生中の曲で、すでに曲解説タブを開いた解説 ID の並び */
+  const commentarySeenKeyRef = useRef('');
   const [hasMainArtistData, setHasMainArtistData] = useState(false);
   const [hasSongData, setHasSongData] = useState(false);
   /** STYLE_ADMIN_USER_IDS 未設定なら true。設定時はリスト内ユーザーのみ（スタイル・アーティスト行の修正） */
@@ -820,6 +840,22 @@ export default function RoomPlaybackHistory({
     onRegenerateAiAfterPlaybackTitleSave,
   ]);
 
+  useEffect(() => {
+    commentarySeenKeyRef.current = '';
+  }, [currentVideoId]);
+
+  useEffect(() => {
+    if (!autoOpenCommentaryTab || IS_MC_PRODUCT) return;
+    const vid = currentVideoId?.trim() ?? '';
+    if (!vid) return;
+    const ids = (songCommentarySlots ?? []).map((s) => s?.messageId ?? '').join('\n');
+    if (!ids.replace(/\n/g, '')) return;
+    const key = `${vid}\n${ids}`;
+    if (commentarySeenKeyRef.current === key) return;
+    commentarySeenKeyRef.current = key;
+    setActiveTab('commentary');
+  }, [autoOpenCommentaryTab, currentVideoId, songCommentarySlots]);
+
   if (!roomId) return null;
 
   const watchInNewTabUrl =
@@ -837,6 +873,17 @@ export default function RoomPlaybackHistory({
         )}
       >
         <div className="flex min-w-0 flex-1 items-center gap-1">
+          {!IS_MC_PRODUCT && (
+            <button
+              type="button"
+              onClick={() => setActiveTab('commentary')}
+              className={`inline-flex items-center gap-1 rounded px-2 py-1 text-sm transition ${activeTab === 'commentary' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:bg-gray-700/50 hover:text-gray-200'}`}
+              aria-label="曲解説"
+            >
+              <DocumentTextIcon className="h-4 w-4 shrink-0" aria-hidden />
+              曲解説
+            </button>
+          )}
           <button
             type="button"
             onClick={() => {
@@ -912,8 +959,22 @@ export default function RoomPlaybackHistory({
           </a>
         )}
       </div>
-      <div className="min-h-0 min-w-0 w-full flex-1 overflow-auto [scrollbar-gutter:stable]">
-        {activeTab === 'artist' && playbackTabsResolve?.tabArtist ? (
+      <div
+        className={`min-h-0 min-w-0 w-full flex-1 ${
+          activeTab === 'commentary' && !IS_MC_PRODUCT
+            ? 'flex flex-col overflow-hidden'
+            : 'overflow-auto [scrollbar-gutter:stable]'
+        }`}
+      >
+        {activeTab === 'commentary' && !IS_MC_PRODUCT ? (
+          <SongCommentaryTabPanel
+            videoId={currentVideoId}
+            slots={songCommentarySlots ?? EMPTY_SONG_COMMENTARY_SLOTS}
+            slotEnabled={commentarySlotEnabled}
+            canRejectTidbit={canRejectSongCommentary}
+            onTidbitLibraryReject={onSongCommentaryTidbitReject}
+          />
+        ) : activeTab === 'artist' && playbackTabsResolve?.tabArtist ? (
           <MainArtistTabPanel
             artistName={playbackTabsResolve.tabArtist}
             songTitle={playbackTabsResolve.tabSong}

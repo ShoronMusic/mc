@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   isGemmaCommentaryStillDirty,
   parseCopyeditBodiesJson,
+  resolveCopyeditSlotBody,
 } from '@/lib/gemma-commentary-copyedit';
 import {
   resolveGenerationModelId,
@@ -89,6 +90,25 @@ test('isGemmaCommentaryStillDirty: Draft / Check leftovers are dirty', () => {
     ),
     true,
   );
+});
+
+test('resolveCopyeditSlotBody: empty Flash extract keeps a clean draft', () => {
+  const draft =
+    'Mr. Bigの『Take Cover』は、1991年のアルバム『Lean Into It』に収録された楽曲です。';
+  assert.equal(resolveCopyeditSlotBody('', draft), draft);
+});
+
+test('resolveCopyeditSlotBody: dirty draft is not kept when extract is empty', () => {
+  assert.equal(
+    resolveCopyeditSlotBody('', 'Draft 2 (Refining): 歌詞は夜のドライブです。'),
+    '',
+  );
+});
+
+test('resolveCopyeditSlotBody: clean extract wins over the draft', () => {
+  const extracted = 'Mr. Bigの『Take Cover』は、警告を込めたロックです。';
+  const draft = '別の下書きです。アルバム名は書きません。';
+  assert.equal(resolveCopyeditSlotBody(extracted, draft), extracted);
 });
 
 test('parseCopyeditBodiesJson: extracts bodies array', () => {

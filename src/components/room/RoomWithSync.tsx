@@ -12,7 +12,6 @@ import {
 import type { RealtimeChannel } from 'ably';
 import Chat from '@/components/chat/Chat';
 import ChatInput, { type ChatInputHandle } from '@/components/chat/ChatInput';
-import { AiUsageBillingNotice } from '@/components/room/AiUsageBillingNotice';
 import YouTubePlayer, {
   type YouTubePlayerHandle,
   YT_PLAYER_STATE_BUFFERING,
@@ -228,6 +227,7 @@ import {
   DEFAULT_USER_ROOM_AI_SONG_QUIZ_ENABLED,
 } from '@/lib/user-room-ai-features';
 import { formatMusic8ModeratorIntroPrefix } from '@/lib/music8-moderator-chat-prefix';
+import { collectCurrentSongCommentarySlots } from '@/lib/song-commentary-panel';
 import { formatCommentPackChatOriginPrefix } from '@/lib/commentary-model-head-tag';
 import {
   computeNextSelectionRound,
@@ -695,6 +695,10 @@ export default function RoomWithSync({
   }, [isGuest]);
   const [chatSummary, setChatSummary] = useState<RoomSessionChatSummaryDisplay | null>(null);
   const isLg = useIsLgViewport();
+  const songCommentarySlots = useMemo(
+    () => collectCurrentSongCommentarySlots(messages, videoId),
+    [messages, videoId],
+  );
   const isMobileLandscape = useIsMobileLandscapeViewport();
   const [mcUiFontSize] = useMcUiFontSize();
   useMcUiAccentTheme();
@@ -9840,24 +9844,23 @@ export default function RoomWithSync({
             onOpenLibraryForArtist={(mainArtist, options) =>
               chatInputRef.current?.openLibraryForArtist(mainArtist, options)
             }
+            songCommentarySlots={songCommentarySlots}
+            commentarySlotEnabled={commentPackSlots}
+            autoOpenCommentaryTab={isLg}
+            canRejectSongCommentary={!IS_MC_PRODUCT && canRejectTidbit && !isGuest}
+            onSongCommentaryTidbitReject={handleTidbitLibraryReject}
           />
         }
         playbackHistoryModalOpen={playbackHistoryModalOpen}
         onPlaybackHistoryModalClose={() => setPlaybackHistoryModalOpen(false)}
         mobileBelowChat={
-          !isLg && !isMobileLandscape ? (
-            <>
-              <AiUsageBillingNotice isGuest={isGuest} />
-              {chatInputNode}
-            </>
-          ) : undefined
+          !isLg && !isMobileLandscape ? chatInputNode : undefined
         }
       />
       </div>
 
       {isLg || isMobileLandscape ? (
       <section className="mt-2 shrink-0 space-y-2">
-        <AiUsageBillingNotice isGuest={isGuest} />
         {chatInputNode}
       </section>
       ) : null}

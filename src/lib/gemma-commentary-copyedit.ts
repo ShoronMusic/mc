@@ -46,6 +46,18 @@ export function hasGemmaEnglishMetaPrefix(raw: string): boolean {
   return false;
 }
 
+/**
+ * 清書結果が空・まだ汚いときは、polish 済みで汚れていない下書きを残す。
+ * Flash が `{"bodies":[""]}` だけ返すと、日本語の下書きまでチャットから消える。
+ */
+export function resolveCopyeditSlotBody(extracted: string, polishedDraft: string): string {
+  const next = extracted.trim();
+  const draft = polishedDraft.trim();
+  if (next && !isGemmaCommentaryStillDirty(next)) return next;
+  if (draft && !isGemmaCommentaryStillDirty(draft)) return draft;
+  return '';
+}
+
 /** polish 後も英語思考・Draft/Check が残っているか（アーティスト英語名だけの本文は汚れていない） */
 export function isGemmaCommentaryStillDirty(raw: string): boolean {
   const t = raw.trim();
@@ -78,7 +90,8 @@ function copyeditForceAll(): boolean {
 
 /**
  * Gemma 下書き配列を清書。きれいならそのまま。汚れていれば Flash で1回抽出し、
- * なお汚い枠は空文字（チャットに出さない）。API 失敗時は polish 済み原文を残す。
+ * 抽出が空でも polish 済みの日本語が残っていればそれを使う。両方ダメな枠だけ空にする。
+ * API 失敗時は polish 済み原文を残す。
  */
 export async function copyeditGemmaCommentaryBodies(
   bodies: string[],
@@ -178,7 +191,13 @@ ${JSON.stringify({ drafts })}
     const out = [...polished];
     dirtyIdx.forEach((origI, j) => {
       const body = polishGemmaModelVisibleText(extracted[j] ?? '');
-      out[origI] = isGemmaCommentaryStillDirty(body) ? '' : body;
+      const kept = resolveCopyeditSlotBody(body, polished[origI] ?? '');
+      if (!kept) {
+        console.warn('[commentary-copyedit] dropping slot; no clean Japanese', origI);
+      } else if (!body.trim() || isGemmaCommentaryStillDirty(body)) {
+        console.warn('[commentary-copyedit] extract unusable; keeping polished draft', origI);
+      }
+      out[origI] = kept;
     });
     return out;
   } catch (e) {

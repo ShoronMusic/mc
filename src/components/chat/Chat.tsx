@@ -35,6 +35,7 @@ import {
   CHAT_CONVERSATION_SNAPSHOT_BEFORE,
 } from '@/lib/chat-conversation-snapshot';
 import { isAiTidbitToolbarMessage, stripDbPrefixForChatDisplay } from '@/lib/ai-commentary-chat-display';
+import { isSongCommentaryChatMessage } from '@/lib/song-commentary-panel';
 import {
   coerceSongQuizCorrectIndex,
   formatSongQuizFeedbackBody,
@@ -66,6 +67,7 @@ import ThemePlaylistMissionEntriesModal, {
 } from '@/components/chat/ThemePlaylistMissionEntriesModal';
 import AiCharacterTtsReplayButton from '@/components/chat/AiCharacterTtsReplayButton';
 import { AiTrialStatusBadge } from '@/components/shared/AiTrialStatusBadge';
+import { AiUsageBillingModal } from '@/components/room/AiUsageBillingNotice';
 import type { AiTrialStatus } from '@/lib/ai-trial-status';
 import {
   AI_CHARACTER_DEFAULT_ANNOUNCE_NAME,
@@ -952,6 +954,7 @@ export default function Chat({
   const [themeMissionModalOpen, setThemeMissionModalOpen] = useState(false);
   /** 三択クイズ: メッセージ id → 選んだ選択肢 index */
   const [songQuizPickedIndex, setSongQuizPickedIndex] = useState<Record<string, number>>({});
+  const isLg = useIsLgViewport();
   const deferredNextSongRecommendMessages = messages.filter((m) => {
     if (!isDeferredNextSongRecommendMessage(m)) return false;
     const cur =
@@ -961,6 +964,7 @@ export default function Chat({
     return msgVid === cur;
   });
   const visibleMessages = messages.filter((m) => {
+    if (isLg && isSongCommentaryChatMessage(m)) return false;
     if (isDeferredNextSongRecommendMessage(m)) return false;
     if (m.systemKind === 'song_quiz') {
       const cur =
@@ -987,7 +991,7 @@ export default function Chat({
       requestAnimationFrame(scrollToLatest);
     });
     return () => cancelAnimationFrame(raf);
-  }, [messages.length, scrollToLatest]);
+  }, [visibleMessages.length, scrollToLatest]);
 
   useEffect(() => {
     if (!themePlaylistActiveMission && themeMissionModalOpen) {
@@ -1383,11 +1387,11 @@ export default function Chat({
   }
 
   const [aiHelpModalOpen, setAiHelpModalOpen] = useState(false);
+  const [aiUsageNoticeOpen, setAiUsageNoticeOpen] = useState(false);
   const [aiHelpModalTab, setAiHelpModalTab] = useState<'question' | 'comments'>('question');
   const [aiQuestionExamplesOpen, setAiQuestionExamplesOpen] = useState(false);
   const [chatHeaderMoreOpen, setChatHeaderMoreOpen] = useState(false);
   const chatHeaderMoreRef = useRef<HTMLDivElement>(null);
-  const isLg = useIsLgViewport();
 
   useEffect(() => {
     if (!chatHeaderMoreOpen) return;
@@ -1543,6 +1547,17 @@ export default function Chat({
               AI設定
             </button>
           ) : null}
+          {!viewerIsGuest ? (
+            <button
+              type="button"
+              onClick={() => setAiUsageNoticeOpen(true)}
+              className="shrink-0 rounded border border-violet-500/65 bg-violet-900/35 px-1.5 py-0.5 text-[10px] font-semibold leading-none tracking-tight text-violet-200 hover:bg-violet-900/55"
+              aria-label="AI 利用説明を開く"
+              title="AI の利用と料金"
+            >
+              AI利用
+            </button>
+          ) : null}
         </div>
         ) : null}
         {isLg ? (
@@ -1664,7 +1679,7 @@ export default function Chat({
         </div>
       ) : null}
       <div ref={scrollPaneRef} className="mc-room-scroll-pane min-h-0 flex-1 overflow-y-auto p-2">
-        {messages.length === 0 ? (
+        {visibleMessages.length === 0 ? (
           <p className="py-4 text-center text-sm text-gray-500">
             メッセージがまだありません
           </p>
@@ -1819,7 +1834,7 @@ export default function Chat({
                 key={m.id}
                 ref={isAiCommentaryLabeled ? (node) => registerAiCommentaryNode(m.id, node) : undefined}
                 data-message-id={isAiCommentaryLabeled ? m.id : undefined}
-                className={`rounded-lg px-3 py-2 text-sm ${
+                className={`rounded-lg px-3 py-2 text-sm ${isAiCommentaryLabeled ? 'lg:hidden' : ''} ${
                   m.messageType === 'ai'
                     ? isNextSongRecommendMessage
                       ? IS_MC_PRODUCT
@@ -2654,6 +2669,13 @@ export default function Chat({
           </div>
         </div>
       )}
+
+      <AiUsageBillingModal
+        open={aiUsageNoticeOpen}
+        onClose={() => setAiUsageNoticeOpen(false)}
+        status={aiTrialStatus ?? null}
+        loading={aiTrialLoading}
+      />
 
       {aiHelpModalOpen && (
         <div

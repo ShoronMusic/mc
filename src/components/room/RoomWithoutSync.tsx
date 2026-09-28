@@ -8,7 +8,6 @@ import {
 } from '@/lib/favorite-heart-ui';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Chat from '@/components/chat/Chat';
-import { AiUsageBillingNotice } from '@/components/room/AiUsageBillingNotice';
 import { McMaPromoHeaderBanner } from '@/components/home/McMaPromoBanner';
 import { MusicChatTitleLogo } from '@/components/home/MusicChatTitleLogo';
 import ChatInput, { type ChatInputHandle } from '@/components/chat/ChatInput';
@@ -23,6 +22,8 @@ import { RoomChatLogModal } from '@/components/room/RoomChatLogModal';
 import NowPlaying from '@/components/room/NowPlaying';
 import RoomMainLayout from '@/components/room/RoomMainLayout';
 import RoomPlaybackHistory from '@/components/room/RoomPlaybackHistory';
+import { DEFAULT_COMMENT_PACK_SLOTS } from '@/lib/comment-pack-slots';
+import { collectCurrentSongCommentarySlots } from '@/lib/song-commentary-panel';
 import ChatSummaryModalBody, {
   buildActiveUsageTimeLabelFromFetch,
   type RoomSessionChatSummaryDisplay,
@@ -405,6 +406,10 @@ export default function RoomWithoutSync({
 
   const [chatSummary, setChatSummary] = useState<RoomSessionChatSummaryDisplay | null>(null);
   const isLg = useIsLgViewport();
+  const songCommentarySlots = useMemo(
+    () => collectCurrentSongCommentarySlots(messages, videoId),
+    [messages, videoId],
+  );
   const isMobileLandscape = useIsMobileLandscapeViewport();
   const [mcUiFontSize] = useMcUiFontSize();
   useMcUiAccentTheme();
@@ -3185,24 +3190,21 @@ export default function RoomWithoutSync({
             onOpenLibraryForArtist={(mainArtist, options) =>
               chatInputRef.current?.openLibraryForArtist(mainArtist, options)
             }
+            songCommentarySlots={songCommentarySlots}
+            commentarySlotEnabled={DEFAULT_COMMENT_PACK_SLOTS}
+            autoOpenCommentaryTab={isLg}
           />
         }
         playbackHistoryModalOpen={playbackHistoryModalOpen}
         onPlaybackHistoryModalClose={() => setPlaybackHistoryModalOpen(false)}
         mobileBelowChat={
-          !isLg && !isMobileLandscape ? (
-            <>
-              <AiUsageBillingNotice isGuest={isGuest} />
-              {chatInputNode}
-            </>
-          ) : undefined
+          !isLg && !isMobileLandscape ? chatInputNode : undefined
         }
       />
       </div>
 
       {isLg || isMobileLandscape ? (
       <section className="mt-2 shrink-0 space-y-2">
-        <AiUsageBillingNotice isGuest={isGuest} />
         {chatInputNode}
       </section>
       ) : null}
