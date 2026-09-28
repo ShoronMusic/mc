@@ -58,6 +58,7 @@ test('character_song_pick: Gemma primary uses Flash unless USE_PRIMARY', () => {
     assert.equal(resolveGenerationModelId('next_song_recommend'), 'gemini-2.5-flash');
     assert.equal(resolveGenerationModelId('song_quiz'), 'gemini-2.5-flash');
     assert.equal(resolveGenerationModelId('chat_reply'), 'gemini-2.5-flash');
+    assert.equal(resolveGenerationModelId('character_chat'), 'gemini-2.5-flash');
     assert.equal(resolveGenerationModelId('get_song_style'), 'gemini-2.5-flash');
     assert.equal(resolveGenerationModelId('get_song_era'), 'gemini-2.5-flash');
     assert.equal(resolveGenerationModelId('music8_song_intro'), 'gemini-2.5-flash');
@@ -72,6 +73,7 @@ test('character_song_pick: Gemma primary uses Flash unless USE_PRIMARY', () => {
     delete process.env.GEMINI_SONG_QUIZ_USE_PRIMARY;
     process.env.GEMINI_CHAT_REPLY_USE_PRIMARY = '1';
     assert.equal(resolveGenerationModelId('chat_reply'), 'gemma-4-31b-it');
+    assert.equal(resolveGenerationModelId('character_chat'), 'gemma-4-31b-it');
     delete process.env.GEMINI_CHAT_REPLY_USE_PRIMARY;
     process.env.GEMINI_SONG_META_USE_PRIMARY = '1';
     assert.equal(resolveGenerationModelId('get_song_style'), 'gemma-4-31b-it');

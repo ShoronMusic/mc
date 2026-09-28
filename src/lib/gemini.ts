@@ -155,12 +155,15 @@ export async function generateChatReply(
     personaInstruction?: string | null;
     /** AIキャラの参加表示名。会話ログに出るため、本文で自分を「〇〇さん」と呼ばないよう注入する */
     characterSelfDisplayName?: string | null;
+    /** 利用ログの context。エージェント発言は `character_chat`（主催者原価） */
+    usageLogContext?: string | null;
   }
 ): Promise<string | null> {
   const model = getGeminiModel('chat_reply');
   if (!model) return null;
 
   const forceReply = options?.forceReply === true;
+  const usageLogContext = options?.usageLogContext?.trim() || 'chat_reply';
   const personaInstructionRaw =
     typeof options?.personaInstruction === 'string' ? options.personaInstruction.trim() : '';
   const personaInstructionBlock =
@@ -327,8 +330,12 @@ ${lines || '(まだ発言なし)'}
     while (attempt < 2) {
       attempt += 1;
       const result = await model.generateContent(prompt2);
-      logGeminiUsage('chat_reply', result.response);
-      await persistGeminiUsageLog('chat_reply', result.response.usageMetadata, geminiUsagePersistMeta(usageMeta));
+      logGeminiUsage(usageLogContext, result.response);
+      await persistGeminiUsageLog(
+        usageLogContext,
+        result.response.usageMetadata,
+        geminiUsagePersistMeta(usageMeta),
+      );
       const text = readGeneratedText(result.response, 'chat_reply');
       const discographyPolicyOk = forceReply || !containsUnreliableCommentaryDiscographyClaim(text);
       if (text && !isRejectedChatOrTidbitOutput(text) && discographyPolicyOk) {

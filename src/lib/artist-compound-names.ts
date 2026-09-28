@@ -30,14 +30,25 @@ export function normArtistCompoundKey(name: string): string {
     .replace(/\s+and\s+/g, ' & ');
 }
 
-function parseCompoundConfig(): { canonicalNames: string[]; map: Map<string, string> } {
+function parseCompoundConfig(): {
+  canonicalNames: string[];
+  map: Map<string, string>;
+  surfaces: { surface: string; canonical: string }[];
+} {
   const raw = artistCompoundExtra as unknown;
   const canonicalNames: string[] = [];
   const m = new Map<string, string>();
+  const surfaces: { surface: string; canonical: string }[] = [];
 
   if (!Array.isArray(raw)) {
-    return { canonicalNames, map: m };
+    return { canonicalNames, map: m, surfaces };
   }
+
+  const pushSurface = (surface: string, canonical: string) => {
+    const s = surface.trim();
+    if (!s) return;
+    surfaces.push({ surface: s, canonical });
+  };
 
   for (const x of raw as CompoundJsonEntry[]) {
     if (typeof x === 'string') {
@@ -46,6 +57,7 @@ function parseCompoundConfig(): { canonicalNames: string[]; map: Map<string, str
       canonicalNames.push(n);
       const k = normArtistCompoundKey(n);
       if (!m.has(k)) m.set(k, n);
+      pushSurface(n, n);
       continue;
     }
     if (x && typeof x === 'object' && typeof x.canonical === 'string') {
@@ -57,18 +69,59 @@ function parseCompoundConfig(): { canonicalNames: string[]; map: Map<string, str
       canonicalNames.push(canonical);
       const ck = normArtistCompoundKey(canonical);
       if (!m.has(ck)) m.set(ck, canonical);
+      pushSurface(canonical, canonical);
       for (const a of aliases) {
         const ak = normArtistCompoundKey(a.trim());
         if (!m.has(ak)) m.set(ak, canonical);
+        pushSurface(a, canonical);
       }
     }
   }
 
-  return { canonicalNames, map: m };
+  return { canonicalNames, map: m, surfaces };
 }
 
-const { canonicalNames: COMPOUND_CANONICAL_NAMES, map: COMPOUND_CANONICAL_BY_NORM } =
-  parseCompoundConfig();
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** `and` と `&` を同一視した部分一致。長い名前を先に置換する。 */
+function compoundSurfaceToPatternBody(name: string): string {
+  return name
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((tok) => (tok === '&' || /^and$/i.test(tok) ? '(?:&|&amp;|and)' : escapeRegExp(tok)))
+    .join('\\s+');
+}
+
+function buildCompoundShieldPatterns(
+  surfaces: { surface: string; canonical: string }[],
+): { re: RegExp; canonical: string }[] {
+  const seen = new Set<string>();
+  const ranked: { re: RegExp; canonical: string; len: number }[] = [];
+  for (const { surface, canonical } of surfaces) {
+    const body = compoundSurfaceToPatternBody(surface);
+    const key = `${body.toLowerCase()}\0${canonical}`;
+    if (!body || seen.has(key)) continue;
+    seen.add(key);
+    ranked.push({
+      re: new RegExp(`(?<![A-Za-z0-9])(?:${body})(?![A-Za-z0-9])`, 'gi'),
+      canonical,
+      len: surface.trim().length,
+    });
+  }
+  ranked.sort((a, b) => b.len - a.len);
+  return ranked.map(({ re, canonical }) => ({ re, canonical }));
+}
+
+const {
+  canonicalNames: COMPOUND_CANONICAL_NAMES,
+  map: COMPOUND_CANONICAL_BY_NORM,
+  surfaces: COMPOUND_SURFACES,
+} = parseCompoundConfig();
+
+const COMPOUND_SHIELD_PATTERNS = buildCompoundShieldPatterns(COMPOUND_SURFACES);
 
 /** 表示・マップ構築に使う正式名の一覧（エイリアスのみの行は含まない） */
 export const ARTIST_NAMES_KEEP_AMPERSAND_AND: readonly string[] = COMPOUND_CANONICAL_NAMES;
@@ -85,4 +138,34 @@ export function compoundArtistCanonicalIfKnown(artistPart: string): string | nul
   if (hit) return hit;
   const kCommaAsAmp = normArtistCompoundKey(t.replace(/,\s+/g, ' & '));
   return COMPOUND_CANONICAL_BY_NORM.get(kCommaAsAmp) ?? null;
+}
+
+const COMPOUND_SLOT_RE = /\uE000(\d+)\uE001/g;
+
+/**
+ * 共演文字列の中にある合体アーティスト名を退避する。
+ * 「Tegan and Sara ft. Lights」を and で割る前に使い、退避した箇所は正式名へ戻す。
+ */
+export function protectCompoundArtistNames(input: string): {
+  text: string;
+  restore: (part: string) => string;
+} {
+  const slots: string[] = [];
+  let text = input.replace(/&amp;/gi, '&');
+  for (const { re, canonical } of COMPOUND_SHIELD_PATTERNS) {
+    re.lastIndex = 0;
+    text = text.replace(re, () => {
+      const id = slots.length;
+      slots.push(canonical);
+      return `\uE000${id}\uE001`;
+    });
+  }
+  const restore = (part: string) => {
+    COMPOUND_SLOT_RE.lastIndex = 0;
+    return part
+      .replace(COMPOUND_SLOT_RE, (_, n: string) => slots[Number(n)] ?? '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  };
+  return { text, restore };
 }

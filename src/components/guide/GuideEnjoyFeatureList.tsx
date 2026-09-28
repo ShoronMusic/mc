@@ -810,21 +810,30 @@ export function GuideEnjoyFeatureList() {
           <p className="break-keep text-sm leading-relaxed text-gray-600">
             {GUIDE_ENJOY_SONG_SELECTION.charmText}
           </p>
-          <div className="mt-3 flex justify-center overflow-x-auto">
+          <div
+            className="-mx-4 mt-3 overflow-x-auto overscroll-x-contain px-4 [scrollbar-width:thin] [-webkit-overflow-scrolling:touch] sm:mx-0 sm:flex sm:justify-center"
+            role="region"
+            aria-label={`${GUIDE_ENJOY_SONG_SELECTION.charmImage.alt}（スマホでは横にスワイプして等倍でご覧ください）`}
+            tabIndex={0}
+          >
             <Image
               src={GUIDE_ENJOY_SONG_SELECTION.charmImage.src}
               alt={GUIDE_ENJOY_SONG_SELECTION.charmImage.alt}
               width={GUIDE_ENJOY_SONG_SELECTION.charmImage.width}
               height={GUIDE_ENJOY_SONG_SELECTION.charmImage.height}
-              className="h-auto shrink-0"
+              className="h-auto max-w-none shrink-0"
               style={{
-                width: `${Math.round(GUIDE_ENJOY_SONG_SELECTION.charmImage.width * 0.9)}px`,
+                width: `${GUIDE_ENJOY_SONG_SELECTION.charmImage.width}px`,
+                maxWidth: 'none',
                 height: 'auto',
               }}
-              sizes={`${Math.round(GUIDE_ENJOY_SONG_SELECTION.charmImage.width * 0.9)}px`}
+              sizes={`${GUIDE_ENJOY_SONG_SELECTION.charmImage.width}px`}
               draggable={false}
             />
           </div>
+          <p className="mt-1.5 text-center text-[11px] text-gray-400 sm:hidden">
+            横にスワイプして3コマを見られます
+          </p>
         </div>
       </section>
 

@@ -58,6 +58,33 @@ assert.equal(
 assert.equal(getArtistDisplayString('Tom Petty & The Heartbreakers'), 'Tom Petty and the Heartbreakers');
 assert.equal(getMainArtist('Elton John and Kiki Dee'), 'Elton John');
 assert.equal(getArtistDisplayString('Elton John and Kiki Dee'), 'Elton John, Kiki Dee');
+assert.equal(
+  getArtistDisplayString('Tegan and Sara ft. Lights, Felix Cartal'),
+  'Tegan and Sara, Lights, Felix Cartal',
+);
+assert.equal(
+  getArtistDisplayString('Tegan & Sara, Lights, Felix Cartal'),
+  'Tegan and Sara, Lights, Felix Cartal',
+);
+assert.equal(getMainArtist('Tegan and Sara ft. Lights, Felix Cartal'), 'Tegan and Sara');
+{
+  const r = getArtistAndSong(
+    'Tom Morello - "UNCONQUERED (Feat. KNEECAP)" (OFFICIAL VIDEO)',
+    'Tom Morello',
+  );
+  assert.equal(r.artist, 'Tom Morello');
+  assert.equal(r.artistDisplay, 'Tom Morello, KNEECAP');
+  assert.equal(r.song, 'UNCONQUERED');
+}
+{
+  const r = getArtistAndSong(
+    'Tegan and Sara - Our Year (Official Video) ft. Lights, Felix Cartal',
+    'Tegan and Sara',
+  );
+  assert.equal(r.artist, 'Tegan and Sara');
+  assert.equal(r.artistDisplay, 'Tegan and Sara, Lights, Felix Cartal');
+  assert.equal(r.song, 'Our Year');
+}
 {
   const split = splitArtistNameForM8Storage('Tom Petty And The Heartbreakers');
   assert.equal(split?.displayName, 'Tom Petty and the Heartbreakers');

@@ -40,6 +40,24 @@ export function queryTitleAgreesWithYoutubeTitle(queryTitle: string, youtubeTitl
   return false;
 }
 
+/** 拡張が落とした客演（Feat.）を、YouTube タイトル解析側から足す */
+function mergeMissingFeaturedArtists(queryArtist: string, parsedArtist: string): string {
+  const split = (raw: string) =>
+    getArtistDisplayString(raw)
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+  const queryParts = split(queryArtist);
+  const parsedParts = split(parsedArtist);
+  if (queryParts.length === 0 || parsedParts.length <= queryParts.length) return queryArtist;
+  const parsedKeys = new Set(parsedParts.map((p) => p.toLowerCase()));
+  if (!queryParts.every((p) => parsedKeys.has(p.toLowerCase()))) return queryArtist;
+  const queryKeys = new Set(queryParts.map((p) => p.toLowerCase()));
+  const extra = parsedParts.filter((p) => !queryKeys.has(p.toLowerCase()));
+  if (extra.length === 0) return queryArtist;
+  return [...queryParts, ...extra].join(', ');
+}
+
 /** YouTube 曲名が Stay With … のとき、With 以降をサブアーティストにしない */
 export function youtubeSongTitleKeepsWithAsTitle(song: string): boolean {
   return /\bstay\s+with\s+\S+/i.test(song.trim());
@@ -80,6 +98,10 @@ export function resolveAdminNewSongMetaFromYoutube(input: {
       title = queryTitle;
     }
   } else if (!junk && agrees && !droppedStayWith) {
+    const merged = mergeMissingFeaturedArtists(queryArtist, artist);
+    if (merged !== queryArtist) {
+      return { artist: merged, title: queryTitle, corrected: true };
+    }
     return { artist: queryArtist, title: queryTitle, corrected: false };
   }
 

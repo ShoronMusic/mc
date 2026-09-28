@@ -99,7 +99,7 @@ export function isSongQuizUsageContext(usageContext: string): boolean {
 
 export function isChatReplyUsageContext(usageContext: string): boolean {
   const c = usageContext.trim();
-  return c === 'chat_reply' || c.startsWith('chat_reply_');
+  return c === 'chat_reply' || c === 'character_chat' || c.startsWith('chat_reply_');
 }
 
 export function isGetSongStyleUsageContext(usageContext: string): boolean {

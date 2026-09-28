@@ -4,7 +4,7 @@
  * ref: YTtoWP-YouTube動画をWP新規投稿で開く.js（区切り文字・引用符・不要語の除去を参考）
  */
 
-import { compoundArtistCanonicalIfKnown } from '@/lib/artist-compound-names';
+import { compoundArtistCanonicalIfKnown, protectCompoundArtistNames } from '@/lib/artist-compound-names';
 import artistHyphenNamePrefixes from '@/config/artist-hyphen-name-prefixes.json';
 
 /**
@@ -217,6 +217,8 @@ export function cleanTitle(title: string): string {
   t = stripStreamingEditionMarkers(t);
   t = stripTrailingYoutubeViewCountBoilerplate(t);
   t = stripTrailingRightsMetadata(t);
+  const wrapped = t.match(/^"(.+)"$/);
+  if (wrapped?.[1]?.trim()) t = wrapped[1].trim();
   return t;
 }
 
@@ -594,17 +596,14 @@ export function getMainArtist(artistPart: string): string {
   if (!main) return main;
   main = cleanAuthor(main);
   main = main.replace(FEAT_BLOCK, ' ').replace(/\s+/g, ' ').trim();
-  const compound = compoundArtistCanonicalIfKnown(main);
-  if (compound) return compound;
-  const byFeat = main.split(FEAT_SEPARATOR);
-  main = (byFeat[0] ?? main).trim();
-  const byAmp = main.split(COLLAB_AMP_SPLIT);
-  main = (byAmp[0] ?? main).trim();
-  const byAnd = main.split(COLLAB_AND_SPLIT);
-  main = (byAnd[0] ?? main).trim();
-  const byX = main.split(/\s+x\s+/);
-  main = (byX[0] ?? main).trim();
-  return main || artistPart.trim();
+  const protectedNames = protectCompoundArtistNames(main);
+  let head = protectedNames.text;
+  head = (head.split(FEAT_SEPARATOR)[0] ?? head).trim();
+  head = (head.split(COLLAB_AMP_SPLIT)[0] ?? head).trim();
+  head = (head.split(COLLAB_AND_SPLIT)[0] ?? head).trim();
+  head = (head.split(/\s+x\s+/)[0] ?? head).trim();
+  const restored = protectedNames.restore(head);
+  return restored || artistPart.trim();
 }
 
 /**
@@ -615,15 +614,14 @@ export function getArtistDisplayString(artistPart: string): string {
   let s = artistPart.replace(FEAT_BLOCK, ' ').replace(/\s+/g, ' ').trim();
   if (!s) return artistPart.trim();
   s = cleanAuthor(s);
-  const compound = compoundArtistCanonicalIfKnown(s);
-  if (compound) return compound;
-  const parts = s
+  const protectedNames = protectCompoundArtistNames(s);
+  const parts = protectedNames.text
     .split(FEAT_SEPARATOR)
     .flatMap((p) => p.split(COLLAB_AMP_SPLIT))
     .flatMap((p) => p.split(COLLAB_AND_SPLIT))
     .flatMap((p) => p.split(/\s+x\s+/))
     .flatMap((p) => p.split(',').map((x) => x.trim()).filter(Boolean))
-    .map((p) => cleanAuthor(p.trim()))
+    .map((p) => cleanAuthor(protectedNames.restore(p)))
     .filter((p) => Boolean(p) && !FEAT_WORDS.test(p));
   const seen = new Set<string>();
   const uniq = parts.filter((p) => {
@@ -879,6 +877,45 @@ export function parsePerformerPlaysSongFromDescription(
  * @param allowQuotedSongWithTrailingParens Genius 典型の「Artist "曲" (Live Performance)」のみ true（全体タイトルに付けると誤爆する）
  * @param allowColonQuotedSongWithTrailingParens Apple Music 典型の「Artist: "曲" (Live at …)」や「Artist: '曲' Live」のみ true
  */
+/** 曲名中の (Feat. X) / [ft. X] を客演として切り出す。(Official Video) は対象外。 */
+function detachParentheticalFeatured(songRaw: string): { song: string; featured: string | null } {
+  const names: string[] = [];
+  const song = songRaw
+    .replace(/[(\[]\s*(?:ft\.?|feat\.?|fet\.?|featuring)\s+([^)\]]+?)\s*[)\]]/gi, (_full, inner: string) => {
+      const name = String(inner).replace(/["']/g, '').trim();
+      if (name) names.push(name);
+      return ' ';
+    })
+    .replace(/\s+/g, ' ')
+    .trim();
+  return { song, featured: names.length > 0 ? names.join(', ') : null };
+}
+
+function finalizeParsedArtistSong(
+  artist: string,
+  songRaw: string,
+): { artist: string; song: string } | null {
+  let nextArtist = artist.trim();
+  let raw = songRaw.trim();
+  const lifted = detachParentheticalFeatured(raw);
+  if (lifted.featured) {
+    nextArtist = `${nextArtist} ft. ${lifted.featured}`.trim();
+    raw = lifted.song;
+  }
+  const featInSong = raw.match(/^(.+?)\s+(?:ft\.?|feat\.?|fet\.?|featuring|w\/?)\s+(.+)$/i);
+  if (featInSong) {
+    const songOnly = featInSong[1].trim();
+    const featured = stripTrailingOfficialStyleParensFromSegment(featInSong[2].trim());
+    if (songOnly && featured) {
+      nextArtist = `${nextArtist} ft. ${featured}`.trim();
+      raw = songOnly;
+    }
+  }
+  const song = cleanTitle(raw);
+  if (!nextArtist || !song) return null;
+  return { artist: nextArtist, song };
+}
+
 export function parseArtistTitle(
   title: string,
   options?: {
@@ -898,12 +935,8 @@ export function parseArtistTitle(
   // 引用符: Artist "Song Title" または Artist 'Song Title'
   const doubleQuote = raw.match(/^([^"]+)\s+"([^"]+)"\s*$/);
   if (doubleQuote) {
-    const artist = doubleQuote[1].trim();
-    const song = cleanTitle(doubleQuote[2]);
-    if (artist && song) {
-      const out = { artist, song };
-      if (!isGarbageArtistSongParse(out)) return out;
-    }
+    const out = finalizeParsedArtistSong(doubleQuote[1].trim(), doubleQuote[2]);
+    if (out && !isGarbageArtistSongParse(out)) return out;
   }
 
   if (options?.allowQuotedSongWithTrailingParens) {
@@ -912,12 +945,8 @@ export function parseArtistTitle(
       /^(.+?)\s+"([^"]+)"\s*((?:\([^)]*\)\s*)*)(\s*\|\s*[^|]*)?\s*$/i,
     );
     if (doubleQuoteWithTail) {
-      const artist = doubleQuoteWithTail[1].trim();
-      const song = cleanTitle(doubleQuoteWithTail[2]);
-      if (artist && song) {
-        const out = { artist, song };
-        if (!isGarbageArtistSongParse(out)) return out;
-      }
+      const out = finalizeParsedArtistSong(doubleQuoteWithTail[1].trim(), doubleQuoteWithTail[2]);
+      if (out && !isGarbageArtistSongParse(out)) return out;
     }
   }
 
@@ -934,32 +963,20 @@ export function parseArtistTitle(
     };
     const colonDouble = raw.match(/^(.+?):\s+"([^"]+)"\s*(.*)$/i);
     if (colonDouble && colonQuotedSuffixOk(colonDouble[3] ?? '')) {
-      const artist = colonDouble[1].trim();
-      const song = cleanTitle(colonDouble[2]);
-      if (artist && song) {
-        const out = { artist, song };
-        if (!isGarbageArtistSongParse(out)) return out;
-      }
+      const out = finalizeParsedArtistSong(colonDouble[1].trim(), colonDouble[2]);
+      if (out && !isGarbageArtistSongParse(out)) return out;
     }
     const colonSingle = raw.match(/^(.+?):\s+'([^']+)'\s*(.*)$/i);
     if (colonSingle && colonQuotedSuffixOk(colonSingle[3] ?? '')) {
-      const artist = colonSingle[1].trim();
-      const song = cleanTitle(colonSingle[2]);
-      if (artist && song) {
-        const out = { artist, song };
-        if (!isGarbageArtistSongParse(out)) return out;
-      }
+      const out = finalizeParsedArtistSong(colonSingle[1].trim(), colonSingle[2]);
+      if (out && !isGarbageArtistSongParse(out)) return out;
     }
   }
 
   const singleQuote = raw.match(/^([^']+)\s+'([^']+)'\s*$/);
   if (singleQuote) {
-    const artist = singleQuote[1].trim();
-    const song = cleanTitle(singleQuote[2]);
-    if (artist && song) {
-      const out = { artist, song };
-      if (!isGarbageArtistSongParse(out)) return out;
-    }
+    const out = finalizeParsedArtistSong(singleQuote[1].trim(), singleQuote[2]);
+    if (out && !isGarbageArtistSongParse(out)) return out;
   }
 
   // 公式MV系で多い: Artist 'Song Title' Official MV (Choreography ver.) など
@@ -974,12 +991,8 @@ export function parseArtistTitle(
       return /^(official|mv\b|music video\b|live\b|performance\b|ver\.?\b|version\b|choreography\b|dance practice\b|lyric\b|audio\b|clip\b|teaser\b)/i.test(t);
     })();
     if (tailOk) {
-      const artist = singleQuoteWithTail[1].trim();
-      const song = cleanTitle(singleQuoteWithTail[2]);
-      if (artist && song) {
-        const out = { artist, song };
-        if (!isGarbageArtistSongParse(out)) return out;
-      }
+      const out = finalizeParsedArtistSong(singleQuoteWithTail[1].trim(), singleQuoteWithTail[2]);
+      if (out && !isGarbageArtistSongParse(out)) return out;
     }
   }
 
@@ -989,50 +1002,22 @@ export function parseArtistTitle(
   const parts = rawForHyphenSplit.split(ARTIST_TITLE_SEPARATOR).map((p) => p.trim()).filter(Boolean);
   if (parts.length >= 2) {
     const hyphenMerged = mergeKnownHyphenArtistLeadingParts(parts);
-    let artist = unshieldHyphenArtists(hyphenMerged ? hyphenMerged.artist : parts[0]!);
-    let songRaw = unshieldHyphenArtists(
+    const artist = unshieldHyphenArtists(hyphenMerged ? hyphenMerged.artist : parts[0]!);
+    const songRaw = unshieldHyphenArtists(
       hyphenMerged ? hyphenMerged.songParts.join(' - ') : parts.slice(1).join(' - '),
     );
-    // 曲名側に " ft. X" / " feat. X" があれば、曲名はその前だけにし、X はアーティストに含める
-    // ※ 単独の "with" は含めない。「Be With You」「Walk with Me」等を誤って feat 扱いしないため
-    const featInSong = songRaw.match(/^(.+?)\s+(ft\.?|feat\.?|fet\.?|featuring|w\/?)\s+(.+)$/i);
-    if (featInSong) {
-      const songOnly = featInSong[1].trim();
-      let featured = stripTrailingOfficialStyleParensFromSegment(featInSong[3].trim());
-      if (songOnly && featured) {
-        artist = `${artist} ft. ${featured}`;
-        songRaw = songOnly;
-      }
-    }
-    const song = cleanTitle(songRaw);
-    if (artist && song) {
-      const out = { artist, song };
-      if (isGarbageArtistSongParse(out)) return null;
-      return out;
-    }
+    const out = finalizeParsedArtistSong(artist, songRaw);
+    if (out && !isGarbageArtistSongParse(out)) return out;
   }
 
   // ハイフンが無い「Artist | Song」（Passenger 公式など）。右側が公式タグなら分割しない
   const pipeIdx = rawForHyphenSplit.indexOf(' | ');
   if (pipeIdx > 0) {
     const left = unshieldHyphenArtists(rawForHyphenSplit.slice(0, pipeIdx).trim());
-    let songRaw = unshieldHyphenArtists(rawForHyphenSplit.slice(pipeIdx + 3).trim());
+    const songRaw = unshieldHyphenArtists(rawForHyphenSplit.slice(pipeIdx + 3).trim());
     if (left.length >= 2 && songRaw.length >= 2 && !looksLikeJunkYoutubePipeSuffix(songRaw)) {
-      let artist = left;
-      const featInSong = songRaw.match(/^(.+?)\s+(ft\.?|feat\.?|fet\.?|featuring|w\/?)\s+(.+)$/i);
-      if (featInSong) {
-        const songOnly = featInSong[1].trim();
-        const featured = stripTrailingOfficialStyleParensFromSegment(featInSong[3].trim());
-        if (songOnly && featured) {
-          artist = `${artist} ft. ${featured}`;
-          songRaw = songOnly;
-        }
-      }
-      const song = cleanTitle(songRaw);
-      if (artist && song) {
-        const out = { artist, song };
-        if (!isGarbageArtistSongParse(out)) return out;
-      }
+      const out = finalizeParsedArtistSong(left, songRaw);
+      if (out && !isGarbageArtistSongParse(out)) return out;
     }
   }
   return null;

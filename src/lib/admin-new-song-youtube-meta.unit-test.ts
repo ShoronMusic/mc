@@ -65,6 +65,16 @@ assert.equal(keepExtensionParse.corrected, false);
 assert.equal(keepExtensionParse.artist, 'KAROL G, Bruno Mars');
 assert.equal(keepExtensionParse.title, 'Still');
 
+const morelloFeat = resolveAdminNewSongMetaFromYoutube({
+  queryArtist: 'Tom Morello',
+  queryTitle: 'UNCONQUERED',
+  youtubeTitle: 'Tom Morello - "UNCONQUERED (Feat. KNEECAP)" (OFFICIAL VIDEO)',
+  youtubeChannelTitle: 'Tom Morello',
+});
+assert.equal(morelloFeat.corrected, true);
+assert.equal(morelloFeat.artist, 'Tom Morello, KNEECAP');
+assert.equal(morelloFeat.title, 'UNCONQUERED');
+
 const noSnippet = resolveAdminNewSongMetaFromYoutube({
   queryArtist: 'Bowen Hills QLD, オーストラリア',
   queryTitle: '一番近いイベント',

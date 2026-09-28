@@ -13,7 +13,24 @@ import {
   librarySelectSongBtnClass,
   librarySortChipBtnClass,
 } from '@/lib/product-branding';
+import { MusicLibrarySongList } from '@/components/music-library/MusicLibrarySongList';
 import { SongCoverThumb } from '@/components/song/SongCoverThumb';
+import type { MusicLibrarySongCard } from '@/lib/music-library-types';
+import type { MusicLibraryWeeklyChartPage } from '@/lib/music-library-query';
+import {
+  MUSIC8_NAV_STYLE_COLORS,
+  MUSIC8_NAV_STYLE_LABELS,
+  MUSIC8_NAV_STYLE_SLUGS,
+  type Music8NavStyleSlug,
+} from '@/lib/music8-catalog-slugs';
+
+type WeeklyChartRegion = 'us' | 'uk';
+
+function chartSongWatchUrl(videoId: string | null | undefined): string | null {
+  const id = (videoId ?? '').trim();
+  if (!id) return null;
+  return `https://www.youtube.com/watch?v=${encodeURIComponent(id)}`;
+}
 
 type FeaturedListItem = {
   id: string;
@@ -53,12 +70,36 @@ type FeaturedSongItem = {
   spotify_images: string | null;
 };
 
+const CHAT_WEEKLY_CHARTS: Array<{ region: WeeklyChartRegion; label: string }> = [
+  { region: 'us', label: 'US週間チャート トップ10' },
+  { region: 'uk', label: 'UK週間チャート トップ10' },
+];
+
+const CHAT_STYLE_LISTS: Array<{ slug: Exclude<Music8NavStyleSlug, 'others'>; label: string }> =
+  MUSIC8_NAV_STYLE_SLUGS.filter((slug) => slug !== 'others').map((slug) => ({
+    slug,
+    label: MUSIC8_NAV_STYLE_LABELS[slug],
+  }));
+
+type StyleSongPage = {
+  slug: string;
+  name: string;
+  cards: MusicLibrarySongCard[];
+  page: number;
+  totalPages: number;
+  totalItems: number;
+};
+
 type Props = {
   open: boolean;
   onClose: () => void;
   /** 一覧から特定ページを開く（省略時は一覧→詳細） */
   initialPageId?: string | null;
   onLibraryArtistAutoplay: (params: LibraryArtistAutoplayRequest) => void | Promise<void>;
+  /** チャートの曲を選曲。YouTube 視聴 URL */
+  onSelectSong?: (youtubeUrl: string) => void;
+  onPreviewStart?: (videoId: string) => void;
+  onPreviewStop?: () => void;
   isGuest?: boolean;
   participatesInSelection?: boolean;
   roomInteractionLocked?: boolean;
@@ -115,6 +156,9 @@ export function FeaturedPageModal({
   onClose,
   initialPageId = null,
   onLibraryArtistAutoplay,
+  onSelectSong,
+  onPreviewStart,
+  onPreviewStop,
   isGuest = false,
   participatesInSelection = true,
   roomInteractionLocked = false,
@@ -135,6 +179,34 @@ export function FeaturedPageModal({
 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmStartVideoId, setConfirmStartVideoId] = useState<string | null>(null);
+
+  const [chartRegion, setChartRegion] = useState<WeeklyChartRegion | null>(null);
+  const [chartPage, setChartPage] = useState<MusicLibraryWeeklyChartPage | null>(null);
+  const [chartLoading, setChartLoading] = useState(false);
+  const [chartError, setChartError] = useState<string | null>(null);
+  const [chartWeekLabels, setChartWeekLabels] = useState<Partial<Record<WeeklyChartRegion, string>>>({});
+
+  const [styleSlug, setStyleSlug] = useState<string | null>(null);
+  const [stylePage, setStylePage] = useState<StyleSongPage | null>(null);
+  const [styleLoading, setStyleLoading] = useState(false);
+  const [styleError, setStyleError] = useState<string | null>(null);
+
+  const loadChartWeekLabels = useCallback(async () => {
+    try {
+      const res = await fetch('/api/library/weekly-charts');
+      const data = await res.json().catch(() => ({}));
+      const items = Array.isArray(data.items) ? data.items : [];
+      const next: Partial<Record<WeeklyChartRegion, string>> = {};
+      for (const item of items) {
+        const region = item?.region === 'us' || item?.region === 'uk' ? item.region : null;
+        const label = typeof item?.chartWeekLabel === 'string' ? item.chartWeekLabel.trim() : '';
+        if (region && label) next[region] = label;
+      }
+      setChartWeekLabels(next);
+    } catch {
+      setChartWeekLabels({});
+    }
+  }, []);
 
   const loadList = useCallback(async () => {
     setListLoading(true);
@@ -186,16 +258,82 @@ export function FeaturedPageModal({
     setConfirmStartVideoId(null);
   }, []);
 
+  const resetChart = useCallback(() => {
+    setChartRegion(null);
+    setChartPage(null);
+    setChartError(null);
+    setChartLoading(false);
+  }, []);
+
+  const resetStyle = useCallback(() => {
+    setStyleSlug(null);
+    setStylePage(null);
+    setStyleError(null);
+    setStyleLoading(false);
+  }, []);
+
+  const loadChart = useCallback(async (region: WeeklyChartRegion) => {
+    setChartRegion(region);
+    setChartLoading(true);
+    setChartError(null);
+    setChartPage(null);
+    setDetail(null);
+    resetStyle();
+    resetArtistSongs();
+    try {
+      const res = await fetch(`/api/library/weekly-charts?region=${region}`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.page) {
+        setChartError(typeof data.error === 'string' ? data.error : 'チャートの取得に失敗しました。');
+        return;
+      }
+      setChartPage(data.page as MusicLibraryWeeklyChartPage);
+    } catch {
+      setChartError('チャートの取得に失敗しました。');
+    } finally {
+      setChartLoading(false);
+    }
+  }, [resetArtistSongs, resetStyle]);
+
+  const loadStyle = useCallback(async (slug: string, page = 1) => {
+    setStyleSlug(slug);
+    setStyleLoading(true);
+    setStyleError(null);
+    setDetail(null);
+    resetChart();
+    resetArtistSongs();
+    try {
+      const res = await fetch(
+        `/api/library/style-songs?slug=${encodeURIComponent(slug)}&page=${page}`,
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.page) {
+        setStyleError(typeof data.error === 'string' ? data.error : '曲一覧の取得に失敗しました。');
+        setStylePage(null);
+        return;
+      }
+      setStylePage(data.page as StyleSongPage);
+    } catch {
+      setStyleError('曲一覧の取得に失敗しました。');
+      setStylePage(null);
+    } finally {
+      setStyleLoading(false);
+    }
+  }, [resetArtistSongs, resetChart]);
+
   useEffect(() => {
     if (!open) {
       setDetail(null);
       resetArtistSongs();
+      resetChart();
+      resetStyle();
       return;
     }
+    void loadChartWeekLabels();
     void loadList().then(() => {
       if (initialPageId) void loadDetail(initialPageId);
     });
-  }, [open, initialPageId, loadList, loadDetail, resetArtistSongs]);
+  }, [open, initialPageId, loadList, loadDetail, loadChartWeekLabels, resetArtistSongs, resetChart, resetStyle]);
 
   const loadSongsForArtist = useCallback(async (artistName: string) => {
     setSongsLoading(true);
@@ -307,9 +445,24 @@ export function FeaturedPageModal({
     onClose,
   ]);
 
-  const showList = open && !detail;
-  const pageTitle = detail?.title ?? '特集';
+  const selectChartSong = useCallback(
+    (song: MusicLibrarySongCard) => {
+      const url = chartSongWatchUrl(song.videoId);
+      if (!url || !onSelectSong) return;
+      onSelectSong(url);
+      onClose();
+    },
+    [onClose, onSelectSong],
+  );
+
+  const showList = open && !detail && !chartRegion && !styleSlug;
+  const pageTitle =
+    stylePage?.name ??
+    (styleSlug ? 'スタイル' : chartPage?.title ?? (chartRegion ? '週間チャート' : (detail?.title ?? '特集')));
   const inArtistSongs = Boolean(selectedArtist);
+  const inChart = Boolean(chartRegion);
+  const inStyle = Boolean(styleSlug);
+  const inSongBrowser = inChart || inStyle;
   const listByYear = useMemo(() => groupFeaturedPagesByYear(list), [list]);
 
   const disabledReason = useMemo(() => {
@@ -318,6 +471,31 @@ export function FeaturedPageModal({
     if (roomInteractionLocked) return '操作できません';
     return null;
   }, [isGuest, participatesInSelection, roomInteractionLocked]);
+
+  const chartSelectDisabledReason = useMemo(() => {
+    if (!participatesInSelection) return '選曲に参加していないため利用できません';
+    if (roomInteractionLocked) return '操作できません';
+    if (!onSelectSong) return '選曲できません';
+    return null;
+  }, [onSelectSong, participatesInSelection, roomInteractionLocked]);
+
+  const renderSelectSong = useCallback(
+    (song: MusicLibrarySongCard) => {
+      const url = chartSongWatchUrl(song.videoId);
+      return (
+        <button
+          type="button"
+          disabled={!url || Boolean(chartSelectDisabledReason)}
+          title={chartSelectDisabledReason ?? `${song.artistName} — ${song.songTitle} を選曲`}
+          className="rounded border border-lime-500/70 bg-lime-900/50 px-2 py-0.5 text-[11px] font-semibold text-lime-100 hover:bg-lime-900/80 disabled:opacity-40"
+          onClick={() => selectChartSong(song)}
+        >
+          選曲
+        </button>
+      );
+    },
+    [chartSelectDisabledReason, selectChartSong],
+  );
 
   if (!open) return null;
 
@@ -330,9 +508,11 @@ export function FeaturedPageModal({
     >
       <div
         className={`relative flex w-full flex-col overflow-hidden rounded-lg border border-amber-700/50 bg-gray-950 shadow-xl ${
-          inArtistSongs
-            ? 'h-[min(88vh,760px)] max-w-3xl'
-            : 'max-h-[90vh] max-w-lg'
+          inSongBrowser
+            ? 'h-[min(92vh,960px)] max-w-6xl'
+            : inArtistSongs
+              ? 'h-[min(88vh,760px)] max-w-3xl'
+              : 'max-h-[90vh] max-w-lg'
         }`}
         onClick={(e) => e.stopPropagation()}
       >
@@ -367,8 +547,20 @@ export function FeaturedPageModal({
                 {detail?.ai_usage_free && !inArtistSongs ? (
                   <p className="text-[11px] text-emerald-300">この特集からの選曲は AI 使用量無料</p>
                 ) : null}
+                {inChart && chartPage ? (
+                  <p className="truncate text-[11px] text-emerald-300">
+                    {chartPage.subtitle}
+                    {chartPage.chartWeekLabel ? ` · ${chartPage.chartWeekLabel}` : ''}
+                    {chartPage.cards.length > 0 ? ` · ${chartPage.cards.length} 曲` : ''}
+                  </p>
+                ) : null}
+                {inStyle && stylePage ? (
+                  <p className="truncate text-[11px] text-emerald-300">
+                    {stylePage.page} / {stylePage.totalPages} ページ · 全 {stylePage.totalItems} 曲 · 10曲ずつ
+                  </p>
+                ) : null}
                 {inArtistSongs ? (
-                  <p className="truncate text-[11px] text-gray-400">{pageTitle}</p>
+                  <p className="truncate text-[11px] text-gray-400">{detail?.title ?? '特集'}</p>
                 ) : null}
               </div>
               <div className="flex shrink-0 gap-1">
@@ -379,6 +571,17 @@ export function FeaturedPageModal({
                     onClick={resetArtistSongs}
                   >
                     アーティスト一覧
+                  </button>
+                ) : inSongBrowser ? (
+                  <button
+                    type="button"
+                    className="rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:bg-gray-800"
+                    onClick={() => {
+                      resetChart();
+                      resetStyle();
+                    }}
+                  >
+                    一覧
                   </button>
                 ) : detail ? (
                   <button
@@ -484,6 +687,70 @@ export function FeaturedPageModal({
                   </button>
                 </footer>
               </>
+            ) : inSongBrowser ? (
+              <div className="flex min-h-0 flex-1 flex-col">
+                <div className="mc-scrollbar-stable min-h-0 flex-1 overflow-y-auto p-3 sm:p-4">
+                  {inChart ? (
+                    chartLoading ? (
+                      <p className="py-6 text-sm text-gray-400">チャートを読み込み中…</p>
+                    ) : chartError ? (
+                      <p className="py-4 text-sm text-red-300">{chartError}</p>
+                    ) : chartPage && chartPage.cards.length === 0 ? (
+                      <p className="text-sm text-gray-400">公開できる登録曲がありません。</p>
+                    ) : chartPage ? (
+                      <MusicLibrarySongList
+                        songs={chartPage.cards}
+                        groupByYear={false}
+                        onPreviewStart={onPreviewStart}
+                        onPreviewStop={onPreviewStop}
+                        renderSongAction={renderSelectSong}
+                      />
+                    ) : null
+                  ) : styleLoading && !stylePage ? (
+                    <p className="py-6 text-sm text-gray-400">曲一覧を読み込み中…</p>
+                  ) : styleError ? (
+                    <p className="py-4 text-sm text-red-300">{styleError}</p>
+                  ) : stylePage && stylePage.cards.length === 0 ? (
+                    <p className="text-sm text-gray-400">公開できる登録曲がありません。</p>
+                  ) : stylePage ? (
+                    <MusicLibrarySongList
+                      key={`${stylePage.slug}-${stylePage.page}`}
+                      songs={stylePage.cards}
+                      groupByYear={false}
+                      onPreviewStart={onPreviewStart}
+                      onPreviewStop={onPreviewStop}
+                      renderSongAction={renderSelectSong}
+                    />
+                  ) : null}
+                </div>
+                {inStyle && stylePage && stylePage.totalPages > 1 ? (
+                  <footer className="flex shrink-0 items-center justify-between gap-2 border-t border-gray-800 px-3 py-2">
+                    <button
+                      type="button"
+                      disabled={styleLoading || stylePage.page <= 1}
+                      className="rounded border border-gray-600 px-3 py-1 text-xs text-gray-200 hover:bg-gray-800 disabled:opacity-40"
+                      onClick={() => {
+                        if (styleSlug) void loadStyle(styleSlug, stylePage.page - 1);
+                      }}
+                    >
+                      前へ
+                    </button>
+                    <span className="text-xs tabular-nums text-gray-400">
+                      {stylePage.page} / {stylePage.totalPages}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={styleLoading || stylePage.page >= stylePage.totalPages}
+                      className="rounded border border-gray-600 px-3 py-1 text-xs text-gray-200 hover:bg-gray-800 disabled:opacity-40"
+                      onClick={() => {
+                        if (styleSlug) void loadStyle(styleSlug, stylePage.page + 1);
+                      }}
+                    >
+                      次へ
+                    </button>
+                  </footer>
+                ) : null}
+              </div>
             ) : (
               <div className="min-h-0 flex-1 overflow-y-auto p-3">
                 {disabledReason ? (
@@ -491,15 +758,64 @@ export function FeaturedPageModal({
                 ) : null}
 
                 {showList ? (
-                  listLoading ? (
-                    <p className="text-sm text-gray-400">読み込み中…</p>
-                  ) : listError ? (
-                    <p className="text-sm text-red-300">{listError}</p>
-                  ) : list.length === 0 ? (
-                    <p className="text-sm text-gray-500">公開中の特集はありません。</p>
-                  ) : (
-                    <div className="space-y-4">
-                      {listByYear.map((group) => (
+                  <div className="space-y-4">
+                    <section>
+                      <h3 className="mb-2 border-b border-amber-800/50 pb-1 text-sm font-semibold text-amber-100">
+                        週間チャート
+                      </h3>
+                      <ul className="space-y-2">
+                        {CHAT_WEEKLY_CHARTS.map((chart) => (
+                          <li key={chart.region}>
+                            <button
+                              type="button"
+                              className="flex w-full items-center justify-between gap-2 rounded border border-amber-500/60 bg-amber-950/30 px-3 py-2 text-left hover:border-amber-400/80 hover:bg-amber-900/40"
+                              onClick={() => void loadChart(chart.region)}
+                            >
+                              <span className="font-medium text-amber-50">{chart.label}</span>
+                              {chartWeekLabels[chart.region] ? (
+                                <span className="shrink-0 text-[11px] tabular-nums text-gray-400">
+                                  {chartWeekLabels[chart.region]}
+                                </span>
+                              ) : null}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </section>
+                    <section>
+                      <h3 className="mb-2 border-b border-amber-800/50 pb-1 text-sm font-semibold text-amber-100">
+                        スタイル別 新曲
+                      </h3>
+                      <ul className="grid grid-cols-2 gap-2">
+                        {CHAT_STYLE_LISTS.map((style) => (
+                          <li key={style.slug}>
+                            <button
+                              type="button"
+                              className="flex w-full items-stretch overflow-hidden rounded border border-amber-500/60 bg-amber-950/30 text-left hover:border-amber-400/80 hover:bg-amber-900/40"
+                              onClick={() => void loadStyle(style.slug, 1)}
+                            >
+                              <span
+                                className="w-1.5 shrink-0"
+                                style={{ backgroundColor: MUSIC8_NAV_STYLE_COLORS[style.slug] }}
+                                aria-hidden
+                              />
+                              <span className="flex min-w-0 flex-col px-3 py-2">
+                                <span className="font-medium text-amber-50">{style.label}</span>
+                                <span className="text-[11px] text-gray-400">10曲ずつ</span>
+                              </span>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </section>
+                    {listLoading ? (
+                      <p className="text-sm text-gray-400">特集を読み込み中…</p>
+                    ) : listError ? (
+                      <p className="text-sm text-red-300">{listError}</p>
+                    ) : list.length === 0 ? (
+                      <p className="text-sm text-gray-500">公開中の特集はありません。</p>
+                    ) : (
+                      listByYear.map((group) => (
                         <section key={group.label}>
                           <h3 className="mb-2 border-b border-amber-800/50 pb-1 text-sm font-semibold text-amber-100">
                             {group.label}
@@ -521,9 +837,9 @@ export function FeaturedPageModal({
                             ))}
                           </ul>
                         </section>
-                      ))}
-                    </div>
-                  )
+                      ))
+                    )}
+                  </div>
                 ) : detailLoading ? (
                   <p className="text-sm text-gray-400">読み込み中…</p>
                 ) : detailError ? (

@@ -126,7 +126,7 @@
 | 機能 | 享受 | 課金帰属（試算） |
 |------|------|------------------|
 | 30 秒無発言の豆知識（tidbit） | ○（部屋全体） | **主催者** — `room_owner` |
-| AI エージェントの選曲・解説（character_song_pick 等） | ○（部屋全体） | **主催者** — `ai_agent` |
+| AI エージェントの選曲（character_song_pick）・発言（character_chat） | ○（部屋全体） | **主催者** — `ai_agent` |
 | AI エージェント TTS（試験） | △ | **主催者** |
 | ゲストの AI 付き選曲・@ | ○（部屋として提供） | **主催者** — `guest_enjoy_owner_paid` |
 | 部屋日次サマリー生成 | ○（管理画面） | 管理操作（集計のみ） |
@@ -354,7 +354,8 @@ CSV には `youtube_quota_units` · `youtube_jpy` · `ably_messages_est` · `abl
 
 | 項目 | 内容 |
 |------|------|
-| AI エージェント選曲後の曲解説 | ブラウザから comment-pack が走ると、ログ上は選曲者の `user_id` に付く場合がある（帰属ギャップ） |
+| AI エージェント選曲後の曲解説 | ブラウザから comment-pack が走ると、ログ上は選曲者の `user_id` に付く場合がある（帰属ギャップ）。現行のエージェント選曲は `aiMode: none` で曲解説自体を付けない |
+| エージェント発言の過去ログ | `character_chat` 導入前の発言は `chat_reply`（使用者側の @質問）に含まれる。以降は `ai_agent` |
 | マイページ集計キー | `billing_user_id` 請求先 + personal / roomCommon 分割。**管理画面**も同キー |
 | スナップショット選曲数 | `room_playback_history` の時刻窓（`gathering_id` 列は未使用） |
 | ゲスト参加者行 | スナップショット参加者はログインユーザー中心（`is_guest` 行は今後拡張可） |

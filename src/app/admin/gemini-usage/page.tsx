@@ -58,6 +58,7 @@ const CONTEXT_HELP: Record<string, string> = {
   next_song_recomend: '「次に聴くなら（試験）」のおすすめ曲生成（旧キー）',
   question_guard_classify: '「@」音楽関連の二次判定（質問ガード分類）',
   character_song_pick: 'AIキャラの選曲クエリ生成（/api/ai/character-song-pick）',
+  character_chat: 'AIエージェントの発言（選曲コメント・呼びかけ返答）',
   user_taste_auto_profile: 'マイページ・履歴からの自動趣向プロフィール生成',
 };
 

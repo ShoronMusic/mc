@@ -1002,6 +1002,7 @@ export async function fetchMusicLibraryStylePage(
   styleSlug: string,
   page: number,
   catalog: LibraryCatalogFilter = musicLibraryCatalogFilter(),
+  pageSize: number = MUSIC_LIBRARY_PAGE_SIZE,
 ): Promise<{
   slug: Music8NavStyleSlug;
   name: string;
@@ -1011,9 +1012,10 @@ export async function fetchMusicLibraryStylePage(
   totalItems: number;
 }> {
   const slug = styleSlug.trim().toLowerCase() as Music8NavStyleSlug;
+  const size = Math.max(1, Math.floor(pageSize));
   const safePage = parseMusicLibraryPageParam(page) ?? 1;
-  const from = (safePage - 1) * MUSIC_LIBRARY_PAGE_SIZE;
-  const to = from + MUSIC_LIBRARY_PAGE_SIZE - 1;
+  const from = (safePage - 1) * size;
+  const to = from + size - 1;
 
   const [joinRows, joinCount] = await Promise.all([
     fetchStyleSongsViaJoin(admin, slug, catalog, { from, to }),
@@ -1022,7 +1024,7 @@ export async function fetchMusicLibraryStylePage(
 
   if (joinRows && joinCount != null) {
     const { cards } = await attachVideosToSongs(admin, joinRows);
-    const totalPages = musicLibraryTotalPages(joinCount, MUSIC_LIBRARY_PAGE_SIZE);
+    const totalPages = musicLibraryTotalPages(joinCount, size);
     return {
       slug,
       name: MUSIC8_NAV_STYLE_LABELS[slug] ?? slug,
@@ -1034,7 +1036,7 @@ export async function fetchMusicLibraryStylePage(
   }
 
   const rows = await loadStyleSongRows(admin, slug, catalog);
-  const sliced = sliceMusicLibraryPage(rows, page, MUSIC_LIBRARY_PAGE_SIZE);
+  const sliced = sliceMusicLibraryPage(rows, page, size);
   const { cards } = await attachVideosToSongs(admin, sliced.items);
   return {
     slug,

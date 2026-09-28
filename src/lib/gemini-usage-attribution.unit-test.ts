@@ -17,6 +17,10 @@ assert(
   'character_song_pick -> ai_agent',
 );
 assert(
+  getGeminiUsageAttributionRule('character_chat').billingKind === 'ai_agent',
+  'character_chat -> ai_agent',
+);
+assert(
   getGeminiUsageAttributionRule('liked_song_axis_explore').billingKind === 'room_owner',
   'liked_song_axis_explore -> room_owner',
 );

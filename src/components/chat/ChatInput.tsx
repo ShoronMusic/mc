@@ -3269,6 +3269,14 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
           open={featuredOpen}
           onClose={() => setFeaturedOpen(false)}
           onLibraryArtistAutoplay={onLibraryArtistAutoplay}
+          onSelectSong={(youtubeUrl) => {
+            if (!onVideoUrl || roomInteractionLocked) return;
+            onVideoUrl(youtubeUrl);
+            setValue('');
+            setFeaturedOpen(false);
+          }}
+          onPreviewStart={onPreviewStart}
+          onPreviewStop={onPreviewStop}
           isGuest={isGuest}
           participatesInSelection={participatesInSelection}
           roomInteractionLocked={roomInteractionLocked}

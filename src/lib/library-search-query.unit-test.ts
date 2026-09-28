@@ -48,6 +48,10 @@ function run() {
   assert.equal(primaryArtistForLibraryIndex('Tyler, The Creator'), 'Tyler, The Creator');
   assert.equal(primaryArtistForLibraryIndex('Tyler, the Creator'), 'Tyler, The Creator');
   assert.equal(primaryArtistForLibraryIndex('Christine and the Queens'), 'Christine and the Queens');
+  assert.equal(
+    primaryArtistForLibraryIndex('Tegan and Sara, Lights, Felix Cartal'),
+    'Tegan and Sara',
+  );
 
   const index = [
     { main_artist: 'Oasis' },

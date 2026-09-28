@@ -101,6 +101,10 @@ const RULES: Record<string, GeminiUsageAttributionRule> = {
     billingKind: 'ai_agent',
     descriptionJa: 'AI エージェント選曲（主催者原価）',
   },
+  character_chat: {
+    billingKind: 'ai_agent',
+    descriptionJa: 'AI エージェント発言（主催者原価）',
+  },
 };
 
 const DEFAULT_RULE: GeminiUsageAttributionRule = {

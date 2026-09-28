@@ -34,6 +34,12 @@ export type MusicLibrarySongListProps = {
   groupByYear?: boolean;
   /** いま開いている Genre BEST の slug。当該ラベルは曲行に出さない */
   omitGenreBestSlug?: string | null;
+  /** 曲行の右端。チャット特集の選曲ボタンなど */
+  renderSongAction?: (song: MusicLibrarySongCard) => ReactNode;
+  /** プレビュー再生開始（部屋本体をミュートする用途） */
+  onPreviewStart?: (videoId: string) => void;
+  /** プレビュー終了 */
+  onPreviewStop?: () => void;
 };
 
 export function MusicLibrarySongList({
@@ -47,6 +53,9 @@ export function MusicLibrarySongList({
   pageArtist = null,
   groupByYear = true,
   omitGenreBestSlug = null,
+  renderSongAction,
+  onPreviewStart,
+  onPreviewStop,
 }: MusicLibrarySongListProps) {
   const router = useRouter();
   const isStyleAdmin = useMusicLibraryStyleAdmin();
@@ -131,9 +140,15 @@ export function MusicLibrarySongList({
     });
   }, []);
 
+  const onPreviewStartRef = useRef(onPreviewStart);
+  const onPreviewStopRef = useRef(onPreviewStop);
+  onPreviewStartRef.current = onPreviewStart;
+  onPreviewStopRef.current = onPreviewStop;
+
   useEffect(() => {
     return () => {
       if (skipTimer.current != null) window.clearTimeout(skipTimer.current);
+      onPreviewStopRef.current?.();
     };
   }, []);
 
@@ -269,7 +284,10 @@ export function MusicLibrarySongList({
                 videoId={current.videoId}
                 playNonce={playNonce}
                 iframeTitle={`${current.artistName} — ${current.songTitle}`}
-                onPlaying={() => setIsPlaying(true)}
+                onPlaying={() => {
+                  setIsPlaying(true);
+                  if (current.videoId) onPreviewStartRef.current?.(current.videoId);
+                }}
                 onPausedOrEnded={() => setIsPlaying(false)}
                 onEnded={scheduleSkip}
                 onError={() => {
@@ -423,8 +441,9 @@ export function MusicLibrarySongList({
                     })}
                   </p>
                 </div>
-                <div className="flex shrink-0 flex-col items-end gap-0.5">
+                <div className="flex shrink-0 flex-col items-end gap-1">
                   <span className={dateClass}>{formatMusicLibraryYearMonth(song.releaseDate) ?? ''}</span>
+                  {renderSongAction ? renderSongAction(song) : null}
                   {(song.genreLinks?.length ?? 0) > 0 || isStyleAdmin ? (
                     <button
                       type="button"

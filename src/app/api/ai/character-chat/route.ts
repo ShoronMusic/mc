@@ -148,6 +148,7 @@ export async function POST(request: Request) {
         userTasteSummary,
         personaInstruction: CHARACTER_PERSONA_INSTRUCTION + selectorHint,
         characterSelfDisplayName: aiCharacterDisplayName || null,
+        usageLogContext: 'character_chat',
       },
     );
     if (text == null || !String(text).trim()) {

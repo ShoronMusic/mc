@@ -410,6 +410,10 @@ export default function AdminUserBillingUsagePage() {
 
       <p className="mt-6 text-xs text-gray-600">
         関連:{' '}
+        <Link href="/admin/ai-usage-fee-breakdown" className="text-blue-400 hover:underline">
+          AI 使用料（月・日・累計）
+        </Link>
+        {' · '}
         <Link href="/admin/room-cost-summary" className="text-blue-400 hover:underline">
           部屋原価サマリー
         </Link>

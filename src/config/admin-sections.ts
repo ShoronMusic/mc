@@ -62,6 +62,13 @@ export const ADMIN_SECTIONS: AdminSection[] = [
     category: 'billing',
   },
   {
+    href: '/admin/ai-usage-fee-breakdown',
+    title: 'AI 使用料（月・日・累計）',
+    description:
+      '曲解説・クイズ・おすすめ・エージェント発言・選曲などを、使用者負担と主催者負担で月別・日別・累計表示',
+    category: 'billing',
+  },
+  {
     href: '/admin/user-billing-usage',
     title: 'ユーザー別 AI 利用（課金帰属）',
     description:
