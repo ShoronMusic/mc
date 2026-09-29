@@ -7,6 +7,7 @@ import {
   getPostCommentaryRecommendDisplayDelayMs,
   POST_COMMENTARY_QUIZ_GAP_MS,
   POST_QUIZ_RECOMMEND_GAP_MS,
+  resolveFreeCommentaryArrivalStaggerMs,
   resolvePostCommentaryPace,
 } from './post-commentary-followup-timing';
 
@@ -78,5 +79,28 @@ assert.equal(tiny.compressed, true);
 
 assert.ok(getPostCommentaryFixedTailMs({ quizEnabled: true, recommendEnabled: true }) >
   getPostCommentaryFixedTailMs({ quizEnabled: false, recommendEnabled: false }));
+
+/** 曲終盤に自由解説が届いたら、間隔を待たずすぐ出す */
+assert.equal(
+  resolveFreeCommentaryArrivalStaggerMs({
+    remainingPlaybackMs: 12_000,
+    freeSlotCount: 4,
+    quizEnabled: true,
+    recommendEnabled: true,
+    aiAgentParticipating: false,
+  }),
+  0,
+);
+/** 余裕があるときは理想間隔のまま */
+assert.equal(
+  resolveFreeCommentaryArrivalStaggerMs({
+    remainingPlaybackMs: 6 * 60_000,
+    freeSlotCount: 4,
+    quizEnabled: false,
+    recommendEnabled: false,
+    aiAgentParticipating: false,
+  }),
+  COMMENT_PACK_FREE_STAGGER_IDEAL_MS,
+);
 
 console.log('post-commentary-followup-timing.unit-test.ts: ok');

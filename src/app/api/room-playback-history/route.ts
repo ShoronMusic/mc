@@ -153,9 +153,10 @@ export async function GET(request: Request) {
   }
 
   const historyProduct = getRoomHistoryProductId();
+  const db = createAdminClient() ?? supabase;
 
   const historyRes = await runRoomHistoryQueryScoped((scopeProduct) => {
-    let historyQuery = supabase
+    let historyQuery = db
       .from('room_playback_history')
       .select(
         'id, room_id, video_id, display_name, is_guest, played_at, title, artist_name, style, selection_round',
@@ -201,7 +202,7 @@ export async function GET(request: Request) {
   }));
   const videoIds = Array.from(new Set(items.map((r) => r.video_id).filter(Boolean)));
   if (videoIds.length > 0) {
-    const { data: eraRows, error: eraError } = await supabase
+    const { data: eraRows, error: eraError } = await db
       .from('song_era')
       .select('video_id, era')
       .in('video_id', videoIds);
@@ -297,10 +298,11 @@ export async function POST(request: Request) {
 
   const cutoff = new Date(Date.now() - TWO_MINUTES_MS).toISOString();
   const historyProduct = getRoomHistoryProductId();
+  const historyDb = createAdminClient() ?? supabase;
 
   if (userId) {
     const dupRes = await runRoomHistoryQueryScoped((scopeProduct) => {
-      let q = supabase
+      let q = historyDb
         .from('room_playback_history')
         .select('id')
         .eq('room_id', roomId)
@@ -317,7 +319,7 @@ export async function POST(request: Request) {
     }
   } else {
     const dupRes = await runRoomHistoryQueryScoped((scopeProduct) => {
-      let q = supabase
+      let q = historyDb
         .from('room_playback_history')
         .select('id')
         .eq('room_id', roomId)
@@ -565,7 +567,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    await getOrAssignEra(supabase, videoId, {
+    await getOrAssignEra(songDbClient, videoId, {
       songTitle: (song ?? title ?? videoId) as string,
       artistName: artist,
       oembedTitle: title,
@@ -613,16 +615,16 @@ export async function POST(request: Request) {
     insertPlayback.selection_round = selectionRound;
   }
 
-  let { error } = await supabase.from('room_playback_history').insert(insertPlayback);
+  let { error } = await songDbClient.from('room_playback_history').insert(insertPlayback);
 
   if (error && (error.code === '42703' || error.message?.includes('product'))) {
     const legacy = { ...insertPlayback };
     delete legacy.product;
-    ({ error } = await supabase.from('room_playback_history').insert(legacy));
+    ({ error } = await songDbClient.from('room_playback_history').insert(legacy));
   }
 
   if (!error && songId) {
-    await incrementSongPlayCount(supabase, songId);
+    await incrementSongPlayCount(songDbClient, songId);
   }
 
   if (error) {

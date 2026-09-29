@@ -5,6 +5,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { resolveYoutubeChannelHref } from '@/lib/music8-artist-display';
 import { buildPersistableMusic8SongSnapshot } from '@/lib/music8-song-persist';
 import {
@@ -672,8 +673,8 @@ async function patchSongMainArtistWhenMusic8Canonical(
 }
 
 export async function upsertSongAndVideo(params: UpsertSongAndVideoParams): Promise<string | null> {
+  const supabase = createAdminClient() ?? params.supabase;
   const {
-    supabase,
     videoId,
     mainArtist,
     songTitle,
@@ -940,27 +941,28 @@ export async function attachMusic8SongDataIfFetched(
   songId: string | null,
   music8RootJson: unknown,
 ): Promise<void> {
-  if (!supabase || !songId?.trim()) return;
+  const db = createAdminClient() ?? supabase;
+  if (!db || !songId?.trim()) return;
   if (music8RootJson == null || typeof music8RootJson !== 'object' || Array.isArray(music8RootJson)) {
     return;
   }
   const snap = buildPersistableMusic8SongSnapshot(music8RootJson);
   if (!snap) return;
-  await patchSongMusic8SongData(supabase, songId.trim(), snap);
+  await patchSongMusic8SongData(db, songId.trim(), snap);
   const ex = extractMusic8SongFields(music8RootJson);
   try {
-    await syncSongLibraryColumnsFromMusic8Extract(supabase, songId.trim(), ex, music8RootJson);
-    await patchSongFutureColumnsFromMusic8(supabase, songId.trim(), ex, snap);
-    const { data: curRow } = await supabase
+    await syncSongLibraryColumnsFromMusic8Extract(db, songId.trim(), ex, music8RootJson);
+    await patchSongFutureColumnsFromMusic8(db, songId.trim(), ex, snap);
+    const { data: curRow } = await db
       .from('songs')
       .select('main_artist')
       .eq('id', songId.trim())
       .maybeSingle();
     const curMain = (curRow as { main_artist?: string | null } | null)?.main_artist ?? null;
-    await syncArtistMasterFromMusic8(supabase, songId.trim(), curMain, snap);
-    await patchSongMainArtistWhenMusic8Canonical(supabase, songId.trim(), curMain, snap);
+    await syncArtistMasterFromMusic8(db, songId.trim(), curMain, snap);
+    await patchSongMainArtistWhenMusic8Canonical(db, songId.trim(), curMain, snap);
     if (process.env.MUSIC8_BULK_SKIP_SONG_CREDITS?.trim() !== '1') {
-      await syncSongCreditsFromSongId(supabase, songId.trim(), true);
+      await syncSongCreditsFromSongId(db, songId.trim(), true);
     }
   } catch (e) {
     console.warn('[song-entities] syncSongLibraryColumnsFromMusic8Extract (attach)', e);
@@ -976,9 +978,10 @@ export async function updateSongStyle(
   songId: string | null,
   style: string | null
 ): Promise<boolean> {
-  if (!supabase || !songId || !style || !style.trim()) return false;
+  const db = createAdminClient() ?? supabase;
+  if (!db || !songId || !style || !style.trim()) return false;
 
-  const { error } = await supabase
+  const { error } = await db
     .from('songs')
     .update({ style: style.trim() })
     .eq('id', songId);
@@ -996,14 +999,15 @@ export async function updateSongStyleIfEmpty(
   songId: string | null,
   style: string | null,
 ): Promise<boolean> {
-  if (!supabase || !songId || !style || !style.trim()) return false;
-  const { data, error } = await supabase.from('songs').select('style').eq('id', songId).maybeSingle();
+  const db = createAdminClient() ?? supabase;
+  if (!db || !songId || !style || !style.trim()) return false;
+  const { data, error } = await db.from('songs').select('style').eq('id', songId).maybeSingle();
   if (error && error.code !== '42P01' && error.code !== '42703') {
     console.error('[song-entities] updateSongStyleIfEmpty select', error.code, error.message);
   }
   const existing = parseUsableSongStyle(typeof data?.style === 'string' ? data.style : null);
   if (existing) return true;
-  return updateSongStyle(supabase, songId, style);
+  return updateSongStyle(db, songId, style);
 }
 
 /**
@@ -1055,16 +1059,17 @@ export async function incrementSongPlayCount(
   supabase: SupabaseClient | null,
   songId: string | null
 ): Promise<void> {
-  if (!supabase || !songId) return;
+  const db = createAdminClient() ?? supabase;
+  if (!db || !songId) return;
 
-  const { data } = await supabase
+  const { data } = await db
     .from('songs')
     .select('play_count')
     .eq('id', songId)
     .maybeSingle();
 
   const current = Math.max(0, Number((data as { play_count?: number } | null)?.play_count) || 0);
-  const { error } = await supabase
+  const { error } = await db
     .from('songs')
     .update({ play_count: current + 1 })
     .eq('id', songId);

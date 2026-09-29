@@ -51,6 +51,10 @@ import {
   copyeditGemmaCommentaryBodies,
   copyeditGemmaCommentaryText,
 } from '@/lib/gemma-commentary-copyedit';
+import {
+  looksIncompleteSongCommentary,
+  trimCommentaryToLastCompleteSentence,
+} from '@/lib/song-commentary-completeness';
 import { persistGeminiUsageLog, buildGeminiUsagePersistMeta } from '@/lib/gemini-usage-log';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { attachMusic8SongDataIfFetched, upsertSongAndVideo } from '@/lib/song-entities';
@@ -314,6 +318,14 @@ ${secondaryHint}・世界的知名度の高い客演者がいる一曲では、�
  * - メタからアーティストを信頼できない（曲名も空・キュレーターchでアップローダー名=アーティスト等）は skipAiCommentary。AI_COMMENTARY_ALLOW_UNCERTAIN_ARTIST=1 で無効化
  * - YouTube タイトル／説明が宣伝文・長文プローズっぽいときは skipAiCommentary（skipReason: promotional_metadata）。視聴履歴の表記修正でタイトルが付いているときはスキップしない。AI_COMMENTARY_SKIP_PROMO_METADATA=0 で無効化
  */
+/** 句点まで届いている本文。途中切れは最後の完結文だけ残し、それも無ければ空 */
+function commentaryReadyToPublish(visible: string): string {
+  const t = visible.trim();
+  if (!t) return '';
+  if (!looksIncompleteSongCommentary(t)) return t;
+  return trimCommentaryToLastCompleteSentence(t);
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json().catch(() => ({}));
@@ -1111,7 +1123,10 @@ ${basePromptTail}`;
       let basePromptUse = basePrompt;
       while (baseAttempt < 2) {
         baseAttempt += 1;
-        const baseResult = await model.generateContent(basePromptUse);
+        const baseResult = await model.generateContent({
+          contents: [{ role: 'user', parts: [{ text: basePromptUse }] }],
+          generationConfig: { maxOutputTokens: 1024, temperature: 0.4 },
+        });
         logGeminiUsage('comment_pack_base', baseResult.response);
         await persistGeminiUsageLog('comment_pack_base', baseResult.response.usageMetadata, selectorGeminiLogMeta);
         /** Gemma は polish 前の原文を清書へ渡す（思考漏れごと消えると解説01が欠ける） */
@@ -1338,6 +1353,7 @@ ${isRemixFocusTopic ? banBlockRemixFocus : isCoverFocusTopic ? banBlockCoverFocu
 出力ルール:
 ・日本語、です・ます調。
 ・2〜4文、60〜140文字程度。
+・必ず句点（。）で終える。人名や文を途中で切らない。
 ・前置きは短く。「豆知識ですが」は使わない。
 ・この1本だけを出力してください。説明や箇条書きは禁止。
 ・英語の思考過程・メタメモは禁止（チャット掲載用の本文のみ）。
@@ -1370,7 +1386,10 @@ ${isRemixFocusTopic ? banBlockRemixFocus : isCoverFocusTopic ? banBlockCoverFocu
           filteredFreeIndices.map(async (i) => {
             try {
               const p0 = buildFreePrompt(i, usedParallel, parallelRoleLines);
-              const res = await model.generateContent(p0);
+              const res = await model.generateContent({
+                contents: [{ role: 'user', parts: [{ text: p0 }] }],
+                generationConfig: { maxOutputTokens: 1024, temperature: 0.4 },
+              });
               logGeminiUsage(`comment_pack_free_${i + 1}`, res.response);
               await persistGeminiUsageLog(`comment_pack_free_${i + 1}`, res.response.usageMetadata, selectorGeminiLogMeta);
               draftTexts[i] = isGemmaHostedModelId(commentPackModelId)
@@ -1405,13 +1424,17 @@ ${isRemixFocusTopic ? banBlockRemixFocus : isCoverFocusTopic ? banBlockCoverFocu
           : parallelRaw;
 
         const policyHonorsParallel = isHonorsTopic;
+        const readyParallel = commentaryReadyToPublish(parallelTxt);
         const okParallel =
-          parallelTxt.length > 0 &&
-          !containsUnreliableCommentPackClaim(parallelTxt, policyHonorsParallel) &&
-          !isSimilarToExistingComment(parallelTxt, [baseText, ...existingFreeBodies()]);
+          readyParallel.length > 0 &&
+          !containsUnreliableCommentPackClaim(readyParallel, policyHonorsParallel) &&
+          !isSimilarToExistingComment(readyParallel, [baseText, ...existingFreeBodies()]);
 
         if (okParallel) {
-          freeComments[i] = isGemmaHostedModelId(commentPackModelId) ? parallelRaw : parallelTxt;
+          freeComments[i] =
+            isGemmaHostedModelId(commentPackModelId) && !looksIncompleteSongCommentary(parallelTxt)
+              ? parallelRaw
+              : readyParallel;
           continue;
         }
 
@@ -1422,7 +1445,10 @@ ${isRemixFocusTopic ? banBlockRemixFocus : isCoverFocusTopic ? banBlockCoverFocu
           let prompt = buildFreePrompt(i, used || 'まだありません', '');
           while (attempt < maxAttempts) {
             attempt += 1;
-            const res = await model.generateContent(prompt);
+            const res = await model.generateContent({
+              contents: [{ role: 'user', parts: [{ text: prompt }] }],
+              generationConfig: { maxOutputTokens: 1024, temperature: 0.4 },
+            });
             logGeminiUsage(`comment_pack_free_${i + 1}`, res.response);
             await persistGeminiUsageLog(`comment_pack_free_${i + 1}`, res.response.usageMetadata, selectorGeminiLogMeta);
             const txtRaw = isGemmaHostedModelId(commentPackModelId)
@@ -1433,13 +1459,17 @@ ${isRemixFocusTopic ? banBlockRemixFocus : isCoverFocusTopic ? banBlockCoverFocu
               : txtRaw;
             /** 3回目は栄誉枠でもチャート数字を避けるフォールバック → 歌詞・サウンド枠と同じ厳しさで通す */
             const policyHonors = isHonorsTopic && attempt < maxAttempts;
-            const tooSimilar = isSimilarToExistingComment(txt, [baseText, ...existingFreeBodies()]);
-            if (txt && !containsUnreliableCommentPackClaim(txt, policyHonors) && !tooSimilar) {
-              freeComments[i] = isGemmaHostedModelId(commentPackModelId) ? txtRaw : txt;
+            const ready = commentaryReadyToPublish(txt);
+            const tooSimilar = isSimilarToExistingComment(ready || txt, [baseText, ...existingFreeBodies()]);
+            if (ready && !containsUnreliableCommentPackClaim(ready, policyHonors) && !tooSimilar) {
+              freeComments[i] =
+                isGemmaHostedModelId(commentPackModelId) && !looksIncompleteSongCommentary(txt)
+                  ? txtRaw
+                  : ready;
               break;
             }
             if (attempt >= maxAttempts) {
-              if (!txt || containsUnreliableCommentPackClaim(txt, policyHonors) || tooSimilar) {
+              if (!ready || containsUnreliableCommentPackClaim(ready || txt, policyHonors) || tooSimilar) {
                 console.warn(
                   '[comment-pack] free comment slot',
                   i + 1,

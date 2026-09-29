@@ -1,4 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { createAdminClient } from '@/lib/supabase/admin';
+
+function tidbitDb(passed: SupabaseClient | null): SupabaseClient | null {
+  return createAdminClient() ?? passed;
+}
 
 /** 基本コメントに続けて出す自由コメントの本数（最大） */
 export const COMMENT_PACK_MAX_FREE_COMMENTS = 4;
@@ -34,13 +39,14 @@ export async function insertTidbit(
   supabase: SupabaseClient | null,
   params: InsertSongTidbitParams,
 ): Promise<SongTidbitRow | null> {
-  if (!supabase) return null;
+  const db = tidbitDb(supabase);
+  if (!db) return null;
 
   const { songId, videoId, body, source, isActive = true } = params;
   const trimmed = body.trim();
   if (!trimmed || !songId) return null;
 
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from('song_tidbits')
     .insert({
       song_id: songId,
@@ -94,10 +100,11 @@ export async function getStoredNewReleaseCommentPack(
   supabase: SupabaseClient | null,
   videoId: string
 ): Promise<{ baseComment: string; freeComments: []; tidbitIds?: string[] } | null> {
-  if (!supabase || !videoId.trim()) return null;
+  const db = tidbitDb(supabase);
+  if (!db || !videoId.trim()) return null;
   const vid = videoId.trim();
 
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from('song_tidbits')
     .select('id, body')
     .eq('video_id', vid)
@@ -125,10 +132,11 @@ export async function getStoredBaseOnlyCommentPackByVideoId(
   supabase: SupabaseClient | null,
   videoId: string
 ): Promise<{ baseComment: string; freeComments: []; tidbitIds?: string[] } | null> {
-  if (!supabase || !videoId.trim()) return null;
+  const db = tidbitDb(supabase);
+  if (!db || !videoId.trim()) return null;
   const vid = videoId.trim();
 
-  const { data: baseRow, error: e1 } = await supabase
+  const { data: baseRow, error: e1 } = await db
     .from('song_tidbits')
     .select('id, body')
     .eq('video_id', vid)
@@ -145,7 +153,7 @@ export async function getStoredBaseOnlyCommentPackByVideoId(
   const body = typeof baseRow?.body === 'string' ? baseRow.body.trim() : '';
   if (!body || bodyHasNewReleaseCacheMarker(body)) return null;
 
-  const { data: chat1, error: e2 } = await supabase
+  const { data: chat1, error: e2 } = await db
     .from('song_tidbits')
     .select('id')
     .eq('video_id', vid)
@@ -172,13 +180,14 @@ export async function getStoredCommentPackByVideoId(
   supabase: SupabaseClient | null,
   videoId: string
 ): Promise<StoredCommentPack | null> {
-  if (!supabase || !videoId.trim()) return null;
+  const db = tidbitDb(supabase);
+  if (!db || !videoId.trim()) return null;
   const vid = videoId.trim();
   const base: Partial<Record<(typeof COMMENT_PACK_SOURCES)[number], string>> = {};
   const tidbitIds: string[] = [];
 
   for (const src of COMMENT_PACK_SOURCES) {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('song_tidbits')
       .select('id, body')
       .eq('video_id', vid)
@@ -212,7 +221,8 @@ export async function getStoredAiCommentaryForRead(
   supabase: SupabaseClient | null,
   videoId: string,
 ): Promise<{ baseComment: string; freeComments: string[] } | null> {
-  if (!supabase || !videoId.trim()) return null;
+  const db = tidbitDb(supabase);
+  if (!db || !videoId.trim()) return null;
   const vid = videoId.trim();
 
   const full = await getStoredCommentPackByVideoId(supabase, vid);
@@ -223,7 +233,7 @@ export async function getStoredAiCommentaryForRead(
     };
   }
 
-  const { data: baseRow, error: baseErr } = await supabase
+  const { data: baseRow, error: baseErr } = await db
     .from('song_tidbits')
     .select('body')
     .eq('video_id', vid)
@@ -242,7 +252,7 @@ export async function getStoredAiCommentaryForRead(
 
   const freeComments: string[] = [];
   for (const src of ['ai_chat_1', 'ai_chat_2', 'ai_chat_3', 'ai_chat_4'] as const) {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('song_tidbits')
       .select('body')
       .eq('video_id', vid)

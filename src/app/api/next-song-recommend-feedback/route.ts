@@ -66,7 +66,7 @@ export async function POST(request: Request) {
     is_duplicate: false,
     free_comment: comment || null,
   };
-  const { error } = await supabase.from('comment_feedback').insert(row);
+  const { error } = await admin.from('comment_feedback').insert(row);
   if (error) {
     if (error.code === '42P01') {
       return NextResponse.json({ error: 'comment_feedback テーブルがありません。' }, { status: 503 });

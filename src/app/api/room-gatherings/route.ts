@@ -88,6 +88,7 @@ export async function POST(request: Request) {
   if (!supabase) {
     return NextResponse.json({ error: 'DBが利用できません。' }, { status: 503 });
   }
+  const db = createAdminClient() ?? supabase;
 
   const { data: { user } } = await supabase.auth.getUser();
   if (!user?.id) {
@@ -117,7 +118,7 @@ export async function POST(request: Request) {
 
     if (!roomId && autoAssign) {
       const { data: liveRows, error: liveErr } = await runGatheringQueryScoped((scopeProduct) => {
-        let q = supabase
+        let q = db
           .from('room_gatherings')
           .select('room_id')
           .eq('status', 'live')
@@ -150,7 +151,7 @@ export async function POST(request: Request) {
     }
 
     const { data: existingRaw, error: selErr } = await runGatheringQueryScoped((scopeProduct) => {
-      let q = supabase
+      let q = db
         .from('room_gatherings')
         .select('id, created_by')
         .eq('room_id', roomId)
@@ -195,7 +196,7 @@ export async function POST(request: Request) {
       let stale = await endStaleLiveGatheringIfNeeded(adminStale, roomId);
       if (!stale.ended) {
         const { data: hostedRaw } = await runGatheringQueryScoped((scopeProduct) => {
-          let q = supabase
+          let q = db
             .from('room_gatherings')
             .select('id')
             .eq('room_id', roomId)
@@ -221,7 +222,7 @@ export async function POST(request: Request) {
     }
 
     const countMyLiveGatherings = async (scopeProduct: boolean) => {
-      let q = supabase
+      let q = db
         .from('room_gatherings')
         .select('*', { count: 'exact', head: true })
         .eq('created_by', user.id)
@@ -257,7 +258,7 @@ export async function POST(request: Request) {
     let inserted: { id: string; room_id: string; title: string; started_at: string } | null = null;
     let insErr: { code?: string; message?: string } | null = null;
     {
-      const res = await supabase
+      const res = await db
         .from('room_gatherings')
         .insert({
           room_id: roomId,
@@ -273,7 +274,7 @@ export async function POST(request: Request) {
       insErr = res.error;
     }
     if (insErr && isMissingProductColumnError(insErr)) {
-      const res = await supabase
+      const res = await db
         .from('room_gatherings')
         .insert({
           room_id: roomId,
@@ -313,7 +314,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'roomId が不正です。' }, { status: 400 });
     }
     const { data: updatedRaw, error: updErr } = await runGatheringQueryScoped((scopeProduct) => {
-      let q = supabase
+      let q = db
         .from('room_gatherings')
         .update({
           status: 'ended',
@@ -370,7 +371,7 @@ export async function POST(request: Request) {
     }
 
     const { data: renamedRaw, error: updErr } = await runGatheringQueryScoped((scopeProduct) => {
-      let q = supabase
+      let q = db
         .from('room_gatherings')
         .update({ title })
         .eq('room_id', roomId)
@@ -445,7 +446,7 @@ export async function POST(request: Request) {
     }
 
     const { data: lockUpdatedRaw, error: updErr } = await runGatheringQueryScoped((scopeProduct) => {
-      let q = supabase
+      let q = db
         .from('room_gatherings')
         .update({ join_locked: body.locked })
         .eq('room_id', roomId)
@@ -495,6 +496,7 @@ export async function GET() {
   if (!supabase) {
     return NextResponse.json({ error: 'DBが利用できません。' }, { status: 503 });
   }
+  const db = createAdminClient() ?? supabase;
 
   const { data: { user } } = await supabase.auth.getUser();
   if (!user?.id) {
@@ -502,7 +504,7 @@ export async function GET() {
   }
 
   const { data: rowsRaw, error } = await runGatheringQueryScoped((scopeProduct) => {
-    let q = supabase
+    let q = db
       .from('room_gatherings')
       .select('room_id, title, status, started_at')
       .eq('created_by', user.id)
@@ -553,7 +555,7 @@ export async function GET() {
 
     if (safeExtraRoomIds.length > 0) {
       const { data: extraRowsRaw, error: extraErr } = await runGatheringQueryScoped((scopeProduct) => {
-        let q = supabase
+        let q = db
           .from('room_gatherings')
           .select('room_id, title, status, started_at')
           .in('room_id', safeExtraRoomIds)

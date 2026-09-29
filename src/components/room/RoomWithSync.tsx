@@ -106,6 +106,7 @@ import { startPostCommentaryFollowups } from '@/lib/schedule-post-commentary-fol
 import {
   POST_COMMENTARY_QUIZ_GAP_MS,
   readRemainingPlaybackMsFromPlayer,
+  resolveFreeCommentaryArrivalStaggerMs,
   resolvePostCommentaryPace,
 } from '@/lib/post-commentary-followup-timing';
 import {
@@ -2605,7 +2606,8 @@ export default function RoomWithSync({
           handlePassPhraseFromClientRef.current(senderId, data.displayName ?? 'ゲスト');
         }
       }
-      // 次の選曲案内が出たら、全クライアントで遅延中の自由コメントを破棄（案内の後に旧曲の解説が続かないように）
+      // 次曲の案内が出ても、次曲が未セットなら解説の表示は残す（曲終了後に解説を完結させる）。
+      // 次曲が再生されて videoId が変わったときに未表示タイマーを捨てる。
       if (data.messageType === 'ai') {
         const bodyAi = data.body ?? '';
         if (
@@ -2613,10 +2615,6 @@ export default function RoomWithSync({
           /次の曲をどうぞ/.test(bodyAi) ||
           /^5分経過しましたので、/.test(bodyAi.trim())
         ) {
-          if (freeCommentTimeoutsRef.current.length > 0) {
-            freeCommentTimeoutsRef.current.forEach((t) => clearTimeout(t));
-            freeCommentTimeoutsRef.current = [];
-          }
           clearPendingSongQuizRoundState();
           suppressTidbitRef.current = false;
         }
@@ -5585,6 +5583,8 @@ export default function RoomWithSync({
               aiAgentParticipating: ownerAiCharacterJoinEnabledRef.current,
             });
             const freeStaggerMs = paceFrees.freeStaggerMs;
+            /** 自由解説が曲終盤に届いたときは、基本解説時点の間隔を使わずすぐ出す */
+            let freeStaggerMsLive = freeStaggerMs;
 
             const filledForSlot: string[] = Array.from(
               { length: COMMENT_PACK_MAX_FREE_COMMENTS },
@@ -5635,13 +5635,14 @@ export default function RoomWithSync({
                   continue;
                 }
                 scheduledForSlot[i] = true;
-                const delayMs = (shownIdx2 + 1) * freeStaggerMs;
+                const delayMs =
+                  freeStaggerMsLive <= 0 ? 0 : (shownIdx2 + 1) * freeStaggerMsLive;
                 // オーナー設定のスロット番号と一致させる（slot0..3 => ラベル02..05）
                 const labelNoForThisMessage = i + 2;
                 shownIdx2 += 1;
                 const tidN = tidForSlot[i] ?? parseTidbitIdFromPack(idsPhase[i + 1]);
                 const prefixI = prefixForSlot[i];
-                const timer = setTimeout(() => {
+                const publishFree = () => {
                   if (videoIdRef.current !== vid) return;
                   const freeLabelNo = String(labelNoForThisMessage).padStart(2, '0');
                   addAiMessage(`${buildCommentaryUiLabel(freeLabelNo)} ${prefixI + c}`, {
@@ -5651,8 +5652,13 @@ export default function RoomWithSync({
                     aiSource: 'tidbit',
                   });
                   touchActivity();
-                }, delayMs);
-                freeCommentTimeoutsRef.current.push(timer);
+                };
+                if (delayMs <= 0) {
+                  publishFree();
+                } else {
+                  const timer = setTimeout(publishFree, delayMs);
+                  freeCommentTimeoutsRef.current.push(timer);
+                }
                 nextToSchedule += 1;
               }
             };
@@ -5706,6 +5712,13 @@ export default function RoomWithSync({
                     equivalentBaseOnlySlots(commentPackSlotsRef.current) ||
                     pendingFreeBodies2.length > 0;
                 }
+                freeStaggerMsLive = resolveFreeCommentaryArrivalStaggerMs({
+                  remainingPlaybackMs: readRemainingPlaybackMsFromPlayer(playerRef.current),
+                  freeSlotCount: pendingFreeBodies2.length,
+                  quizEnabled: quizLikelyFrees,
+                  recommendEnabled: recommendEnabledFrees,
+                  aiAgentParticipating: ownerAiCharacterJoinEnabledRef.current,
+                });
                 pumpFreesSequential();
               })
               .catch(() => {
@@ -5732,7 +5745,7 @@ export default function RoomWithSync({
                     ]
                       .filter(Boolean)
                       .join('\n\n---\n\n');
-                    const delayMs = freeIdxSorted.length * freeStaggerMs + POST_COMMENTARY_QUIZ_GAP_MS;
+                    const delayMs = freeIdxSorted.length * freeStaggerMsLive + POST_COMMENTARY_QUIZ_GAP_MS;
                     scheduleAiCharacterPickReasonAfterCommentary(vid, delayMs);
                     const skipQuizRecommendIntroOnly = skipQuizRecommendIntroOnlyFrees;
                     const shouldGateRecommendByQuiz =
@@ -5745,7 +5758,7 @@ export default function RoomWithSync({
                       roomId,
                       commentaryContext,
                       freeSlotCount: freeIdxSorted.length,
-                      staggerMs: freeStaggerMs,
+                      staggerMs: freeStaggerMsLive,
                       quizEnabled: shouldGateRecommendByQuiz && !skipQuizRecommendForTheme,
                       recommendEnabled: recommendEnabledFrees,
                       isGuest,

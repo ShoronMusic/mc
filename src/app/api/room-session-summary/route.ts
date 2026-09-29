@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { fetchLiveGatheringStartedAtIso } from '@/lib/live-gathering-playback-since';
 import {
   getRoomHistoryProductId,
@@ -68,16 +69,17 @@ export async function GET(request: Request) {
   const nowIso = new Date().toISOString();
   const endIso = nowIso < session.endIso ? nowIso : session.endIso;
   const historyProduct = getRoomHistoryProductId();
+  const db = createAdminClient() ?? supabase;
 
   let gatheringStartedAt: string | null = null;
   try {
-    gatheringStartedAt = await fetchLiveGatheringStartedAtIso(supabase, roomId);
+    gatheringStartedAt = await fetchLiveGatheringStartedAtIso(db, roomId);
   } catch (e) {
     console.error('[room-session-summary] gathering since', e);
   }
 
   const playRes = await runRoomHistoryQueryScoped((scopeProduct) => {
-    let playQuery = supabase
+    let playQuery = db
       .from('room_playback_history')
       .select('played_at, display_name, video_id, artist_name, title, style')
       .eq('room_id', roomId)
@@ -94,7 +96,7 @@ export async function GET(request: Request) {
   const { data: playData, error: playErr } = playRes;
   if (playErr) return NextResponse.json({ error: playErr.message }, { status: 500 });
 
-  const { data: liveGathering, error: liveErr } = await supabase
+  const { data: liveGathering, error: liveErr } = await db
     .from('room_gatherings')
     .select('id')
     .eq('room_id', roomId)
@@ -160,7 +162,7 @@ export async function GET(request: Request) {
   const videoIds = Array.from(new Set(plays.map((p) => p.video_id).filter(Boolean)));
   const eraByVideo = new Map<string, string>();
   if (videoIds.length > 0) {
-    const { data: eraData, error: eraErr } = await supabase
+    const { data: eraData, error: eraErr } = await db
       .from('song_era')
       .select('video_id, era')
       .in('video_id', videoIds);

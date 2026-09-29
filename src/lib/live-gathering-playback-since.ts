@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { maxIsoTimestamp } from '@/lib/playback-history-since';
 
 const TWENTY_FOUR_H_MS = 24 * 60 * 60 * 1000;
@@ -11,7 +12,8 @@ export async function fetchLiveGatheringStartedAtIso(
   const rid = roomId.trim();
   if (!rid) return null;
 
-  const { data, error } = await supabase
+  const db = createAdminClient() ?? supabase;
+  const { data, error } = await db
     .from('room_gatherings')
     .select('started_at')
     .eq('room_id', rid)

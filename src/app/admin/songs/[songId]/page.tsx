@@ -216,8 +216,9 @@ export default async function SongDetailPage({ params, searchParams }: SongDetai
       </main>
     );
   }
+  const db = createAdminClient() ?? supabase;
 
-  let { data, error } = await supabase
+  let { data, error } = await db
     .from('songs')
     .select(
       'id, display_title, main_artist, song_title, song_title_ja, style, play_count, catalog_scope, original_release_date, music8_song_data, music8_intro, created_at,' +
@@ -230,7 +231,7 @@ export default async function SongDetailPage({ params, searchParams }: SongDetai
     .maybeSingle();
 
   if (error?.code === '42703') {
-    const fallback = await supabase
+    const fallback = await db
       .from('songs')
       .select(
         'id, display_title, main_artist, song_title, style, play_count, catalog_scope, original_release_date, music8_song_data, created_at,' +
@@ -599,7 +600,7 @@ export default async function SongDetailPage({ params, searchParams }: SongDetai
   let spotifyArtistId: string | null = null;
   if (song.artist_id) {
     try {
-      const { data: artistData } = await supabase
+      const { data: artistData } = await db
         .from('artists')
         .select('spotify_artist_id')
         .eq('id', song.artist_id)
@@ -620,7 +621,7 @@ export default async function SongDetailPage({ params, searchParams }: SongDetai
   // song_videos の取得
   let videos: SongVideoRow[] = [];
   try {
-    const { data: videoData, error: videoError } = await supabase
+    const { data: videoData, error: videoError } = await db
       .from('song_videos')
       .select('video_id, variant, performance_id, youtube_published_at, created_at')
       .eq('song_id', song.id)
@@ -639,7 +640,7 @@ export default async function SongDetailPage({ params, searchParams }: SongDetai
     const ids = Array.from(new Set(videos.map((v) => v.video_id))).filter(Boolean);
     if (ids.length > 0) {
       try {
-        const { data: commData, error: commError } = await supabase
+        const { data: commData, error: commError } = await db
           .from('song_commentary')
           .select('video_id, body, created_at')
           .in('video_id', ids);
@@ -660,7 +661,7 @@ export default async function SongDetailPage({ params, searchParams }: SongDetai
   // song_tidbits（豆知識ライブラリ）
   let tidbits: SongTidbitRow[] = [];
   try {
-    const { data: tidbitData, error: tidbitError } = await supabase
+    const { data: tidbitData, error: tidbitError } = await db
       .from('song_tidbits')
       .select('id, song_id, video_id, body, created_at, source, is_active')
       .eq('song_id', song.id)
@@ -685,7 +686,7 @@ export default async function SongDetailPage({ params, searchParams }: SongDetai
       const byUser = new Map<string, number>();
       let scanned = 0;
       for (let offset = 0; ; offset += PAGE) {
-        const { data: playRows, error: playErr } = await supabase
+        const { data: playRows, error: playErr } = await db
           .from('room_playback_history')
           .select('user_id')
           .in('video_id', videoIds)
@@ -720,7 +721,7 @@ export default async function SongDetailPage({ params, searchParams }: SongDetai
   let feedback: AggregatedFeedback[] = [];
   let detailFeedbackRows: CommentFeedbackRow[] = [];
   try {
-    const { data: fbData, error: fbError } = await supabase
+    const { data: fbData, error: fbError } = await db
       .from('comment_feedback')
       .select(
         'id, created_at, user_id, video_id, ai_message_id, body, source, is_upvote, is_duplicate, is_dubious, is_ambiguous, free_comment',

@@ -6,6 +6,10 @@ import {
   resolveCopyeditSlotBody,
 } from '@/lib/gemma-commentary-copyedit';
 import {
+  looksIncompleteSongCommentary,
+  trimCommentaryToLastCompleteSentence,
+} from '@/lib/song-commentary-completeness';
+import {
   resolveGenerationModelId,
   resolveSanitizeModelId,
 } from '@/lib/gemini-model-routing';
@@ -105,6 +109,30 @@ test('resolveCopyeditSlotBody: dirty draft is not kept when extract is empty', (
   );
 });
 
+test('looksIncompleteSongCommentary: mid-name cutoff is incomplete', () => {
+  assert.equal(
+    looksIncompleteSongCommentary('Deep Forestはフランスのユニットで、エリック・ムゲとミシェル・'),
+    true,
+  );
+  assert.equal(
+    looksIncompleteSongCommentary('Deep Forestはフランスを拠点とするユニットです。'),
+    false,
+  );
+});
+
+test('trimCommentaryToLastCompleteSentence: drops the unfinished tail', () => {
+  assert.equal(
+    trimCommentaryToLastCompleteSentence('ユニットです。エリック・ムゲとミシェル・'),
+    'ユニットです。',
+  );
+  assert.equal(trimCommentaryToLastCompleteSentence('ミシェル・'), '');
+});
+
+test('resolveCopyeditSlotBody: incomplete extract keeps a complete draft', () => {
+  const draft = 'Deep Forestはフランスを拠点とするユニットです。';
+  assert.equal(resolveCopyeditSlotBody('エリック・ムゲとミシェル・', draft), draft);
+});
+
 test('resolveCopyeditSlotBody: clean extract wins over the draft', () => {
   const extracted = 'Mr. Bigの『Take Cover』は、警告を込めたロックです。';
   const draft = '別の下書きです。アルバム名は書きません。';
@@ -116,8 +144,13 @@ test('parseCopyeditBodiesJson: extracts bodies array', () => {
   assert.deepEqual(parseCopyeditBodiesJson(raw, 2), ['基本の解説です。', '']);
 });
 
-test('parseCopyeditBodiesJson: rejects wrong count', () => {
-  assert.equal(parseCopyeditBodiesJson('{"bodies":["a"]}', 2), null);
+test('parseCopyeditBodiesJson: pads a short bodies array', () => {
+  assert.deepEqual(parseCopyeditBodiesJson('{"bodies":["a"]}', 2), ['a', '']);
+});
+
+test('parseCopyeditBodiesJson: salvages a truncated bodies array', () => {
+  const raw = '{"bodies":["解説です。","二本目です。","三本目';
+  assert.deepEqual(parseCopyeditBodiesJson(raw, 4), ['解説です。', '二本目です。', '', '']);
 });
 
 test('resolveGenerationModelId: commentary_copyedit uses sanitize not Gemma primary', () => {

@@ -137,10 +137,11 @@ export async function GET(request: Request) {
   }
 
   const buildBaseQuery = (withJoinLocked: boolean, scopeProduct: boolean) => {
+    const db = createAdminClient() ?? supabase;
     const selectCols = withJoinLocked
       ? 'id, room_id, title, started_at, join_locked, created_by'
       : 'id, room_id, title, started_at, created_by';
-    let q = supabase
+    let q = db
       .from('room_gatherings')
       .select(selectCols)
       .eq('status', 'live')

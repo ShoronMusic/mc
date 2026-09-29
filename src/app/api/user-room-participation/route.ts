@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import {
   getRoomHistoryProductId,
   runRoomHistoryQueryScoped,
@@ -108,7 +109,7 @@ export async function POST(request: Request) {
 
   if (action === 'join') {
     const liveRes = await runGatheringQueryScoped((scopeProduct) => {
-      let q = supabase
+      let q = (createAdminClient() ?? supabase)
         .from('room_gatherings')
         .select('id, title')
         .eq('room_id', roomId)

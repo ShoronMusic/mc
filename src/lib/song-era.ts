@@ -1,4 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { createAdminClient } from '@/lib/supabase/admin';
+
+/** 曲マスタ・年代キャッシュは service_role で読む。anon に RLS を掛けたあとも選曲登録が止まらないようにする。 */
+function songEraDb(passed: SupabaseClient | null): SupabaseClient | null {
+  return createAdminClient() ?? passed;
+}
 import { lookupMusicBrainzReleaseDate } from '@/lib/admin-songs-batch-musicbrainz-dates';
 import { getSongEra } from '@/lib/gemini';
 import { SONG_ERA_OPTIONS, type SongEraOption } from '@/lib/song-era-options';
@@ -78,9 +84,10 @@ export async function getEraFromDb(
   supabase: SupabaseClient | null,
   videoId: string
 ): Promise<SongEraOption | null> {
-  if (!supabase || !videoId.trim()) return null;
+  const db = songEraDb(supabase);
+  if (!db || !videoId.trim()) return null;
 
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from('song_era')
     .select('era')
     .eq('video_id', videoId.trim())
@@ -100,9 +107,10 @@ export async function setEraInDb(
   videoId: string,
   era: SongEraOption
 ): Promise<boolean> {
-  if (!supabase || !videoId.trim()) return false;
+  const db = songEraDb(supabase);
+  if (!db || !videoId.trim()) return false;
 
-  const { error } = await supabase.from('song_era').upsert(
+  const { error } = await db.from('song_era').upsert(
     { video_id: videoId.trim(), era },
     { onConflict: 'video_id' }
   );
@@ -122,10 +130,11 @@ async function getOriginalReleaseDateFromSongs(
   videoId: string,
   songId?: string | null,
 ): Promise<string | null> {
-  if (!supabase) return null;
+  const db = songEraDb(supabase);
+  if (!db) return null;
   let id = (songId ?? '').trim();
   if (!id && videoId.trim()) {
-    const { data: link, error: linkErr } = await supabase
+    const { data: link, error: linkErr } = await db
       .from('song_videos')
       .select('song_id')
       .eq('video_id', videoId.trim())
@@ -137,7 +146,7 @@ async function getOriginalReleaseDateFromSongs(
     id = typeof link?.song_id === 'string' ? link.song_id.trim() : '';
   }
   if (!id) return null;
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from('songs')
     .select('original_release_date')
     .eq('id', id)
@@ -158,11 +167,12 @@ export async function fetchOriginalReleaseEraByVideoIds(
   videoIds: string[],
 ): Promise<Map<string, SongEraOption>> {
   const out = new Map<string, SongEraOption>();
-  if (!supabase || videoIds.length === 0) return out;
+  const db = songEraDb(supabase);
+  if (!db || videoIds.length === 0) return out;
   const uniq = [...new Set(videoIds.map((v) => v.trim()).filter(Boolean))];
   if (uniq.length === 0) return out;
 
-  const { data: links, error: linkErr } = await supabase
+  const { data: links, error: linkErr } = await db
     .from('song_videos')
     .select('video_id, song_id')
     .in('video_id', uniq);
@@ -182,7 +192,7 @@ export async function fetchOriginalReleaseEraByVideoIds(
   ];
   if (songIds.length === 0) return out;
 
-  const { data: songs, error: songErr } = await supabase
+  const { data: songs, error: songErr } = await db
     .from('songs')
     .select('id, original_release_date')
     .in('id', songIds);

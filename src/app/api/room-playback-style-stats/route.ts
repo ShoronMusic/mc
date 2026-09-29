@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import {
   parsePlaybackHistorySinceQuery,
   resolveRoomPlaybackStatsSinceIso,
@@ -42,12 +43,13 @@ export async function GET(request: Request) {
   }
 
   const sinceQuery = parsePlaybackHistorySinceQuery(searchParams.get('since'));
-  const sinceIso = await resolveRoomPlaybackStatsSinceIso(supabase, roomId, sinceQuery, mode);
+  const db = createAdminClient() ?? supabase;
+  const sinceIso = await resolveRoomPlaybackStatsSinceIso(db, roomId, sinceQuery, mode);
   const historyProduct = getRoomHistoryProductId();
 
   if (mode === '24h') {
     const historyRes = await runRoomHistoryQueryScoped((scopeProduct) => {
-      let query = supabase.from('room_playback_history').select('style').eq('room_id', roomId);
+      let query = db.from('room_playback_history').select('style').eq('room_id', roomId);
       if (scopeProduct) query = withRoomHistoryProductEq(query, historyProduct);
       if (sinceIso) query = query.gte('played_at', sinceIso);
       return query;
@@ -72,7 +74,7 @@ export async function GET(request: Request) {
   }
 
   const last100Res = await runRoomHistoryQueryScoped((scopeProduct) => {
-    let last100Query = supabase
+    let last100Query = db
       .from('room_playback_history')
       .select('style')
       .eq('room_id', roomId)

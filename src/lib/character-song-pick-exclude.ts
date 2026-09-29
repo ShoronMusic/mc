@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { formatArtistTitle, getArtistAndSong } from '@/lib/format-song-display';
 
 export type UserSongPickExclude = {
@@ -232,7 +233,7 @@ export async function buildCharacterSongPickExcludes(
   const nowPlaying = (opts?.nowPlayingVideoId ?? '').trim();
   if (nowPlaying) excludeVideoIds.add(nowPlaying);
 
-  const { data: roomHistoryRows, error } = await supabase
+  const { data: roomHistoryRows, error } = await (createAdminClient() ?? supabase)
     .from('room_playback_history')
     .select('video_id, display_name, title, artist_name, played_at')
     .eq('room_id', roomId)

@@ -127,6 +127,28 @@ export function resolvePostCommentaryPace(input: PostCommentaryPaceInput): PostC
   };
 }
 
+/**
+ * 自由解説の HTTP が返った時点の間隔。
+ * 基本解説のときに決めた間隔のままだと、生成が曲終盤まで伸びたとき
+ * 表示タイマーが曲変わりで消され、解説2以降が出ない。
+ * 残り時間に間隔×本数が収まらないときは 0（すぐ出す）。
+ */
+export function resolveFreeCommentaryArrivalStaggerMs(
+  input: PostCommentaryPaceInput,
+): number {
+  const freeSlotCount = Number.isFinite(input.freeSlotCount)
+    ? Math.max(0, Math.floor(input.freeSlotCount))
+    : 0;
+  if (freeSlotCount === 0) return 0;
+  const pace = resolvePostCommentaryPace(input);
+  const remaining =
+    typeof input.remainingPlaybackMs === 'number' && Number.isFinite(input.remainingPlaybackMs)
+      ? Math.max(0, input.remainingPlaybackMs)
+      : null;
+  if (remaining != null && freeSlotCount * pace.freeStaggerMs > remaining) return 0;
+  return pace.freeStaggerMs;
+}
+
 /** YouTube プレイヤーから残り再生ミリ秒を取る（失敗時 null） */
 export function readRemainingPlaybackMsFromPlayer(player: {
   getCurrentTime?: () => number;

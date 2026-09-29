@@ -12,6 +12,10 @@ import {
 } from '@/lib/gemini-gemma-host';
 import { resolveSanitizeModelId } from '@/lib/gemini-model-routing';
 import { persistGeminiUsageLog, type GeminiUsagePersistMeta } from '@/lib/gemini-usage-log';
+import {
+  looksIncompleteSongCommentary,
+  trimCommentaryToLastCompleteSentence,
+} from '@/lib/song-commentary-completeness';
 
 export const COMMENTARY_COPYEDIT_USAGE_CONTEXT = 'commentary_copyedit';
 
@@ -50,12 +54,17 @@ export function hasGemmaEnglishMetaPrefix(raw: string): boolean {
  * 清書結果が空・まだ汚いときは、polish 済みで汚れていない下書きを残す。
  * Flash が `{"bodies":[""]}` だけ返すと、日本語の下書きまでチャットから消える。
  */
+function usableCompleteCommentary(text: string): string {
+  const t = text.trim();
+  if (!t || isGemmaCommentaryStillDirty(t)) return '';
+  if (!looksIncompleteSongCommentary(t)) return t;
+  return trimCommentaryToLastCompleteSentence(t);
+}
+
 export function resolveCopyeditSlotBody(extracted: string, polishedDraft: string): string {
-  const next = extracted.trim();
-  const draft = polishedDraft.trim();
-  if (next && !isGemmaCommentaryStillDirty(next)) return next;
-  if (draft && !isGemmaCommentaryStillDirty(draft)) return draft;
-  return '';
+  const fromExtract = usableCompleteCommentary(extracted);
+  if (fromExtract) return fromExtract;
+  return usableCompleteCommentary(polishedDraft);
 }
 
 /** polish 後も英語思考・Draft/Check が残っているか（アーティスト英語名だけの本文は汚れていない） */
@@ -70,12 +79,47 @@ export function isGemmaCommentaryStillDirty(raw: string): boolean {
   return false;
 }
 
+function alignCopyeditBodies(bodies: string[], expectedCount: number): string[] | null {
+  if (expectedCount <= 0 || bodies.length === 0) return null;
+  const out = bodies.slice(0, expectedCount).map((b) => b.trim());
+  while (out.length < expectedCount) out.push('');
+  return out;
+}
+
+/** 閉じ括弧が欠けた JSON から、完成している文字列だけ拾う */
+function salvageCopyeditBodiesFromRaw(raw: string, expectedCount: number): string[] | null {
+  const idx = raw.indexOf('"bodies"');
+  if (idx < 0) return null;
+  const slice = raw.slice(idx);
+  const strings: string[] = [];
+  const re = /"((?:\\.|[^"\\])*)"/g;
+  let first = true;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(slice)) && strings.length < expectedCount) {
+    if (first) {
+      first = false;
+      if (m[1] === 'bodies') continue;
+    }
+    strings.push(
+      m[1]
+        .replace(/\\n/g, '\n')
+        .replace(/\\"/g, '"')
+        .replace(/\\\\/g, '\\')
+        .trim(),
+    );
+  }
+  return alignCopyeditBodies(strings, expectedCount);
+}
+
 export function parseCopyeditBodiesJson(raw: string, expectedCount: number): string[] | null {
+  if (expectedCount <= 0) return null;
   const obj = extractJsonObjectFromGeminiText(raw);
-  if (!obj) return null;
-  const bodies = obj.bodies;
-  if (!Array.isArray(bodies) || bodies.length !== expectedCount) return null;
-  return bodies.map((b) => (typeof b === 'string' ? b.trim() : ''));
+  if (obj && Array.isArray(obj.bodies)) {
+    const mapped = obj.bodies.map((b) => (typeof b === 'string' ? b.trim() : ''));
+    const aligned = alignCopyeditBodies(mapped, expectedCount);
+    if (aligned) return aligned;
+  }
+  return salvageCopyeditBodiesFromRaw(raw, expectedCount);
 }
 
 function copyeditDisabled(): boolean {

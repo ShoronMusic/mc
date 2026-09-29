@@ -3,6 +3,7 @@
  */
 
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { fetchOEmbed } from '@/lib/youtube-oembed';
 import {
   generateThemePlaylistAiBlurb,
@@ -112,7 +113,7 @@ export async function appendThemePlaylistRoomEntry(
       : null;
   const resolveLiveRoomContext = async (): Promise<{ room_title: string | null; room_owner_user_id: string | null }> => {
     if (!roomIdSafe) return { room_title: null, room_owner_user_id: null };
-    const { data } = await supabase
+    const { data } = await (createAdminClient() ?? supabase)
       .from('room_gatherings')
       .select('title, created_by')
       .eq('room_id', roomIdSafe)

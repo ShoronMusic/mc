@@ -6,6 +6,7 @@ import {
 } from '@/lib/format-song-display';
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { generateChatReply } from '@/lib/gemini';
 import { fetchOEmbed } from '@/lib/youtube-oembed';
 import { getStyleFromDb } from '@/lib/song-style';
@@ -131,12 +132,13 @@ function countMentionsByKeyword(chatBodies: string[], keyword: string): number {
 async function buildRoomTrendSummary(roomId: string, hours: 1 | 2): Promise<string | null> {
   const supabase = await createClient();
   if (!supabase) return null;
+  const db = createAdminClient() ?? supabase;
 
   const sinceIso = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
   const historyProduct = getRoomHistoryProductId();
 
   const playRes = await runRoomHistoryQueryScoped((scopeProduct) => {
-    let q = supabase
+    let q = db
       .from('room_playback_history')
       .select('video_id, title, artist_name, style, played_at')
       .eq('room_id', roomId)
@@ -207,7 +209,7 @@ async function buildRoomTrendSummary(roomId: string, hours: 1 | 2): Promise<stri
   const videoIds = Array.from(new Set(plays.map((p) => p.video_id).filter(Boolean)));
   const eraCount = new Map<string, number>();
   if (videoIds.length > 0) {
-    const { data: eraData, error: eraError } = await supabase
+    const { data: eraData, error: eraError } = await db
       .from('song_era')
       .select('video_id, era')
       .in('video_id', videoIds);
